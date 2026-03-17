@@ -1,0 +1,195 @@
+syntax = "proto3";
+
+package temporal.api.batch.v1;
+
+option go_package = "go.temporal.io/api/batch/v1;batch";
+option java_package = "io.temporal.api.batch.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Batch::V1";
+option csharp_namespace = "Temporalio.Api.Batch.V1";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/api/activity/v1/message.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/batch_operation.proto";
+import "temporal/api/enums/v1/reset.proto";
+import "temporal/api/rules/v1/message.proto";
+import "temporal/api/workflow/v1/message.proto";
+
+message BatchOperationInfo {
+  // Batch job ID
+  string job_id = 1;
+  // Batch operation state
+  temporal.api.enums.v1.BatchOperationState state = 2;
+  // Batch operation start time
+  google.protobuf.Timestamp start_time = 3;
+  // Batch operation close time
+  google.protobuf.Timestamp close_time = 4;
+}
+
+// BatchOperationTermination sends terminate requests to batch workflows.
+// Keep the parameter in sync with temporal.api.workflowservice.v1.TerminateWorkflowExecutionRequest.
+// Ignore first_execution_run_id because this is used for single workflow operation.
+message BatchOperationTermination {
+  // Serialized value(s) to provide to the termination event
+  temporal.api.common.v1.Payloads details = 1;
+  // The identity of the worker/client
+  string identity = 2;
+}
+
+// BatchOperationSignal sends signals to batch workflows.
+// Keep the parameter in sync with temporal.api.workflowservice.v1.SignalWorkflowExecutionRequest.
+message BatchOperationSignal {
+  // The workflow author-defined name of the signal to send to the workflow
+  string signal = 1;
+  // Serialized value(s) to provide with the signal
+  temporal.api.common.v1.Payloads input = 2;
+  // Headers that are passed with the signal to the processing workflow.
+  // These can include things like auth or tracing tokens.
+  temporal.api.common.v1.Header header = 3;
+  // The identity of the worker/client
+  string identity = 4;
+}
+
+// BatchOperationCancellation sends cancel requests to batch workflows.
+// Keep the parameter in sync with temporal.api.workflowservice.v1.RequestCancelWorkflowExecutionRequest.
+// Ignore first_execution_run_id because this is used for single workflow operation.
+message BatchOperationCancellation {
+  // The identity of the worker/client
+  string identity = 1;
+}
+
+// BatchOperationDeletion sends deletion requests to batch workflows.
+// Keep the parameter in sync with temporal.api.workflowservice.v1.DeleteWorkflowExecutionRequest.
+message BatchOperationDeletion {
+  // The identity of the worker/client
+  string identity = 1;
+}
+
+// BatchOperationReset sends reset requests to batch workflows.
+// Keep the parameter in sync with temporal.api.workflowservice.v1.ResetWorkflowExecutionRequest.
+message BatchOperationReset {
+  // The identity of the worker/client.
+  string identity = 3;
+
+  // Describes what to reset to and how. If set, `reset_type` and `reset_reapply_type` are ignored.
+  temporal.api.common.v1.ResetOptions options = 4;
+
+  // Deprecated. Use `options`.
+  temporal.api.enums.v1.ResetType reset_type = 1 [deprecated = true];
+  // Deprecated. Use `options`.
+  temporal.api.enums.v1.ResetReapplyType reset_reapply_type = 2 [deprecated = true];
+  // Operations to perform after the workflow has been reset. These operations will be applied
+  // to the *new* run of the workflow execution in the order they are provided.
+  // All operations are applied to the workflow before the first new workflow task is generated
+  repeated temporal.api.workflow.v1.PostResetOperation post_reset_operations = 5;
+}
+
+// BatchOperationUpdateWorkflowExecutionOptions sends UpdateWorkflowExecutionOptions requests to batch workflows.
+// Keep the parameters in sync with temporal.api.workflowservice.v1.UpdateWorkflowExecutionOptionsRequest.
+message BatchOperationUpdateWorkflowExecutionOptions {
+  // The identity of the worker/client.
+  string identity = 1;
+
+  // Update Workflow options that were originally specified via StartWorkflowExecution. Partial updates are accepted and controlled by update_mask.
+  temporal.api.workflow.v1.WorkflowExecutionOptions workflow_execution_options = 2;
+
+  // Controls which fields from `workflow_execution_options` will be applied.
+  // To unset a field, set it to null and use the update mask to indicate that it should be mutated.
+  google.protobuf.FieldMask update_mask = 3;
+}
+
+// BatchOperationUnpauseActivities sends unpause requests to batch workflows.
+message BatchOperationUnpauseActivities {
+  // The identity of the worker/client.
+  string identity = 1;
+
+  // The activity to unpause. If match_all is set to true, all activities will be unpaused.
+  oneof activity {
+    string type = 2;
+    bool match_all = 3;
+  }
+
+  // Setting this flag will also reset the number of attempts.
+  bool reset_attempts = 4;
+
+  // Setting this flag will also reset the heartbeat details.
+  bool reset_heartbeat = 5;
+
+  // If set, the activity will start at a random time within the specified jitter
+  // duration, introducing variability to the start time.
+  google.protobuf.Duration jitter = 6;
+}
+
+// BatchOperationTriggerWorkflowRule sends TriggerWorkflowRule requests to batch workflows.
+message BatchOperationTriggerWorkflowRule {
+  // The identity of the worker/client.
+  string identity = 1;
+
+  oneof rule {
+    // ID of existing rule.
+    string id = 2;
+    // Rule specification to be applied to the workflow without creating a new rule.
+    temporal.api.rules.v1.WorkflowRuleSpec spec = 3;
+  }
+}
+
+// BatchOperationResetActivities sends activity reset requests in a batch.
+// NOTE: keep in sync with temporal.api.workflowservice.v1.ResetActivityRequest
+message BatchOperationResetActivities {
+  // The identity of the worker/client.
+  string identity = 1;
+
+  // The activities to reset. If match_all is set to true, all activities will be reset.
+  oneof activity {
+    string type = 2;
+    bool match_all = 3;
+  }
+
+  // Setting this flag will also reset the number of attempts.
+  bool reset_attempts = 4;
+
+  // Setting this flag will also reset the heartbeat details.
+  bool reset_heartbeat = 5;
+
+  // If activity is paused, it will remain paused after reset
+  bool keep_paused = 6;
+
+  // If set, the activity will start at a random time within the specified jitter
+  // duration, introducing variability to the start time.
+  google.protobuf.Duration jitter = 7;
+
+  // If set, the activity options will be restored to the defaults.
+  // Default options are then options activity was created with.
+  // They are part of the first ActivityTaskScheduled event.
+  bool restore_original_options = 8;
+}
+
+// BatchOperationUpdateActivityOptions sends an update-activity-options requests in a batch.
+// NOTE: keep in sync with temporal.api.workflowservice.v1.UpdateActivityRequest
+message BatchOperationUpdateActivityOptions {
+  // The identity of the worker/client.
+  string identity = 1;
+
+  // The activity to update. If match_all is set to true, all activities will be updated.
+  oneof activity {
+    string type = 2;
+    bool match_all = 3;
+  }
+
+  // Update Activity options. Partial updates are accepted and controlled by update_mask.
+  temporal.api.activity.v1.ActivityOptions activity_options = 4;
+
+  // Controls which fields from `activity_options` will be applied
+  google.protobuf.FieldMask update_mask = 5;
+
+  // If set, the activity options will be restored to the default.
+  // Default options are then options activity was created with.
+  // They are part of the first ActivityTaskScheduled event.
+  // This flag cannot be combined with any other option; if you supply
+  // restore_original together with other options, the request will be rejected.
+  bool restore_original = 6;
+}

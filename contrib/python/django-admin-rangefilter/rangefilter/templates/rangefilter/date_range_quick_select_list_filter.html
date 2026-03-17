@@ -1,0 +1,16 @@
+{% extends 'rangefilter/date_filter.html' %}
+
+{% block quick-select-choices %}
+    {% comment %}
+    The following code under the <ul> tag belongs to admin/filter.html:
+    https://github.com/django/django/blob/stable/2.2.x/django/contrib/admin/templates/admin/filter.html#L3-L8
+    {% endcomment %}
+    <ul>
+        {% for choice in choices %}
+            <li{% if choice.selected %} class="selected"{% endif %}>
+                <a href="{{ choice.query_string|iriencode }}"
+                   title="{{ choice.display }}">{{ choice.display }}</a>
+            </li>
+        {% endfor %}
+    </ul>
+{% endblock %}

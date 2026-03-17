@@ -1,0 +1,9 @@
+# Local definition 15: Seasonal forecast data
+
+unsigned[2] systemNumber : dump;
+unsigned[2] methodNumber : dump;
+alias system=systemNumber;
+alias method=methodNumber;
+
+alias local.systemNumber=systemNumber;
+alias local.methodNumber=methodNumber;

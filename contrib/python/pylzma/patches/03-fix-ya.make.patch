@@ -1,0 +1,11 @@
+--- contrib/python/pylzma/ya.make	(index)
++++ contrib/python/pylzma/ya.make	(working tree)
+@@ -9,7 +9,7 @@ VERSION(0.5.0)
+ LICENSE(LGPL-2.1-or-later)
+ 
+ PEERDIR(
+-    contrib/libs/lzmasdk
++    ADDINCL contrib/libs/lzmasdk
+ )
+ 
+ NO_COMPILER_WARNINGS()

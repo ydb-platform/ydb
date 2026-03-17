@@ -1,0 +1,37 @@
+[package]
+name = "temporal-sdk-core-protos"
+version = "0.1.0"
+edition = "2024"
+authors = ["Spencer Judge <spencer@temporal.io>"]
+license-file = { workspace = true }
+description = "Protobuf definitions for Temporal SDKs Core/Lang interface"
+homepage = "https://temporal.io/"
+repository = "https://github.com/temporalio/sdk-core"
+keywords = ["temporal", "workflow"]
+categories = ["development-tools"]
+
+[features]
+history_builders = ["uuid", "rand"]
+serde_serialize = []
+
+[dependencies]
+anyhow = "1.0"
+base64 = "0.22"
+derive_more = { workspace = true }
+prost = { workspace = true }
+prost-wkt = "0.6"
+prost-wkt-types = "0.6"
+rand = { version = "0.9", optional = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = { workspace = true }
+tonic = { workspace = true }
+uuid = { version = "1.1", features = ["v4"], optional = true }
+
+[build-dependencies]
+tonic-build = { workspace = true }
+prost-build = "0.13"
+prost-wkt-build = "0.6"
+
+[lints]
+workspace = true

@@ -1,0 +1,111 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 35285485746935535b39b96ffab0f639
+BELONGS ya.make
+    License text:
+         * Copyright 2009 Colin Percival
+         * Copyright 2013 Alexander Peslyak
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto_pwhash/scryptsalsa208sha256/crypto_scrypt.h [2:4]
+        crypto_pwhash/scryptsalsa208sha256/nosse/pwhash_scryptsalsa208sha256_nosse.c [2:4]
+        crypto_pwhash/scryptsalsa208sha256/sse/pwhash_scryptsalsa208sha256_sse.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3816299947c8dff688704b9997b1df5a
+BELONGS ya.make
+    License text:
+         * Copyright 2005,2007,2009 Colin Percival
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto_hash/sha256/cp/hash_sha256_cp.c [3:4]
+        crypto_hash/sha512/cp/hash_sha512_cp.c [3:4]
+        crypto_pwhash/scryptsalsa208sha256/pbkdf2-sha256.c [2:3]
+        crypto_pwhash/scryptsalsa208sha256/pbkdf2-sha256.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5ca59dffac277875ef03d72d98a98c32
+BELONGS ya.make
+    License text:
+         * Copyright 2009 Colin Percival
+         * Copyright 2012,2013 Alexander Peslyak
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto_pwhash/scryptsalsa208sha256/sse/pwhash_scryptsalsa208sha256_sse.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cc3f4b59c6763e4d92ee1ff5a2d14953
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2013-2019
+         * Frank Denis <j at pureftpd dot org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e258303f6b9936c0edc4fb4a7e5d8bf2
+BELONGS ya.make
+    License text:
+         * Copyright 2013 Alexander Peslyak
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto_pwhash/scryptsalsa208sha256/crypto_scrypt-common.c [2:3]
+        crypto_pwhash/scryptsalsa208sha256/crypto_scrypt.h [2:4]
+        crypto_pwhash/scryptsalsa208sha256/nosse/pwhash_scryptsalsa208sha256_nosse.c [2:4]
+        crypto_pwhash/scryptsalsa208sha256/scrypt_platform.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f8e4ad7010af8e84627a691bd61c1570
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015 Thomas Pornin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto_pwhash/argon2/argon2-encoding.c [26:26]

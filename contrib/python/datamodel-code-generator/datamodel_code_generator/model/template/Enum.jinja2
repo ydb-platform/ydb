@@ -1,0 +1,17 @@
+{% for decorator in decorators -%}
+{{ decorator }}
+{% endfor -%}
+class {{ class_name }}({{ base_class }}):
+{%- if description %}
+    """
+    {{ description | indent(4) }}
+    """
+{%- endif %}
+{%- for field in fields %}
+    {{ field.name }} = {{ field.default }}
+    {%- if field.docstring %}
+    """
+    {{ field.docstring | indent(4) }}
+    """
+    {%- endif %}
+{%- endfor -%}

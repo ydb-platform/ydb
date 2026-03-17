@@ -1,0 +1,9 @@
+import { f as fallback } from './async-DWBXLqlH.js';
+import { d as attr_class, c as bind_props } from './index-D1re1cuM.js';
+import { e, h } from './Upload-CBOKnugH.js';
+import { e as escape_html } from './escaping-CBnpiEl5.js';
+
+const n=/^(#\s*)(.+)$/m;function v(c){const s=c.trim(),a=s.match(n);if(!a)return [false,s||false];const[l,,o]=a,p=o.trim();if(s===l)return [p,false];const i=a.index!==void 0?a.index+l.length:0,e=s.substring(i).trim()||false;return [p,e]}function k(c,s$1){c.component(a=>{let l,o,p=fallback(s$1.type,"file"),i=s$1.i18n,u=fallback(s$1.message,void 0),e$1=fallback(s$1.mode,"full"),d=fallback(s$1.hovered,false),h$1=fallback(s$1.placeholder,void 0);const f={image:"upload_text.drop_image",video:"upload_text.drop_video",audio:"upload_text.drop_audio",file:"upload_text.drop_file",csv:"upload_text.drop_csv",gallery:"upload_text.drop_gallery",clipboard:"upload_text.paste_clipboard"};[l,o]=h$1?v(h$1):[false,false],a.push(`<div class="wrap svelte-1vmd51o"><span${attr_class("icon-wrap svelte-1vmd51o",void 0,{hovered:d})}>`),p==="clipboard"?(a.push("<!--[-->"),e(a)):(a.push("<!--[!-->"),h(a)),a.push("<!--]--></span> "),l||o?(a.push("<!--[-->"),l?(a.push("<!--[-->"),a.push(`<h2 class="svelte-1vmd51o">${escape_html(l)}</h2>`)):a.push("<!--[!-->"),a.push("<!--]--> "),o?(a.push("<!--[-->"),a.push(`<p class="svelte-1vmd51o">${escape_html(o)}</p>`)):a.push("<!--[!-->"),a.push("<!--]-->")):(a.push("<!--[!-->"),a.push(`${escape_html(i(f[p]||f.file))} `),e$1!=="short"?(a.push("<!--[-->"),a.push(`<span class="or svelte-1vmd51o">- ${escape_html(i("common.or"))} -</span> ${escape_html(u||i("upload_text.click_to_upload"))}`)):a.push("<!--[!-->"),a.push("<!--]-->")),a.push("<!--]--></div>"),bind_props(s$1,{type:p,i18n:i,message:u,mode:e$1,hovered:d,placeholder:h$1});});}
+
+export { k };
+//# sourceMappingURL=UploadText-CL6YR3zU.js.map

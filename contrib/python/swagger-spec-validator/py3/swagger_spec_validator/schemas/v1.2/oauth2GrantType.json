@@ -1,0 +1,94 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "definitions": {
+        "authorizationCode": {
+            "additionalProperties": false,
+            "properties": {
+                "tokenEndpoint": {
+                    "$ref": "#/definitions/tokenEndpoint"
+                },
+                "tokenRequestEndpoint": {
+                    "$ref": "#/definitions/tokenRequestEndpoint"
+                }
+            },
+            "required": [
+                "tokenEndpoint",
+                "tokenRequestEndpoint"
+            ],
+            "type": "object"
+        },
+        "implicit": {
+            "additionalProperties": false,
+            "properties": {
+                "loginEndpoint": {
+                    "$ref": "#/definitions/loginEndpoint"
+                },
+                "tokenName": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "loginEndpoint"
+            ],
+            "type": "object"
+        },
+        "loginEndpoint": {
+            "additionalProperties": false,
+            "properties": {
+                "url": {
+                    "format": "uri",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "url"
+            ],
+            "type": "object"
+        },
+        "tokenEndpoint": {
+            "additionalProperties": false,
+            "properties": {
+                "tokenName": {
+                    "type": "string"
+                },
+                "url": {
+                    "format": "uri",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "url"
+            ],
+            "type": "object"
+        },
+        "tokenRequestEndpoint": {
+            "additionalProperties": false,
+            "properties": {
+                "clientIdName": {
+                    "type": "string"
+                },
+                "clientSecretName": {
+                    "type": "string"
+                },
+                "url": {
+                    "format": "uri",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "url"
+            ],
+            "type": "object"
+        }
+    },
+    "minProperties": 1,
+    "properties": {
+        "authorization_code": {
+            "$ref": "#/definitions/authorizationCode"
+        },
+        "implicit": {
+            "$ref": "#/definitions/implicit"
+        }
+    },
+    "type": "object"
+}

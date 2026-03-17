@@ -2,8 +2,6 @@
 
 PY2_LIBRARY()
 
-SUBSCRIBER(g:python-contrib)
-
 VERSION(1.1.0)
 
 LICENSE(MIT)

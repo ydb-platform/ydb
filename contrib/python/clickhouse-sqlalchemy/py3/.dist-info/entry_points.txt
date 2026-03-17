@@ -1,0 +1,5 @@
+[sqlalchemy.dialects]
+clickhouse = clickhouse_sqlalchemy.drivers.http.base:ClickHouseDialect_http
+clickhouse.asynch = clickhouse_sqlalchemy.drivers.asynch.base:ClickHouseDialect_asynch
+clickhouse.http = clickhouse_sqlalchemy.drivers.http.base:ClickHouseDialect_http
+clickhouse.native = clickhouse_sqlalchemy.drivers.native.base:ClickHouseDialect_native

@@ -1,0 +1,1258 @@
+'CLOUD_FRACTI' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               7;
+}
+'CLOUD_WATER' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               6;
+}
+'FONC.COURANT' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               4;
+}
+'GRAUPEL' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              32;
+}
+'HUMI.SPECIFI' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =               0;
+}
+'ICE_CRYSTAL' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              82;
+}
+'LIQUID_WATER' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              83;
+}
+'POT.VITESSE' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               5;
+}
+'PRESS.DEPART' = {
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =               8;
+}
+'RAD_LIQUID_W' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              69;
+}
+'RAD_SOLID_WA' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              70;
+}
+'RAIN' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              85;
+}
+'RAYT' = {
+  discipline                       =               0;
+  parameterCategory                =               5;
+  parameterNumber                  =               5;
+}
+'RAYT_SOL_CL' = {
+  discipline                       =               0;
+  parameterCategory                =               4;
+  parameterNumber                  =              11;
+}
+'RAYT_THER_CL' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               5;
+  parameterNumber                  =               6;
+}
+'SNOW' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              86;
+}
+'SOLID_WATER' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              84;
+}
+'TEMPERATURE' = {
+  discipline                       =               0;
+  parameterCategory                =               0;
+  parameterNumber                  =               0;
+}
+'TKE' = {
+  discipline                       =               0;
+  parameterCategory                =              19;
+  parameterNumber                  =              11;
+}
+'VENT_MERIDIE' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               3;
+}
+'VENT_ZONAL' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               2;
+}
+'VERTIC.DIVER' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =              11;
+}
+'VITESSE_VERT' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               8;
+}
+'WIND.U.PHYS' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               2;
+}
+'WIND.V.PHYS' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               3;
+}
+'ABS_VORTIC' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =              10;
+}
+'CLOUD_FRAC' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               7;
+}
+'CLOUD_WATE' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               6;
+}
+'GEOPOTENTI' = {
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =               5;
+}
+'GRAUPEL' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              32;
+}
+'HUMI_RELAT' = {
+  FMULTM                           =               1;
+  FMULTE                           =               2;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =               1;
+}
+'ICE_CRYSTA' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              82;
+}
+'PRESSURE' = {
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =               0;
+}
+'POT_VORTIC' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =              14;
+}
+'RAD_LIQUID' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              69;
+}
+'RAD_SOLID_' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              70;
+}
+'RAIN' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              85;
+}
+'SIM_REFLEC' = {
+  discipline                       =               0;
+  parameterCategory                =              16;
+  parameterNumber                  =               4;
+}
+'SNOW' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              86;
+}
+'TEMPERATUR' = {
+  discipline                       =               0;
+  parameterCategory                =               0;
+  parameterNumber                  =               0;
+}
+'TEMPE_POTE' = {
+  discipline                       =               0;
+  parameterCategory                =               0;
+  parameterNumber                  =               2;
+}
+'THETA_PRIM' = {
+  discipline                       =               0;
+  parameterCategory                =               0;
+  parameterNumber                  =               3;
+}
+'TKE' = {
+  discipline                       =               0;
+  parameterCategory                =              19;
+  parameterNumber                  =              11;
+}
+'VENT_MERID' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               3;
+}
+'VENT_ZONAL' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               2;
+}
+'ABS_VORTIC' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =              10;
+}
+'CLOUD_FRAC' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               7;
+}
+'CLOUD_WATE' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               6;
+}
+'DIVERGENCE' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =              11;
+}
+'EDR' = {
+  discipline                       =               0;
+  parameterCategory                =              19;
+  parameterNumber                  =              28;
+}
+'GEOPOTENTI' = {
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =               5;
+}
+'GRAUPEL' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              32;
+}
+'HUMI_RELAT' = {
+  FMULTM                           =               1;
+  FMULTE                           =               2;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =               1;
+}
+'ICE_CRYSTA' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              82;
+}
+'POT_VORTIC' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =              14;
+}
+'RAD_LIQUID' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              69;
+}
+'RAD_SOLID_' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              70;
+}
+'RAIN' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              85;
+}
+'SIM_REFLEC' = {
+  discipline                       =               0;
+  parameterCategory                =              16;
+  parameterNumber                  =               4;
+}
+'SNOW' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              86;
+}
+'TEMPERATUR' = {
+  discipline                       =               0;
+  parameterCategory                =               0;
+  parameterNumber                  =               0;
+}
+'THETA_PRIM' = {
+  discipline                       =               0;
+  parameterCategory                =               0;
+  parameterNumber                  =               3;
+}
+'THETA_VIRT' = {
+  discipline                       =               0;
+  parameterCategory                =               0;
+  parameterNumber                  =              15;
+}
+'TKE' = {
+  discipline                       =               0;
+  parameterCategory                =              19;
+  parameterNumber                  =              11;
+}
+'VENT_MERID' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               3;
+}
+'VENT_ZONAL' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               2;
+}
+'VERT.VELOC' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               9;
+}
+'VITESSE_VE' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               8;
+}
+'ABS_VORTICIT' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =              10;
+}
+'GEOPOTENTIEL' = {
+  FMULTM                           = 101971621297793;
+  FMULTE                           =             -15;
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =               5;
+}
+'TEMPE_POTENT' = {
+  discipline                       =               0;
+  parameterCategory                =               0;
+  parameterNumber                  =               2;
+}
+'VENT_MERIDIE' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               3;
+}
+'VENT_ZONAL' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =               2;
+}
+'SPECSURFGEOPOTEN' = {
+  FMULTM                           = 101971621297793;
+  FMULTE                           =             -15;
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =               5;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFACCGRAUPEL' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              32;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFACCNEIGE' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              50;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFACCPLUIE' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              49;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFAEROS.LAND' = {
+  discipline                       =               0;
+  parameterCategory                =              13;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFAEROS.DESERT' = {
+  discipline                       =               0;
+  parameterCategory                =              13;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFAEROS.SEA' = {
+  discipline                       =               0;
+  parameterCategory                =              13;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFAEROS.SOOT' = {
+  discipline                       =               0;
+  parameterCategory                =              13;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFALBEDO' = {
+  FMULTM                           =               1;
+  FMULTE                           =               2;
+  discipline                       =               0;
+  parameterCategory                =              19;
+  parameterNumber                  =               1;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFALBEDO_NEIGE' = {
+  discipline                       =               0;
+  parameterCategory                =              19;
+  parameterNumber                  =              19;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFALBEDO_HISTO' = {
+  discipline                       =               0;
+  parameterCategory                =              19;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFALBEDO.SOLNU' = {
+  discipline                       =               0;
+  parameterCategory                =              19;
+  parameterNumber                  =              18;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFALBEDO.VEG' = {
+  discipline                       =               0;
+  parameterCategory                =              19;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFA.OF.OZONE' = {
+  discipline                       =               0;
+  parameterCategory                =              14;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFB.OF.OZONE' = {
+  discipline                       =               0;
+  parameterCategory                =              14;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFC.OF.OZONE' = {
+  discipline                       =               0;
+  parameterCategory                =              14;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFCAPE.MOD.XFU' = {
+  discipline                       =               0;
+  level                            =               0;
+  parameterCategory                =               7;
+  parameterNumber                  =               6;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFCAPE.POS.F00' = {
+  discipline                       =               0;
+  level                            =               1;
+  parameterCategory                =               7;
+  parameterNumber                  =               6;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFDIAGHAIL' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              31;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFDENSIT.NEIGE' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              61;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFEMISSIVITE' = {
+  discipline                       =               0;
+  parameterCategory                =              19;
+  parameterNumber                  =             218;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFEPAIS.SOL' = {
+  discipline                       =               2;
+  parameterCategory                =               3;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFET.GEOPOTENT' = {
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFFL.CT_TURBUL' = {
+  discipline                       =               0;
+  parameterCategory                =               0;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFFL.Q_TURBUL' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFFL.U_TURBUL' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFFL.V_TURBUL' = {
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFFLU.CHA.SENS' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               0;
+  parameterNumber                  =              11;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFFLU.LAT.MEVA' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              41;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFFLU.LAT.MSUB' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              62;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFFLU.MEVAP.EA' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              41;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFFLU.MSUBL.NE' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              62;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFFLU.RAY.SOLA' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               4;
+  parameterNumber                  =               9;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFFLU.RAY.THER' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               5;
+  parameterNumber                  =               5;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFGEOPOTENTIEL' = {
+  FMULTM                           = 101971621297793;
+  FMULTE                           =             -15;
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =               5;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFGZ0.THERM' = {
+  discipline                       =               2;
+  parameterCategory                =               0;
+  parameterNumber                  =             216;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFIND.FOLIAIRE' = {
+  discipline                       =               2;
+  parameterCategory                =               0;
+  parameterNumber                  =              28;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFIND.TERREMER' = {
+  discipline                       =               2;
+  parameterCategory                =               0;
+  parameterNumber                  =               0;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFIND.VEG.DOMI' = {
+  discipline                       =               2;
+  parameterCategory                =               0;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFINSGRAUPEL' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              75;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFINSNEIGE' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              66;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFINSPLUIE' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              65;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFISOT0.MALTIT' = {
+  discipline                       =               0;
+  level                            =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =               6;
+  typeOfFirstFixedSurface          =              20;
+}
+'SURFISOTM10.MALT' = {
+  discipline                       =               0;
+  level                            =             -10;
+  parameterCategory                =               3;
+  parameterNumber                  =               6;
+  typeOfFirstFixedSurface          =              20;
+}
+'SURFISOTPW0.MALT' = {
+  discipline                       =               0;
+  level                            =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =               6;
+  typeOfFirstFixedSurface          =             107;
+}
+'SURFISOTPW1.MALT' = {
+  discipline                       =               0;
+  level                            =               1;
+  parameterCategory                =               3;
+  parameterNumber                  =               6;
+  typeOfFirstFixedSurface          =             107;
+}
+'SURFNEBUL.TOTALE' = {
+  FMULTM                           =               1;
+  FMULTE                           =               2;
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               1;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFNEBUL.CONVEC' = {
+  FMULTM                           =               1;
+  FMULTE                           =               2;
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               2;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFNEBUL.BASSE' = {
+  FMULTM                           =               1;
+  FMULTE                           =               2;
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               3;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFNEBUL.MOYENN' = {
+  FMULTM                           =               1;
+  FMULTE                           =               2;
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               4;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFNEBUL.HAUTE' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               5;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFPREC.EAU.CON' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              48;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFPREC.EAU.GEC' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              47;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFPREC.NEI.CON' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              14;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFPREC.NEI.GEC' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              15;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFPRESSION' = {
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =              25;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFPROP.ARGILE' = {
+  discipline                       =               2;
+  parameterCategory                =               3;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFPROP.SABLE' = {
+  discipline                       =               2;
+  parameterCategory                =               3;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFPROP.VEGETAT' = {
+  FMULTM                           =               1;
+  FMULTE                           =               2;
+  discipline                       =               2;
+  parameterCategory                =               0;
+  parameterNumber                  =               4;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRAYT_DIR_SUR' = {
+  discipline                       =               0;
+  parameterCategory                =               4;
+  parameterNumber                  =               7;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRAYT_SOL_CL' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               4;
+  parameterNumber                  =              11;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRAYT_SOLA_DE' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               4;
+  parameterNumber                  =               7;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFRAYT_THER_CL' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               5;
+  parameterNumber                  =               6;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRAYT_THER_DE' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               5;
+  parameterNumber                  =               3;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'SURFRAYT.LUNE.DE' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               4;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRAYT.SOLAIRE' = {
+  discipline                       =               0;
+  parameterCategory                =               4;
+  parameterNumber                  =               9;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRAYT.TERREST' = {
+  discipline                       =               0;
+  parameterCategory                =               5;
+  parameterNumber                  =               5;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFREFLECT.MAX' = {
+  discipline                       =               0;
+  parameterCategory                =             255;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRES.EVAPOTRA' = {
+  discipline                       =               2;
+  parameterCategory                =               0;
+  parameterNumber                  =               6;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRESERV.EAU' = {
+  discipline                       =               2;
+  parameterCategory                =               3;
+  parameterNumber                  =              20;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRESERV.GLACE' = {
+  discipline                       =               2;
+  parameterCategory                =               3;
+  parameterNumber                  =              22;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRESERV.INTER' = {
+  discipline                       =               2;
+  parameterCategory                =               3;
+  parameterNumber                  =              20;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRESERV.NEIGE' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              11;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFRESI.STO.MIN' = {
+  discipline                       =               2;
+  parameterCategory                =               0;
+  parameterNumber                  =              16;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFTEMPERATURE' = {
+  discipline                       =               2;
+  parameterCategory                =               3;
+  parameterNumber                  =              18;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFTENS.DMOG.ME' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =              17;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFTENS.DMOG.ZO' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =              16;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFTENS.TURB.ME' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =              37;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFTENS.TURB.ZO' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               2;
+  parameterNumber                  =              38;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFTOT.WAT.VAPO' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              64;
+  typeOfFirstFixedSurface          =               1;
+  typeOfSecondFixedSurface         =               8;
+}
+'SURFVAR.GEOP.ANI' = {
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =              24;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFVAR.GEOP.DIR' = {
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =              21;
+  typeOfFirstFixedSurface          =               1;
+}
+'SURFZ0.FOIS.G' = {
+  FMULTM                           = 101971621297793;
+  FMULTE                           =             -15;
+  discipline                       =               2;
+  parameterCategory                =               0;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'PROFRESERV.EAU' = {
+  discipline                       =               2;
+  level                            =             255;
+  parameterCategory                =               3;
+  parameterNumber                  =              20;
+  typeOfFirstFixedSurface          =             106;
+}
+'PROFRESERV.GLACE' = {
+  discipline                       =               2;
+  level                            =             255;
+  parameterCategory                =               3;
+  parameterNumber                  =              22;
+  typeOfFirstFixedSurface          =             106;
+}
+'PROFTEMPERATURE' = {
+  discipline                       =               2;
+  level                            =             255;
+  parameterCategory                =               3;
+  parameterNumber                  =              18;
+  typeOfFirstFixedSurface          =             106;
+}
+'PROFXRUISSELLEME' = {
+  discipline                       =               2;
+  level                            =             255;
+  parameterCategory                =               0;
+  parameterNumber                  =               5;
+  typeOfFirstFixedSurface          =             106;
+}
+'CLSHUMI.RELATIVE' = {
+  FMULTM                           =               1;
+  FMULTE                           =               2;
+  discipline                       =               0;
+  level                            =               2;
+  parameterCategory                =               1;
+  parameterNumber                  =               1;
+  typeOfFirstFixedSurface          =             103;
+}
+'CLSHUMI.SPECIFIQ' = {
+  discipline                       =               0;
+  level                            =               2;
+  parameterCategory                =               1;
+  parameterNumber                  =               0;
+  typeOfFirstFixedSurface          =             103;
+}
+'CLSMAXI.HUMI.REL' = {
+  discipline                       =               0;
+  level                            =               2;
+  parameterCategory                =               1;
+  parameterNumber                  =               1;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =             103;
+  typeOfStatisticalProcessing      =               2;
+}
+'CLSMAXI.TEMPERAT' = {
+  discipline                       =               0;
+  level                            =               2;
+  parameterCategory                =               0;
+  parameterNumber                  =               0;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =             103;
+  typeOfStatisticalProcessing      =               2;
+}
+'CLSMINI.HUMI.REL' = {
+  discipline                       =               0;
+  level                            =               2;
+  parameterCategory                =               1;
+  parameterNumber                  =               1;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =             103;
+  typeOfStatisticalProcessing      =               3;
+}
+'CLSMINI.TEMPERAT' = {
+  discipline                       =               0;
+  level                            =               2;
+  parameterCategory                =               0;
+  parameterNumber                  =               0;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =             103;
+  typeOfStatisticalProcessing      =               3;
+}
+'CLSTEMPERATURE' = {
+  discipline                       =               0;
+  level                            =               2;
+  parameterCategory                =               0;
+  parameterNumber                  =               0;
+  typeOfFirstFixedSurface          =             103;
+}
+'CLSU.RAF.MOD.XFU' = {
+  discipline                       =               0;
+  level                            =              10;
+  parameterCategory                =               2;
+  parameterNumber                  =              23;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =             103;
+  typeOfStatisticalProcessing      =               0;
+}
+'CLSVENT.ZONAL' = {
+  discipline                       =               0;
+  level                            =              10;
+  parameterCategory                =               2;
+  parameterNumber                  =               2;
+  typeOfFirstFixedSurface          =             103;
+}
+'CLSVENT.MERIDIEN' = {
+  discipline                       =               0;
+  level                            =              10;
+  parameterCategory                =               2;
+  parameterNumber                  =               3;
+  typeOfFirstFixedSurface          =             103;
+}
+'CLSV.RAF.MOD.XFU' = {
+  discipline                       =               0;
+  level                            =              10;
+  parameterCategory                =               2;
+  parameterNumber                  =              24;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =             103;
+  typeOfStatisticalProcessing      =               0;
+}
+'SOMMFLU.RAY.SOLA' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               4;
+  parameterNumber                  =               9;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               8;
+  typeOfStatisticalProcessing      =               1;
+}
+'SOMMFLU.RAY.THER' = {
+  LSTCUM                           =               1;
+  discipline                       =               0;
+  parameterCategory                =               5;
+  parameterNumber                  =               5;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               8;
+  typeOfStatisticalProcessing      =               1;
+}
+'SOMMRAYT.SOLAIRE' = {
+  discipline                       =               0;
+  parameterCategory                =               4;
+  parameterNumber                  =               9;
+  typeOfFirstFixedSurface          =               8;
+}
+'SOMMRAYT.TERREST' = {
+  discipline                       =               0;
+  parameterCategory                =               5;
+  parameterNumber                  =               5;
+  typeOfFirstFixedSurface          =               8;
+}
+'TOPRAYT_DIR_SOM' = {
+  discipline                       =               0;
+  parameterCategory                =               4;
+  parameterNumber                  =               7;
+  typeOfFirstFixedSurface          =               8;
+}
+'ATMONEBUL.TOTALE' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               1;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'ATMONEBUL.CONVEC' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               2;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'ATMONEBUL.BASSE' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               3;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'ATMONEBUL.MOYENN' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               4;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'ATMONEBUL.HAUTE' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =               5;
+  productDefinitionTemplateNumber  =               8;
+  typeOfFirstFixedSurface          =               1;
+  typeOfStatisticalProcessing      =               1;
+}
+'CLPMHAUT.MOD.XFU' = {
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =              18;
+  typeOfFirstFixedSurface          =               1;
+  typeOfSecondFixedSurface         =             255;
+}
+'CLPMOCON.MOD.XFU' = {
+  discipline                       =               0;
+  parameterCategory                =               1;
+  parameterNumber                  =              26;
+  typeOfFirstFixedSurface          =               1;
+  typeOfSecondFixedSurface         =             255;
+}
+'CUF1PRESSURE' = {
+  discipline                       =               0;
+  level                            =               1;
+  parameterCategory                =               3;
+  parameterNumber                  =               2;
+  typeOfFirstFixedSurface          =               1;
+}
+'CUF2PRESSURE' = {
+  discipline                       =               0;
+  level                            =               2;
+  parameterCategory                =               3;
+  parameterNumber                  =               2;
+  typeOfFirstFixedSurface          =               1;
+}
+'GEOMASK.FPOS' = {
+  discipline                       =               0;
+  parameterCategory                =             191;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'LAT_G_XY' = {
+  discipline                       =               0;
+  parameterCategory                =             191;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'LATGAUSS' = {
+  discipline                       =               0;
+  parameterCategory                =             191;
+  parameterNumber                  =               1;
+  typeOfFirstFixedSurface          =               1;
+}
+'LON_G_XY' = {
+  discipline                       =               0;
+  parameterCategory                =             191;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'LONGAUSS' = {
+  discipline                       =               0;
+  parameterCategory                =             191;
+  parameterNumber                  =               2;
+  typeOfFirstFixedSurface          =               1;
+}
+'MAP_FACTOR' = {
+  discipline                       =               0;
+  parameterCategory                =             191;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'MESHGAUSS' = {
+  discipline                       =               0;
+  parameterCategory                =             191;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'MSLPRESSURE' = {
+  discipline                       =               0;
+  parameterCategory                =               3;
+  parameterNumber                  =               1;
+  typeOfFirstFixedSurface          =             101;
+}
+'RELATEMPERATURE' = {
+  discipline                       =               2;
+  level                            =             255;
+  parameterCategory                =               3;
+  parameterNumber                  =              18;
+  typeOfFirstFixedSurface          =             106;
+}
+'RELAPROP.RMAX.EA' = {
+  discipline                       =               2;
+  level                            =             255;
+  parameterCategory                =               3;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =             106;
+}
+'SIM_REFLECT.MAX' = {
+  discipline                       =               0;
+  parameterCategory                =              16;
+  parameterNumber                  =               4;
+  typeOfFirstFixedSurface          =              10;
+}
+'SUNSHI._DURATION' = {
+  discipline                       =               0;
+  parameterCategory                =               6;
+  parameterNumber                  =              33;
+  typeOfFirstFixedSurface          =               1;
+}
+'THETAPWP_FLUX' = {
+  discipline                       =               0;
+  parameterCategory                =               0;
+  parameterNumber                  =             255;
+  typeOfFirstFixedSurface          =               1;
+}
+'default' = {
+  discipline                       =             255;
+  parameterCategory                =             255;
+  parameterNumber                  =             255;
+}

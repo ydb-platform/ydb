@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Extras",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "normal key",
+      "key1": 123,
+      "key2": 456,
+      "$exclude": 123,
+      "invalid-key-1": "abc",
+      "-invalid+key_2": "efg",
+      "$comment": "comment",
+      "$id": "#name",
+      "register": "hij",
+      "schema": "klm",
+      "x-repr": true,
+      "x-abc": true,
+      "example": "example",
+      "readOnly": true
+    },
+    "age": {
+      "type": "integer",
+      "example": 12,
+      "writeOnly": true,
+      "examples": [
+        13,
+        20
+      ]
+    }
+  }
+}

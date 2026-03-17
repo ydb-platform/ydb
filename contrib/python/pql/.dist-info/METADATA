@@ -1,0 +1,22 @@
+Metadata-Version: 2.1
+Name: pql
+Version: 0.4.3
+Summary: A python expression to MongoDB query translator
+Home-page: https://github.com/alonho/pql
+Author: Alon Horev
+Author-email: alon@horev.net
+License: BSD
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: MacOS :: MacOS X
+Requires-Dist: pymongo
+Requires-Dist: python-dateutil
+
+UNKNOWN
+
+

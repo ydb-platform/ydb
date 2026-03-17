@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1;iam";
+option java_package = "yandex.cloud.api.iam.v1";
+
+message RefreshToken {
+  // Refresh Token id.
+  string id = 1;
+
+  // Information about the app for which the Refresh Token was issued.
+  string client_instance_info = 2;
+
+  // The OAuth client identifier for which the Refresh Token was issued.
+  string client_id = 3;
+
+  // The subject identifier for whom the Refresh Token was issued.
+  string subject_id = 4;
+
+  // Refresh token creation time.
+  google.protobuf.Timestamp created_at = 5;
+
+  // Refresh token expiration time.
+  google.protobuf.Timestamp expires_at = 6;
+
+  // Timestamp for the last authentication using this Refresh Token.
+  google.protobuf.Timestamp last_used_at = 7;
+
+  // Protection level of the refresh token.
+  //
+  // It shows whether DPOP was used to protect the Refresh Token and and the level of security of the storage used for the DPOP key.
+  RefreshToken.ProtectionLevel protection_level = 8;
+
+  // Protection level of the refresh token.
+  enum ProtectionLevel {
+    PROTECTION_LEVEL_UNSPECIFIED = 0;
+    // Refresh token without DPOP
+    NO_PROTECTION = 1;
+    // Refresh token with dpop. The dpop key is not a YubiKey PIV key with required pin/touch policy and attestation.
+    INSECURE_KEY_DPOP = 2;
+    // Refresh token with dpop. The dpop key is a YubiKey PIV key with required pin/touch policy and attestation.
+    SECURE_KEY_DPOP = 3;
+  }
+}

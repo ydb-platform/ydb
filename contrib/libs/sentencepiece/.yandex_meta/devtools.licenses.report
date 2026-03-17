@@ -1,0 +1,181 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  04380297db22a888ca5ed52dc9d62896
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/esaxx/esa.hxx [5:24]
+        third_party/esaxx/sais.hxx [5:24]
+
+KEEP     Apache-2.0           1cac41bf11bf0089dd57c82cec762bb9
+BELONGS ya.make
+    License text:
+        [![License](https://img.shields.io/badge/License-Apache%202.0-brightgreen.svg)](https://opensource.org/licenses/Apache-2.0)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 94.44
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [9:9]
+
+SKIP     LicenseRef-scancode-generic-cla 202c55093e2c797e9ded17a2f9c796d7
+BELONGS ya.make
+    License text:
+        [Google Individual Contributor License Agreement](https://cla.developers.google.com/about/google-individual)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [5:5]
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+
+SKIP     LicenseRef-scancode-generic-cla 876c509448bd2332ed7b35545f217cf4
+BELONGS ya.make
+    License text:
+        the one above, the [Software Grant and Corporate Contributor License Agreement](https://cla.developers.google.com/about/google-corporate).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [24:24]
+
+KEEP     BSD-3-Clause         99ab82d108d433d7c81ab68b50eb500d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        third_party/darts_clone/LICENSE [4:10]
+
+KEEP     Apache-2.0           a7e28c43917c6e222115fd30600f686a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        src/bpe_model.cc [3:13]
+        src/bpe_model.h [3:13]
+        src/bpe_model_trainer.cc [3:13]
+        src/bpe_model_trainer.h [3:13]
+        src/builder.cc [3:13]
+        src/builder.h [3:13]
+        src/char_model.cc [3:13]
+        src/char_model.h [3:13]
+        src/char_model_trainer.cc [3:13]
+        src/char_model_trainer.h [3:13]
+        src/common.h [3:13]
+        src/error.cc [3:13]
+        src/filesystem.cc [3:13]
+        src/filesystem.h [3:13]
+        src/freelist.h [3:13]
+        src/init.h [3:13]
+        src/model_factory.cc [3:13]
+        src/model_factory.h [3:13]
+        src/model_interface.cc [3:13]
+        src/model_interface.h [3:13]
+        src/normalizer.cc [3:13]
+        src/normalizer.h [3:13]
+        src/pretokenizer_for_training.cc [3:13]
+        src/pretokenizer_for_training.h [3:13]
+        src/sentencepiece.proto [3:13]
+        src/sentencepiece_model.proto [3:13]
+        src/sentencepiece_processor.cc [3:13]
+        src/sentencepiece_processor.h [3:13]
+        src/sentencepiece_trainer.cc [3:13]
+        src/sentencepiece_trainer.h [3:13]
+        src/spec_parser.h [3:13]
+        src/trainer_factory.cc [3:13]
+        src/trainer_factory.h [3:13]
+        src/trainer_interface.cc [3:13]
+        src/trainer_interface.h [3:13]
+        src/unicode_script.cc [3:13]
+        src/unicode_script.h [3:13]
+        src/unicode_script_map.h [3:13]
+        src/unigram_model.cc [3:13]
+        src/unigram_model.h [3:13]
+        src/unigram_model_trainer.cc [3:13]
+        src/unigram_model_trainer.h [3:13]
+        src/util.cc [3:13]
+        src/util.h [3:13]
+        src/word_model.cc [3:13]
+        src/word_model.h [3:13]
+        src/word_model_trainer.cc [3:13]
+        src/word_model_trainer.h [3:13]
+
+KEEP     MIT                  c44ec98f08524b2b7a3cbf7075dc91fd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/esaxx/LICENSE [5:24]
+
+KEEP     LicenseRef-scancode-warranty-disclaimer ede6de4dcab3ee3c2aa2d423799b1c6c
+BELONGS ya.make
+    License text:
+          // recommended and may result in unexpected behavior. Use at your own risk.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        src/sentencepiece_processor.h [698:698]

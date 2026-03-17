@@ -1,0 +1,19 @@
+# Local definition 11: Supplementary data used by the analysis
+
+unsigned[2] yearOfAnalysis   = year   : dump;
+unsigned[1] monthOfAnalysis  = month  : dump;
+unsigned[1] dayOfAnalysis    = day    : dump;
+unsigned[1] hourOfAnalysis   = hour   : dump;
+unsigned[1] minuteOfAnalysis = minute : dump;
+
+codetable[2] originatingCentreOfAnalysis 'common/c-1.table' = originatingCentre : dump,string_type;
+
+unsigned[2] subcentreOfAnalysis = subCentre : dump;
+
+constant secondsOfAnalysis = 0;
+
+meta dateOfAnalysis  g2date(yearOfAnalysis,monthOfAnalysis,dayOfAnalysis) : dump;
+meta timeOfAnalysis  time(hourOfAnalysis,minuteOfAnalysis,secondsOfAnalysis) : dump;
+
+alias mars.date = dateOfAnalysis;
+alias mars.time = timeOfAnalysis;

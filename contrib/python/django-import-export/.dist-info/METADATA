@@ -1,0 +1,218 @@
+Metadata-Version: 2.4
+Name: django-import-export
+Version: 4.4.0
+Summary: Django application and library for importing and exporting data with included admin integration.
+Author-email: Bojan Mihelač <djangoimportexport@gmail.com>
+Maintainer-email: Matthew Hegarty <djangoimportexport@gmail.com>
+License: Copyright (c) Bojan Mihelac and individual contributors.
+        All rights reserved.
+        
+        Redistribution and use in source and binary forms, with or without modification,
+        are permitted provided that the following conditions are met:
+        
+            1. Redistributions of source code must retain the above copyright notice,
+               this list of conditions and the following disclaimer.
+        
+            2. Redistributions in binary form must reproduce the above copyright
+               notice, this list of conditions and the following disclaimer in the
+               documentation and/or other materials provided with the distribution.
+        
+        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+        ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+        WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+        DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+        ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+        (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+        LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+        ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+        (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+        SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+        
+Project-URL: Documentation, https://django-import-export.readthedocs.io/en/stable/
+Project-URL: Repository, https://github.com/django-import-export/django-import-export
+Project-URL: Changelog, https://github.com/django-import-export/django-import-export/blob/main/docs/changelog.rst
+Keywords: django,import,export
+Platform: OS Independent
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 4.2
+Classifier: Framework :: Django :: 5.1
+Classifier: Framework :: Django :: 5.2
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Topic :: Software Development
+Requires-Python: >=3.9
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+License-File: AUTHORS
+Requires-Dist: diff-match-patch==20241021
+Requires-Dist: Django>=4.2
+Requires-Dist: tablib>=3.7.0
+Provides-Extra: all
+Requires-Dist: tablib[all]; extra == "all"
+Provides-Extra: cli
+Requires-Dist: tablib[cli]; extra == "cli"
+Provides-Extra: ods
+Requires-Dist: tablib[ods]; extra == "ods"
+Provides-Extra: pandas
+Requires-Dist: tablib[pandas]; extra == "pandas"
+Provides-Extra: xls
+Requires-Dist: tablib[xls]; extra == "xls"
+Provides-Extra: xlsx
+Requires-Dist: tablib[xlsx]; extra == "xlsx"
+Provides-Extra: yaml
+Requires-Dist: tablib[yaml]; extra == "yaml"
+Provides-Extra: docs
+Requires-Dist: sphinx==8.1.3; extra == "docs"
+Requires-Dist: sphinx-rtd-theme==3.0.1; extra == "docs"
+Requires-Dist: openpyxl==3.1.5; extra == "docs"
+Requires-Dist: psycopg[binary]>=3.2.9; extra == "docs"
+Provides-Extra: tests
+Requires-Dist: psycopg[binary]>=3.2.9; extra == "tests"
+Requires-Dist: mysqlclient==2.2.5; extra == "tests"
+Requires-Dist: chardet==5.2.0; extra == "tests"
+Requires-Dist: pytz==2024.2; extra == "tests"
+Requires-Dist: memory-profiler==0.61.0; extra == "tests"
+Requires-Dist: django-extensions==3.2.3; extra == "tests"
+Requires-Dist: coverage==7.6.4; extra == "tests"
+Requires-Dist: tablib[all]>=3.7.0; extra == "tests"
+Requires-Dist: setuptools-scm==8.1.0; extra == "tests"
+Dynamic: license-file
+
+====================
+django-import-export
+====================
+
+.. |build| image:: https://github.com/django-import-export/django-import-export/actions/workflows/release.yml/badge.svg
+    :target: https://github.com/django-import-export/django-import-export/actions/workflows/release.yml
+    :alt: Build status on Github
+
+.. |coveralls| image:: https://coveralls.io/repos/github/django-import-export/django-import-export/badge.svg?branch=main
+    :target: https://coveralls.io/github/django-import-export/django-import-export?branch=main
+
+.. |pypi| image:: https://img.shields.io/pypi/v/django-import-export.svg
+    :target: https://pypi.org/project/django-import-export/
+    :alt: Current version on PyPi
+
+.. |docs| image:: http://readthedocs.org/projects/django-import-export/badge/?version=stable
+    :target: https://django-import-export.readthedocs.io/en/stable/
+    :alt: Documentation
+
+.. |pyver| image:: https://img.shields.io/pypi/pyversions/django-import-export
+    :alt: PyPI - Python Version
+
+.. |djangover| image:: https://img.shields.io/pypi/djversions/django-import-export
+    :alt: PyPI - Django Version
+
+.. |downloads| image:: https://static.pepy.tech/personalized-badge/django-import-export?period=month&units=international_system&left_color=black&right_color=blue&left_text=Downloads/month
+    :target: https://pepy.tech/project/django-import-export
+
+.. |xfollow| image:: https://img.shields.io/twitter/url/https/twitter.com/django_import.svg?style=social&label=Follow%20%40django_import
+   :alt: Follow us on X
+   :target: https://twitter.com/django_import
+
+.. |discord|  image:: https://img.shields.io/discord/1240294048653119508?style=flat
+   :alt: Discord
+
+|build| |coveralls| |pypi| |docs| |pyver| |djangover| |downloads| |xfollow| |discord|
+
+Introduction
+============
+
+Straightforward, reliable and comprehensive file import / export for your Django application.
+
+*django-import-export* is an application and library which lets you manage import / export from / to a variety of sources (csv, xlsx, json etc).
+
+Can be run programmatically, or with optional integration with the Django Admin site:
+
+..
+  source of this video uploaded to this issue comment:
+  https://github.com/django-import-export/django-import-export/pull/1833#issuecomment-2118777440
+
+https://github.com/django-import-export/django-import-export/assets/6249838/ab56d8ba-c307-4bdf-8fa9-225669c72b37
+
+`Screenshots <https://django-import-export.readthedocs.io/en/latest/screenshots.html>`_
+
+Features
+========
+
+* Import / export via `Admin UI Integration <https://django-import-export.readthedocs.io/en/latest/admin_integration.html>`_ or `programmatically <https://django-import-export.readthedocs.io/en/latest/getting_started.html#importing-data>`_
+* Import to and from a variety of file formats (csv, json, xlsx, pandas, HTML, YAML... and anything else that `tablib <https://github.com/jazzband/tablib>`_ supports)
+* `Preview <https://django-import-export.readthedocs.io/en/latest/screenshots.html/>`_ data before importing in Admin UI
+* Support for `bulk import <https://django-import-export.readthedocs.io/en/latest/bulk_import.html>`_
+* Handles `CRUD (and 'skip') operations during import <https://django-import-export.readthedocs.io/en/latest/advanced_usage.html#create-or-update-model-instances>`_
+* Flexible handling of `foreign key <https://django-import-export.readthedocs.io/en/latest/advanced_usage.html#importing-model-relations>`_ relationships
+* `Many-to-many relationship <https://django-import-export.readthedocs.io/en/latest/advanced_usage.html#many-to-many-relations>`_ support
+* `Validation <https://django-import-export.readthedocs.io/en/latest/advanced_usage.html#validation-during-import>`_ of imported data
+* Define custom `transformations <https://django-import-export.readthedocs.io/en/latest/advanced_usage.html#advanced-data-manipulation-on-export>`_ for exported data
+* Import / export the same model instance as `different views <https://django-import-export.readthedocs.io/en/latest/advanced_usage.html#customize-resource-options>`_
+* Export using `natural keys <https://django-import-export.readthedocs.io/en/latest/advanced_usage.html#django-natural-keys>`__ for portability between environments
+* `Select items for export <https://django-import-export.readthedocs.io/en/latest/screenshots.html/>`_ via the Admin UI object list
+* `Select fields for export <https://django-import-export.readthedocs.io/en/latest/screenshots.html/>`_ via the export form
+* `Export single object instances <https://django-import-export.readthedocs.io/en/latest/admin_integration.html#export-from-model-instance-change-form>`_
+* Use `django permissions <https://django-import-export.readthedocs.io/en/latest/installation.html#import-export-import-permission-code>`_ to control import / export authorization
+* Internationalization support
+* Based on `tablib <https://github.com/jazzband/tablib>`__
+* Support for MySQL / PostgreSQL / SQLite
+* Extensible - `add custom logic to control import / export <https://django-import-export.readthedocs.io/en/latest/advanced_usage.html>`_
+* Handle import from various character encodings
+* `Celery <https://django-import-export.readthedocs.io/en/latest/celery.html>`_ integration
+* Test locally with `Docker <https://django-import-export.readthedocs.io/en/latest/testing.html>`_
+* Comprehensive `documentation <https://django-import-export.readthedocs.io/en/latest/index.html>`__
+* `Extensible API <https://django-import-export.readthedocs.io/en/latest/api_admin.html>`_
+* test coverage :100:
+* Supports dark mode :rocket:
+
+Example use-cases
+=================
+
+*django-import-export* is designed to be extensible and can be used to support a variety of operations.
+Here are some examples of how it has been used in the wild:
+
+* Configure external cron jobs to run an import or export at set times
+* Use `permissions <https://django-import-export.readthedocs.io/en/latest/installation.html#import-export-import-permission-code>`_ to define a subset of users able to import and export project data
+* Safely update project reference data by importing from version controlled csv
+* Create portable data to transfer between environments using `natural keys <https://django-import-export.readthedocs.io/en/latest/advanced_usage.html#django-natural-keys>`_
+* Manage user access to an application by importing externally version controlled auth user lists
+* Add `hooks <https://django-import-export.readthedocs.io/en/latest/advanced_usage.html#advanced-data-manipulation-on-export>`_ to anonymize data on export
+* `Modify import / export UI forms <https://django-import-export.readthedocs.io/en/latest/admin_integration.html#customize-admin-import-forms>`_ to add dynamic filtering on import / export.
+* Build a migration layer between platforms, for example take a `Wordpress <https://wordpress.org/>`_ export and import to `Wagtail <https://wagtail.org/>`_
+
+Getting started
+===============
+
+* `Installation <https://django-import-export.readthedocs.io/en/latest/installation.html>`_
+* `Getting started <https://django-import-export.readthedocs.io/en/latest/getting_started.html>`__
+* `Example application <https://django-import-export.readthedocs.io/en/latest/installation.html#exampleapp>`_
+
+Help and support
+================
+
+* `Documentation <https://django-import-export.readthedocs.io/en/latest/>`_
+* `FAQ <https://django-import-export.readthedocs.io/en/latest/faq.html>`_
+* `Getting help <https://django-import-export.readthedocs.io/en/latest/faq.html#what-s-the-best-way-to-communicate-a-problem-question-or-suggestion>`_
+* `Contributing <https://django-import-export.readthedocs.io/en/latest/faq.html#how-can-i-help>`_
+* Become a `sponsor <https://github.com/sponsors/django-import-export>`_
+* Join our `discord <https://discord.gg/aCcec52kY4>`_
+* Tutorial videos on `YouTube <https://www.youtube.com/results?search_query=django-import-export>`_
+* `Raise a security issue <https://github.com/django-import-export/django-import-export/blob/main/SECURITY.md>`_
+
+Commercial support
+==================
+
+Commercial support is provided by `Bellaport Systems Ltd <https://www.bellaport.co.uk>`_
+
+Releases
+========
+
+* `Release notes <https://django-import-export.readthedocs.io/en/latest/release_notes.html>`_
+* `Changelog <https://django-import-export.readthedocs.io/en/latest/changelog.html>`_
+

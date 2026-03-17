@@ -1,0 +1,72 @@
+.. -*- restructuredtext -*-
+
+==========================
+The Passlib Python Library
+==========================
+
+Welcome
+=======
+Passlib is a password hashing library for Python 2 & 3, which provides
+cross-platform implementations of over 30 password hashing algorithms, as well
+as a framework for managing existing password hashes. It's designed to be useful
+for a wide range of tasks, from verifying a hash found in /etc/shadow, to
+providing full-strength password hashing for multi-user application.
+
+* See the `documentation <https://passlib.readthedocs.io>`_
+  for details, installation instructions, and examples.
+
+* See the `changelog <https://passlib.readthedocs.io/en/stable/history>`_
+  for a description of what's new in Passlib.
+
+* Visit `PyPI <https://pypi.python.org/pypi/passlib>`_
+  for the latest stable release.
+  All releases are signed with the gpg key
+  `4D8592DF4CE1ED31 <http://pgp.mit.edu:11371/pks/lookup?op=get&search=0x4D8592DF4CE1ED31>`_.
+
+* Additional questions about usage or features? Feel free to post on our
+  `mailing list <https://groups.google.com/group/passlib-users>`_.
+
+Usage
+=====
+A quick example of using passlib to integrate into a new application::
+
+    >>> # import the context under an app-specific name (so it can easily be replaced later)
+    >>> from passlib.apps import custom_app_context as pwd_context
+
+    >>> # encrypting a password...
+    >>> hash = pwd_context.hash("somepass")
+    >>> hash
+    '$6$rounds=36122$kzMjVFTjgSVuPoS.$zx2RoZ2TYRHoKn71Y60MFmyqNPxbNnTZdwYD8y2atgoRIp923WJSbcbQc6Af3osdW96MRfwb5Hk7FymOM6D7J1'
+
+    >>> # verifying a password...
+    >>> ok = pwd_context.verify("somepass", hash)
+    True
+    >>> ok = pwd_context.verify("letmein", hash)
+    False
+
+For more details and an extended set of examples, see the full documentation;
+This example barely touches on the range of features available.
+
+Online Resources
+================
+* Latest Docs - https://passlib.readthedocs.io
+* Latest News - https://foss.heptapod.net/python-libs/passlib/wikis/home
+* Mailing list - https://groups.google.com/group/passlib-users
+
+* Downloads -  https://pypi.python.org/pypi/passlib
+* Source -     https://foss.heptapod.net/python-libs/passlib
+* Issues -     https://foss.heptapod.net/python-libs/passlib/issues
+
+Source
+=========
+Passlib's source repository uses Mercurial.  When building Passlib from an hg clone, note that there are two main branches: ``default`` and ``stable``.
+
+* ``default`` is the bleeding edge of the next major release. It may sometimes be of alpha quality. 
+* ``stable`` is the latest released version plus any pending bugfixes, and should be safe to use in production. 
+
+Hosting
+=======
+Thanks to the people at `Octobus <https://octobus.net/>`_ and `CleverCloud <https://clever-cloud.com/>`_
+for providing the repository / issue tracker hosting, as well as the development of `Heptapod <https://heptapod.net/>`_!
+
+Thanks to `ReadTheDocs <https://readthedocs.io>`_ for providing documentation hosting!

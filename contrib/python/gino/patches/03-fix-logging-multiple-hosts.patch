@@ -1,0 +1,27 @@
+commit b49d815c898bcf1838456a0f0d8b66adad6fdb91 (HEAD -> users/shadchin/pytest)
+author: danila-eremin
+date: 2022-02-07T01:08:10+03:00
+
+    Fix gino logging with multiple hosts
+
+--- contrib/python/gino/gino/ext/starlette.py	(873be5105ec104118c41ceec65b9aeed589dda41)
++++ contrib/python/gino/gino/ext/starlette.py	(b49d815c898bcf1838456a0f0d8b66adad6fdb91)
+@@ -168,7 +168,17 @@ class Gino(_Gino):
+         @app.on_event("startup")
+         async def startup():
+             config = self.config
+-            logger.info("Connecting to the database: %r", config["dsn"])
++            try:
++                logger.info("Connecting to the database: %r", config["dsn"])
++            except TypeError:
++                log_str = config["dsn"].drivername + "://"
++                if config["dsn"].host is not None:
++                    log_str += str(config["dsn"].host)
++                if config["dsn"].port is not None:
++                    log_str += ":" + str(config["dsn"].port)
++                if config["dsn"].database is not None:
++                    log_str += "/" + config["dsn"].database
++                logger.info("Connecting to the database: %r", log_str)
+             retries = 0
+             while True:
+                 retries += 1

@@ -1,0 +1,9 @@
+# Code table 4.103 - Spatial vicinity type
+0 0 Circle [m]
+1 1 Rectangle [m,m]
+2 2 Square [m]
+3 3 Wedge [m, degree, degree]
+4 4 Span of grid boxes centered around grid box i,j [x,y]
+# 5-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

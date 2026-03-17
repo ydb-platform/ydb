@@ -1,0 +1,932 @@
+Version 1.0.21 of the Developers' Release of the SCTP
+Linux Kernel Implementation is available from
+
+        http://www.kernel.org
+
+lksctp-1.0.21: Thu Sep 26 16:23:06 EDT 2024
+T:APP         Close some opened sockets in sctp_darn and sctp_test
+T:APP         Free host_s and serv_s in sctp_test and sctp_status
+T:TEST        Call close on the correct sk in test_1_to_1_send
+T:TEST        Free the allocated buffers before return
+T:TEST        Replace malloc with test_malloc
+
+lksctp-1.0.20: Sun Sep 22 16:08:56 EDT 2024
+T:APP         Replace use of deprecated gethostbyname with getaddrinfo
+T:APP         Check strdup return in append_addr
+T:LIB         Define cmsg array with correct size in sendv and recvv
+T:LIB         zero-initialize sinfo_assoc_id in sctp_rcvmsg
+T:LIB         Man page updates
+T:TEST        Add a test case for RE_CONFIG and interleaving
+
+lksctp-1.0.19: Wed Apr 28 02:51:29 PM -03 2021
+T:LIB         Fixes ignored parameter on sctp_sendv
+T:LIB         Man page updates
+T:BUILD       Fix hardcoded version for libsctp and libwithsctp
+T:BUILD       Various fixes for CI integration
+T:BUILD       Fix netinet/sctp.h not being installed
+T:TEST        Various fixes
+
+lksctp-1.0.18: Mon Aug 13 16:19 EDT 2016
+T:APP         Various test tools fixes
+T:LIB         Added support for sctp_peeloff_flags function
+T:LIB         Added macro definitions indicating which kernel
+              features were detected during build.
+T:LIB         Initial batch of fixes for coverity scan issues
+T:NA          Initial integration with Travis and Coverity Scan
+T:BUILD       Updated rfc listings so now 'make distcheck' works
+
+lksctp-1.0.17: Mon May  9 16:19 EDT 2016
+T:APP         Various sctp_test fixes
+T:TEST        also expect EACCES when accept on an established socket
+T:LIB         Make use of 'extern "C"'
+T:NA          Make use .git_ignore
+T:NA          Removed sysctl listing from man page
+T:BUILD       Added support for pkg-config
+T:BUILD       Allow not building tests
+
+lksctp-1.0.16: Tue Feb 18 11:01 EDT 2014
+T:APP         Code cleanups
+T:APP         Various sctp_status fixes
+T:TEST        Avoid using file descriptor 0 to get ENOTSOCK
+T:TEST        Various fixes
+T:LIB         Fix build for prefixed architectures
+
+lksctp-1.0.15: Sun May 12 11:01 EDT 2013
+T:BUILD       Allow build with no AM_SILENT_RULES support
+T:APP         Fix sctp_status
+T:APP         Fix quoted command line arguments
+
+lksctp-1.0.14: Wed Apr 05 11:54 EDT 2013
+T:BUILD       Modernize and fix autotool's build system
+T:TEST        Fix threading test
+T:TEST        Zero out flags in sendrecvmsg test
+T:HDR         Sync header with the kernel
+
+lksctp-1.0.13: Wed Jan 23 12:13 EDT 2013
+T:BUILD       Use silent rules
+T:BUILD       Fix build warnings all over the place
+T:APP         Fix memory leak in sctp_xconnect
+T:TEST        Fix deprecated values in test cases
+
+lksctp-1.0.12: Tue Jan 08 10:45 EDT 2013
+T:API         Add needed definitions for DTLS/SCTP.
+T:API         Fix data corruption in sctp_send
+T:API         Implement private SCTP_GET_ASSOC_STATS option to fetch addition
+              association data.
+T:TEST        Add more options to conformace test tool.
+T:APP         Add HEARTBEAT command to sctp_darn
+T:API         Obsolete interefaces have been removed
+T:API         Suport for SCTP_SACK_IMMEDIATELY options
+T:API         Support for non-blocking sctp-connectx
+
+lksctp-2.6.28-1.0.11: Wed Oct 21 16:53:41 EDT 2009
+T:BUILD       fix parallel build warning
+T:BUILD       fix make distcheck for lksctp-tools
+T:BUILD       fix compiler warnings in the library, apps and tests
+T:API         Update the sctp.h header to match the kernel.
+
+lksctp-2.6.28-1.0.10: Fri Mar 27 11:15:25 EDT 2009
+T:TEST	      Split the kernel frame test framework from lksctp-tools.  The
+              framework is very sensitive to all kernel changes, not just ones
+	      related to SCTP.  As such, it has been a gating factor to the
+	      releases of the new tools.
+T:APP	      New tool sctp_status to be used with SCTP conformance tests.
+              http://networktest.sourceforge.net/
+T:APP	      Add -T option to sctp_test
+T:APP	      Fix the -e option to sctp_darn
+T:LIB	      Fix building of static libraries.
+T:LIB         Fix compile warning in addrs.c
+T:APP	      Update the application useage of sctp_connectx
+T:TEST        Update the sctp_connectx() functional tests.
+T:API         Update to the sctp_connectx().  Now takes additional argument.
+T:API         Let sctp_recvmsg() honor passed in MSG_ flags
+K:	      See kernel change log for details.  We'll track only tools
+              changes here from now on.
+
+lksctp-2.6.26-1.0.9: Sun Jul 13 14:51:29 PDT 2008
+T:Patch	      Make frame tests work with 2.6.26 kernel.
+T:Patch       Implement and export SCTP-AUTH API extensions based on
+              sctpsocket-16 draft
+T:NA          Process withsctp.in at build time
+K:Patch       Add documentation for sctp sysctl variable
+K:NA          Mark the tsn as received after all allocations finish
+K:NA          Make sure N * sizeof(union sctp_addr) does not overflow.
+K:NA          Correctly set changeover_active for SFR-CACC
+K:NA          Correctly cleanup procfs entries upon failure.
+K:NA          Fix ECN markings for IPv6
+K:NA          Flush the queue only once during fast retransmit.
+K:NA          Start T3-RTX timer when fast retransmitting lowest TSN
+K:NA          Correctly implement Fast Recovery cwnd manipulations.
+K:NA          Move sctp_v4_dst_saddr out of loop
+K:NA          retran_path update bug fix
+K:NA          Fix NULL dereference of asoc.
+K:NA          Fix use of uninitialized pointer
+K:NA          Add address type check while process parameters of ASCONF chunk
+K:NA          Do not enable peer IPv6 address support on PF_INET socket
+K:NA          Initialize partial_bytes_acked to 0, when all of the data is acked
+K:NA          IPv4 vs IPv6 addresses mess in sctp_inet[6]addr_event.
+K:NA          Fix compiler warning about const qualifiers
+K:NA          Fix protocol violation when receiving an error length INIT-ACK
+K:NA          Add check for hmac_algo parameter in sctp_verify_param()
+K:Patch       New sctp mailing list
+K:NA          Remove an unused parameter from sctp_cmd_hb_timer_update
+K:Patch       "list_for_each()" -> "list_for_each_entry()" where appropriate.
+K:NA          Correct /proc/net/assocs formatting error
+K:Patch       Use snmp_mib_{init,free}().
+K:Patch       Remove useless assignment from __sctp_rcv_lookup_endpoint
+K:NA          fix wrong debug counting of bind_bucket
+K:NA          fix wrong debug counting of datamsg
+K:Patch       Replace socket with sock for SCTP control socket.
+K:Patch       Use inet_ctl_sock_create for control socket creation.
+K:Patch       Remove sctp_add_cmd_sf wrapper bloat
+K:Patch       Remove redundant wrapper functions.
+K:Patch       Replace char msg[] with static const char[]
+K:NA          Fix a race between module load and protosw access
+K:NA          fix misannotated __sctp_rcv_asconf_lookup()
+K:NA          Fix local_addr deletions during list traversals.
+K:Patch       Bring MAX_BURST socket option into ietf API extension compliance
+K:NA          Fix chunk parameter processing bug
+K:Patch       Kill unused static inline sctp_sysctl_jiffies_ms
+K:Patch       extend exported data in /proc/net/sctp/assoc
+K:Patch       Use proc_create to setup de->proc_fops.
+K:Patch       Update AUTH structures to match declarations in draft-16.
+K:NA          Incorrect length was used in SCTP_*_AUTH_CHUNKS socket option
+K:Patch       Clean up naming conventions of sctp protocol/address family
+              registration
+K:NA          Correctly set the length of sctp_assoc_change notification
+K:NA          Pick up an orphaned sctp_sockets_allocated counter.
+K:Patch       Convert sctp_dbg_objcnt to seq files.
+K:Patch       Use snmp_fold_field instead of a homebrew analogue.
+K:NA          Make sure the chunk is off the transmitted list prior to freeing.
+K:NA          Fix kernel panic while received ASCONF chunk with bad serial
+              number
+K:NA          Set ports in every address returned by sctp_getladdrs()
+K:NA          Correctly reap SSNs when processing FORWARD_TSN chunk
+K:NA          Fix kernel panic while received AUTH chunk with BAD shared key
+              identifier
+K:NA          Fix kernel panic while received AUTH chunk while enabled auth
+K:Patch       Kill silly inlines in ulpqueue.c
+K:NA          Do not increase rwnd when reading partial notification.
+K:Patch       Stop claiming that this is a "reference implementation"
+K:NA          Fix miss of report unrecognized HMAC Algorithm parameter
+K:NA          Correctly initialize error when parameter validation failed.
+K:Patch       Follow Add-IP security considerations wrt INIT/INIT-ACK
+K:Patch       Implement ADD-IP special case processing for ABORT chunk
+K:Patch       Change use_as_src into a full address state
+K:Patch       Update ASCONF processing to conform to spec.
+K:Patch       ADD-IP updates the states where ASCONFs can be sent
+K:Patch       Update association lookup to look at ASCONF chunks as well
+K:Patch       Add the handling of "Set Primary IP Address" parameter to INIT
+K:Patch       Handle the wildcard ADD-IP Address parameter
+K:Patch       Discard unauthenticated ASCONF and ASCONF ACK chunks
+K:Patch       Use crc32c library for checksum calculations.
+K:Patch       Use ipv4_is_<type>
+
+lksctp-2.6.24-1.0.8: Fri Feb  01 14:55:00 EST 2008
+K:NA          Add back the code that accounted for FORWARD_TSN parameter in
+              INIT.
+K:NA          Correctly handle AUTH parameters in unexpected INIT
+K:NA          Fix the name of the authentication event.
+K:NA          Spelling fixes
+K:NA          Flush fragment queue when exiting partial delivery.
+K:NA          Fix the bind_addr info during migration.
+K:NA          Add bind hash locking to the migrate code
+K:NA          Fix build issues with SCTP AUTH.
+K:NA          Fix chunk acceptance when no authenticated chunks were listed.
+K:NA          Fix the supported extensions parameter
+K:NA          Fix SCTP-AUTH to correctly add HMACS parameter.
+K:NA          Fix the number of HB transmissions.
+K:NA          Add missing "space"
+K:NA          Always flush the queue when uncorking.
+K:NA          Clean-up some defines for regressions tests.
+K:NA          Fix PR-SCTP to deliver all the accumulated ordered chunks
+K:NA          Make sctp_verify_param return multiple indications.
+K:NA          Convert custom hash lists to use hlist.
+K:NA          Use hashed lookup when looking for an association.
+K:NA          Fix a potential race between timers and receive path.
+K:NA          Allow ADD_IP to work with AUTH for backward compatibility.
+K:NA          Correctly disable ADD-IP when AUTH is not supported.
+K:NA          Update RCU handling during the ADD-IP case
+K:NA          Fix difference cases of retransmit.
+K:NA          Fix to process bundled ASCONF chunk correctly
+K:NA          Fix bad formatted comment in outqueue.c
+Patch         Use the {DEFINE|REF}_PROTO_INUSE infrastructure
+K:NA          SCTP endianness annotations regression
+K:NA          net/sctp/auth.c: make 3 functions static
+K:NA          #if 0 sctp_update_copy_cksum()
+K:NA          Consolidate sctp_ulpq_renege_xxx functions
+Patch         port randomization
+Patch         Tie ADD-IP and AUTH functionality as required by spec.
+Patch         API updates to support SCTP-AUTH extensions.
+Patch         Implement the receive and verification of AUTH chunk
+Patch         Enable the sending of the AUTH chunk.
+Patch         Implement SCTP-AUTH parameter processing
+Patch         Implement SCTP-AUTH initializations.
+Patch         Implement SCTP-AUTH internals
+Patch         protocol definitions for SCTP-AUTH implementation
+K:NA          Move sysctl_sctp_[rw]mem definitions to protocol.
+Patch         Implement the Supported Extensions Parameter
+K:NA          net/sctp/socket.c: make 3 variables static
+K:NA          Make sctp_addto_param() static.
+Patch         Rewrite of sctp buffer management code
+K:NA          Add parameters validity check for ASCONF chunk
+K:NA          Discard OOTB packets with bundled INIT early.
+K:NA          Clean up OOTB handling and fix infinite loop processing
+K:NA          Explicitly discard OOTB chunks
+K:NA          Send ABORT chunk with correct tag in response to INIT ACK
+K:NA          Validate buffer room when processing sequential chunks
+K:NA          Convert bind_addr_list locking to RCU
+K:NA          Add RCU synchronization around sctp_localaddr_list
+K:NA          Fix to handle invalid parameter length correctly
+K:NA          Abort on COOKIE-ECHO if backlog is exceeded.
+K:NA          Correctly disable listening when backlog is 0.
+K:NA          Do not retransmit chunks that are newer then rtt.
+K:NA          Unconfirmed transports can't become Inactive
+K:NA          Pick the correct port when binding to 0.
+K:NA          Use net_ratelimit to suppress error messages print too fast
+K:NA          Fix to encode PROTOCOL VIOLATION error cause correctly
+K:NA          Fix sctp_addto_chunk() to add pad with correct length
+K:NA          Assign stream sequence numbers to the entire message
+K:NA          properly clean up fragment and ordering queues during FWD-TSN.
+K:NA	      remove useless code in function sctp_init_cause
+K:NA	      drop SACK if ctsn is not less than the next tsn of assoc
+K:NA	      IPv4 mapped addr not returned in SCTPv6 accept()
+K:NA          Fix whitespace errors.
+
+lksctp-2.6.22-1.0.7: Thu Jul  12 12:24:14 EDT 2007
+K:NA	      Don't disable PMTU discovery when mtu is small
+K:NA          Flag a pmtu change request
+K:NA          Update pmtu handling to be similar to tcp
+K:NA          Fix leak in sctp_getsockopt_local_addrs when copy_to_user fails
+K:NA          Allow unspecified port in sctp_bindx()
+K:NA          Correctly set daddr for IPv6 sockets during peeloff
+K:NA          Do not include ABORT chunk header in the notification.
+K:NA          Correctly copy addresses in sctp_copy_laddrs.
+K:NA          Prevent OOPS if hmac modules didn't load
+K:NA	      Set assoc_id correctly during INIT collision.
+K:NA          Re-order SCTP initializations to avoid race with sctp_rcv()
+K:NA          Fix the SO_REUSEADDR handling to be similar to TCP.
+K:NA          Verify all destination ports in sctp_connectx.
+K:NA          Fix sctp_getsockopt_local_addrs_old() to use local storage.
+K:NA          Implement SCTP_MAX_BURST socket option.
+K:NA          Implement sac_info field in SCTP_ASSOC_CHANGE notification.
+K:NA          Honor flags when setting peer address parameters
+K:NA          Implement SCTP_ADDR_CONFIRMED state for ADDR_CHNAGE event.
+K:NA          Implement SCTP_PARTIAL_DELIVERY_POINT option.
+K:NA          Implement SCTP_FRAGMENT_INTERLEAVE socket option
+K:NA          Do not interleave non-fragments when in partial delivery
+K:NA          Unmap v4mapped addresses during SCTP_BINDX_REM_ADDR operation.
+K:NA          Fix assertion (!atomic_read(&sk->sk_rmem_alloc)) failed message
+K:NA          Correctly reset ssthresh when restarting association
+K:NA          Reset some transport and association variables on restart
+K:NA          Increment error counters on user requested HBs.
+K:NA          Cleanup stale data during association restart
+K:NA          Strike the transport before updating rto.
+K:NA          Fix connection hang/slowdown with PR-SCTP.
+K:NA          Force update of the rto when processing HB-ACK
+K:NA          Fix SACK sequence during shutdown.
+K:NA          Correctly handle unexpected INIT-ACK chunk.
+K:NA          Verify some mandatory parameters.
+K:NA          Set correct error cause value for missing parameters
+K:NA          Fix err_hdr assignment in sctp_init_cause.
+T:NA          Add support for sctp_getaddrlen() API.
+K,T:NA        Fix typo adaption -> adaptation as per the latest API draft.
+K:NA          Don't export include/linux/sctp.h to userspace.
+K,T:NA        Add support for SCTP_CONTEXT socket option.
+K:NA          Enable auto loading of SCTP when creating an ipv6 SCTP socket.
+K:NA          Handle address add/delete events in a more efficient way.
+K:NA          SCTP endianness annotations.
+K:NA          Cleanup of the sctp state table code.
+K:NA          Remove temporary associations from backlog and hash.
+K:NA          Correctly set IP id for SCTP traffic.
+K:NA          Always linearize packet on input.
+K:NA          Fix the RX queue size shown in /proc/net/sctp/assocs output.
+K:NA          Fix receive buffer accounting.
+K:NA          Do not timestamp every SCTP packet.
+K:NA          Use correct mask when disabling PMTUD.
+K:NA          Include sk_buff overhead while updating the peer's receive window.
+K:NA          Enable Nagle algorithm by default.
+K:NA          Remove multiple levels of msecs to jiffies conversions.
+K:NA          Use the flags value that is passed as an arg to sctp_accept.
+K:NA          Fix IPv6 address flag setting when doing peel-off/accept.
+K:NA          Cleanup nomem handling in the state functions.
+K:NA          Extend /proc/net/sctp/snmp to provide more statistics.
+K:NA          Convert SCTP to use the new HMAC template and hash interface.
+K:NA          Fix sctp_primitive_ABORT() call in sctp_close().
+K:NA          Fix sctp_make_abort_user() to avoid use of buggy 
+              get_user_iov_size().
+K:Bug 1502698 ADDIP: Don't use an address as source until it is ASCONF-ACKed.
+K:NA          Set chunk->data_accepted only if we are going to accept it.
+K:NA          Verify all the paths to a peer via heartbeat before using them.
+K:NA          Unhash the endpoint in sctp_endpoint_free().
+K:NA          Check for NULL input to sctp_bucket_destroy().
+K:NA          Fix persistent slowdown in sctp when a gap ack consumes rx buffer.
+K:NA          Send only 1 window update SACK per message.
+K:NA          Don't do CRC32C checksum over loopback.
+K:NA          Reset rtt_in_progress for the chunk when processing its sack.
+K:NA          Reject sctp packets with broadcast addresses.
+K:NA          Limit association max_retrans setting in ASSOCINFO setsockopt.
+T:NA          updates to linux 2.6.17
+K:NA          Allow linger to abort 1-N style sockets.
+K:NA          Validate the parameter length in HB-ACK chunk.
+K:NA          A better solution to fix the race between sctp_peeloff() and
+              sctp_rcv().
+K:Bug 1439226 Set sk_err so that poll wakes up after a non-blocking connect
+              failure.
+K:NA          Fix state table entries for chunks received in CLOSED state.
+K:NA          Fix panic's when receiving fragmented SCTP control chunks.
+K:NA          Prevent possible infinite recursion with multiple bundled DATA.
+K:NA          Allow spillover of receive buffer to avoid deadlock.
+T:NA          Fix the type of 'len' argument in sctp_recvmsg() man page.
+
+lksctp-2.6.16-1.0.6: Fri Feb  3 10:54:20 PST 2006
+K:NA          Fix 'fast retransmit' to send a TSN only once.       
+K:NA          Heartbeats exceed maximum retransmission limit.
+K:NA          Correct the number of INIT retransmissions.
+K:NA          Fix sctp_rcv_ootb() to handle the last chunk of a packet
+              correctly.
+K:NA          Fix couple of races between sctp_peeloff() and sctp_rcv().
+K:NA          Fix machine check/connection hang on IA64.
+K:NA          Fix bad sysctl formatting of SCTP timeout values on 64-bit m/cs.
+K:NA          Fix sctp_assoc_seq_show() panics on big-endian systems.
+K:NA          sctp doesn't show all associations/endpoints in /proc.
+K:NA          Fix sctp_cookie alignment in the packet.
+K:NA          Fix potential race condition between sctp_close() and sctp_rcv().
+K,T:NA        Add support for SCTP_DELAYED_ACK_TIME socket option.
+K,T:NA        Update SCTP_PEER_ADDR_PARAMS socket option to the latest api.
+              draft11.
+
+lksctp-2.6.15-1.0.5: Tue Jan  3 15:49:27 PST 2006
+K:NA           Fix SCTP to not return erroneous POLLOUT events.
+K:NA           Fix getsockname for sctp when an ipv6 socket accepts a
+               connection from an ipv4 socket.
+K:NA           Return socket errors only if the receive queue is empty.
+K,T:NA         Include ulpevents in socket receive buffer accounting.
+K:Bug 1350514  Fix ia64 NaT consumption fault with sctp_sideeffect commands.
+K:NA           Remove timeouts[] array from sctp_endpoint.
+K:Bug 1350521  Fix potential NULL pointer dereference in sctp_v4_get_saddr.
+K:NA           Do not allow unprivileged programs initiating new assocs on
+               privileged ports.
+K:NA           Allow SCTP_MAXSEG to revert to default frag point with a '0'
+               value.    
+K:NA           Fix SCTP_SETADAPTION sockopt to use the correct structure.
+K,T:NA         Rename SCTP specific control message flags to use SCTP_ prefix
+               rather than MSG_ prefix.
+
+lksctp-2.6.14-1.0.4: Fri Oct 28 10:56:04 PDT 2005
+T:NA           Add sctp_send() API support, testcases and manpage.
+T:NA           Add preprocessor constants for PR-SCTP, ADDIP & CANSET_PRIMARY
+K,T:NA         Fix SCTP socket options to work with 32-bit apps on 64-bit
+               kernels.
+K,T:NA         Fix sctp_get{pl}addrs() API to work with 32-bit apps on 64-bit
+               kernels.
+T:NA           Ignore MSG_CMSG_COMPAT flag leaked to 32-bit userspace with
+               64-bit kernels <= 2.6.13.
+K,T:Bug 1122994Fix SCTP_SHUTDOWN notifications for 1-1 style sockets.
+
+lksctp-2.6.13-1.0.3: Thu Sep  1 10:54:22 PDT 2005
+T:NA           Update to 2.6.13
+K:NA           Fix potential NULL pointer dereference while handling an ICMP
+               error.
+K:NA           Make init & delayed sack timeouts configurable by user.
+K:NA           Fix incorrect setting of sk_bound_dev_if when binding/sending
+               to a ipv6 link local address.
+K:NA           Support IP_FREEBIND socket option and ip_nonlocal_bind sysctl.  
+K:NA           Extend the info exported via /proc/net/sctp to support
+               netstat for SCTP.
+K:NA           Support SO_BINDTODEVICE option on incoming packets.
+K:Bug 120804   Fix bug in restart of peeled-off association.
+K,T:NA         sctp_connectx() support.
+T:NA           Increase sk_sndbuf to address send buffer accounting changes.
+T:NA           Update SCTP internet drafts in doc directory
+T:NA           Fix inconsistencies in license stmt in the library files.
+K:Bug 1155119  Add sctp send buffer accounting.
+K:NA           Replace incorrect use of dev_alloc_skb with alloc_skb in
+               sctp_packet_transmit().
+K:NA           Fix bug in sctp_init() error handling code.
+K:NA           Use ipv6_addr_any() rather than ipv6_addr_type() in
+               sctp_v6_is_any().
+T:Bug 1150885  Fix subscript out of range bug in sctp_test.c
+K:Bug 1158878  Implement Sec 2.41 of SCTP Implementers guide.
+K:Bug 1121085  Fix SCTP_ASSOCINFO getsockopt for 1-1 style sockets.
+K:Bug 1155130  Add sctp receive buffer accounting.
+
+lksctp-2.6.10-1.0.2: Thu Dec 30 15:55:27 PST 2004 
+Bug 1074664  Fix sctp_getladdrs() to return valid local addresses on an 
+             endpoint that is bound to INADDR_ANY or inaddr6_any.
+NA           Update to 2.6.10
+Bug 1028605  Fix misc. issues in SCTP_PEER_ADDR_PARAMS set socket option.
+NA           Fix bug in setting ephemeral port while adding a bind address.
+Bug 1090392  Clean up the T3_rtx timer when deleting a transport.
+Patch 1090027Implementation of SCTP IG Section 2.35
+Bug 905731   Validate and respond to invalid chunk/parameter lengths.
+Bug 1085959  Treat ICMP protocol unreachable errors from non-SCTP capable 
+             hosts as ABORTs.
+NA           Code cleanup: remove unused code and make needlessly global code 
+             static
+Bug 1058857  Fix potential null pointer dereference in sctp_err_lookup().
+Bug 982971   Validate fromlen/msg_flags in sctp_recvmsg before dereferencing.
+Bug 860345   Fix invalid msg length to sctp_sendmsg in sctp_xconnect.c
+Bug 1008149  Fix HEARTBEAT_ACKs being sent to wrong dest. ip address in a
+             multihoming scenario after failback. (Jorge)
+NA           Update any transports that are caching a deleted address as
+             a source address.
+NA           Update cwnd/ssthresh as per the sctpimpguide modifications.
+NA           Adaption layer indication support
+NA           Change sctp_assoc_t to a sized type(s32)
+NA           Update to 2.6.9
+NA           Update to 2.6.8-rc2
+NA           Mark chunks as ineligible for fast retransmit after handling
+             retransmit.
+Bug 995918   Fix missing '+' in the computation of sack chunk size in 
+             sctp_sm_pull_sack().
+NA           Use idr_get_new_above() with a starting id of 1 to avoid returning
+             an associd of 0.
+Bug 968562   Fix issues with handling stale cookie error over multihoming
+             associations.
+Bug 991991   Fix data not being delivered in SHUTDOWN_SENT state.
+Bug 979178   Set/Get default SCTP_PEER_ADDR_PARAMS for endpoint when associd
+             and peer address are 0.
+Bug 965359   Fix missing VTAG validation on certain incoming packets.
+Bug 965278   Fix to wakeup blocking connect() after max INIT retries failed.
+Bug 965276   Fix the use of cached non-zero vtag in a INIT that is resent
+             after a stale cookie error.
+Bug 962587   Fix poll() on a 1-1 style socket so that it returns when the
+             association is aborted by peer.
+Bug 962530   Add association states to netinet/sctp.h
+Bug 954271   Fix to not start a new association on a 1-many style sendmsg()
+             with MSG_EOF/MSG_ABORT flag and no data.
+Bug 948012   Fix to not setup a new association if the endpoint is in
+             SHUTDOWN_ACK_SENT state and recognizes that the peer has restarted.
+
+lksctp-2.6.6-1.0.1: Tue May 11 10:08:56 PDT 2004
+Bug 949429   Fix multihomed connection failures on 64bit systems. (Vlad)
+Bug 932698   fix accessing gap ack blocks array with -ve index in 
+             sctp_outq_sack().
+Bug 932692   memset parameter misordering.
+NA           Fix the 3rd arg to sctp_recvmsg() to size_t instead of a ptr.
+NA           Rename SCTP_ADDR_REACHBLE as SCTP_ADDR_AVAILABLE.
+NA           Fix bugs in handling overlapping INIT and peer restart over a
+             multi-homed association.
+NA           SCTP crc table can be static const (Stephen Hemminger)
+NA           Update sctp_test message sizes to match the new frag point of 
+             1452 bytes for AF_INET sockets with 1500 mtu. 
+NA           Propagate error from sctp_proc_init. (Olaf Kirch)
+Patch 751951 Partial Reliability extension support.
+NA           Cleanup sctp_packet and sctp_outq infrastructure.
+NA           Avoid the use of constant SCTP_IP_OVERHEAD to determine the max
+             data size in a SCTP packet.
+NA           Add MSG_EOF to netinet/sctp.h
+NA           Use id to ptr translation service to assign and validate assoc ids.
+NA           Update sctp_ulpevent structure.
+NA           Fix typo in entry name of remove_proc_entry() call.
+NA           Enable association change and data io events in sctp_test.
+NA           Add set_peer_primary interactive option to sctp_darn.
+NA           Use AM_CFLAGS/AM_LDFLAGS in Makefile.am's.
+NA           Avoid the use of hackish CONFIG_IPV6_SCTP__ option.
+NA           Don't do any ppid byte-order conversions as it is opaque to SCTP.
+
+lksctp-2.6.3-1.0.0:
+Bug 905331   Fix incorrect sinit_max_init_timeo behavior. (samudrala)
+NA           Force enable crypto options needed by SCTP (samudrala)
+NA           Update to 2.6.3 (samudrala)
+NA           Add support to get/set primary addr of an assoc to sctp_darn.
+NA           Add __BEGIN_DECLS/__END_DECLS to sctp.h (Ian)
+NA           Fix sctp_getladdrs()/sctp_getpaddrs() API so that the port value
+             in the returned addresses is in network byte order. (samudrala)
+NA           Fix SCTP_INITMSG set socket option so that a parameter with 0
+             value will not change its current value. (samudrala)
+NA           Use __get_free_pages() to allocate ssnmap to avoid kmalloc's
+             128K limit. (samudrala)
+
+lksctp-2.6.2-0.9.0:
+NA           Updated withsctp to capture and replace TCP_NODELAY
+             setsockopt() (samudrala) 
+Patch 890787 RPM packaging bugfixes. (FiX)
+NA           Removed the deprecated ADLER32 checksum support. (samudrala)
+NA           Update to 2.6.2 (samudrala)
+NA           Added manpages for SCTP. (samudrala)
+Patch 887176 autoconf cleanup/ Initial RPM packaging (FiX)
+Patch 878417 Added new 1-1 style API testcases. (damien, samudrala)
+NA           Add sysctl parameters to change socket receive/send buffer sizes
+             and update the default receive buffer to 65535 bytes.
+NA           provide valid tos and oif values for ip_route_output_key.
+NA           Fix bugs in byte order conversion while processing certain
+             address related socket options. (samudrala)
+Patch 869098 ADDIP: T4 RTO timer support. (kevin.gao)
+Patch 865250 withsctp: a tool to replace TCP with SCTP. (La Monte)
+NA           Enable shared libraries in lksctp-tools. (FiX)
+Patch 843544 ADDIP: Process incoming ASCONF_ACK chunks. (kevin.gao) 
+NA           Add a testcase to verify that a SHUTDOWN_COMP notification is
+             received on a SHUT_RW one-to-one style socket. (samudrala)
+NA           Add peeloff test to src/apps. (samudrala)
+NA           Fix overflow in the macros JIFFIES_TO_MSECS/MSECS_TO_JIFFIES
+             when used with large values. (samudrala)
+NA           Fix the duplicate increment of checksum error counter and
+             counting bad packet errors as checksum errors. (samudrala)
+NA           Fix to free assocs in the acceptq of a one-to-one style socket
+             that is closed. (samudrala)
+NA           ADDIP: Add sysctl parameter to enable/disable addip (samudrala) 
+NA           Fix extra semicolon bug in sctp_cacc_skip_3_1() (Ed Rupp)
+Patch 831522 ADDIP: Testcase for delete IP (kevin.gao)
+Patch 822546 ADDIP: Process ASCONF and respond with ASCONF_ACK (kevin.gao)
+
+lksctp-2.6.0-test7-0.7.4:
+NA           Update SCTP tests so that they can be run under LTP (samudrala) 
+NA           Update to 2.6.0-test7 (samudrala)
+Patch 809137 ADDIP: Support to create ASCONF_ACK chunk. (kevin.gao)
+Patch 798988 ADDIP: ASCONF chunk send support. (kevin.gao)
+NA           lksctp-tools tree re-organization (samudrala)
+NA           Fix malloc calls in kernel tests with no error checks. (samudrala)
+NA           Fix bugs in conversions between msecs and jiffies. (samudrala)
+NA           Update to 2.6.0-test6 (samudrala)
+PARISC64     Convert tv_add() from a static inline to macro to fix an
+             obscure assembler issue with parisc64 (samudrala)
+NA           Update to 2.6.0-test5 (samudrala)
+PPC64 port   Use correct types for args passed to sctp_recvmsg() calls.
+PPC64 port   Change the last arg of sctp_opt_info() to match the last arg
+             of getsockopt(). (samudrala)
+PPC64 port   Don't overload the optval of ADDRS_NUM socket options with 
+             different types for input and output. (samudrala)
+
+lksctp-2_6_0-test4-0_7_3:
+NA           draft 07 API:                              (samudrala)
+             - listen() with 0 backlog disables listening.
+             - By default all notifications are turned off even with
+               one-to-many(UDP) style sockets.
+Bug   799468 Fixes for a couple of issues with ssnmap allocation. (samudrala)
+NA           Convert sctp_param2sockaddr() and sockaddr2sctp_addr to address
+             family specific routines. (samudrala) 
+NA           draft 07 API: sctp_bindx() update. (samudrala)
+Patch 791660 ADDIP: SCTP_SET_PEER_PRIMARY socket option support. (kevin.gao)
+NA           Update to 2.6.0-test4 (samudrala)
+NA           draft 07 API: getp/laddrs, freep/laddrs changes (samudrala) 
+NA           draft 07 API: sctp_recvmsg() arg type change. (samudrala) 
+NA           draft 07 API: sctp_peeloff() takes associd, not a ptr (samudrala)
+Patch 784504 ADDIP: Testcase to verify basic ADDIP functionality. (kevin.gao)
+Bug   787008 Bugs in sysctl set/get of sctp rto parameters. (samudrala)
+NA           Update to 2.6.0-test3 (samudrala)
+Bug   783176 Fix to avoid large kmalloc failures on 64bit platforms (samudrala)
+Patch 776732 ADDIP basic infrastructure support. (ardelle.fan)
+Patch 775227 sctp_recvmsg() API support. (rlayer)
+
+lksctp-2_6_0-test1-0_7_2:
+NA           Set output interface for link-local v6 addresses (jgrimm)
+Patch 769844 Add V6 and freebsd support to sctp_test (rlayer)
+Patch 772062 Support IPV6_V6ONLY socket option. (ardelle.fan)
+Patch 757888 Support v4-mapped-v6 addresses (ardelle.fan)	
+NA           Update API names to be compatible with draft07 (samudrala)
+NA           Update to 2.6.0-test1 (samudrala)
+Patch 767208 Shutdown transport selection fix. (rlayer)
+Patch 769792 Fix for panic on recvmsg() with MSG_PEEK & misc stuff (samudrala)
+Patch 765676 Fix nasty race on skb destructor with AF_PACKET sockets (jgrimm)
+	
+lksctp-2_5_72-0_7_1:	
+Patch 759352 Perf: Don't search for gap ack blocks past highest TSN (jgrimm) 
+Patch 758202 Perf: Remove update_pending() from SACK path (jgrimm)
+NA           Update to 2.5.72	
+NA           Fix hlist bug introduced by mainline kernel (jgrimm)	
+NA           sctp_xconnect test tool (rlayer)	
+Patch 729089 ASSOCINFO/RTOINFO sockopts (pems & rlayer)
+NA           Update to 2.5.71  (jgrimm)	
+Bug   754129 Incorrect VTAG in stale cookie error chunk (samudrala)	
+Patch 749587 Change rto sysctl vars to milliseconds (rmlayer)	
+Patch 752321 Add kamikaze test.  (ardelle.fan) 
+Bug   752808 Bug fix for input loop exiting too early on TCP-style (jgrimm)
+	
+lksctp-2_5_70-0_7_0:	
+NA           Fix hostname parameter handling, should ABORT (jgrimm)	
+NA           Fix ft_frame_unkparam testcase (rlayer)	
+Bug   751458 Fixes from InterOp  (jgrimm, samudrala)	
+Bug   746295 Fix div by 0 in sctp_jitter (jgrimm)
+NA           Make T5 timer cleanup SHUTDOWN-PENDING state.  (jgrimm)	
+Patch 744633 /proc interface to display associations/endpoints (samudrala)
+NA           Update to 2.5.70 kernel. (samudrala)
+NA           sctp_getladdrs(), sctp_getpaddrs() bug fixes. (samudrala)
+Patch 738592 sctp_sendmsg() api support. (ardelle.fan)
+Patch 738550 SCTP_SHUTDOWN_EVENT notification support. (samudrala)
+NA           Rename struct sctp_protocol as sctp_globals (samudrala)
+Patch 737395 SCTP_GET_PEER_ADDR_INFO socket option. (samudrala)
+Bug   695324 Report error cause in CANT_STR_ASSOC (ardelle.fan)	
+Bug   695322 Stale cookie might not be first err cause (ardelle.fan)	
+Patch 735933 Support for socket options that take addr & associd (samudrala)
+Patch 718726 Add CACC frametest (ardelle.fan) 	
+NA           slab cache for chunks & bind_bucket (jgrimm)	
+NA           Update to 2.5.69 kernel. (samudrala)
+Patch 733320 SCTP ECN & IPv6 (jgrimm)	
+NA           Bug in get_peer_addr_params. (jgrimm, report by yfj@stanford.edu)
+Patch 730924 Add sinfo_timetolive support. (jgrimm)
+Patch 730461 SO_LINGER support for TCP-style sockets. (samudrala)
+Bug   729234 Initialize missing v4 fields of a v6 accept socket (samudrala)
+Bug   729652 Free chunk(s) when primitive_SEND fails (jgrimm)	
+Patch 704841 SEND_FAILed for fragmented messages (jgrimm, ardelle.fan)	
+Patch 727821 sendmsg() updates for TCP-style sockets. (samudrala)
+Patch 727454 Add control chunk bundling (jgrimm)	
+Patch 718726 Add SFR-CACC support.  (ardelle.fan)
+Patch 726343 Add SCTP_MAXSEG support.  (jgrimm)	
+NA           Add some macros to help cleanup code.  (jgrimm)	
+Patch 725367 Fix for poll() on a TCP-style listening socket. (samudrala)
+Patch 725219 Add per message fragment tracking (jgrimm)	
+NA           Update to 2.5.68 kernel. (samudrala)
+
+lksctp-2_5_67-0_6_9:
+Patch 723414 Handle accept() of a CLOSED association. (samudrala)
+Patch 722206 shutdown() support for TCP-style sockets. (samudrala)
+Bug   722169 Fix can't send to routed ipv6 address bug (jgrimm) 	
+NA           Fix GFP_KERNEL allocation while spinlock.  (jgrimm)	
+Patch 721330 Allow v4 private to v4 global association. (jgrimm)	
+Patch 720930 getsockname/getpeername support for TCP-style sockets (samudrala)
+Patch 719232 optimization: csum_update_copy && ulpq short-circuit (jgrimm)
+NA           Update to 2.5.67 kernel. (samudrala)
+Patch 717587 Use kernel crypto api (jgrimm)	
+Patch 714270 listen backlog support for TCP-style sockets. (samudrala)
+Patch 712929 Fix SACK bundling bug & a few minor fixes (jgrimm)	
+Patch 711590 Add V6_LINKLOCAL & sin6_scope_id support. (jgrimm)	
+Patch 711584 Add '--interface' option to sctp_darn tool. (jgrimm)	
+Patch 704841 Add SEND_FAILED support (ardelle.fan)
+NA           Update to 2.5.66 kernel (jgrimm)	
+Patch 709527 Add icmpv6 handler and PKT_TOOBIG support.  (jgrimm)
+	
+lksctp-2_5_65-0_6_8:
+Patch 706470 Bundle SACK with outgoing DATA (jgrimm)
+NA           Add --echo option to sctp_darn (jgrimm)	
+NA           Update to 2.5.65 kernel and config changes. (jgrimm)	
+Patch 702439 New kernel test to verify TCP-style socket interfaces. (samudrala)
+Bug   701294 Invalid associd passed to getsockopt() in sctp_darn. (samudrala) 
+
+lksctp-2_5_64-0_6_7:
+NA           Update to 2.5.64 kernel. (samudrala)
+Bug   699299 Panic in close(). (jgrimm)
+Patch 698437 frametest for TCP-style sockets. (samudrala)
+Patch 698877 Receiver SWS prevention. (jgrimm) 
+Patch 689872 Nagle-like support for SCTP.  (ardelle.fan)
+Patch 694884 accept() support for TCP-style sockets. (samudrala)
+NA           Bug fix from mailing list (Norbert Kiesel)
+Patch 689872 SCTP_NODELAY testcases (ardelle.fan)
+	
+lksctp-2_5_63-0_6_6:
+NA           Update to 2.5.63 kernel. (samudrala)
+Patch 692590 Add set/getsockopt SET_PEER_PRIMARY_ADDR (jgrimm)
+Bug   601470 Fix PF_INET sockets advertise v6 support bug (jgrimm)	
+NA           Fix testframe for non-SMP build  (jgrimm)
+Bug   688408 Fix testcases for v4 only configurations (jgrimm)	
+Patch 677351 Add getsockopt for DEFAULT_SEND_PARAM  (ardelle.fan)
+Patch 689446 Renege for "fills gap" case. (jgrimm)	
+Bug   611888 Round-robin retransmit path updates. (samudrala)
+NA           Update to 2.5.61 kernel. (samudrala)
+NA           Update to 2.5.60 kernel. (samudrala)
+Bug   649355 v6 source address selection support. (samudrala)
+Patch 680361 Add testcase for partial data delivery. (jgrimm)
+Patch 677351 SET_DEFAULT_SEND_PARAM setsockopt.  (ardelle.fan)
+Patch 681914 Skinny up ulpevent and support sinfo_cumtsn (jgrimm)
+Patch 685246 Partial Data Delivery.  (jgrimm).
+Patch 683736 Override primary destination with MSG_ADDR_OVER (ardelle.fan)
+Patch 630124 SCTP snmp mib statistics update/display support. (samudrala)
+Patch 686131 Move duplicate TSN tracking to tsnmap & cleanup (jgrimm)
+NA           C99 struct initializer cleanup.                 (Art Haas)	
+	
+lksctp-2_5_59-0_6_5:
+Patch 674359 Handling for Invalid Stream in INIT & missing cookie. (jgrimm)
+Patch 676473 Add v6 scoping testcases.  (jgrimm)
+Bug   677107 af->dst_saddr doesn't fill in the port  (samudrala)
+Patch 676468 Cleanup of assoc bind addr list initialization (samudrala)
+Patch 678481 Large Message Fragmentation support (jgrimm)
+Bug   679839 Kconfig can emit bad config of ipv6=m, sctp=y (jgrimm)	
+
+lksctp-2_5_59-0_6_4:
+Patch 673715 Fix to update rwnd on partial reads. (samudrala)
+Patch 673678 Minor fixes to overlapping init. (jgrimm)
+Patch 673309 Minor fixes to icmp error handler. (samudrala)
+Bug   672878 Free chunks in rtx & control queues on teardown.(samudrala)
+Patch 672759 Advisory marker as 'unsafe' for unload. (jgrimm)
+Patch 671916 Heartbeat timer during shutdown fixes (jgrimm)
+Patch 670970 Path mtu support for v4 addresses. (samudrala)
+NA           Update to 2.5.59 kernel. (samudrala)
+Patch 667038 Add heartbeat jitter (ardelle.fan)
+Patch 670020 Remove hardcoded stream limits (jgrimm)
+NA           Update to 2.5.56 kernel. (samudrala)
+Patch 662296 Handle ip re-assembled non-linear skb's (samudrala)
+Patch 663633 get/free paddrs and laddrs support (ardelle.fan)
+Bug   664112 Retransmitting already gap-acked TSNs (jgrimm)
+NA           Update to 2.5.53 kernel. (samudrala)
+Bug   667037 ft_frame_rwnd_receiver fail with v4 only (ardelle.fan)
+
+lksctp-2_5_52-0_6_3:
+NA           Update to 2.5.52 kernel. (samudrala)
+Patch 652802 Window update SACK support. (samudrala)
+Patch 651063 Fixes for compiler issues with gcc 3.2 (samudrala)
+Patch 649819 Notifier registration for v6 addr events. (samudrala)
+Patch 638235 Stale cookie support. (ardelle.fan)
+Patch 648103 v6 source address selection support. (samudrala)
+Bug   645067 memcpy in sctp_sendmsg() may copy too much. (samudrala)
+NA           Update to 2.5.50 kernel. (samudrala)
+Patch 644936 SCTP_INITMSG socket option. (samudrala)
+NA           Update to 2.5.49 kernel. (samudrala)
+Bug   641066 Bad dereference in sctp_cmd_assoc_failed. (samudrala)
+Patch 639177 MSG_PEEK support for recvmsg(). (samudrala)
+
+lksctp-2_5_47-0_6_2:
+Patch 637943 MSG_EOR support for recvmsg(). (samudrala)
+NA           Update to 2.5.47 kernel. (samudrala)
+Patch 636734 v6 autobind (jgrimm)
+Patch 635797 Blocking connect() support. (samudrala)
+Patch 634730 udp-style connect(non-blocking) support. (samudrala)
+NA           Update to 2.5.46 kernel. (samudrala)
+Patch 555335 Peer address parameters socket option (ardelle)
+NA           Update to 2.5.45 kernel. (samudrala)
+Patch 631750 sctpParam_t cleanup (jgrimm)
+Bug   587078 sctp_process_init() can fail (jgrimm)
+Patch 633338 Handle HOST_NAME_ADDR parm and misc. (jgrimm)
+Patch 625413 sockaddr_storage_t cleanup (jgrimm)
+Patch 635246 short circuit "no route" case (jgrimm)
+Bug   581734 PF_INET6 listen can't receiving v4 addresses (jgrimm)
+
+lksctp-2_5_44-0_6_1:
+Patch 628901 Initial Source address selection support. (samudrala)
+Bug   611930 Lost CWR scenario fix (jgrimm)
+NA           2.5.44 (jgrimm)
+Patch 628333 SNMP MIB infrastructure for SCTP. (nivedita)
+Patch 628318 Checks for tcp-style sockets. (nivedita)
+Bug   547270 Retain the order of retransmission. (daisyc)
+Patch 622919 Handle User initiated ABORT. (ardelle.fan)
+Bug   611927 Bug in the calculation of highest new tsn in sack. (samudrala)
+Bug   611916 Data can end up getting sent ahead of pend. rtx data (jgrimm)
+NA           Update to 2.5.43 kernel. (samudrala)
+Bug   623286 SHUTDOWN_COMPLETE has 0 vtag on lost SDC + restart. (samudrala)
+Patch 601756 VTAG checks for ABORT and SHUTDOWN_COMPLETE chunks. (ardelle.fan)
+Patch 619993 Fixes a couple of sctp_peeloff() issues. (samudrala)
+Bug   611919 Fast retransmit should ignore cwnd limit. (daisyc)
+Bug   611840 Restart address needs to check INIT and happen earlier (jgrimm)
+
+lksctp-2_5_41-0_6_0:
+NA           Update to 2.5.41 kernel (samudrala)
+Bug   621054 v6 kernel tests pass without IPv6 configured. (daisyc)
+NA           Update to 2.5.40 kernel   (jgrimm)
+NA           Split into user/kernel repositories (inaky, daisyc)
+Bug   611928 Alloc GFP_KERNEL with locks held (jgrimm)
+Bug   602650 Dropping packets > frag_point (jgrimm, samudrala)
+Patch 601367 Handle Unrecognized Parms (daisyc)
+Patch 609744 Add abort and shutdown to sctp_darn (ardelle.fan)
+Bug   604251 Association freed twice (jgrimm)
+Bug   611835 Fix Restart address check (jgrimm)
+
+lksctp-2_5_29-0_5_0:
+Patch 588249 misc. user header file fixes (jgrimm)
+
+lksctp-2_5_29-0_4_99:
+Patch 582166 sctp_peeloff() support. (samudrala)
+Bug   583874 sendmsg/init with bad buf. has leak (jgrimm)
+Patch 581963 Handle select/poll syscalls (daisyc)
+Bug   583798 Need GFP_ATOMIC when BH disabled (samudrala)
+Bug   585351 MSG_UNORDERED not set on fragmented chunks (samudrala)
+Patch 585474 Remove old DEFAULT_STREAM sock opt (jgrimm)
+Bug   585653 Fix V6INADDR_ANY to choose a saddr (jgrimm)
+Bug   585929 more leaks in sendmsg() on error cases. (samudrala)
+Patch 574420 overlapping init/restart  (dajiang, jgrimm)
+Bug   581992 zero probe shouldn't error association (samudrala)
+Patch 587986 move to Linux 2.5.29 (samudrala)
+
+lksctp-2_5_24-0_4_12:
+Patch 569943 graceful shutdown of an individual association. (samudrala)
+Patch 572054 move to linux kernel 2.5.24. (samudrala)
+Bug   574069 bugs in fragmentation & reassembly. (samudrala)
+Patch 579301 check for No User Data error and testcase (jgrimm)
+Bug   574071 less strict rwnd check at rcvr (samudrala)
+Patch 579525 SCTP_AUTOCLOSE socket option. (samudrala)
+Patch 575712 modify sctp_darn tool to use select (daisyc)
+NA           misc.: cleanup jiffies decl., update docs. (jgrimm)
+Patch 581745 getsockname needs sk->sport (jgrimm)
+Patch 582273 handle DATA while in SHUTDOWN-SENT (jgrimm)
+Bug   581997 sctp_wait_for_sndbuf fault (jgrimm)
+Patch 573958 Overlapping Init testcases (dajiang)
+Patch 582905 misc: remove md5 files. update cause code values (jgrimm)
+
+lksctp-2_5_15-0_4_11:
+Patch 560341 assoc_hash and more locking (jgrimm)
+Bug   541062 local_addr_list not not writer safe (jgrimm)
+Patch 564637 new ep_hash and locking down address list read/writes (jgrimm)
+Patch 565087 protect against timer overfiring (jgrimm)
+Patch 565935 Collapse ep/asoc hash links into common substructure (jgrimm)
+Bug   565868 Ctl-sock (OOTB) traps sending to ipv6 dest.  (jgrimm)
+Bug   565878 Xmit to wrong peer when no asoc.  (jgrimm)
+Patch 565686 Update RTO upon Heartbeat ACK.  (samudrala)
+Patch 567028 Cleanup unneeded atomic_t fields (jgrimm)
+Patch 567061 Some sctp-socket-04.txt updates (jgrimm)
+Patch 567646 Combine sctp_func_t/sctp_af_specific_t (jgrimm)
+Patch 568562 Sysctl support for RFC 2960 variables (jgrimm)
+Patch 567514 SCTP_SET_EVENTS sock options (samudrala)
+Patch 567492 block/non-block send and SNDBUF/RCVBUF (daisyc)
+
+lksctp-2_5_15-0_4_10:
+Patch 561757 congestion control, handle SACKs indicating renege (samudrala)
+Patch 561632 v4 scoping rules (daisyc)
+lksctp-2_5_15-0_4_9:
+Patch 554705 Locking phase 1 (off the BH, use socklock and backlog) (jgrimm)
+Bug   550363 Shutdown handling of CTSN incorrect (jgrimm)
+Patch 558565 testframe ipv4 only, doesn't compile (samudrala)
+Patch 556572 Fix INADDR_ANY and some IPv4 scoping (daisyc)
+Patch 559801 Cleanup old locking stuff and various naming/style (jgrimm)
+
+lksctp-2_5_15-0_4_8:
+Patch 557034 Port to 2.5.15 (samudrala)
+Patch 550903 sys_bindx removal (inaky, samudrala)
+
+lksctp-2_4_18-0_4_8:
+Patch 546328 sctp_transport cleanup (jgrimm)
+Bug   545852 sk->err cleanup (samudrala)
+Bug   547147 association leaks the inqueue->in_progress chunk (jgrimm)
+Bug   541065 fix port_rover race conditition in bind path (jgrimm)
+Patch 544577 heartbeat ack and failover (dajiang)
+NA           Make lksctp a module (inaky)
+NA           bindx over sockopt (inaky)
+Patch 547885 Split out v6 code and cleanup module patch (jgrimm)
+Patch 544583 ft_frame_hbACK updates (dajiang, huang)
+Patch 547340 fix testframe for "run once" (samudrala)
+Patch 548772 sctp_lock primitives   (jgrimm)
+Patch 547319 naming cleanup in statefuns (daisyc)
+Patch 549266 sctp_lock unittests (jgrimm)
+Patch 548815 Disable fragments option and more tests. (samudrala)
+Patch 550400 Add OOTB testcase (daisyc)
+Patch 550520 transport & association error thresholds (samudrala)
+NA           fix ft_frame_init_timer to not conflict with OOTB (jgrimm)
+Patch 549356 Small fixes and cleanup of bindx code (inaky)
+Patch 549360 bindx through sockopt (inaky)
+Patch 551716 Start using sctp_opts field instead of endpoint (jgrimm)
+Patch 551657 RTT Measurements and RTO updates (samudrala)
+Patch 552084 sctp_endpoint_common (jgrimm)
+Patch 553100 Testcase for RTT Measurements (samudrala)
+Bug   553329 Sendmsg + INIT CMSG has path which can corrupt assoc (jgrimm)
+Patch 553394 Move sctp_association to use endpoint_common (jgrimm)
+Patch 553528 rtx and heartbeat failures cleanup (samudrala)
+Patch 553844 OOTB packet processing (daisyc)
+
+lksctp-2_4_18-0_4_7:
+Bug   541198 Old-style retval->state races with CMD (jgrimm)
+Patch 541820 listen auto-bind support (samudrala)
+Patch 543421 Complete removal of retval structs/processing (jgrimm)
+Patch 544908 Object Count Debugging facilities (jgrimm)
+Patch 544806 Fix inqueue leak of chunks (daisyc)
+Patch 544460 Fragmentation/Reassembly support (samudrala)
+
+lksctp-2_4_18-0_4_6:
+Patch 529522 Primary Addr from saddr (jgrimm, daisyc, hui_huang)
+Patch 529530 Use skb_copy_datagram_iovec (samudrala)
+Patch 529961 sctphdr, PARAM constants in net order (jgrimm)
+Patch 529707 Changes to sctp_make_data* interfaces (samudrala)
+Patch 531206 Massive linux/sctp.h changes (jgrimm)
+Patch NA     Eliminate sctp_io.h (jgrimm)
+Patch 532575 sctp_opt as a per socket structure (jgrimm)
+Patch 532245 Patch to eliminate tcp_func dependency (samudrala)
+Patch 533351 Update headers to Socket Extensions 03 draft (jgrimm)
+Patch 531647 Initialize MTU from routing information (samudrala)
+Patch NA     Update csum I-D. (jgrimm)
+Patch 529783 Send heartbeats (dajiang, hui_huang)
+Bug   529726 SACK response sent to incorrect dest (jgrimm)
+Patch NA     More cleanup, mostly naming, dead field removal. (jgrimm)
+Bug   539452 sk->err should have errno as positive value (jgrimm).
+
+lksctp-2_4_18-0_4_5:
+Bug   513536 association lookup can fail (jgrimm)
+NA           Unused file/header cleanup (jgrimm)
+NA           Move sctp_socket() to testframe (jgrimm)
+Patch 524687 Stop byteswapping the rcv skb part 1 (daisyc)
+Patch 525009 Stop byteswapping the rcv skb part 2 (daisyc)
+NA           Change CRC32C per Connectathon (jgrimm)
+Patch 526505 Change crc code to skip checksum field (jgrimm)
+Patch 526177 Incorrect use of skb->end (samudrala)
+Patch 526740 Missing bindx support (samudrala)
+NA           A few sctp_darn fixes (jgrimm)
+NA           updatelinux_sctp.sh to handle links (loretos)
+Patch 513912 Invalid stream verification (daisyc)
+Patch 528541 ABORT handling during initiation phase (jgrimm)
+Patch 528679 Misc. Cleanup. (jgrimm)
+Patch 528611 Fix testframe skb for fraglist support (samudrala)
+Patch 526156 SCTP_STATUS sockopt (samudrala)
+
+
+lksctp-2_4_17_0-4_4:
+
+Patch 515054 INIT retransmission (jgrimm)
+Patch 511394 Invalid StreamId tests (daisyc)
+	     README suggestions (baqaqi)
+Bug   519410 test_kernel spinlock initialization (sridhar)
+Patch 520992 Enable COOKIE-ECHO bundling (jgrimm)
+Patch 520627 Fix autobind twice bug (daisyc)
+Patch 520755 A couple bugs from Debug Memory Allocations (sridhar)
+Patch 521216 Fix bind_addrs_to_raw calling kmalloc(GFP_KERNL) on int. (jgrimm)
+
+lksctp-2_4_17-0_4_3:
+New          Update to 2.4.17 (sridhar)
+Patch 512680 Frame test bindx for IPv6 (hui)
+Patch 510317 Failing testcase for source addr bug (daisyc)
+
+lksctp-2_4_1-0_4_3:
+Patch 511028 New CRC32C  (dinakarjb)
+Patch 510797 Sendmsg w/associd (jgrimm)
+Patch 499262 Testcase for stream negotiation (daisyc)
+Bug   473322 Sendmsg insists on msg_name (jgrimm)
+
+
+If you would like to follow the day-to-day development of the SCTP
+kernel, please refer to the README file for contact information and how to
+collaborate.

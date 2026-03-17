@@ -1,0 +1,16 @@
+about_resource: spans.py
+version: 2.4.1 
+name: Whoosh Spans
+vcs_url: hg+https://bitbucket.org/mchaput/whoosh@72e06bd0aac8
+home_url: https://bitbucket.org/mchaput/whoosh
+owner: Matt Chaput
+copyright: Copyright (c) 2011 Matt Chaput.
+download_url: https://bitbucket.org/mchaput/whoosh/get/2.4.1.tar.gz
+description: Manage spans of tokens and text. 
+ This file was originally copied and modified from Whoosh.
+
+license_expression: bsd-simplified
+
+licenses:
+-   file: spans.py.LICENSE
+    key: bsd-simplified

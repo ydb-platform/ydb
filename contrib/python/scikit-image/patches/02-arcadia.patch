@@ -1,0 +1,44 @@
+--- contrib/python/scikit-image/skimage/feature/_orb_descriptor_positions.py	(index)
++++ contrib/python/scikit-image/skimage/feature/_orb_descriptor_positions.py	(working tree)
+@@ -12,1 +13,2 @@ cimport numpy as cnp
+-POS = np.loadtxt(os.path.join(this_dir, "orb_descriptor_positions.txt"), dtype=np.int8)
++import importlib.resources
++POS = np.loadtxt((importlib.resources.files(__package__) / "orb_descriptor_positions.txt").open(mode='rb'), dtype=np.int8)
+--- contrib/python/scikit-image/skimage/io/manage_plugins.py	(index)
++++ contrib/python/scikit-image/skimage/io/manage_plugins.py	(working tree)
+@@ -98,1 +98,1 @@ def reset_plugins():
+-    parser.read(filename)
++    parser.read_file(filename)
+@@ -109,10 +111,12 @@ def _parse_config_file(filename):
+ 
+     """
+     pd = os.path.dirname(__file__)
+-    config_files = glob(os.path.join(pd, '_plugins', '*.ini'))
++    import io
++    from library.python import resource
++    config_files = resource.iterkeys(os.path.join("resfs/file", pd, "_plugins"))
+ 
+     for filename in config_files:
+-        name, meta_data = _parse_config_file(filename)
++        name, meta_data = _parse_config_file(io.StringIO(resource.find(filename).decode("utf-8")))
+         if 'provides' not in meta_data:
+             warnings.warn(
+                f'file {filename} not recognized as a scikit-image io plugin, skipping.'
+--- contrib/python/scikit-image/skimage/morphology/footprints.py	(index)
++++ contrib/python/scikit-image/skimage/morphology/footprints.py	(working tree)
+@@ -13,12 +13,13 @@ from skimage import morphology
+ # repetitions of 3 different types elementary of structuring elements.
+ #
+ # See _nsphere_series_decomposition for full details.
++import importlib.resources
+ _nsphere_decompositions = {}
+ _nsphere_decompositions[2] = np.load(
+-    os.path.join(os.path.dirname(__file__), 'disk_decompositions.npy')
++    (importlib.resources.files(__package__) / 'disk_decompositions.npy').open(mode='rb'), allow_pickle=True
+ )
+ _nsphere_decompositions[3] = np.load(
+-    os.path.join(os.path.dirname(__file__), 'ball_decompositions.npy')
++    (importlib.resources.files(__package__) / 'ball_decompositions.npy').open(mode='rb'), allow_pickle=True
+ )
+ 
+ 

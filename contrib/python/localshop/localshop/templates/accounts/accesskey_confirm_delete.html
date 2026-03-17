@@ -1,0 +1,22 @@
+{% extends "accounts/base.html" %}
+{% load i18n %}
+
+{% block content_panel %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading">Access keys</div>
+        <div class="panel-body">
+
+            <form method="post" action="" class="form-stacked">
+                <p>Delete the access key ?</p>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary"><span class="icon-ok icon-white"></span> Save</button>
+                    <a href="{% url 'accounts:access_key_list' %}" class="btn">Cancel</a>
+                </div>
+                {% csrf_token %}
+            </form>
+        </div>
+    </div>
+{% endblock %}
+

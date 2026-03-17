@@ -1,0 +1,19 @@
+{% load i18n %}
+
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' tree.urls.app %}">{{ app_label|capfirst|escape }}</a>
+    &rsaquo; <a href="{% url tree.urls.changelist %}">{{ tree.verbose_name_plural }}</a>
+    &rsaquo; <a href="{% url tree.urls.change tree.pk %}">{{ tree.get_title }}</a>
+    {% if deleted_objects %}
+        &rsaquo; <a href="{% url tree.urls.treeitem_change tree.pk object.pk %}">{{ object|truncatewords:"18" }}</a>
+        &rsaquo; {% trans 'Delete' %}
+    {% else %}
+        {% if action_list %}
+            &rsaquo; <a href="{% url tree.urls.treeitem_change tree.pk object.pk %}">{{ object|truncatewords:"18" }}</a>
+            &rsaquo; {% trans 'History' %}
+        {% else %}
+            &rsaquo; {% if add %}{% trans 'Add' %} {{ opts.verbose_name }}{% else %}{{ original|truncatewords:"18" }}{% endif %}
+        {% endif %}
+    {% endif %}
+</div>

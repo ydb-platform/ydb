@@ -1,0 +1,127 @@
+# Predefined grid 21
+
+#position offsetSection2;
+#transient section2Length=0 ;
+
+template predefined_grid_values "grib1/grid_[gridDefinition].def";
+
+#  NV -- number of vertical coordinate parameters
+constant numberOfVerticalCoordinateValues=0 ;
+
+constant neitherPresent = 255;
+
+alias NV = numberOfVerticalCoordinateValues;
+alias numberOfCoordinatesValues= numberOfVerticalCoordinateValues;
+
+#  PV -- location
+# (octet number)
+constant pvlLocation = 255;
+
+#  Data representation type
+constant dataRepresentationType  = 0;
+
+#  Grid definition
+# (according to data representation type - octet 6 above)
+
+# grib 1 -> 2
+constant gridDefinitionTemplateNumber = 0;
+
+# START 1/grid_definition.latitude_longitude_grid
+# GRID DEFINITION latitude/longitude grid (or equidistant cylindrical)
+
+alias numberOfPointsAlongAParallel=Ni;
+alias numberOfPointsAlongAMeridian=Nj;
+
+# Latitudes and Longitudes of the first and the last points
+# Resolution and component flags
+
+#  La1 - latitude of first grid point
+meta geography.latitudeOfFirstGridPointInDegrees scale(latitudeOfFirstGridPoint,oneConstant,grib1divider,truncateDegrees) : read_only;
+alias La1 = latitudeOfFirstGridPoint;
+
+#  Lo1 - longitude of first grid point
+meta geography.longitudeOfFirstGridPointInDegrees scale(longitudeOfFirstGridPoint,oneConstant,grib1divider,truncateDegrees) : read_only;
+alias Lo1 = longitudeOfFirstGridPoint;
+
+#  Resolution and component flags
+constant resolutionAndComponentFlags = 128;
+
+# Not flagbit numbers 7 to 0, while wmo is 1 to 8
+constant ijDirectionIncrementGiven = 1 ;
+
+# For grib 1 to 2
+alias iDirectionIncrementGiven = ijDirectionIncrementGiven;
+alias jDirectionIncrementGiven = ijDirectionIncrementGiven;
+alias DiGiven = ijDirectionIncrementGiven;
+alias DjGiven = ijDirectionIncrementGiven;
+
+constant earthIsOblate = 0;
+constant resolutionAndComponentFlags3 = 0;
+constant resolutionAndComponentFlags4 = 0;
+constant uvRelativeToGrid = 0;
+constant resolutionAndComponentFlags6 = 0;
+constant resolutionAndComponentFlags7 = 0;
+constant resolutionAndComponentFlags8 = 0;
+
+#  La2 - latitude of last grid point
+meta geography.latitudeOfLastGridPointInDegrees scale(latitudeOfLastGridPoint,oneConstant,grib1divider,truncateDegrees) : read_only;
+alias La2 = latitudeOfLastGridPoint;
+
+#  Lo2 - longitude of last grid point
+meta geography.longitudeOfLastGridPointInDegrees scale(longitudeOfLastGridPoint,oneConstant,grib1divider,truncateDegrees)  : read_only;
+alias Lo2 = longitudeOfLastGridPoint;
+
+alias Dj = jDirectionIncrement;
+alias Di = iDirectionIncrement;
+
+#  Scanning mode
+constant scanningMode = 64;
+
+# Not flagbit numbers 7 to 0, while wmo is 1 to 8
+constant iScansNegatively = 0 ;
+constant jScansPositively = 1 ;
+constant jPointsAreConsecutive = 0;
+constant iScansPositively = 1;
+
+constant scanningMode4 = 0;
+constant scanningMode5 = 0;
+constant scanningMode6 = 0;
+constant scanningMode7 = 0;
+constant scanningMode8 = 0;
+
+meta  geography.jDirectionIncrementInDegrees latlon_increment(ijDirectionIncrementGiven,jDirectionIncrement,
+  jScansPositively,
+  latitudeOfFirstGridPointInDegrees,latitudeOfLastGridPointInDegrees,
+  numberOfPointsAlongAMeridian,oneConstant,grib1divider,0) : read_only;
+
+meta  geography.iDirectionIncrementInDegrees latlon_increment(ijDirectionIncrementGiven,iDirectionIncrement,
+  iScansPositively,
+  longitudeOfFirstGridPointInDegrees,longitudeOfLastGridPointInDegrees,
+  Ni,oneConstant,grib1divider,1)  : read_only;
+
+alias latitudeFirstInDegrees  = latitudeOfFirstGridPointInDegrees;
+alias longitudeFirstInDegrees = longitudeOfFirstGridPointInDegrees;
+alias latitudeLastInDegrees   = latitudeOfLastGridPointInDegrees;
+alias longitudeLastInDegrees  = longitudeOfLastGridPointInDegrees;
+alias DiInDegrees             = iDirectionIncrementInDegrees;
+alias DjInDegrees             = jDirectionIncrementInDegrees;
+
+alias numberOfPoints=numberOfDataPoints;
+#alias ls.valuesCount=numberOfValues;
+
+# END 1/grid_definition.latitude_longitude_grid
+constant PVPresent = 0;
+constant PLPresent = 0;
+constant reducedGrid =0;
+
+# we always include the bitmap keys if a GDS is not present
+constant numberOfUnusedBitsAtEndOfSection3 = 0;
+
+# Table reference:
+constant tableReference = 0;
+
+#position offsetBeforeBitmap;
+# meta bitmap gds_not_present_bitmap( missingValue,numberOfValues,
+# numberOfPoints,
+# latitudeOfFirstGridPoint,
+# Ni,numberOfUnusedBitsAtEndOfSection3) : read_only;

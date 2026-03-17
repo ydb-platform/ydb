@@ -1,0 +1,9 @@
+# Code table 4.227 - Icing scenario (weather/cloud classification)
+0 0 None
+1 1 General
+2 2 Convective
+3 3 Stratiform
+4 4 Freezing
+# 5-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing value

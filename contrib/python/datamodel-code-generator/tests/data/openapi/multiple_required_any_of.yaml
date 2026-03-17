@@ -1,0 +1,21 @@
+openapi: 3.0.0
+info:
+paths:
+components:
+  schemas:
+    Addr:
+      type: object
+      properties:
+        ipv4Addr:
+          $ref: '#/components/schemas/Ipv4Addr'
+        ipv6Addr:
+          $ref: '#/components/schemas/Ipv6Addr'
+      anyOf:
+        - required: [ ipv4Addr ]
+        - required: [ ipv6Addr ]
+    Ipv4Addr:
+      type: string
+      format: ipv4
+    Ipv6Addr:
+      type: string
+      format: ipv6

@@ -1,0 +1,27 @@
+--- contrib/python/aiohttp-apispec/aiohttp_apispec/aiohttp_apispec.py	(index)
++++ contrib/python/aiohttp-apispec/aiohttp_apispec/aiohttp_apispec.py	(working tree)
+@@ -1,5 +1,6 @@
+ import os
+ import copy
++import importlib.resources
+ from pathlib import Path
+ from typing import Awaitable, Callable
+ 
+@@ -106,7 +106,7 @@ class AiohttpApiSpec:
+         if self._index_page is not None:
+             return self._index_page
+ 
+-        with open(str(static_files / INDEX_PAGE)) as swg_tmp:
++        with (static_files / INDEX_PAGE).open() as swg_tmp:
+             url = self.url if app is None else app.router[NAME_SWAGGER_SPEC].url_for()
+ 
+             if app is not None:
+@@ -119,7 +120,7 @@ class AiohttpApiSpec:
+     def _add_swagger_web_page(
+         self, app: web.Application, static_path: str, view_path: str
+     ):
+-        static_files = Path(__file__).parent / "static"
++        static_files = importlib.resources.files(__package__) / "static"
+         app.router.add_static(static_path, static_files, name=NAME_SWAGGER_STATIC)
+ 
+         async def swagger_view(_):

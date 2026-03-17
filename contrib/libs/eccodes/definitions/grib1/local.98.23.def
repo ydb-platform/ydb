@@ -1,0 +1,55 @@
+# (C) Copyright 2005- ECMWF.
+# Coupled atmospheric, wave and ocean means (with hindcast support)
+
+constant GRIBEXSection1Problem = 84 - section1Length;
+
+#used in local definition 13
+transient localFlag=2 : hidden;
+
+template mars_labeling "grib1/mars_labeling.def";
+#1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=23;
+
+unsigned[2] perturbationNumber  : dump;
+
+# unsigned[2] numberOfForecastsInEnsemble  : dump;
+
+unsigned[2] systemNumber  : dump;
+unsigned[2] methodNumber  : dump;
+unsigned[4] verifyingMonth : dump;
+unsigned[1] averagingPeriod : dump;
+unsigned[2] forecastMonth : dump;
+unsigned[4] referenceDate  : dump;
+unsigned[4] climateDateFrom  : dump;
+unsigned[4] climateDateTo : dump;
+signed[1] unitsDecimalScaleFactor  : dump;
+unsigned[1] thresholdIndicator  : dump;
+unsigned[2] lowerThresholdValue  : dump;
+unsigned[2] upperThresholdValue  : dump;
+
+alias local.systemNumber=systemNumber;
+alias local.methodNumber=methodNumber;
+alias local.verifyingMonth=verifyingMonth;
+alias local.averagingPeriod=averagingPeriod;
+alias local.forecastMonth=forecastMonth;
+alias local.referenceDate=referenceDate;
+alias local.climateDateFrom=climateDateFrom;
+alias local.climateDateTo=climateDateTo;
+alias local.unitsDecimalScaleFactor=unitsDecimalScaleFactor;
+alias local.thresholdIndicator=thresholdIndicator;
+alias local.lowerThresholdValue=lowerThresholdValue;
+alias local.upperThresholdValue=upperThresholdValue;
+
+# TODO: BR Note: this is not where we expect it!!
+
+unsigned[2] numberOfForecastsInEnsemble  : dump;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+#spareSetToZero
+pad padding_loc23_1(2);
+
+alias number = perturbationNumber;
+alias system = systemNumber;
+alias method = methodNumber;
+alias refdate = referenceDate;

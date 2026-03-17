@@ -1,0 +1,9 @@
+about_resource: gemfile_lock.py
+name: bundler
+version: 77e705
+download_url: https://raw.githubusercontent.com/bundler/bundler/77e7050364367d98f9bc96911ea2769b69a4735c/lib/bundler/lockfile_parser.rb
+license: mit
+license_text_file: gemfile_lock.py.LICENSE
+
+notes: this Python parser has been ported from Ruby bundler
+  bundler/lockfile_parser.rb for convenience.

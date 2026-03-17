@@ -1,0 +1,18 @@
+# Code table 4.224 - Categorical outlook
+0 0 No risk area
+1 1 Reserved
+2 2 General thunderstorm risk area
+3 3 Reserved
+4 4 Slight risk area
+5 5 Reserved
+6 6 Moderate risk area
+7 7 Reserved
+8 8 High risk area
+# 9-10 Reserved
+11 11 Dry thunderstorm (dry lightning) risk area
+# 12-13 Reserved
+14 14 Critical risk area
+# 15-17 Reserved
+18 18 Extremely critical risk area
+# 19-254 Reserved
+255 255 Missing

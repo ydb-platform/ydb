@@ -1,0 +1,24 @@
+--- contrib/python/tree-sitter/tree_sitter/__init__.py	(index)
++++ contrib/python/tree-sitter/tree_sitter/__init__.py	(working tree)
+@@ -1,6 +1,7 @@
+ """Python bindings for tree-sitter."""
+ 
+ from ctypes import cdll, c_void_p
++from ctypes.util import find_library
+ from distutils.ccompiler import new_compiler
+ from distutils.unixccompiler import UnixCCompiler
+ from os import path
+@@ -78,8 +79,11 @@ class Language:
+         Load the language with the given name from the dynamic library
+         at the given path.
+         """
+-        self.name = name
+-        self.lib = cdll.LoadLibrary(library_path)
++        self.name = name     
++        path = find_library("grammars")
++        if not path:
++            raise ImportError("Cannot find tree_sitter library")
++        self.lib = cdll.LoadLibrary(path)
+         language_function = getattr(self.lib, "tree_sitter_%s" % name)
+         language_function.restype = c_void_p
+         self.language_id = language_function()

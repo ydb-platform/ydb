@@ -1,0 +1,57 @@
+Metadata-Version: 2.1
+Name: django-autoconfig
+Version: 0.8.0
+Summary: Automatic configuration of Django projects based on the application requirements.
+Home-page: https://github.com/mikebryant/django-autoconfig
+Author: Mike Bryant
+Author-email: mike@mikebryant.me.uk
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+Classifier: Framework :: Django
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Requires-Dist: django (<2.1)
+
+=================
+django-autoconfig
+=================
+
+
+.. image:: https://travis-ci.org/mikebryant/django-autoconfig.png?branch=master
+    :target: https://travis-ci.org/mikebryant/django-autoconfig
+    :alt: Build Status Badge
+.. image:: https://coveralls.io/repos/mikebryant/django-autoconfig/badge.png?branch=master
+    :target: https://coveralls.io/r/mikebryant/django-autoconfig?branch=master
+    :alt: Coverage Status Badge
+.. image:: https://landscape.io/github/mikebryant/django-autoconfig/master/landscape.png
+   :target: https://landscape.io/github/mikebryant/django-autoconfig/master
+   :alt: Code Health Badge
+.. image:: https://pypip.in/v/django-autoconfig/badge.png
+    :target: https://pypi.python.org/pypi/django-autoconfig/
+    :alt: Version Badge
+.. image:: https://pypip.in/d/django-autoconfig/badge.png
+    :target: https://pypi.python.org/pypi/django-autoconfig/
+    :alt: Downloads Badge
+.. image:: https://pypip.in/wheel/django-autoconfig/badge.png
+    :target: https://pypi.python.org/pypi/django-autoconfig/
+    :alt: Wheel Status Badge
+.. image:: https://pypip.in/license/django-autoconfig/badge.png
+    :target: https://pypi.python.org/pypi/django-autoconfig/
+    :alt: License Badge
+
+Automatic configuration of Django projects based on the requirements of apps in the INSTALLED_APP setting.
+
+Official docs can be found at `Read the Docs`_.
+
+.. _`Read the Docs`: https://django-autoconfig.readthedocs.org
+
+

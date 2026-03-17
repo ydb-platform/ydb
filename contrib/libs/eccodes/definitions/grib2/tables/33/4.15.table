@@ -1,0 +1,11 @@
+# Code table 4.15 - Type of spatial processing used to arrive at given data value from the source data
+0 0 Data is calculated directly from the source grid with no interpolation
+1 1 Bilinear interpolation using the 4 source grid grid-point values surrounding the nominal grid-point
+2 2 Bicubic interpolation using the 4 source grid grid-point values surrounding the nominal grid-point
+3 3 Using the value from the source grid grid-point which is nearest to the nominal grid-point
+4 4 Budget interpolation using the 4 source grid grid-point values surrounding the nominal grid-point
+5 5 Spectral interpolation using the 4 source grid grid-point values surrounding the nominal grid-point
+6 6 Neighbor-budget interpolation using the 4 source grid grid-point values surrounding the nominal grid-point
+# 7-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

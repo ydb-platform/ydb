@@ -1,0 +1,6 @@
+# Code table 4.222 - Categorical result
+0 0 No
+1 1 Yes
+# 2-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

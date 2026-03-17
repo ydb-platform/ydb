@@ -1,0 +1,33 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 7.41, Grid point data - PNG
+
+meta codedValues data_png_packing(
+  section7Length,
+  offsetBeforeData,
+  offsetSection7,
+  numberOfValues,
+  referenceValue,
+  binaryScaleFactor,
+  decimalScaleFactor,
+  bitsPerValue,
+  # For encoding
+  Nx,
+  Ny,
+  interpretationOfNumberOfPoints,
+  numberOfDataPoints,
+  scanningMode
+): read_only;
+
+meta values data_apply_bitmap(
+  codedValues,
+  bitmap,
+  missingValue,
+  binaryScaleFactor,
+  numberOfDataPoints,
+  numberOfValues) : dump;
+
+alias data.packedValues = codedValues;
+
+template statistics "common/statistics_grid.def";
+template missing_values "common/missing_values_grid.def";

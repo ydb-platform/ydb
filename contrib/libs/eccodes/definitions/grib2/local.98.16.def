@@ -1,0 +1,11 @@
+# Local definition 16: Seasonal forecast monthly mean data
+
+unsigned[2] systemNumber : dump;
+unsigned[2] methodNumber : dump;
+
+alias local.systemNumber=systemNumber;
+alias local.methodNumber=methodNumber;
+
+# ECC-1425
+meta marsForecastMonth g1forecastmonth(dataDate, forecastTime): read_only;
+alias forecastMonth = marsForecastMonth;

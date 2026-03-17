@@ -1,0 +1,6 @@
+requirements:
+  - contrib/libs/gdal
+mark_as_cython_c:
+  - pyogrio/*.pyx
+cython_directive:
+  - language_level=3

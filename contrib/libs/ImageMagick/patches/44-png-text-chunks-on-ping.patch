@@ -1,0 +1,197 @@
+--- a/coders/png.c
++++ b/coders/png.c
+@@ -102,6 +102,8 @@
+ #define PNG_PTR_NORETURN
+ 
+ #include <png.h>
++// for custom png_read_end() implementation
++#include <pngpriv.h>
+ #include <zlib.h>
+ 
+ /* ImageMagick differences */
+@@ -3242,9 +3244,8 @@ static Image *ReadOnePNGImage(MngInfo *mng_info,
+   if (image->delay != 0)
+     mng_info->scenes_found++;
+ 
+-  if ((mng_info->mng_type == 0 && (image->ping != MagickFalse)) || (
+-      (image_info->number_scenes != 0) && (mng_info->scenes_found > (ssize_t)
+-      (image_info->first_scene+image_info->number_scenes))))
++  if ((image_info->number_scenes != 0) && (mng_info->scenes_found > (ssize_t)
++      (image_info->first_scene+image_info->number_scenes)))
+     {
+       /* This happens later in non-ping decodes */
+       if (png_get_valid(ping,ping_info,PNG_INFO_tRNS))
+@@ -3271,6 +3272,7 @@ static Image *ReadOnePNGImage(MngInfo *mng_info,
+       return(image);
+     }
+ 
++  if (image->ping == MagickFalse) {
+   status=SetImageExtent(image,image->columns,image->rows);
+   if (status != MagickFalse)
+     status=ResetImagePixels(image,exception);
+@@ -3733,6 +3735,136 @@ static Image *ReadOnePNGImage(MngInfo *mng_info,
+ 
+       image->storage_class=DirectClass;
+     }
++  } else {
++    // This is rewritten implementation png_read_end() function from libpng,
++    // here we skip all unneeded for ping case chunks without unpacking.
++    // This edition much faster for ImageMagick ping case.
++#ifdef PNG_HANDLE_AS_UNKNOWN_SUPPORTED
++    int keep;
++#endif
++#ifdef PNG_HANDLE_AS_UNKNOWN_SUPPORTED
++    if (png_chunk_unknown_handling(ping, png_IDAT) == 0)
++#endif
++    {
++      if ((ping->flags & PNG_FLAG_ZSTREAM_ENDED) == 0)
++      {
++        ping->zstream.next_out = NULL;
++        if ((ping->flags & PNG_FLAG_ZSTREAM_ENDED) == 0)
++        {
++          ping->mode |= PNG_AFTER_IDAT;
++          ping->flags |= PNG_FLAG_ZSTREAM_ENDED;
++        }
++      }
++      if (ping->zowner == png_IDAT)
++      {
++        ping->zstream.next_in = NULL;
++        ping->zstream.avail_in = 0;
++        ping->zowner = 0;
++        (void)png_crc_finish(ping, ping->idat_size);
++      }
++    }
++    do
++    {
++      png_uint_32 length = png_read_chunk_header(ping);
++      png_uint_32 chunk_name = ping->chunk_name;
++ 
++      if (chunk_name != png_IDAT)
++        ping->mode |= PNG_HAVE_CHUNK_AFTER_IDAT;
++ 
++      if (chunk_name == png_IEND)
++        png_handle_IEND(ping, end_info, length);
++      else if (chunk_name == png_IHDR)
++        png_handle_IHDR(ping, end_info, length);
++      else if (end_info == NULL)
++        png_crc_finish(ping, length);
++#ifdef PNG_HANDLE_AS_UNKNOWN_SUPPORTED
++      else if ((keep = png_chunk_unknown_handling(ping, chunk_name)) != 0)
++      {
++        png_handle_unknown(ping, end_info, length, keep);
++        if (chunk_name == png_PLTE)
++          ping->mode |= PNG_HAVE_PLTE;
++      }
++#endif
++      else if (chunk_name == png_IDAT)
++        png_crc_finish(ping, length);
++      else if (chunk_name == png_PLTE)
++        png_crc_finish(ping, length);
++#ifdef PNG_READ_bKGD_SUPPORTED
++      else if (chunk_name == png_bKGD)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_cHRM_SUPPORTED
++      else if (chunk_name == png_cHRM)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_eXIf_SUPPORTED
++      else if (chunk_name == png_eXIf)
++        png_handle_eXIf(ping, end_info, length);
++#endif
++#ifdef PNG_READ_gAMA_SUPPORTED
++      else if (chunk_name == png_gAMA)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_hIST_SUPPORTED
++      else if (chunk_name == png_hIST)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_oFFs_SUPPORTED
++      else if (chunk_name == png_oFFs)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_pCAL_SUPPORTED
++      else if (chunk_name == png_pCAL)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_sCAL_SUPPORTED
++      else if (chunk_name == png_sCAL)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_pHYs_SUPPORTED
++      else if (chunk_name == png_pHYs)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_sBIT_SUPPORTED
++      else if (chunk_name == png_sBIT)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_sRGB_SUPPORTED
++      else if (chunk_name == png_sRGB)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_iCCP_SUPPORTED
++      else if (chunk_name == png_iCCP)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_sPLT_SUPPORTED
++      else if (chunk_name == png_sPLT)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_tEXt_SUPPORTED
++      else if (chunk_name == png_tEXt)
++        png_handle_tEXt(ping, end_info, length);
++#endif
++#ifdef PNG_READ_tIME_SUPPORTED
++      else if (chunk_name == png_tIME)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_tRNS_SUPPORTED
++      else if (chunk_name == png_tRNS)
++        png_crc_finish(ping, length);
++#endif
++#ifdef PNG_READ_zTXt_SUPPORTED
++      else if (chunk_name == png_zTXt)
++        png_handle_zTXt(ping, end_info, length);
++#endif
++#ifdef PNG_READ_iTXt_SUPPORTED
++      else if (chunk_name == png_iTXt)
++        png_handle_iTXt(ping, end_info, length);
++#endif
++      else
++        png_handle_unknown(ping, end_info, length, PNG_HANDLE_CHUNK_AS_DEFAULT);
++    } while ((ping->mode & PNG_HAVE_IEND) == 0);
++  }
+ 
+   for (j = 0; j < 2; j++)
+   {
+@@ -3823,6 +3955,28 @@ static Image *ReadOnePNGImage(MngInfo *mng_info,
+       }
+     num_text_total += num_text;
+   }
++  if (mng_info->mng_type == 0 && (image->ping != MagickFalse))
++    {
++      /* This happened before in non-ping decodes */
++      if (png_get_valid(ping,ping_info,PNG_INFO_tRNS))
++        image->storage_class=DirectClass;
++      image->matte=(((int) ping_color_type == PNG_COLOR_TYPE_RGB_ALPHA) ||
++        ((int) ping_color_type == PNG_COLOR_TYPE_GRAY_ALPHA) ||
++         (png_get_valid(ping,ping_info,PNG_INFO_tRNS))) ?
++        MagickTrue : MagickFalse;
++      if (logging != MagickFalse)
++        (void) LogMagickEvent(CoderEvent,GetMagickModule(),
++          "    Skipping PNG image data for scene %.20g",(double)
++          mng_info->scenes_found-1);
++      png_destroy_read_struct(&ping,&ping_info,&end_info);
++#ifdef IMPNG_SETJMP_NOT_THREAD_SAFE
++      UnlockSemaphoreInfo(ping_semaphore);
++#endif
++      if (logging != MagickFalse)
++        (void) LogMagickEvent(CoderEvent,GetMagickModule(),
++          "  exit ReadOnePNGImage().");
++      return(image);
++    }
+ 
+ #ifdef MNG_OBJECT_BUFFERS
+   /*

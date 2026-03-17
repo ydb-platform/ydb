@@ -1,0 +1,19 @@
+--- contrib/python/langchain-mcp-adapters/langchain_mcp_adapters/sessions.py	(ba270761d0f8c800c7d2cf5b5f03964e0ad7f844)
++++ contrib/python/langchain-mcp-adapters/langchain_mcp_adapters/sessions.py	(index)
+@@ -326,6 +326,7 @@ async def _create_streamable_http_session(
+ async def _create_websocket_session(
+     *,
+     url: str,
++    headers: dict[str, Any] | None = None,
+     session_kwargs: dict[str, Any] | None = None,
+ ) -> AsyncIterator[ClientSession]:
+     """Create a new session to an MCP server using Websockets.
+@@ -351,7 +352,7 @@ async def _create_websocket_session(
+         raise ImportError(msg) from None
+ 
+     async with (
+-        websocket_client(url) as (read, write),
++        websocket_client(url, headers) as (read, write),
+         ClientSession(read, write, **(session_kwargs or {})) as session,
+     ):
+         yield session

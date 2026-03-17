@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.clickhouse.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/clickhouse/v1;clickhouse";
+option java_package = "yandex.cloud.api.mdb.clickhouse.v1";
+
+// A ClickHouse Backup resource. See the [Developer's Guide](/docs/managed-clickhouse/concepts)
+// for more information.
+message Backup {
+  enum BackupType {
+    BACKUP_TYPE_UNSPECIFIED = 0;
+
+    // Backup created by automated daily schedule.
+    AUTOMATED = 1;
+
+    // Backup created by user request.
+    MANUAL = 2;
+  }
+
+  // ID of the backup.
+  string id = 1;
+
+  // ID of the folder that the backup belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format
+  // (i.e. when the backup operation was completed).
+  google.protobuf.Timestamp created_at = 3;
+
+  // ID of the ClickHouse cluster that the backup was created for.
+  string source_cluster_id = 4;
+
+  // Names of the shards included in the backup.
+  repeated string source_shard_names = 6;
+
+  // Time when the backup operation was started.
+  google.protobuf.Timestamp started_at = 5;
+
+  // Size of backup in bytes.
+  int64 size = 7;
+
+  // How this backup was created (manual/automatic/etc...).
+  BackupType type = 8;
+}

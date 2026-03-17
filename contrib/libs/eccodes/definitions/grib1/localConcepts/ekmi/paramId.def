@@ -1,0 +1,21 @@
+#Provided by Henrik Feddersen (Danish Meteorological Institute)
+#Total precipitation
+'94001061' = {
+     table2Version = 1 ;
+     indicatorOfParameter = 61 ;
+    }
+#10 metre wind gust
+'94001228' = {
+     table2Version = 1 ;
+     indicatorOfParameter = 228 ;
+    }
+#convective available potential energy
+'94001225' = {
+     table2Version = 1 ;
+     indicatorOfParameter = 225 ;
+    }
+#Convective inhibition
+'94001224' = {
+     table2Version = 1 ;
+     indicatorOfParameter = 224 ;
+    }

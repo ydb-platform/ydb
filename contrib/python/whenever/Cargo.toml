@@ -1,0 +1,46 @@
+[package]
+name = "whenever"
+version = "0.1.0"  # Dummy value. Isn't actually used in distribution of the Python package
+authors = []
+description = "Rust extension module for whenever"
+edition = "2024"
+rust-version = "1.86"
+license = "MIT"
+readme = "README.md"
+keywords = []
+include = [
+    "Cargo.toml",
+    "pyproject.toml",
+    "README.md",
+    "src",
+    "tests/*.py",
+    "requirements/*.txt",
+]
+
+[lib]
+name = "_whenever"
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
+
+[dependencies]
+ahash = "^0.8.11"
+pyo3-ffi = { version = "^0.25.1", default-features = false, features = ["extension-module"]}
+
+[build-dependencies]
+pyo3-build-config = { version = "^0.25.1" }
+
+[dev-dependencies]
+criterion = "^0.5.1"
+walkdir = "^2.5.0"
+
+[[bench]]
+name = "criterion_benchmarks"
+harness = false
+path = "benchmarks/rust/main.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [ "cfg(Py_3_9)", "cfg(Py_3_10)", "cfg(Py_3_11)", "cfg(Py_3_12)", "cfg(Py_3_13)", ] }

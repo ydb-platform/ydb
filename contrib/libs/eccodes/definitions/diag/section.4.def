@@ -1,0 +1,41 @@
+# (C) Copyright 2005- ECMWF.
+
+section_length[3] section4Length ;
+
+unsigned[1] reserved1=0 : hidden;
+flags[1] missingDataFlag 'grib1/1.table';
+unsigned[1] numberOfBytesPerInteger=4;
+
+unsigned[2] reserved=0 : hidden ;
+
+unsigned[3] numberOfCharacters : dump;
+alias numberOfChars=numberOfCharacters ;
+
+unsigned[3] numberOfFloats : dump;
+
+unsigned[3] numberOfIntegers=0 : dump;
+alias numberOfInts=numberOfIntegers ;
+
+unsigned[3] numberOfLogicals ;
+unsigned[3] numberOfReservedBytes ;
+unsigned[4] reserved=0 : hidden;
+unsigned[4] reserved=0 : hidden;
+unsigned[1] reserved=0 : hidden;
+
+ibmfloat floatValues[numberOfFloats] : dump;
+alias floatVal=floatValues;
+
+if (numberOfIntegers) {
+  signed[4] integerValues[numberOfIntegers] : dump;
+}
+
+# Have to use integers to represent single char strings
+if (numberOfCharacters) {
+  unsigned[1] charValues[numberOfCharacters] : dump, string_type;
+}
+#charList list(numberOfCharacters) {
+#  ascii[1] charValues : dump;
+#}
+
+# Final padding
+section_padding padding;

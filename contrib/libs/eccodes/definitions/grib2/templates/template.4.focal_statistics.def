@@ -1,0 +1,35 @@
+# (C) Copyright 2005- ECMWF.
+codetable[1] spatialVicinityType ('4.103.table',masterDir,localDir)=255 ;
+
+unsigned[1]  numberOfSpatialVicinityValues = 1 : edition_specific;
+alias nspatvals = numberOfSpatialVicinityValues;
+
+spatialVicintiyList list(numberOfSpatialVicinityValues)
+{
+  # n-th spatial vicinity value
+  unsigned[4] spatialVicinityValue=0 : dump;
+}
+
+codetable[1] spatialVicinityProcessing ('4.104.table',masterDir,localDir)=255 ;
+
+signed[2] spatialVicinityProcessingArgument1 = 255 : dump ;
+
+signed[2] spatialVicinityProcessingArgument2 = 255 : dump ;
+
+codetable[1] spatialVicinityMissingData ('4.105.table',masterDir,localDir)=0 ;
+
+## UUID of irregular kernel
+#byte[16] uuidOfIrregularKernel : dump;
+
+## UUID of spatial vicinity weights
+#byte[16] uuidOfSpatialVicinityWeights : dump;
+
+codetable[1] temporalVicinityProcessing ('4.104.table',masterDir,localDir)=255 ;
+
+codetable[1] temporalVicinityUnit ('4.4.table',masterDir,localDir)=255 ;
+
+unsigned[4] temporalVicinityTowardsPast : dump;
+unsigned[4] temporalVicinityTowardsFuture : dump;
+
+## UUID of temporal vicinity weights
+#byte[16] uuidOfTemporalVicinityWeights : dump;

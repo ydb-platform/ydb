@@ -1,0 +1,28 @@
+# (C) Copyright 2005- ECMWF.
+
+ascii[4] identifier  = "BUFR" : read_only,hidden;
+alias identifier=identifier;
+
+unsigned[3] section1Length;
+
+unsigned[1] edition = 0 : dump;
+alias editionNumber=edition;
+
+template    section_1 "bufr/section.1.1.def";
+
+flagbit localSectionPresent(section1Flags,7) = 1;
+alias section2Present=localSectionPresent;
+alias localUsePresent=localSectionPresent;
+
+if(localSectionPresent){
+   template section_2 "bufr/section.2.def";
+}
+else {
+	transient section2Length = 0;
+}
+
+template section_3 "bufr/section.3.def";
+template section_4 "bufr/section.4.def";
+template section_5 "bufr/section.5.def";
+
+transient totalLength = section1Length + section2Length + section3Length + section4Length + 8;

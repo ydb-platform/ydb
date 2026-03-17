@@ -1,0 +1,12 @@
+disable_includes:
+  - bfd.h
+  - dwarf.h
+  - elfutils/libdw.h
+  - elfutils/libdwfl.h
+  - libdwarf.h
+  - libelf.h
+  - libunwind.h
+  - CodeAnalysis/Warnings.h
+  - KnownFolders.h
+  - TOML_CONFIG_HEADER
+  - sys/byteorder.h

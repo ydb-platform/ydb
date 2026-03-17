@@ -1,0 +1,319 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     DOC                  0f42be88db22eb5e2339e43f98567545
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: DOC
+        Score           : 30.16
+        Match type      : NOTICE
+        Links           : http://www.cs.wustl.edu/~schmidt/, http://www.cs.wustl.edu/~schmidt/ACE-copying.html, https://spdx.org/licenses/DOC
+    Files with this license:
+        extra/win32cond.c [10:12]
+        extra/win32cond.h [13:15]
+
+KEEP     MIT                  26b29d9e4a9a235aed6996ae53d3e2a1
+BELONGS ya.make
+    License text:
+        General Public License. The sample applications are distributed under
+        the terms of the MIT license.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [158:159]
+
+KEEP     LGPL-2.1-or-later    40b0b00dc218626f6bd99bb9d08543ad
+BELONGS ya.make
+    License text:
+        * The library `libde265` is distributed under the terms of the GNU Lesser General Public License.
+        * The sample applications are distributed under the terms of the MIT license.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 38.89
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        COPYING [1:2]
+
+KEEP     MIT                  4dd22eb3e62f0241e1e5d0f8f734ff2b
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: COPYING at line 4
+FILE_INCLUDE libde265/COPYING found in files: COPYING at line 4
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 60.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [1:4]
+
+KEEP     GPL-3.0-only         4fe869ee987a340198fb0d54c55c47f1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        COPYING [176:849]
+
+KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: COPYING at line 868
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [855:871]
+
+KEEP     Public-Domain        5c874ed316f5b266c37d6f43b0b9f411
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 85.59
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libde265/md5.h [5:21]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 85.59
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        libde265/md5.h [5:21]
+
+KEEP     LGPL-2.1-only        78313e2f946cb46ce8164bf7d59775fb
+BELONGS ya.make
+    License text:
+        The library `libde265` is distributed under the terms of the GNU Lesser
+        General Public License. The sample applications are distributed under
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 70.59
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        README.md [157:158]
+
+KEEP     MIT                  94fe3ae853fc10edca7383119a426182
+BELONGS ya.make
+    License text:
+                                     MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [853:853]
+
+KEEP     LGPL-3.0-or-later    991e53d80c6b354065eaab21c8c7f50f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-3.0-or-later
+        Score           : 98.02
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-3.0-standalone.html, https://spdx.org/licenses/LGPL-3.0-or-later
+    Files with this license:
+        libde265/acceleration.h [7:18]
+        libde265/alloc_pool.cc [9:20]
+        libde265/alloc_pool.h [9:20]
+        libde265/bitstream.cc [7:18]
+        libde265/bitstream.h [7:18]
+        libde265/cabac.cc [7:18]
+        libde265/cabac.h [7:18]
+        libde265/configparam.cc [9:20]
+        libde265/configparam.h [9:20]
+        libde265/contextmodel.cc [7:18]
+        libde265/contextmodel.h [10:21]
+        libde265/de265-version.h [7:18]
+        libde265/de265.cc [7:18]
+        libde265/de265.h [7:18]
+        libde265/deblock.cc [7:18]
+        libde265/deblock.h [7:18]
+        libde265/decctx.cc [7:18]
+        libde265/decctx.h [7:18]
+        libde265/dpb.cc [7:18]
+        libde265/dpb.h [7:18]
+        libde265/en265.cc [9:20]
+        libde265/en265.h [9:20]
+        libde265/encoder/algo/algo.cc [9:20]
+        libde265/encoder/algo/algo.h [9:20]
+        libde265/encoder/algo/cb-interpartmode.cc [9:20]
+        libde265/encoder/algo/cb-interpartmode.h [9:20]
+        libde265/encoder/algo/cb-intra-inter.cc [9:20]
+        libde265/encoder/algo/cb-intra-inter.h [9:20]
+        libde265/encoder/algo/cb-intrapartmode.cc [9:20]
+        libde265/encoder/algo/cb-intrapartmode.h [9:20]
+        libde265/encoder/algo/cb-mergeindex.cc [9:20]
+        libde265/encoder/algo/cb-mergeindex.h [9:20]
+        libde265/encoder/algo/cb-skip.cc [9:20]
+        libde265/encoder/algo/cb-skip.h [9:20]
+        libde265/encoder/algo/cb-split.cc [9:20]
+        libde265/encoder/algo/cb-split.h [9:20]
+        libde265/encoder/algo/coding-options.cc [9:20]
+        libde265/encoder/algo/coding-options.h [9:20]
+        libde265/encoder/algo/ctb-qscale.cc [9:20]
+        libde265/encoder/algo/ctb-qscale.h [9:20]
+        libde265/encoder/algo/pb-mv.cc [9:20]
+        libde265/encoder/algo/pb-mv.h [9:20]
+        libde265/encoder/algo/tb-intrapredmode.cc [9:20]
+        libde265/encoder/algo/tb-intrapredmode.h [9:20]
+        libde265/encoder/algo/tb-rateestim.cc [9:20]
+        libde265/encoder/algo/tb-rateestim.h [9:20]
+        libde265/encoder/algo/tb-split.cc [9:20]
+        libde265/encoder/algo/tb-split.h [9:20]
+        libde265/encoder/algo/tb-transform.cc [9:20]
+        libde265/encoder/algo/tb-transform.h [9:20]
+        libde265/encoder/encoder-context.cc [9:20]
+        libde265/encoder/encoder-context.h [9:20]
+        libde265/encoder/encoder-core.cc [9:20]
+        libde265/encoder/encoder-core.h [9:20]
+        libde265/encoder/encoder-intrapred.cc [7:18]
+        libde265/encoder/encoder-intrapred.h [7:18]
+        libde265/encoder/encoder-motion.cc [7:18]
+        libde265/encoder/encoder-motion.h [7:18]
+        libde265/encoder/encoder-params.cc [9:20]
+        libde265/encoder/encoder-params.h [9:20]
+        libde265/encoder/encoder-syntax.cc [9:20]
+        libde265/encoder/encoder-syntax.h [9:20]
+        libde265/encoder/encoder-types.cc [9:20]
+        libde265/encoder/encoder-types.h [9:20]
+        libde265/encoder/encpicbuf.cc [7:18]
+        libde265/encoder/encpicbuf.h [7:18]
+        libde265/encoder/sop.cc [7:18]
+        libde265/encoder/sop.h [7:18]
+        libde265/fallback-dct.cc [7:18]
+        libde265/fallback-dct.h [7:18]
+        libde265/fallback-motion.cc [7:18]
+        libde265/fallback-motion.h [7:18]
+        libde265/fallback.cc [7:18]
+        libde265/fallback.h [7:18]
+        libde265/image-io.cc [9:20]
+        libde265/image-io.h [9:20]
+        libde265/image.cc [7:18]
+        libde265/image.h [7:18]
+        libde265/intrapred.cc [7:18]
+        libde265/intrapred.h [7:18]
+        libde265/motion.cc [7:18]
+        libde265/motion.h [7:18]
+        libde265/nal-parser.cc [7:18]
+        libde265/nal-parser.h [7:18]
+        libde265/nal.cc [7:18]
+        libde265/nal.h [7:18]
+        libde265/pps.cc [7:18]
+        libde265/pps.h [7:18]
+        libde265/quality.cc [7:18]
+        libde265/quality.h [7:18]
+        libde265/refpic.cc [7:18]
+        libde265/refpic.h [7:18]
+        libde265/sao.cc [7:18]
+        libde265/sao.h [7:18]
+        libde265/scan.cc [7:18]
+        libde265/scan.h [7:18]
+        libde265/sei.cc [7:18]
+        libde265/sei.h [7:18]
+        libde265/slice.cc [10:21]
+        libde265/slice.h [10:21]
+        libde265/sps.cc [7:18]
+        libde265/sps.h [7:18]
+        libde265/threads.cc [7:18]
+        libde265/threads.h [7:18]
+        libde265/transform.cc [7:18]
+        libde265/transform.h [7:18]
+        libde265/util.cc [7:18]
+        libde265/util.h [7:18]
+        libde265/visualize.cc [7:18]
+        libde265/visualize.h [7:18]
+        libde265/vps.cc [7:18]
+        libde265/vps.h [7:18]
+        libde265/vui.cc [7:18]
+        libde265/vui.h [7:18]
+        libde265/x86/sse-dct.cc [8:19]
+        libde265/x86/sse-dct.h [8:19]
+        libde265/x86/sse-motion.cc [8:19]
+        libde265/x86/sse-motion.h [8:19]
+        libde265/x86/sse.cc [7:18]
+        libde265/x86/sse.h [7:18]
+
+KEEP     Public-Domain        aa9ddf39ee4e3b6b568d5b27c00ae8ec
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 86.44
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        libde265/md5.cc [5:23]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 86.44
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        libde265/md5.cc [5:23]
+
+KEEP     LGPL-3.0-only        bb3ca60759f3202f1ae42e3519cd06bc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-3.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-3.0-standalone.html, http://www.gnu.org/licenses/lgpl-3.0.html, https://spdx.org/licenses/LGPL-3.0-only
+    Files with this license:
+        COPYING [8:172]
+        libde265/COPYING [1:165]
+
+KEEP     Public-Domain        ea865265b95a986e73c705cb4f67d7b0
+BELONGS ya.make
+    License text:
+        The short video clip in the 'testdata' directory is from the movie 'Girl Shy', which is in the public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        README.md [163:163]

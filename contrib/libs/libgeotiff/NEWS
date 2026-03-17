@@ -1,0 +1,126 @@
+libgeotiff 1.7.4
+----------------
+
+* CMake modernization, automate release generation from tags and refactor CI (#115)
+  - CMake: Bumps the minimum CMake version to 3.13
+  - CMake: Add BUILD_SHARED_LIBS matrix for ON and OFF using similar config for macos-latest, windows-latest, and ubuntu-latest
+  - CMake: Modernize CMake configuration to prevent flag/feature leaking
+  - CMake: Adds CPack configuration so `package_source` target is available for dist generation
+  - CMake: Updates FindPROJ.cmake with GDAL's recent version
+  - CMake: add BUILD_MAN and BUILD_DOC options
+  - CMake: Windows PDB install with BUILD_SHARED_LIBS
+  - CMake: Remove FindGeoTIFF.cmake
+  - Removes 16 year old dead `makefile.mpw`
+  - Removes 6 year old dead `makefile.vc`
+  - CI: Generates release artifacts and attaches them to every build
+  - CI: Creates a release and attaches release artifacts for every tag of the OSGeo/libgeotiff repository
+  - CI: [Attests](https://github.com/actions/attest-build-provenance) the release artifacts if the `github.repository_owner == OSGeo`
+  - CI: Remove Appveyor config
+
+* GTIFGetDefn(): add missing normalization of angular units to degree
+
+  Contrary to what the documentation of GTIFDefn::ProjParm[] mentionned,
+  we failed to normalize angular measures to degrees when reading them
+  from projection parameters (ProjXXXXXGeoKey's) when ProjCoordTransGeoKey
+  was present (but we did normalize them when reading them from the PROJ
+  database when there were was only a EPSG PCS code)
+
+  Relates to https://github.com/OSGeo/gdal/issues/10154 and https://github.com/OSGeo/gdal/pull/10158
+
+* Fix build with GCC 15 (#131)
+
+libgeotiff 1.7.3
+----------------
+
+* CMake: fix typo in CMAKE_INSTALL_BINDIR install target that affects
+  location of geotiff.dll (#117)
+
+libgeotiff 1.7.2
+----------------
+
+* GTIFGetDatumInfoEx(): handle dynamic datums
+* CMake: adopt GNUInstallDirs
+* CMake: export TIFF as a public dependency
+* Add XTIFFClientOpenExt() with re-entrant error callbacks
+* listgeo: add a -no_corners option to avoid printing corner
+  coordinates which might be PROJ version sensitive (refs #81)
+* Fix test failures with PROJ 9.1.1 and 9.3
+* Remove trailing spaces from many files.
+* Localize variables and add const when possible in a number of files
+* geo_normalize.c: sprintf --> snprintf
+* Add missing includes
+* Fix -Werror=calloc-transposed-args with gcc 14
+* FindPROJ.cmake: proj_experimental;h -> proj_experimental.h
+* CMake: add a BUILD_SHARED_LIBS option, and make it default to ON
+* autoconf/CMake: add generation of libgeotiff.pc
+* Remove INSTALL and install-sh autoconf-generated files
+
+libgeotiff 1.7.1
+----------------
+
+* geotiff.h: more precise signature for GTIFDirectoryInfo()
+* applygeo.c/geotifcp.c: use uint16/32_t instead of old libtiff non _t custom types
+* Bump CMake min to 3.0.0 and remove apparently unneeded cmake_policy() declarations
+* CMake: remove libjpeg and libz from linking of libgeotiff itself.
+* geo_config.h: prefix HAVE_xxx and restrict it to GEOTIFF_HAVE_STRINGS_H (fixes #61)
+* GTIFPrintDefn(): avoid potential nullptr deref. CID 1469240
+* CMake: use variable for installation subdirectories, and make sure INTERFACE_INCLUDE_DIRECTORIES is exported (fixes #67)
+* ReadKey(): only allow reading a key with TIFFTagLocation=0 that has a count of 1 to avoid reading an illegal address (and crashing) when using GTIFKeyGet() or PrintKey() (fixes #66)
+* ReadKey(): add extra warning messages
+* CMake: avoid INTERFACE_LINK_LIBRARIES vs LINK_INTERFACE_LIBRARIES_DEBUG warning about TIFF
+* CMake: Fix dllexport
+* CMake: Revise exported cmake config wrt BUILD_SHARED_LIBS
+* CMake: Revise exported cmake config wrt dependencies
+* CMake: Respect <Pkg>_FIND_QUIETLY
+
+libgeotiff 1.7.0
+----------------
+
+* Add CoordinateEpochGeoKey = 5120 of type DOUBLE to store coordinate epoch of
+  tie points / geotransform matrix for dynamic CRS.
+  See https://github.com/opengeospatial/geotiff/pull/99
+* geo_normalize.h/c: rename variables to please codespell
+* GTIFGetGCSInfoEx(): use proj_crs_get_datum_forced() for PROJ >= 8 to avoid
+  issues with datum ensembles (fixes #54)
+* GTIFGetGCSInfoEx(): remove dead code (GDAL Coverity CID 1432690)
+* geo_normalize.c: follow-up to e06625c4e5bcce9f9217d1d5a43dc6af73156283 to avoid
+  look up of user-defined GeogGeodeticDatumGeoKey that cause PROJ warnings (fixes #41)
+
+libgeotiff 1.6.0
+----------------
+
+New features:
+* Add support for OGC GeoTIFF 1.1
+* Expose GTIFGetPCSInfoEx(), GTIFGetProjTRFInfoEx(), GTIFGetGCSInfoEx(), GTIFGetDatumInfoEx(), GTIFGetEllipsoidInfoEx(), GTIFGetPMInfoEx(), GTIFGetUOMLengthInfoEx() and GTIFGetUOMAngleInfoEx() so that users can specify their own PROJ context
+* Add GTIFKeyGetASCII(), GTIFKeyGetSHORT() and GTIFKeyGetDOUBLE() as safer variants of GTIFKeyGet() with type checking
+* autotools build: enable build in a separate tree from source (#37) (fixes #28)
+* Use pkg-config for libtiff detection
+
+Bug fixes:
+* GTIFDecToDMS(): fix rounding issue (refs #16)
+* geo_names.c: Silence warning in GetNameFromDatabase
+* cpl_serv.h: add parenthesis in macro definitions
+* Fix spelling errors
+* geo_normalize.c: set UOMLength from GeogLinearUnits (for geocentic CRS) (GDAL #1595)
+* testlistgeo: remove hardcoded path in test output (fixes https://github.com/OSGeo/libgeotiff/issues/16#issuecomment-502267406)
+* Adapt test script for PROJ 6.2 EPSG database (fixes #22)
+* Use unix EOL for cmake related files (fixes #14)
+* configure.ac: drop dead code
+* geo_normalize.c: avoid look up of user-defined geokeys that cause PROJ warnings (fixes GDAL #2321)
+* listgeo: fix corner coordinates for images with RasterPixelIsPoint (#36)
+
+libgeotiff 1.5.1
+----------------
+
+* re-add #define SetCSVFilenameHook gtSetCSVFilenameHook for compatibility with GDAL 2.4.x
+
+libgeotiff 1.5.0
+----------------
+
+* Require PROJ >= 6 dependency
+* Remove all CSV files used by geo_normalize API, since libgeotiff now relies
+  on PROJ database for EPSG CRS definitions.
+* geo_normalize.c: SetGTParmIds(): use ProjStraightVertPoleLongGeoKey for CT_PolarStereographic
+* geo_normalize.c: report StdParallel1 for Mercator_2SP when a PCS code is used
+* geo_normalize.c: fix support for Laborde Oblique Mercator
+* listgeo: use PROJ database to display non-hardcoded values of a number of keys

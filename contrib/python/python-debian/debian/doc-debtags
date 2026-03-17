@@ -1,0 +1,117 @@
+#!/usr/bin/python3
+
+# Copyright (C) 2006  Enrico Zini <enrico@enricozini.org>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import sys
+import os
+import inspect
+
+sys.path.insert(0, os.path.join(sys.path[0], os.pardir))
+
+from debian import debtags
+
+def print_indented (spaces, string):
+    for line in string.split("\n"):
+        for i in range(1,spaces):
+            sys.stdout.write(" ")
+        sys.stdout.write(line)
+        sys.stdout.write("\n")
+
+def document (callable):
+    if callable.__doc__ != None:
+        print_indented(2, callable.__name__)
+        print_indented(4, inspect.getdoc(callable))
+        print()
+
+
+print("""debtags.py README
+=================
+
+The Debtags python module provides support for accessing and manipulating
+Debtags tag data.
+
+The module provides a single class, debtags.DB, which implements various kinds
+of tag operations on an in-memory tag database.
+
+The database can be queried both as a database of packages with associated tags
+and as a database of tags with associated packages.  Performance are good in
+both ways: querying the tags of a package has the same peed as querying the
+packages having a tag.
+
+debtags.DB allows both simple queries and more complex algorithms to be
+implemented easily and efficiently.  Have a look at the Sample usage section
+below for some examples.
+
+
+Classes
+=======
+
+There is only one class: debtags.DB:
+""")
+
+document (debtags.DB)
+
+print("""
+The methods of debtags.DB are:
+""")
+
+for m in dir(debtags.DB):
+    if m[0:2] != '__' and callable(getattr(debtags.DB, m)):
+        document(getattr(debtags.DB, m))
+
+print("""Iteration
+=========
+
+debtags.DB provides various iteration methods to iterate the collection either
+in a package-centered or in a tag-centered way:
+""")
+
+document(debtags.DB.iter_packages)
+document(debtags.DB.iter_packages_tags)
+document(debtags.DB.iter_tags)
+document(debtags.DB.iter_tags_packages)
+
+
+print("""Sample usage
+============
+
+This example reads the system debtags database and performs a simple tag
+search::
+
+    import debtags
+    
+    db = debtags.DB()
+    db.read(open("/var/lib/debtags/package-tags", "r"))
+    print(db.package_count(), "packages in the database")
+    print("Image editors:")
+    for pkg in db.packages_of_tags(set(("use::editing", "works-with::image:raster"))):
+        print(" *", pkg)
+
+This example computes the set of tags that belong to all the packages in a
+list, then shows all the other packages that have those tags:
+
+    import debtags
+
+    db = debtags.DB()
+    db.read(open("/var/lib/debtags/package-tags", "r"))
+    tags = db.tags_of_packages(("gimp", "krita"))
+    print("Common tags:")
+    for tag in tags:
+        print(" *", tag)
+    print("Packages similar to gimp and krita:")
+    for pkg in db.packages_of_tags(tags):
+        print(" *", pkg)
+""")

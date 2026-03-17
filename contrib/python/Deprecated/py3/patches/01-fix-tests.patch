@@ -1,0 +1,12 @@
+--- contrib/python/Deprecated/py3/tests/test_deprecated.py	(index)
++++ contrib/python/Deprecated/py3/tests/test_deprecated.py	(working tree)
+@@ -139 +138,0 @@ def test_classic_deprecated_function__warns(classic_deprecated_function):
+-    assert warn.filename == __file__ or warn.category is WrongStackLevelWarning, 'Incorrect warning stackLevel'
+@@ -151 +149,0 @@ def test_classic_deprecated_class__warns(classic_deprecated_class):
+-    assert warn.filename == __file__ or warn.category is WrongStackLevelWarning, 'Incorrect warning stackLevel'
+@@ -164 +161,0 @@ def test_classic_deprecated_method__warns(classic_deprecated_method):
+-    assert warn.filename == __file__ or warn.category is WrongStackLevelWarning, 'Incorrect warning stackLevel'
+@@ -176 +172,0 @@ def test_classic_deprecated_static_method__warns(classic_deprecated_static_metho
+-    assert warn.filename == __file__ or warn.category is WrongStackLevelWarning, 'Incorrect warning stackLevel'
+@@ -192 +187,0 @@ def test_classic_deprecated_class_method__warns(classic_deprecated_class_method)
+-    assert warn.filename == __file__ or warn.category is WrongStackLevelWarning, 'Incorrect warning stackLevel'

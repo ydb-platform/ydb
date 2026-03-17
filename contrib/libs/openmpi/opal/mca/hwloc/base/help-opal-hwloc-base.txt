@@ -1,0 +1,61 @@
+# -*- text -*-
+#
+# Copyright (c) 2011-2014 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2014      Intel, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English help file for Open MPI's hwloc base support
+#
+[mbind failure]
+Open MPI failed to bind internal memory to a specific NUMA node.  This
+message will only be reported at most once per process.
+
+  Local host: %s
+  PID:        %d
+  File:       %s:%d
+  Message:    %s
+  Severity:   %s
+#
+[invalid binding_policy]
+The specified %s policy is not recognized:
+
+  Policy: %s
+
+Please check for a typo or ensure that the option is a supported
+one.
+#
+[redefining-policy]
+Conflicting directives for binding policy are causing the policy
+to be redefined:
+
+  New policy:   %s
+  Prior policy:  %s
+
+Please check that only one policy is defined.
+#
+[deprecated]
+The following command line option and corresponding MCA parameter have
+been deprecated and replaced as follows:
+
+  Command line option:
+    Deprecated:  %s
+    Replacement: %s
+
+  Equivalent MCA parameter:
+    Deprecated:  %s
+    Replacement: %s
+
+The deprecated forms *will* disappear in a future version of Open MPI.
+Please update to the new syntax.
+#
+[obj-idx-failed]
+Open MPI failed to find a cache of a specified type.  This is a highly
+unusual error; it may indicate a system configuration error.  This
+additional information may be of help:
+
+  Message:     %s
+  Cache level: %d

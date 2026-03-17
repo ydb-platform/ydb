@@ -1,0 +1,41 @@
+# (C) Copyright 2005- ECMWF.
+
+# Description            Octet   Code   Ksec1  Count
+# -----------            -----   ----   -----  -----
+#localDefinitionNumber   41      I1      37      -
+#class                   42      I1      38      -
+#type                    43      I1      39      -
+#stream                  44      I2      40      -
+#experimentVersionNumber 46      A4      41      -
+#number                  50      I1      42      -
+#total                   51      I1      43      -
+#spareSetToZero          52      PAD     n/a     1
+#
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] perturbationNumber           : dump;
+if(perturbationNumber != 0) {
+  alias number = perturbationNumber;
+}
+
+unsigned[1] numberOfForecastsInEnsemble  : dump;
+pad padding_local1_1(1);
+
+# 1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=1;
+
+if (stepType is "instant" ) {
+  if (numberOfForecastsInEnsemble!=0) {
+    alias productDefinitionTemplateNumber=epsPoint;
+  }
+} else {
+  if (numberOfForecastsInEnsemble!=0) {
+    alias productDefinitionTemplateNumber=epsContinuous;
+  }
+}
+
+# monthly mean
+#if (timeRangeIndicator==113) {
+#}

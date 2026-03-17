@@ -1,0 +1,452 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# 
+# Translators:
+# Juraj Bubniak <translations@jbub.eu>, 2012-2013
+msgid ""
+msgstr ""
+"Project-Id-Version: django-filebrowser\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2013-11-30 18:48+0100\n"
+"PO-Revision-Date: 2013-12-21 20:04+0000\n"
+"Last-Translator: Juraj Bubniak <translations@jbub.eu>\n"
+"Language-Team: Slovak (http://www.transifex.com/projects/p/django-filebrowser/language/sk/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: sk\n"
+"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
+
+#: actions.py:53
+#, python-format
+msgid "Action applied successfully to '%s'"
+msgstr "Akcia bola úspešne aplikovaná na '%s'"
+
+#: actions.py:59 forms.py:20
+msgid "Flip horizontal"
+msgstr "Preklopiť vodorovne"
+
+#: actions.py:66 forms.py:21
+msgid "Flip vertical"
+msgstr "Preklopiť zvisle"
+
+#: actions.py:73 forms.py:22
+msgid "Rotate 90° CW"
+msgstr "Otočiť o 90° v smere hodinových ručičiek"
+
+#: actions.py:80 forms.py:23
+msgid "Rotate 90° CCW"
+msgstr "Otočiť o 90° proti smeru hodinových ručičiek"
+
+#: actions.py:87 forms.py:24
+msgid "Rotate 180°"
+msgstr "Otočiť o 180°"
+
+#: decorators.py:39
+msgid ""
+"Error finding Upload-Folder (site.storage.location + site.directory). Maybe "
+"it does not exist?"
+msgstr "Chyba pri zisťovaní Zložky-pre-nahrávanie (site.storage.location + site.directory). Možno cesta neexistuje?"
+
+#: decorators.py:41
+msgid "The requested Folder does not exist."
+msgstr "Požadovaná zložka neexistuje."
+
+#: decorators.py:55
+msgid "The requested File does not exist."
+msgstr "Požadovaný súbor neexistuje."
+
+#: decorators.py:61
+msgid "You do not have permission to access this file!"
+msgstr "Nemáte oprávnenie pre prístup na tento súbor!"
+
+#: fields.py:63
+#, python-format
+msgid "Extension %(ext)s is not allowed. Only %(allowed)s is allowed."
+msgstr "Prípona %(ext)s nieje povolená. Iba %(allowed)s je povolené."
+
+#: forms.py:57 forms.py:82
+msgid "Name"
+msgstr "Názov"
+
+#: forms.py:57 forms.py:69 forms.py:82 forms.py:101
+msgid "Only letters, numbers, underscores, spaces and hyphens are allowed."
+msgstr "Povolené sú len písmená, čísla, podčiarky, medzery a pomlčky."
+
+#: forms.py:72 forms.py:104
+msgid "The Folder already exists."
+msgstr "Zložka už existuje."
+
+#: forms.py:81
+msgid "Actions"
+msgstr "Akcie"
+
+#: forms.py:106
+msgid "The File already exists."
+msgstr "Súbor už existuje."
+
+#: settings.py:110 templates/filebrowser/include/tableheader.html:21
+#: templates/filebrowser/include/tableheader.html:22
+msgid "Folder"
+msgstr "Zložka"
+
+#: settings.py:111
+msgid "Image"
+msgstr "Obrázok"
+
+#: settings.py:112
+msgid "Video"
+msgstr "Obraz"
+
+#: settings.py:113
+msgid "Document"
+msgstr "Dokument"
+
+#: settings.py:114
+msgid "Audio"
+msgstr "Zvuk"
+
+#: sites.py:348 templates/filebrowser/include/breadcrumbs.html:9
+#: templates/filebrowser/include/breadcrumbs.html:11
+msgid "FileBrowser"
+msgstr "Prehliadač Súborov"
+
+#: sites.py:369
+#, python-format
+msgid "The Folder %s was successfully created."
+msgstr "Zložka %s bola úspešne vytvorená."
+
+#: sites.py:374
+msgid "Permission denied."
+msgstr "Povolenie odmietnuté."
+
+#: sites.py:376
+msgid "Error creating folder."
+msgstr "Chyba pri vytváraní zložky."
+
+#: sites.py:383 sites.py:386 templates/filebrowser/index.html:80
+msgid "New Folder"
+msgstr "Nová Zložka"
+
+#: sites.py:396
+msgid "Select files to upload"
+msgstr "Vyberte súbory pre nahranie"
+
+#: sites.py:399 templates/filebrowser/index.html:81
+msgid "Upload"
+msgstr "Nahrať"
+
+#: sites.py:429 sites.py:432
+msgid "Confirm delete"
+msgstr "Potvrďte vymazanie"
+
+#: sites.py:448
+#, python-format
+msgid "Successfully deleted %s"
+msgstr "Úspešne vymazané %s"
+
+#: sites.py:485
+msgid "Renaming was successful."
+msgstr "Premenovanie bolo úspešné."
+
+#: sites.py:494
+msgid "Error."
+msgstr "Chyba."
+
+#: widgets.py:17 widgets.py:50
+msgid "Currently"
+msgstr "Aktuálne"
+
+#: widgets.py:18 widgets.py:51
+#: templates/filebrowser/include/filelisting.html:131
+msgid "Change"
+msgstr "Zmeniť"
+
+#: widgets.py:19 widgets.py:52
+msgid "Clear"
+msgstr "Vyčistiť"
+
+#: templates/filebrowser/createdir.html:23
+#: templates/filebrowser/detail.html:48
+msgid "Please correct the following errors."
+msgstr "Opravte nasledovné chyby."
+
+#: templates/filebrowser/createdir.html:36
+#: templates/filebrowser/upload.html:147
+msgid ""
+"The Name will be normalized by converting or stripping all non-standard "
+"characters."
+msgstr "Meno bude normalizované prevodom alebo odstránením všetkých neštandardných znakov."
+
+#: templates/filebrowser/createdir.html:39
+#: templates/filebrowser/upload.html:150
+msgid ""
+"The Name will be converted to lowercase. Spaces will be replaced with "
+"underscores."
+msgstr "Názov bude prevedený na malé písmená. Medzery budú nahradené podčiarkami."
+
+#: templates/filebrowser/createdir.html:50
+msgid "Submit"
+msgstr "Potvrdiť"
+
+#: templates/filebrowser/custom_field.html:26
+#: templates/filebrowser/widgets/clearablefileinput.html:11
+#: templates/filebrowser/widgets/fileinput.html:11
+msgid "File not found"
+msgstr "Súbor sa nenašiel"
+
+#: templates/filebrowser/delete_confirm.html:30
+#, python-format
+msgid ""
+"Are you sure you want to delete \"%(escaped_object)s\"? All of the following"
+" items will be deleted:"
+msgstr "Ste si istí, že chcete vymazať \"%(escaped_object)s\"? Všetky nasledovné položky budú vymazané:"
+
+#: templates/filebrowser/delete_confirm.html:43
+#, python-format
+msgid "... and %(escaped_object)s more Files."
+msgstr "... a %(escaped_object)s viac Súborov."
+
+#: templates/filebrowser/delete_confirm.html:50
+#: templates/filebrowser/upload.html:51
+msgid "Cancel"
+msgstr "Zrušiť"
+
+#: templates/filebrowser/delete_confirm.html:51
+msgid "Yes, I'm sure"
+msgstr "Áno, Som si istý"
+
+#: templates/filebrowser/detail.html:63
+msgid "Edit"
+msgstr "Upraviť"
+
+#: templates/filebrowser/detail.html:78
+msgid "Folder Information"
+msgstr "Informácie o Zložke"
+
+#: templates/filebrowser/detail.html:81 templates/filebrowser/detail.html:116
+#: templates/filebrowser/include/tableheader.html:28
+#: templates/filebrowser/include/tableheader.html:29
+msgid "Date"
+msgstr "Dátum"
+
+#: templates/filebrowser/detail.html:93
+msgid "File Information"
+msgstr "Informácie o Súbore"
+
+#: templates/filebrowser/detail.html:96
+msgid "URL"
+msgstr "URL Adresa"
+
+#: templates/filebrowser/detail.html:106
+msgid "Filesize"
+msgstr "Veľkosť Súboru"
+
+#: templates/filebrowser/detail.html:127
+#: templates/filebrowser/include/tableheader.html:25
+#: templates/filebrowser/include/tableheader.html:26
+msgid "Size"
+msgstr "Veľkosť"
+
+#: templates/filebrowser/detail.html:140
+msgid "Image Versions"
+msgstr "Verzie Obrázku"
+
+#: templates/filebrowser/detail.html:144
+#: templates/filebrowser/include/tableheader.html:15
+msgid "Thumbnail"
+msgstr "Náhľad"
+
+#: templates/filebrowser/detail.html:146
+#: templates/filebrowser/include/filelisting.html:101
+msgid "View Image"
+msgstr "Zobraziť Obrázok"
+
+#: templates/filebrowser/detail.html:170
+msgid "Delete"
+msgstr "Vymazať"
+
+#: templates/filebrowser/detail.html:171
+msgid "Save"
+msgstr "Uložiť"
+
+#: templates/filebrowser/detail.html:172
+msgid "Save and continue editing"
+msgstr "Uložiť a pokračovať v úpravách"
+
+#: templates/filebrowser/upload.html:42
+msgid "Drop files here to upload"
+msgstr "Vyberte súbory k nahratiu"
+
+#: templates/filebrowser/upload.html:43
+msgid "Upload a file"
+msgstr "Nahrať"
+
+#: templates/filebrowser/upload.html:52
+msgid "Failed"
+msgstr "Neúspešný"
+
+#: templates/filebrowser/upload.html:66
+msgid "{file} has invalid extension. Only {extensions} are allowed."
+msgstr "{file} má nesprávnu koncovku. Iba {extensions} sú povolené."
+
+#: templates/filebrowser/upload.html:67
+msgid "{file} is too large, maximum file size is {sizeLimit}."
+msgstr "{file} je príliš veľký, maximálna veľkosť súboru je {sizeLimit}."
+
+#: templates/filebrowser/upload.html:68
+msgid "{file} is too small, minimum file size is {minSizeLimit}."
+msgstr "{file} je príliš malý, minimálna veľkosť súboru je {minSizeLimit}."
+
+#: templates/filebrowser/upload.html:69
+msgid "{file} is empty, please select files again without it."
+msgstr "{file} je prázdny, vyberte súbory znovu bez neho."
+
+#: templates/filebrowser/upload.html:70
+msgid ""
+"The files are being uploaded, if you leave now the upload will be cancelled."
+msgstr "Súbory sa nahrávajú, ak teraz opustíte stránku nahrávanie bude zrušené."
+
+#: templates/filebrowser/upload.html:115
+msgid "Please enable Javascript to upload files."
+msgstr "Pre nahrávanie súborov prosím povoľte Javascript."
+
+#: templates/filebrowser/upload.html:120
+msgid "Help"
+msgstr "Pomoc"
+
+#: templates/filebrowser/upload.html:123
+msgid "Allowed"
+msgstr "Povolené"
+
+#: templates/filebrowser/upload.html:137
+msgid "Max. Filesize"
+msgstr "Max. Veľkosť"
+
+#: templates/filebrowser/upload.html:144
+#: templates/filebrowser/include/tableheader.html:17
+#: templates/filebrowser/include/tableheader.html:18
+msgid "Filename"
+msgstr "Názov súboru"
+
+#: templates/filebrowser/include/breadcrumbs.html:6
+msgid "Home"
+msgstr "Domov"
+
+#: templates/filebrowser/include/filelisting.html:19
+#: templates/filebrowser/include/filelisting.html:45
+#: templates/filebrowser/include/filelisting.html:70
+msgid "Select"
+msgstr "Vybrať"
+
+#: templates/filebrowser/include/filelisting.html:23
+#: templates/filebrowser/include/filelisting.html:49
+#: templates/filebrowser/include/filelisting.html:74
+msgid "Versions"
+msgstr "Verzie"
+
+#: templates/filebrowser/include/filter.html:5
+msgid "Filter"
+msgstr "Filter"
+
+#: templates/filebrowser/include/filter.html:9
+msgid "By Date"
+msgstr "Podľa Dátumu"
+
+#: templates/filebrowser/include/filter.html:11
+msgid "Any Date"
+msgstr "Hociktorý Dátum"
+
+#: templates/filebrowser/include/filter.html:12
+msgid "Today"
+msgstr "Dnes"
+
+#: templates/filebrowser/include/filter.html:13
+msgid "Past 7 days"
+msgstr "Posledných 7 dní"
+
+#: templates/filebrowser/include/filter.html:14
+msgid "This Month"
+msgstr "Tento Mesiac"
+
+#: templates/filebrowser/include/filter.html:15
+msgid "This year"
+msgstr "Tento Rok"
+
+#: templates/filebrowser/include/filter.html:21
+msgid "By Type"
+msgstr "Podľa Typu"
+
+#: templates/filebrowser/include/filter.html:23
+msgid "All"
+msgstr "Všetky"
+
+#: templates/filebrowser/include/paginator.html:6
+msgid "result"
+msgstr "výsledok"
+
+#: templates/filebrowser/include/paginator.html:6
+msgid "results"
+msgstr "výsledky"
+
+#: templates/filebrowser/include/paginator.html:10
+#: templates/filebrowser/include/paginator.html:12
+msgid "total"
+msgstr "celkovo"
+
+#: templates/filebrowser/include/tableheader.html:12
+#: templates/filebrowser/include/tableheader.html:13
+msgid "Type"
+msgstr "Typ"
+
+#: templates/filebrowser/include/toolbar.html:6
+msgid "Results"
+msgstr "Výsledky"
+
+#: templates/filebrowser/include/toolbar.html:8
+#, python-format
+msgid "%(counter)s result"
+msgid_plural "%(counter)s results"
+msgstr[0] "%(counter)s výsledok"
+msgstr[1] "%(counter)s výsledky"
+msgstr[2] "%(counter)s výsledky"
+
+#: templates/filebrowser/include/toolbar.html:9
+#, python-format
+msgid "%(full_result_count)s total"
+msgstr "%(full_result_count)s celkovo"
+
+#: templates/filebrowser/include/toolbar.html:16
+msgid "Search"
+msgstr "Vyhľadávanie"
+
+#~ msgid "BROWSE"
+#~ msgstr "BROWSE"
+
+#~ msgid "An Error occured"
+#~ msgstr "An Error occured"
+
+#~ msgid "Completed"
+#~ msgstr "Completed"
+
+#~ msgid "Do you want to replace the file"
+#~ msgstr "Do you want to replace the file"
+
+#~ msgid "KB"
+#~ msgstr "KB"
+
+#~ msgid "MB"
+#~ msgstr "MB"
+
+#~ msgid "Clear Queue"
+#~ msgstr "Clear Queue"
+
+#~ msgid "Flip/Rotate"
+#~ msgstr "Flip/Rotate"
+
+#~ msgid "Transposing was successful."
+#~ msgstr "Transposing was successful."
+
+#~ msgid "SELECT FILES"
+#~ msgstr "SELECT FILES"

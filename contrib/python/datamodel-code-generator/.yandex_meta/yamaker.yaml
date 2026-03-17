@@ -1,0 +1,9 @@
+requirements:
+  - pydantic: contrib/python/pydantic/pydantic-2
+keep:
+  - .arcignore
+  - .idea/*
+exclude_from_macros:
+  - .arcignore
+  - .idea/*
+repo_url: https://github.com/koxudaxi/datamodel-code-generator

@@ -1,0 +1,25 @@
+{% extends "layout.main.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li><a href="#">localshop</a> <span class="divider">/</span></li>
+    <li><a href="{% url 'accounts:team_list' %}">{% trans "teams" %}</a> <span class="divider">/</span></li>
+    <li><a href="{% url 'accounts:team_detail' pk=team.pk %}">{{ team.name }}</a> <span class="divider">/</span></li>
+    <li class="active">{% trans "delete" %}</li>
+</ul>
+{% endblock %}
+
+{% block content %}
+<h1>Team delete</h1>
+
+<form method="post" action="" class="form-horizontal">
+    <p>Delete the team {{ team }}?</p>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary"><span class="icon-trash icon-white"></span> Delete</button>
+        <a href="{% url 'accounts:team_detail' pk=team.pk %}" class="btn">Cancel</a>
+    </div>
+    {% csrf_token %}
+</form>
+{% endblock %}

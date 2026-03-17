@@ -1,0 +1,261 @@
+Metadata-Version: 2.4
+Name: django-colorfield
+Version: 0.14.0
+Summary: color field for django models with a nice color-picker in the admin.
+Author-email: Jared Forsyth <jared@jaredforsyth.com>, Fabio Caccamo <fabio.caccamo@gmail.com>
+Maintainer-email: Fabio Caccamo <fabio.caccamo@gmail.com>
+License: MIT License
+        
+        Copyright (c) 2013-present Jared Forsyth / Fabio Caccamo
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/fabiocaccamo/django-colorfield
+Project-URL: Download, https://github.com/fabiocaccamo/django-colorfield/releases
+Project-URL: Documentation, https://github.com/fabiocaccamo/django-colorfield#readme
+Project-URL: Issues, https://github.com/fabiocaccamo/django-colorfield/issues
+Project-URL: Funding, https://github.com/sponsors/fabiocaccamo/
+Project-URL: Twitter, https://twitter.com/fabiocaccamo
+Keywords: django,colorfield,colorpicker,color,field,picker,chooser,admin,python
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 4.0
+Classifier: Framework :: Django :: 4.1
+Classifier: Framework :: Django :: 4.2
+Classifier: Framework :: Django :: 5.0
+Classifier: Framework :: Django :: 5.1
+Classifier: Framework :: Django :: 5.2
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Build Tools
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+Requires-Dist: Pillow>=9.0.0
+Dynamic: license-file
+
+[![](https://img.shields.io/pypi/pyversions/django-colorfield.svg?color=3776AB&logo=python&logoColor=white)](https://www.python.org/)
+[![](https://img.shields.io/pypi/djversions/django-colorfield?color=0C4B33&logo=django&logoColor=white&label=django)](https://www.djangoproject.com/)
+
+[![](https://img.shields.io/pypi/v/django-colorfield.svg?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/django-colorfield/)
+[![](https://static.pepy.tech/badge/django-colorfield/month)](https://pepy.tech/project/django-colorfield)
+[![](https://img.shields.io/github/stars/fabiocaccamo/django-colorfield?logo=github&style=flat)](https://github.com/fabiocaccamo/django-colorfield/stargazers)
+[![](https://img.shields.io/pypi/l/django-colorfield.svg?color=blue)](https://github.com/fabiocaccamo/django-colorfield/blob/main/LICENSE.txt)
+
+[![](https://results.pre-commit.ci/badge/github/fabiocaccamo/django-colorfield/main.svg)](https://results.pre-commit.ci/latest/github/fabiocaccamo/django-colorfield/main)
+[![](https://img.shields.io/github/actions/workflow/status/fabiocaccamo/django-colorfield/test-package.yml?branch=main&label=build&logo=github)](https://github.com/fabiocaccamo/django-colorfield)
+[![](https://img.shields.io/codecov/c/gh/fabiocaccamo/django-colorfield?logo=codecov)](https://codecov.io/gh/fabiocaccamo/django-colorfield)
+[![](https://img.shields.io/codacy/grade/194566618f424a819ce43450ea0af081?logo=codacy)](https://www.codacy.com/app/fabiocaccamo/django-colorfield)
+[![](https://img.shields.io/codeclimate/maintainability/fabiocaccamo/django-colorfield?logo=code-climate)](https://codeclimate.com/github/fabiocaccamo/django-colorfield/)
+[![](https://img.shields.io/badge/code%20style-black-000000.svg?logo=python&logoColor=black)](https://github.com/psf/black)
+[![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
+# django-colorfield
+simple color field for your models with a nice color-picker in the admin-interface.
+
+![django-colorfield-hex](https://user-images.githubusercontent.com/7900305/104512324-51ed0f80-55ee-11eb-9144-de03d922c2ce.png)
+![django-colorfield-hexa](https://user-images.githubusercontent.com/7900305/104512063-ec991e80-55ed-11eb-95b6-9174ac3f4f38.png)
+
+---
+
+## Installation
+-   Run `pip install django-colorfield`
+-   Add `colorfield` to `settings.INSTALLED_APPS`
+-   Run `python manage.py collectstatic`
+-   Restart your application server
+
+---
+
+## Usage
+
+### Settings
+This package doesn't need any setting.
+
+### Models
+Just add color field(s) to your models like this:
+
+```python
+from colorfield.fields import ColorField
+from django.db import models
+
+class MyModel(models.Model):
+    color = ColorField(default='#FF0000')
+```
+
+### Field Options
+These are the supported custom options: [`format`](#format), [`image_field`](#image_field), [`samples`](#samples)
+
+#### format
+
+The following formats are supported: `hex` *(default)*, `hexa`, `rgb`, `rgba`.
+
+```python
+from colorfield.fields import ColorField
+from django.db import models
+
+class MyModel(models.Model):
+    color = ColorField(format="hexa")
+```
+
+#### image_field
+
+It is possible to auto-populate the field value getting the color from an image using the `image_field` option.
+
+The color will be calculated from the **top-left pixel** color of the image each time the model instance is saved.
+
+```python
+from colorfield.fields import ColorField
+from django.db import models
+
+class MyModel(models.Model):
+    image = models.ImageField(upload_to="images")
+    color = ColorField(image_field="image")
+```
+
+#### samples
+
+It is possible to provide a palette of colors to choose from to the widget using the `samples` option.
+
+This option **is not restrictive** (on the contrary of `choices` option), it is also possible to choose another color from the spectrum.
+
+![django-colorfield-samples](https://user-images.githubusercontent.com/7900305/104512178-194d3600-55ee-11eb-8cba-91cca156da06.png)
+
+```python
+from colorfield.fields import ColorField
+from django.db import models
+
+class MyModel(models.Model):
+
+    COLOR_PALETTE = [
+        ("#FFFFFF", "white", ),
+        ("#000000", "black", ),
+    ]
+
+    # not restrictive, allows the selection of another color from the spectrum.
+    color = ColorField(samples=COLOR_PALETTE)
+
+    # restrictive, it is mandatory to choose a color from the palette
+    color = ColorField(choices=COLOR_PALETTE)
+```
+
+### Forms
+
+#### Model forms
+
+The `colorfield.fields.ColorField` can be used in Django model forms (`django.forms.ModelForm`) to provide a color picker widget.
+When used in a model form, the field automatically validates the color format based on the specified `format` (e.g., `hex`, `rgb`, `rgba`).
+
+```python
+from django import forms
+
+class MyModelForm(forms.ModelForm):
+    class Meta:
+        model = MyModel
+        fields = ["color"]
+```
+
+#### Plain forms
+
+The `colorfield.forms.ColorField` can be used in plain Django forms (`django.forms.Form`) to provide a color-picker widget.
+This is useful when you need a color input outside of a model context.
+
+```python
+from django import forms
+from colorfield.forms import ColorField
+
+class MyForm(forms.Form):
+    color = ColorField(initial="#FF0000", format="hex")
+```
+
+### Admin
+The admin will kindly provide a simple [color picker](https://coloris.js.org/) for all color fields. :)
+
+---
+
+## Testing
+```bash
+# clone repository
+git clone https://github.com/fabiocaccamo/django-colorfield.git && cd django-colorfield
+
+# create virtualenv and activate it
+python -m venv venv && . venv/bin/activate
+
+# upgrade pip
+python -m pip install --upgrade pip
+
+# install requirements
+pip install -r requirements.txt -r requirements-test.txt
+
+# install pre-commit to run formatters and linters
+pre-commit install --install-hooks
+
+# run tests
+tox
+# or
+python runtests.py
+# or
+python -m django test --settings "tests.settings"
+```
+---
+
+## Credits
+Originally developed by [Jared Forsyth](https://github.com/jaredly)
+
+---
+
+## License
+Released under [MIT License](LICENSE.txt).
+
+---
+
+## Supporting
+
+- :star: Star this project on [GitHub](https://github.com/fabiocaccamo/django-colorfield)
+- :octocat: Follow me on [GitHub](https://github.com/fabiocaccamo)
+- :blue_heart: Follow me on [Twitter](https://twitter.com/fabiocaccamo)
+- :moneybag: Sponsor me on [Github](https://github.com/sponsors/fabiocaccamo)
+
+## See also
+
+- [`django-admin-interface`](https://github.com/fabiocaccamo/django-admin-interface) - the default admin interface made customizable by the admin itself. popup windows replaced by modals. 🧙 ⚡
+
+- [`django-cache-cleaner`](https://github.com/fabiocaccamo/django-cache-cleaner) - clear the entire cache or individual caches easily using the admin panel or management command. 🧹✨
+
+- [`django-extra-settings`](https://github.com/fabiocaccamo/django-extra-settings) - config and manage typed extra settings using just the django admin. ⚙️
+
+- [`django-maintenance-mode`](https://github.com/fabiocaccamo/django-maintenance-mode) - shows a 503 error page when maintenance-mode is on. 🚧 🛠️
+
+- [`django-redirects`](https://github.com/fabiocaccamo/django-redirects) - redirects with full control. ↪️
+
+- [`django-treenode`](https://github.com/fabiocaccamo/django-treenode) - probably the best abstract model / admin for your tree based stuff. 🌳
+
+- [`python-benedict`](https://github.com/fabiocaccamo/python-benedict) - dict subclass with keylist/keypath support, I/O shortcuts (base64, csv, json, pickle, plist, query-string, toml, xml, yaml) and many utilities. 📘
+
+- [`python-codicefiscale`](https://github.com/fabiocaccamo/python-codicefiscale) - encode/decode Italian fiscal codes - codifica/decodifica del Codice Fiscale. 🇮🇹 💳
+
+- [`python-fontbro`](https://github.com/fabiocaccamo/python-fontbro) - friendly font operations. 🧢
+
+- [`python-fsutil`](https://github.com/fabiocaccamo/python-fsutil) - file-system utilities for lazy devs. 🧟‍♂️

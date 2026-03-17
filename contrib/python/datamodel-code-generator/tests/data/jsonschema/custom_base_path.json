@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "House",
+  "type": "object",
+  "customBasePath": "custom.models.Property",
+  "properties": {
+    "address": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "object",
+      "customBasePath": "custom.models.Person",
+      "properties": {
+        "job": {
+          "type": "string"
+        },
+        "spouse": {
+          "type": "object",
+          "customBasePath": "custom.models.Person",
+          "properties": {
+            "job": {
+              "type": "string"
+            }
+          }
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "customBasePath": "custom.models.Person",
+            "properties": {
+              "school": {
+                "type": "string"
+              },
+              "grade": {
+                "type": "number"
+              },
+              "pets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "customBasePath": "custom.models.Animal",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "address"
+  ]
+}

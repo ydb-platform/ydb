@@ -1,0 +1,102 @@
+1 msl MSL Pressure reduced to MSL Pa
+11 t T Temperature Deg C
+13 pt PT Potential temperature K
+28 ws1 WS1 Wave spectra (1) -
+29 ws2 WS2 Wave spectra (2) -
+30 ws3 WS3 Wave spectra (3) -
+31 dir DIR Wind direction Deg true
+32 spd SPD Wind speed m/s
+33 u U U-component of Wind m/s
+34 v V V-component of Wind m/s
+35 strf STRF Stream function m2/s
+36 vp VP Velocity potential m2/s
+37 mntsf MNTSF Montgomery stream function m2/s2
+38 sigmw SIGMW Sigma coordinate vertical velocity 1/s
+39 wcur_pr WCUR_PR Z-component of velocity (pressure) Pa/s
+40 wcur_ge WCUR_GE Z-component of velocity (geometric) m/s
+41 absvor ABSVOR Absolute vorticity 1/s
+42 absdiv ABSDIV Absolute divergence 1/s
+43 relvor RELVOR Relative vorticity 1/s
+44 reldiv RELDIV Relative divergence 1/s
+45 vershu VERSHU Vertical u-component shear 1/s
+46 vershv VERSHV Vertical v-component shear 1/s
+47 dirhorcurr DIRHORCURR Direction of horizontal current Deg true
+48 spdhorcurr SPDHORCURR Speed of horizontal current m/s
+49 ucue UCUE U-comp of Current cm/s
+50 vcur VCUR V-comp of Current cm/s
+51 q Q Specific humidity g/kg
+66 hsnow HSNOW Snow Depth m
+67 mld MLD Mixed layer depth m
+68 tthdp TTHDP Transient thermocline depth m
+69 mthd MTHD Main thermocline depth m
+70 mtha MTHA Main thermocline anomaly m
+71 tcc TCC Total Cloud Cover Fraction
+80 wtmp WTMP Water temperature K
+82 zlev ZLEV Deviation of sea level from mean cm
+88 s S Salinity psu
+89 den DEN Density kg/m3
+91 icec ICEC Ice Cover Fraction
+92 icetk ICETK Total ice thickness m
+93 diced DICED Direction of ice drift Deg true
+94 siced SICED Speed of ice drift m/s
+95 uice UICE U-component of ice drift cm/s
+96 vice VICE V-component of ice drift cm/s
+97 iceg ICEG Ice growth rate m/s
+98 iced ICED Ice divergence 1/s
+100 swh SWH Significant wave height m
+101 wvdir WVDIR Direction of Wind Waves Deg. true
+102 shww SHWW Sign Height Wind Waves m
+103 mpww MPWW Mean Period Wind Waves s
+104 swdir SWDIR Direction of Swell Waves Deg. true
+105 shps SHPS Sign Height Swell Waves m
+106 swper SWPER Mean Period Swell Waves s
+107 dirpw DIRPW Primary wave direction Deg true
+108 perpw PERPW Primary wave mean period s
+109 dirsw DIRSW Secondary wave direction Deg true
+110 persw PERSW Secondary wave mean period s
+111 mpw MPW Mean period of waves s
+112 wadir WADIR Mean direction of Waves Deg. true
+113 pp1d PP1D Peak period of 1D spectra s
+130 usurf USURF Skin velocity, x-comp. cm/s
+131 vsurf VSURF Skin velocity, y-comp. cm/s
+151 no3 NO3 Nitrate -
+152 nh4 NH4 Ammonium -
+153 po4 PO4 Phosphate -
+154 o2 O2 Oxygen -
+155 phpl PHPL Phytoplankton -
+156 zpl ZPL Zooplankton -
+157 dtr DTR Detritus -
+158 benn BENN Bentos nitrogen -
+159 benp BENP Bentos phosphorus -
+160 sio4 SIO4 Silicate -
+161 sio2_bi SIO2_BI Biogenic silica -
+162 li_wacol LI_WACOL Light in water column -
+163 inorg_mat INORG_MAT Inorganic suspended matter -
+164 diat DIAT Diatomes (algae) -
+165 flag FLAG Flagellates (algae) -
+166 no3_agg NO3_AGG Nitrate (aggregated) -
+170 ffldg FFLDG Flash flood guidance kg/m2
+171 ffldro FFLDRO Flash flood runoff kg/m2
+172 rssc RSSC Remotely-sensed snow cover Code
+173 esct ESCT Elevation of snow-covered terrain Code
+174 swepon SWEPON Snow water equivalent per cent of normal %
+175 bgrun BGRUN Baseflow-groundwater runoff kg/m2
+176 ssrun SSRUN Storm surface runoff kg/m2
+180 cppop CPPOP Conditional per cent precipitation amount fractile for an overall period kg/m2
+181 pposp PPOSP Per cent precipitation in a sub-period of an overall period %
+182 pop POP Probability if 0.01 inch of precipitation %
+190 tsec TSEC Seconds prior to initial reference time (defined in section1) (oceonography) s
+191 mosf MOSF Meridional overturning stream function m3/s
+200 tke TKE Turbulent Kinetic Energy J/kg
+201 dtke DTKE Dissipation rate of TKE W/kg
+202 km KM Eddy viscosity m2/s
+203 kh KH Eddy diffusivity m2/s
+220 hlev HLEV Level ice thickness m
+221 hrdg HRDG Ridged ice thickness m
+222 rh RH Ice ridge height m
+223 rd RD Ice ridge density 1/km
+231 ucurmean UCURMEAN U-mean (prev. timestep) cm/s
+232 vcurmean VCURMEAN V-mean (prev. timestep) cm/s
+233 wcurmean WCURMEAN W-mean (prev. timestep) m/s
+239 tsnow TSNOW Snow temperature Deg C
+243 depth DEPTH Total depth in meters m

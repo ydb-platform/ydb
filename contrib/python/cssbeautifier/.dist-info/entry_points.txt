@@ -1,0 +1,2 @@
+[console_scripts]
+css-beautify = cssbeautifier:main

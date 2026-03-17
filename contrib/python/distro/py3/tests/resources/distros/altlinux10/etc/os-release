@@ -1,0 +1,10 @@
+NAME="ALT Server"
+VERSION="10.1"
+ID=altlinux
+VERSION_ID=10.1
+PRETTY_NAME="ALT Server 10.1 (Mendelevium)"
+ANSI_COLOR="1;33"
+CPE_NAME="cpe:/o:alt:server:10.1"
+BUILD_ID="ALT Server 10.1"
+HOME_URL="https://basealt.ru/"
+BUG_REPORT_URL="https://bugs.altlinux.org/"

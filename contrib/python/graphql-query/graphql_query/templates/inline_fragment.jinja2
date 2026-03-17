@@ -1,0 +1,12 @@
+... on {{ type }}{% if arguments|length > 0 %}(
+{%- for argument in arguments %}
+  {{ argument }}
+{%- endfor %}
+){% endif %} {
+{%- if typename %}
+  __typename
+{%- endif %}
+{%- for field in fields %}
+  {{ field }}
+{%- endfor %}
+}

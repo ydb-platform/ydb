@@ -1,0 +1,18 @@
+--- contrib/python/jupyter-events/jupyter_events/validators.py	(index)
++++ contrib/python/jupyter-events/jupyter_events/validators.py	(working tree)
+@@ -46,13 +46,13 @@ METASCHEMA_REGISTRY: Registry[Any] = resources @ Registry()
+ 
+ JUPYTER_EVENTS_SCHEMA_VALIDATOR = Draft7Validator(
+     schema=EVENT_METASCHEMA,
+-    registry=METASCHEMA_REGISTRY,
++    # registry=METASCHEMA_REGISTRY,
+     format_checker=draft7_format_checker,
+ )
+ 
+ JUPYTER_EVENTS_CORE_VALIDATOR = Draft7Validator(
+     schema=EVENT_CORE_SCHEMA,
+-    registry=METASCHEMA_REGISTRY,
++    # registry=METASCHEMA_REGISTRY,
+     format_checker=draft7_format_checker,
+ )
+ 

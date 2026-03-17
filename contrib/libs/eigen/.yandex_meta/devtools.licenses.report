@@ -1,0 +1,913 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Public-Domain        096efaddf3ef46ec7c960866f7100536
+BELONGS ya.make
+    License text:
+          * <a href="http://math.nist.gov/javanumerics/jama/">JAMA</a> (public domain).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        Eigen/src/Eigenvalues/EigenSolver.h [59:59]
+        Eigen/src/Eigenvalues/RealSchur.h [49:49]
+
+KEEP     Custom-eigen         0dfb019702f8993cdf7d93be6f544259
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        Eigen/src/Core/arch/Default/Half.h [13:25]
+
+KEEP     BSD-3-Clause         117307b02cf479bed6f00200e2ca104b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING.BSD [4:25]
+        Eigen/src/Cholesky/LLT_LAPACKE.h [4:25]
+        Eigen/src/Core/Assign_MKL.h [5:26]
+        Eigen/src/Core/products/GeneralMatrixMatrixTriangular_BLAS.h [4:25]
+        Eigen/src/Core/products/GeneralMatrixMatrix_BLAS.h [4:25]
+        Eigen/src/Core/products/GeneralMatrixVector_BLAS.h [4:25]
+        Eigen/src/Core/products/SelfadjointMatrixMatrix_BLAS.h [4:25]
+        Eigen/src/Core/products/SelfadjointMatrixVector_BLAS.h [4:25]
+        Eigen/src/Core/products/TriangularMatrixMatrix_BLAS.h [4:25]
+        Eigen/src/Core/products/TriangularMatrixVector_BLAS.h [4:25]
+        Eigen/src/Core/products/TriangularSolverMatrix_BLAS.h [4:25]
+        Eigen/src/Core/util/MKL_support.h [4:25]
+        Eigen/src/Eigenvalues/ComplexSchur_LAPACKE.h [4:25]
+        Eigen/src/Eigenvalues/RealSchur_LAPACKE.h [4:25]
+        Eigen/src/Eigenvalues/SelfAdjointEigenSolver_LAPACKE.h [4:25]
+        Eigen/src/LU/PartialPivLU_LAPACKE.h [4:25]
+        Eigen/src/PardisoSupport/PardisoSupport.h [4:25]
+        Eigen/src/QR/ColPivHouseholderQR_LAPACKE.h [4:25]
+        Eigen/src/QR/HouseholderQR_LAPACKE.h [4:25]
+        Eigen/src/SVD/JacobiSVD_LAPACKE.h [4:25]
+
+KEEP     Custom-eigen         1ed74bc2701a93238ab16f3cdac207a6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 92.86
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        Eigen/src/OrderingMethods/Eigen_Colamd.h [31:37]
+
+KEEP     MPL-2.0              1fd15f7a6302fda4c5b834997679c118
+BELONGS ya.make
+    License text:
+          *                       unless EIGEN_MPL2_ONLY is defined, in which case the default is NaturalOrdering<int>.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        Eigen/src/IterativeLinearSolvers/IncompleteCholesky.h [28:28]
+
+SKIP     LGPL-2.1-only        23c2a5e0106b99d75238986559bb5fc6
+BELONGS ya.make
+    # As we pass -DEIGEN_MPL2_ONLY, this license is not applicable according to COPYING.README
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        COPYING.LGPL [1:502]
+
+KEEP     MPL-2.0              280da0ae8b63b2e861e6766d710e9baf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        COPYING.MPL2 [1:373]
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        COPYING.APACHE [2:202]
+
+KEEP     MPL-2.0              2fc6ac7083269ea7aa452aba34c87972
+BELONGS ya.make
+    License text:
+        // Source Code Form is subject to the terms of the Mozilla
+        // Public License v. 2.0. If a copy of the MPL was not distributed
+        // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        Eigen/src/SVD/BDCSVD.h [16:18]
+
+KEEP     MPL-2.0              3810100eaa06ebdae54f808a05256f5a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        Eigen/src/Core/arch/SYCL/SyclMemoryModel.h [3:5]
+
+KEEP     Minpack              3b187eb1b4f4e5a5d8af31ab24dbedf1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-minpack
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.netlib.org/minpack/disclaimer, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/minpack.LICENSE
+    Files with this license:
+        COPYING.MINPACK [3:51]
+        unsupported/Eigen/src/LevenbergMarquardt/CopyrightMINPACK.txt [3:51]
+
+KEEP     Mozilla-GC           3ddb6d6769fbbcb378104aff2df1cd78
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mozilla-gc
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.hboehm.info/gc/license.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mozilla-gc.LICENSE
+    Files with this license:
+        Eigen/src/SparseCore/SparseColEtree.h [22:29]
+        Eigen/src/SparseLU/SparseLU_Memory.h [21:28]
+        Eigen/src/SparseLU/SparseLU_column_bmod.h [22:29]
+        Eigen/src/SparseLU/SparseLU_column_dfs.h [21:28]
+        Eigen/src/SparseLU/SparseLU_copy_to_ucol.h [20:27]
+        Eigen/src/SparseLU/SparseLU_heap_relax_snode.h [18:25]
+        Eigen/src/SparseLU/SparseLU_panel_bmod.h [22:29]
+        Eigen/src/SparseLU/SparseLU_pivotL.h [21:28]
+        Eigen/src/SparseLU/SparseLU_pruneL.h [21:28]
+        Eigen/src/SparseLU/SparseLU_relax_snode.h [18:25]
+
+SKIP     MPL-2.0 AND LGPL-2.1-only AND LGPL-2.1-or-later AND BSD-3-Clause AND LicenseRef-scancode-other-permissive 4615ef6527dbb87374aabf5a292ab6b5
+BELONGS ya.make
+FILE_INCLUDE COPYING.LGPL found in files: COPYING.README at line 9
+FILE_INCLUDE COPYING.MPL2 found in files: COPYING.README at line 1
+FILE_IGNORE Eigen/Eigen found in files: COPYING.README at line 1, COPYING.README at line 11
+    # COPYING.README is not a license by itself, but rather an explanation on other license application
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 97.81
+        Match type      : NOTICE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        COPYING.README [1:18]
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 97.81
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        COPYING.README [1:18]
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 97.81
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        COPYING.README [1:18]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 97.81
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING.README [1:18]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 97.81
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        COPYING.README [1:18]
+
+KEEP     MPL-2.0              4e488a052da949d1e3c6ec345f6a664c
+BELONGS ya.make
+    License text:
+          *  released under the terms of the GNU LGPL:
+          *    http://www-users.cs.umn.edu/~saad/software/SPARSKIT/README
+          * However, Yousef Saad gave us permission to relicense his ILUT code to MPL2.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 64.29
+        Match type      : REFERENCE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        Eigen/src/IterativeLinearSolvers/IncompleteLUT.h [90:92]
+
+KEEP     MPL-2.0              4fcf3e7e3c87a274caf887bae6435d65
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        Eigen/Cholesky [4:6]
+        Eigen/CholmodSupport [4:6]
+        Eigen/Core [7:9]
+        Eigen/Eigenvalues [4:6]
+        Eigen/Geometry [4:6]
+        Eigen/Householder [4:6]
+        Eigen/IterativeLinearSolvers [4:6]
+        Eigen/Jacobi [4:6]
+        Eigen/KLUSupport [4:6]
+        Eigen/LU [4:6]
+        Eigen/MetisSupport [4:6]
+        Eigen/OrderingMethods [4:6]
+        Eigen/PaStiXSupport [4:6]
+        Eigen/PardisoSupport [4:6]
+        Eigen/QR [4:6]
+        Eigen/QtAlignedMalloc [4:6]
+        Eigen/SPQRSupport [4:6]
+        Eigen/SVD [4:6]
+        Eigen/Sparse [4:6]
+        Eigen/SparseCholesky [6:8]
+        Eigen/SparseCore [4:6]
+        Eigen/SparseLU [7:9]
+        Eigen/SparseQR [4:6]
+        Eigen/StdDeque [7:9]
+        Eigen/StdList [6:8]
+        Eigen/StdVector [7:9]
+        Eigen/SuperLUSupport [4:6]
+        Eigen/UmfPackSupport [4:6]
+        Eigen/src/Cholesky/LDLT.h [9:11]
+        Eigen/src/Cholesky/LLT.h [6:8]
+        Eigen/src/CholmodSupport/CholmodSupport.h [6:8]
+        Eigen/src/Core/ArithmeticSequence.h [6:8]
+        Eigen/src/Core/Array.h [6:8]
+        Eigen/src/Core/ArrayBase.h [6:8]
+        Eigen/src/Core/ArrayWrapper.h [6:8]
+        Eigen/src/Core/Assign.h [8:10]
+        Eigen/src/Core/AssignEvaluator.h [8:10]
+        Eigen/src/Core/BandMatrix.h [6:8]
+        Eigen/src/Core/Block.h [7:9]
+        Eigen/src/Core/BooleanRedux.h [6:8]
+        Eigen/src/Core/CommaInitializer.h [7:9]
+        Eigen/src/Core/ConditionEstimator.h [6:8]
+        Eigen/src/Core/CoreEvaluators.h [8:10]
+        Eigen/src/Core/CoreIterators.h [6:8]
+        Eigen/src/Core/CwiseBinaryOp.h [7:9]
+        Eigen/src/Core/CwiseNullaryOp.h [6:8]
+        Eigen/src/Core/CwiseTernaryOp.h [8:10]
+        Eigen/src/Core/CwiseUnaryOp.h [7:9]
+        Eigen/src/Core/CwiseUnaryView.h [6:8]
+        Eigen/src/Core/DenseBase.h [7:9]
+        Eigen/src/Core/DenseCoeffsBase.h [6:8]
+        Eigen/src/Core/DenseStorage.h [8:10]
+        Eigen/src/Core/Diagonal.h [7:9]
+        Eigen/src/Core/DiagonalMatrix.h [7:9]
+        Eigen/src/Core/DiagonalProduct.h [7:9]
+        Eigen/src/Core/EigenBase.h [7:9]
+        Eigen/src/Core/ForceAlignedAccess.h [6:8]
+        Eigen/src/Core/Fuzzy.h [7:9]
+        Eigen/src/Core/GeneralProduct.h [7:9]
+        Eigen/src/Core/GenericPacketMath.h [7:9]
+        Eigen/src/Core/GlobalFunctions.h [7:9]
+        Eigen/src/Core/IO.h [7:9]
+        Eigen/src/Core/IndexedView.h [6:8]
+        Eigen/src/Core/Inverse.h [6:8]
+        Eigen/src/Core/Map.h [7:9]
+        Eigen/src/Core/MapBase.h [7:9]
+        Eigen/src/Core/MathFunctions.h [6:8]
+        Eigen/src/Core/MathFunctionsImpl.h [7:9]
+        Eigen/src/Core/Matrix.h [7:9]
+        Eigen/src/Core/MatrixBase.h [7:9]
+        Eigen/src/Core/NestByValue.h [7:9]
+        Eigen/src/Core/NoAlias.h [6:8]
+        Eigen/src/Core/NumTraits.h [6:8]
+        Eigen/src/Core/PartialReduxEvaluator.h [6:8]
+        Eigen/src/Core/PermutationMatrix.h [7:9]
+        Eigen/src/Core/PlainObjectBase.h [7:9]
+        Eigen/src/Core/Product.h [6:8]
+        Eigen/src/Core/ProductEvaluators.h [8:10]
+        Eigen/src/Core/Random.h [6:8]
+        Eigen/src/Core/Redux.h [7:9]
+        Eigen/src/Core/Ref.h [6:8]
+        Eigen/src/Core/Replicate.h [6:8]
+        Eigen/src/Core/Reshaped.h [7:9]
+        Eigen/src/Core/ReturnByValue.h [7:9]
+        Eigen/src/Core/Reverse.h [9:11]
+        Eigen/src/Core/Select.h [6:8]
+        Eigen/src/Core/SelfAdjointView.h [6:8]
+        Eigen/src/Core/SelfCwiseBinaryOp.h [6:8]
+        Eigen/src/Core/Solve.h [6:8]
+        Eigen/src/Core/SolveTriangular.h [6:8]
+        Eigen/src/Core/SolverBase.h [6:8]
+        Eigen/src/Core/StableNorm.h [6:8]
+        Eigen/src/Core/StlIterators.h [6:8]
+        Eigen/src/Core/Stride.h [6:8]
+        Eigen/src/Core/Swap.h [6:8]
+        Eigen/src/Core/Transpose.h [7:9]
+        Eigen/src/Core/Transpositions.h [6:8]
+        Eigen/src/Core/TriangularMatrix.h [7:9]
+        Eigen/src/Core/VectorBlock.h [7:9]
+        Eigen/src/Core/VectorwiseOp.h [7:9]
+        Eigen/src/Core/Visitor.h [6:8]
+        Eigen/src/Core/arch/AVX/Complex.h [6:8]
+        Eigen/src/Core/arch/AVX/MathFunctions.h [6:8]
+        Eigen/src/Core/arch/AVX/PacketMath.h [6:8]
+        Eigen/src/Core/arch/AVX/TypeCasting.h [6:8]
+        Eigen/src/Core/arch/AVX512/Complex.h [6:8]
+        Eigen/src/Core/arch/AVX512/MathFunctions.h [6:8]
+        Eigen/src/Core/arch/AVX512/PacketMath.h [6:8]
+        Eigen/src/Core/arch/AVX512/TypeCasting.h [6:8]
+        Eigen/src/Core/arch/AltiVec/Complex.h [7:9]
+        Eigen/src/Core/arch/AltiVec/MathFunctions.h [8:10]
+        Eigen/src/Core/arch/AltiVec/MatrixProduct.h [7:9]
+        Eigen/src/Core/arch/AltiVec/MatrixProductMMA.h [7:9]
+        Eigen/src/Core/arch/AltiVec/PacketMath.h [6:8]
+        Eigen/src/Core/arch/CUDA/Complex.h [7:9]
+        Eigen/src/Core/arch/Default/ConjHelper.h [7:9]
+        Eigen/src/Core/arch/Default/GenericPacketMathFunctions.h [8:10]
+        Eigen/src/Core/arch/Default/GenericPacketMathFunctionsFwd.h [6:8]
+        Eigen/src/Core/arch/Default/Half.h [4:6]
+        Eigen/src/Core/arch/Default/Settings.h [7:9]
+        Eigen/src/Core/arch/Default/TypeCasting.h [7:9]
+        Eigen/src/Core/arch/GPU/MathFunctions.h [6:8]
+        Eigen/src/Core/arch/GPU/PacketMath.h [6:8]
+        Eigen/src/Core/arch/GPU/TypeCasting.h [6:8]
+        Eigen/src/Core/arch/MSA/Complex.h [9:11]
+        Eigen/src/Core/arch/MSA/MathFunctions.h [13:15]
+        Eigen/src/Core/arch/MSA/PacketMath.h [9:11]
+        Eigen/src/Core/arch/NEON/Complex.h [7:9]
+        Eigen/src/Core/arch/NEON/MathFunctions.h [4:6]
+        Eigen/src/Core/arch/NEON/PacketMath.h [8:10]
+        Eigen/src/Core/arch/NEON/TypeCasting.h [7:9]
+        Eigen/src/Core/arch/SSE/Complex.h [6:8]
+        Eigen/src/Core/arch/SSE/MathFunctions.h [7:9]
+        Eigen/src/Core/arch/SSE/PacketMath.h [6:8]
+        Eigen/src/Core/arch/SSE/TypeCasting.h [6:8]
+        Eigen/src/Core/arch/SVE/MathFunctions.h [6:8]
+        Eigen/src/Core/arch/SVE/PacketMath.h [6:8]
+        Eigen/src/Core/arch/SVE/TypeCasting.h [6:8]
+        Eigen/src/Core/arch/SYCL/InteropHeaders.h [9:11]
+        Eigen/src/Core/arch/SYCL/MathFunctions.h [9:11]
+        Eigen/src/Core/arch/SYCL/PacketMath.h [9:11]
+        Eigen/src/Core/arch/SYCL/TypeCasting.h [9:11]
+        Eigen/src/Core/arch/ZVector/Complex.h [7:9]
+        Eigen/src/Core/arch/ZVector/MathFunctions.h [8:10]
+        Eigen/src/Core/arch/ZVector/PacketMath.h [6:8]
+        Eigen/src/Core/functors/AssignmentFunctors.h [6:8]
+        Eigen/src/Core/functors/BinaryFunctors.h [6:8]
+        Eigen/src/Core/functors/NullaryFunctors.h [6:8]
+        Eigen/src/Core/functors/StlFunctors.h [6:8]
+        Eigen/src/Core/functors/TernaryFunctors.h [6:8]
+        Eigen/src/Core/functors/UnaryFunctors.h [6:8]
+        Eigen/src/Core/products/GeneralBlockPanelKernel.h [6:8]
+        Eigen/src/Core/products/GeneralMatrixMatrix.h [6:8]
+        Eigen/src/Core/products/GeneralMatrixMatrixTriangular.h [6:8]
+        Eigen/src/Core/products/GeneralMatrixVector.h [6:8]
+        Eigen/src/Core/products/Parallelizer.h [6:8]
+        Eigen/src/Core/products/SelfadjointMatrixMatrix.h [6:8]
+        Eigen/src/Core/products/SelfadjointMatrixVector.h [6:8]
+        Eigen/src/Core/products/SelfadjointProduct.h [6:8]
+        Eigen/src/Core/products/SelfadjointRank2Update.h [6:8]
+        Eigen/src/Core/products/TriangularMatrixMatrix.h [6:8]
+        Eigen/src/Core/products/TriangularMatrixVector.h [6:8]
+        Eigen/src/Core/products/TriangularSolverMatrix.h [6:8]
+        Eigen/src/Core/products/TriangularSolverVector.h [6:8]
+        Eigen/src/Core/util/BlasUtil.h [6:8]
+        Eigen/src/Core/util/ConfigureVectorization.h [7:9]
+        Eigen/src/Core/util/Constants.h [8:10]
+        Eigen/src/Core/util/ForwardDeclarations.h [7:9]
+        Eigen/src/Core/util/IndexedViewHelper.h [6:8]
+        Eigen/src/Core/util/IntegralConstant.h [6:8]
+        Eigen/src/Core/util/Memory.h [11:13]
+        Eigen/src/Core/util/Meta.h [7:9]
+        Eigen/src/Core/util/ReshapedHelper.h [6:8]
+        Eigen/src/Core/util/StaticAssert.h [7:9]
+        Eigen/src/Core/util/SymbolicIndex.h [6:8]
+        Eigen/src/Core/util/XprHelper.h [7:9]
+        Eigen/src/Eigenvalues/ComplexEigenSolver.h [8:10]
+        Eigen/src/Eigenvalues/ComplexSchur.h [8:10]
+        Eigen/src/Eigenvalues/EigenSolver.h [7:9]
+        Eigen/src/Eigenvalues/GeneralizedEigenSolver.h [8:10]
+        Eigen/src/Eigenvalues/GeneralizedSelfAdjointEigenSolver.h [7:9]
+        Eigen/src/Eigenvalues/HessenbergDecomposition.h [7:9]
+        Eigen/src/Eigenvalues/MatrixBaseEigenvalues.h [7:9]
+        Eigen/src/Eigenvalues/RealQZ.h [6:8]
+        Eigen/src/Eigenvalues/RealSchur.h [7:9]
+        Eigen/src/Eigenvalues/SelfAdjointEigenSolver.h [7:9]
+        Eigen/src/Eigenvalues/Tridiagonalization.h [7:9]
+        Eigen/src/Geometry/AlignedBox.h [6:8]
+        Eigen/src/Geometry/AngleAxis.h [6:8]
+        Eigen/src/Geometry/EulerAngles.h [6:8]
+        Eigen/src/Geometry/Homogeneous.h [6:8]
+        Eigen/src/Geometry/Hyperplane.h [7:9]
+        Eigen/src/Geometry/OrthoMethods.h [7:9]
+        Eigen/src/Geometry/ParametrizedLine.h [7:9]
+        Eigen/src/Geometry/Quaternion.h [7:9]
+        Eigen/src/Geometry/Rotation2D.h [6:8]
+        Eigen/src/Geometry/RotationBase.h [6:8]
+        Eigen/src/Geometry/Scaling.h [6:8]
+        Eigen/src/Geometry/Transform.h [8:10]
+        Eigen/src/Geometry/Translation.h [6:8]
+        Eigen/src/Geometry/Umeyama.h [6:8]
+        Eigen/src/Geometry/arch/Geometry_SIMD.h [7:9]
+        Eigen/src/Householder/BlockHouseholder.h [7:9]
+        Eigen/src/Householder/Householder.h [7:9]
+        Eigen/src/Householder/HouseholderSequence.h [7:9]
+        Eigen/src/IterativeLinearSolvers/BasicPreconditioners.h [6:8]
+        Eigen/src/IterativeLinearSolvers/BiCGSTAB.h [7:9]
+        Eigen/src/IterativeLinearSolvers/ConjugateGradient.h [6:8]
+        Eigen/src/IterativeLinearSolvers/IncompleteCholesky.h [7:9]
+        Eigen/src/IterativeLinearSolvers/IncompleteLUT.h [7:9]
+        Eigen/src/IterativeLinearSolvers/IterativeSolverBase.h [6:8]
+        Eigen/src/IterativeLinearSolvers/LeastSquareConjugateGradient.h [6:8]
+        Eigen/src/IterativeLinearSolvers/SolveWithGuess.h [6:8]
+        Eigen/src/Jacobi/Jacobi.h [7:9]
+        Eigen/src/KLUSupport/KLUSupport.h [6:8]
+        Eigen/src/LU/Determinant.h [6:8]
+        Eigen/src/LU/FullPivLU.h [6:8]
+        Eigen/src/LU/InverseImpl.h [7:9]
+        Eigen/src/LU/PartialPivLU.h [7:9]
+        Eigen/src/LU/arch/InverseSize4.h [8:10]
+        Eigen/src/MetisSupport/MetisSupport.h [6:8]
+        Eigen/src/OrderingMethods/Amd.h [6:8]
+        Eigen/src/OrderingMethods/Eigen_Colamd.h [6:8]
+        Eigen/src/OrderingMethods/Ordering.h [7:9]
+        Eigen/src/PaStiXSupport/PaStiXSupport.h [6:8]
+        Eigen/src/QR/ColPivHouseholderQR.h [7:9]
+        Eigen/src/QR/CompleteOrthogonalDecomposition.h [6:8]
+        Eigen/src/QR/FullPivHouseholderQR.h [7:9]
+        Eigen/src/QR/HouseholderQR.h [8:10]
+        Eigen/src/SPQRSupport/SuiteSparseQRSupport.h [7:9]
+        Eigen/src/SVD/JacobiSVD.h [7:9]
+        Eigen/src/SVD/SVDBase.h [12:14]
+        Eigen/src/SVD/UpperBidiagonalization.h [7:9]
+        Eigen/src/SparseCholesky/SimplicialCholesky.h [6:8]
+        Eigen/src/SparseCholesky/SimplicialCholesky_impl.h [6:8]
+        Eigen/src/SparseCore/AmbiVector.h [6:8]
+        Eigen/src/SparseCore/CompressedStorage.h [6:8]
+        Eigen/src/SparseCore/ConservativeSparseSparseProduct.h [6:8]
+        Eigen/src/SparseCore/MappedSparseMatrix.h [6:8]
+        Eigen/src/SparseCore/SparseAssign.h [6:8]
+        Eigen/src/SparseCore/SparseBlock.h [6:8]
+        Eigen/src/SparseCore/SparseColEtree.h [6:8]
+        Eigen/src/SparseCore/SparseCompressedBase.h [6:8]
+        Eigen/src/SparseCore/SparseCwiseBinaryOp.h [6:8]
+        Eigen/src/SparseCore/SparseCwiseUnaryOp.h [6:8]
+        Eigen/src/SparseCore/SparseDenseProduct.h [6:8]
+        Eigen/src/SparseCore/SparseDiagonalProduct.h [6:8]
+        Eigen/src/SparseCore/SparseDot.h [6:8]
+        Eigen/src/SparseCore/SparseFuzzy.h [6:8]
+        Eigen/src/SparseCore/SparseMap.h [6:8]
+        Eigen/src/SparseCore/SparseMatrix.h [6:8]
+        Eigen/src/SparseCore/SparseMatrixBase.h [6:8]
+        Eigen/src/SparseCore/SparsePermutation.h [6:8]
+        Eigen/src/SparseCore/SparseProduct.h [6:8]
+        Eigen/src/SparseCore/SparseRedux.h [6:8]
+        Eigen/src/SparseCore/SparseRef.h [6:8]
+        Eigen/src/SparseCore/SparseSelfAdjointView.h [6:8]
+        Eigen/src/SparseCore/SparseSolverBase.h [6:8]
+        Eigen/src/SparseCore/SparseSparseProductWithPruning.h [6:8]
+        Eigen/src/SparseCore/SparseTranspose.h [6:8]
+        Eigen/src/SparseCore/SparseTriangularView.h [7:9]
+        Eigen/src/SparseCore/SparseUtil.h [6:8]
+        Eigen/src/SparseCore/SparseVector.h [6:8]
+        Eigen/src/SparseCore/SparseView.h [7:9]
+        Eigen/src/SparseCore/TriangularSolver.h [6:8]
+        Eigen/src/SparseLU/SparseLU.h [7:9]
+        Eigen/src/SparseLU/SparseLU_Memory.h [6:8]
+        Eigen/src/SparseLU/SparseLU_Structs.h [6:8]
+        Eigen/src/SparseLU/SparseLU_SupernodalMatrix.h [7:9]
+        Eigen/src/SparseLU/SparseLU_Utils.h [6:8]
+        Eigen/src/SparseLU/SparseLU_column_bmod.h [7:9]
+        Eigen/src/SparseLU/SparseLU_column_dfs.h [6:8]
+        Eigen/src/SparseLU/SparseLU_copy_to_ucol.h [6:8]
+        Eigen/src/SparseLU/SparseLU_gemm_kernel.h [6:8]
+        Eigen/src/SparseLU/SparseLU_heap_relax_snode.h [6:8]
+        Eigen/src/SparseLU/SparseLU_kernel_bmod.h [7:9]
+        Eigen/src/SparseLU/SparseLU_panel_bmod.h [7:9]
+        Eigen/src/SparseLU/SparseLU_pivotL.h [6:8]
+        Eigen/src/SparseLU/SparseLU_pruneL.h [6:8]
+        Eigen/src/SparseLU/SparseLU_relax_snode.h [6:8]
+        Eigen/src/SparseQR/SparseQR.h [7:9]
+        Eigen/src/StlSupport/StdDeque.h [7:9]
+        Eigen/src/StlSupport/StdList.h [6:8]
+        Eigen/src/StlSupport/StdVector.h [7:9]
+        Eigen/src/StlSupport/details.h [7:9]
+        Eigen/src/SuperLUSupport/SuperLUSupport.h [6:8]
+        Eigen/src/UmfPackSupport/UmfPackSupport.h [6:8]
+        Eigen/src/misc/Image.h [6:8]
+        Eigen/src/misc/Kernel.h [6:8]
+        Eigen/src/misc/RealSvd2x2.h [7:9]
+        Eigen/src/plugins/BlockMethods.h [7:9]
+        Eigen/src/plugins/CommonCwiseBinaryOps.h [7:9]
+        Eigen/src/plugins/CommonCwiseUnaryOps.h [7:9]
+        Eigen/src/plugins/IndexedViewMethods.h [6:8]
+        Eigen/src/plugins/MatrixCwiseBinaryOps.h [7:9]
+        Eigen/src/plugins/MatrixCwiseUnaryOps.h [7:9]
+        unsupported/Eigen/AdolcForward [6:8]
+        unsupported/Eigen/AlignedVector3 [6:8]
+        unsupported/Eigen/ArpackSupport [5:7]
+        unsupported/Eigen/AutoDiff [6:8]
+        unsupported/Eigen/BVH [6:8]
+        unsupported/Eigen/CXX11/Tensor [7:9]
+        unsupported/Eigen/CXX11/TensorSymmetry [6:8]
+        unsupported/Eigen/CXX11/ThreadPool [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/Tensor.h [7:9]
+        unsupported/Eigen/CXX11/src/Tensor/TensorArgMax.h [7:9]
+        unsupported/Eigen/CXX11/src/Tensor/TensorAssign.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorBlock.h [4:6]
+        unsupported/Eigen/CXX11/src/Tensor/TensorBroadcasting.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorChipping.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorConcatenation.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorContraction.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorContractionBlocking.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorContractionGpu.h [8:10]
+        unsupported/Eigen/CXX11/src/Tensor/TensorContractionMapper.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorContractionThreadPool.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorConversion.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorConvolutionSycl.h [11:13]
+        unsupported/Eigen/CXX11/src/Tensor/TensorCostModel.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorCustomOp.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorDevice.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorDeviceDefault.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorDeviceGpu.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorDeviceSycl.h [11:13]
+        unsupported/Eigen/CXX11/src/Tensor/TensorDeviceThreadPool.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorDimensionList.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorDimensions.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorEvalTo.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorEvaluator.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorExecutor.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorExpr.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorFFT.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorFixedSize.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorForcedEval.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorForwardDeclarations.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorFunctors.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorGenerator.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorGlobalFunctions.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorGpuHipCudaDefines.h [7:9]
+        unsupported/Eigen/CXX11/src/Tensor/TensorGpuHipCudaUndefines.h [7:9]
+        unsupported/Eigen/CXX11/src/Tensor/TensorIO.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorImagePatch.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorIndexList.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorInflation.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorInitializer.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorIntDiv.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorLayoutSwap.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorMacros.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorMap.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorMeta.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorMorphing.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorPadding.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorPatch.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorRandom.h [7:9]
+        unsupported/Eigen/CXX11/src/Tensor/TensorReduction.h [7:9]
+        unsupported/Eigen/CXX11/src/Tensor/TensorReductionGpu.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorReductionSycl.h [9:11]
+        unsupported/Eigen/CXX11/src/Tensor/TensorRef.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorReverse.h [7:9]
+        unsupported/Eigen/CXX11/src/Tensor/TensorScan.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorScanSycl.h [9:11]
+        unsupported/Eigen/CXX11/src/Tensor/TensorShuffling.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorStorage.h [7:9]
+        unsupported/Eigen/CXX11/src/Tensor/TensorStriding.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorTrace.h [7:9]
+        unsupported/Eigen/CXX11/src/Tensor/TensorTraits.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorUInt128.h [6:8]
+        unsupported/Eigen/CXX11/src/TensorSymmetry/DynamicSymmetry.h [6:8]
+        unsupported/Eigen/CXX11/src/TensorSymmetry/StaticSymmetry.h [6:8]
+        unsupported/Eigen/CXX11/src/TensorSymmetry/Symmetry.h [6:8]
+        unsupported/Eigen/CXX11/src/TensorSymmetry/util/TemplateGroupTheory.h [6:8]
+        unsupported/Eigen/CXX11/src/ThreadPool/Barrier.h [6:8]
+        unsupported/Eigen/CXX11/src/ThreadPool/EventCount.h [6:8]
+        unsupported/Eigen/CXX11/src/ThreadPool/NonBlockingThreadPool.h [6:8]
+        unsupported/Eigen/CXX11/src/ThreadPool/RunQueue.h [6:8]
+        unsupported/Eigen/CXX11/src/ThreadPool/ThreadCancel.h [6:8]
+        unsupported/Eigen/CXX11/src/ThreadPool/ThreadEnvironment.h [6:8]
+        unsupported/Eigen/CXX11/src/ThreadPool/ThreadLocal.h [6:8]
+        unsupported/Eigen/CXX11/src/ThreadPool/ThreadPoolInterface.h [6:8]
+        unsupported/Eigen/CXX11/src/ThreadPool/ThreadYield.h [6:8]
+        unsupported/Eigen/CXX11/src/util/CXX11Meta.h [6:8]
+        unsupported/Eigen/CXX11/src/util/CXX11Workarounds.h [6:8]
+        unsupported/Eigen/CXX11/src/util/EmulateArray.h [6:8]
+        unsupported/Eigen/CXX11/src/util/MaxSizeVector.h [6:8]
+        unsupported/Eigen/EulerAngles [6:8]
+        unsupported/Eigen/FFT [6:8]
+        unsupported/Eigen/IterativeSolvers [6:8]
+        unsupported/Eigen/KroneckerProduct [5:7]
+        unsupported/Eigen/LevenbergMarquardt [6:8]
+        unsupported/Eigen/MPRealSupport [8:10]
+        unsupported/Eigen/MatrixFunctions [7:9]
+        unsupported/Eigen/MoreVectorization [5:7]
+        unsupported/Eigen/NonLinearOptimization [6:8]
+        unsupported/Eigen/NumericalDiff [6:8]
+        unsupported/Eigen/OpenGLSupport [6:8]
+        unsupported/Eigen/Polynomials [5:7]
+        unsupported/Eigen/Skyline [5:7]
+        unsupported/Eigen/SparseExtra [6:8]
+        unsupported/Eigen/SpecialFunctions [6:8]
+        unsupported/Eigen/Splines [6:8]
+        unsupported/Eigen/src/AutoDiff/AutoDiffJacobian.h [6:8]
+        unsupported/Eigen/src/AutoDiff/AutoDiffScalar.h [6:8]
+        unsupported/Eigen/src/AutoDiff/AutoDiffVector.h [6:8]
+        unsupported/Eigen/src/BVH/BVAlgorithms.h [6:8]
+        unsupported/Eigen/src/BVH/KdBVH.h [6:8]
+        unsupported/Eigen/src/Eigenvalues/ArpackSelfAdjointEigenSolver.h [6:8]
+        unsupported/Eigen/src/EulerAngles/EulerAngles.h [6:8]
+        unsupported/Eigen/src/EulerAngles/EulerSystem.h [6:8]
+        unsupported/Eigen/src/FFT/ei_fftw_impl.h [6:8]
+        unsupported/Eigen/src/FFT/ei_kissfft_impl.h [6:8]
+        unsupported/Eigen/src/IterativeSolvers/DGMRES.h [6:8]
+        unsupported/Eigen/src/IterativeSolvers/GMRES.h [7:9]
+        unsupported/Eigen/src/IterativeSolvers/IDRS.h [8:10]
+        unsupported/Eigen/src/IterativeSolvers/IncompleteLU.h [6:8]
+        unsupported/Eigen/src/IterativeSolvers/MINRES.h [8:10]
+        unsupported/Eigen/src/IterativeSolvers/Scaling.h [6:8]
+        unsupported/Eigen/src/KroneckerProduct/KroneckerTensorProduct.h [8:10]
+        unsupported/Eigen/src/LevenbergMarquardt/LevenbergMarquardt.h [15:17]
+        unsupported/Eigen/src/MatrixFunctions/MatrixExponential.h [7:9]
+        unsupported/Eigen/src/MatrixFunctions/MatrixFunction.h [6:8]
+        unsupported/Eigen/src/MatrixFunctions/MatrixLogarithm.h [7:9]
+        unsupported/Eigen/src/MatrixFunctions/MatrixPower.h [6:8]
+        unsupported/Eigen/src/MatrixFunctions/MatrixSquareRoot.h [6:8]
+        unsupported/Eigen/src/MatrixFunctions/StemFunction.h [6:8]
+        unsupported/Eigen/src/MoreVectorization/MathFunctions.h [7:9]
+        unsupported/Eigen/src/NonLinearOptimization/HybridNonLinearSolver.h [9:11]
+        unsupported/Eigen/src/NonLinearOptimization/LevenbergMarquardt.h [9:11]
+        unsupported/Eigen/src/NumericalDiff/NumericalDiff.h [9:11]
+        unsupported/Eigen/src/Polynomials/Companion.h [6:8]
+        unsupported/Eigen/src/Polynomials/PolynomialSolver.h [6:8]
+        unsupported/Eigen/src/Polynomials/PolynomialUtils.h [6:8]
+        unsupported/Eigen/src/Skyline/SkylineInplaceLU.h [6:8]
+        unsupported/Eigen/src/Skyline/SkylineMatrix.h [6:8]
+        unsupported/Eigen/src/Skyline/SkylineMatrixBase.h [6:8]
+        unsupported/Eigen/src/Skyline/SkylineProduct.h [6:8]
+        unsupported/Eigen/src/Skyline/SkylineStorage.h [6:8]
+        unsupported/Eigen/src/Skyline/SkylineUtil.h [6:8]
+        unsupported/Eigen/src/SparseExtra/BlockOfDynamicSparseMatrix.h [6:8]
+        unsupported/Eigen/src/SparseExtra/BlockSparseMatrix.h [7:9]
+        unsupported/Eigen/src/SparseExtra/DynamicSparseMatrix.h [6:8]
+        unsupported/Eigen/src/SparseExtra/MarketIO.h [7:9]
+        unsupported/Eigen/src/SparseExtra/MatrixMarketIterator.h [7:9]
+        unsupported/Eigen/src/SparseExtra/RandomSetter.h [6:8]
+        unsupported/Eigen/src/SpecialFunctions/BesselFunctionsArrayAPI.h [6:8]
+        unsupported/Eigen/src/SpecialFunctions/BesselFunctionsBFloat16.h [4:6]
+        unsupported/Eigen/src/SpecialFunctions/BesselFunctionsFunctors.h [7:9]
+        unsupported/Eigen/src/SpecialFunctions/BesselFunctionsHalf.h [4:6]
+        unsupported/Eigen/src/SpecialFunctions/BesselFunctionsImpl.h [6:8]
+        unsupported/Eigen/src/SpecialFunctions/BesselFunctionsPacketMath.h [6:8]
+        unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsArrayAPI.h [6:8]
+        unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsBFloat16.h [4:6]
+        unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsFunctors.h [7:9]
+        unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsHalf.h [4:6]
+        unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsImpl.h [6:8]
+        unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsPacketMath.h [6:8]
+        unsupported/Eigen/src/SpecialFunctions/arch/GPU/SpecialFunctions.h [6:8]
+        unsupported/Eigen/src/Splines/Spline.h [6:8]
+        unsupported/Eigen/src/Splines/SplineFitting.h [6:8]
+        unsupported/Eigen/src/Splines/SplineFwd.h [6:8]
+
+SKIP     GPL-3.0-only         4fe869ee987a340198fb0d54c55c47f1
+BELONGS ya.make
+    # As we pass -DEIGEN_MPL2_ONLY, this license is not applicable according to COPYING.README
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        COPYING.GPL [1:674]
+
+KEEP     BSD-3-Clause         51a37aec70edc76da0338333ff87a0f4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 92.17
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        Eigen/src/Geometry/AlignedBox.h [7:44]
+
+SKIP     LicenseRef-scancode-warranty-disclaimer 5664129f79a216daac93dedc284861d2
+BELONGS ya.make
+    License text:
+        //  THIS MATERIAL IS PROVIDED AS IS, WITH ABSOLUTELY NO WARRANTY
+        //  EXPRESSED OR IMPLIED.  ANY USE IS AT YOUR OWN RISK.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        Eigen/src/SuperLUSupport/SuperLUSupport.h [702:703]
+
+KEEP     MPL-2.0              5e02351067cacac8d0d69a2ec95a4d2c
+BELONGS ya.make
+    License text:
+        \#ifndef EIGEN_MPL2_ONLY
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        unsupported/Eigen/IterativeSolvers [36:36]
+
+KEEP     MPL-2.0              68a8bb74b34aa775e41b281ba189bc33
+BELONGS ya.make
+    License text:
+        the Mozilla Public License v. 2.0, as stated at the top of this file.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        Eigen/src/OrderingMethods/Amd.h [18:18]
+        Eigen/src/SparseCholesky/SimplicialCholesky_impl.h [17:17]
+
+KEEP     Minpack              711560b79d7b5d4700a76f3b9791052e
+BELONGS ya.make
+FILE_INCLUDE unsupported/Eigen/src/LevenbergMarquardt/CopyrightMINPACK.txt found in files: unsupported/Eigen/src/LevenbergMarquardt/LMcovar.h at line 10, unsupported/Eigen/src/LevenbergMarquardt/LMonestep.h at line 12, unsupported/Eigen/src/LevenbergMarquardt/LMpar.h at line 10, unsupported/Eigen/src/LevenbergMarquardt/LMqrsolv.h at line 13, unsupported/Eigen/src/LevenbergMarquardt/LevenbergMarquardt.h at line 13
+    License text:
+        // This Source Code Form is subject to the terms of the Minpack license
+        // (a BSD-like license) described in the campaigned CopyrightMINPACK.txt file.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-minpack
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.netlib.org/minpack/disclaimer, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/minpack.LICENSE
+    Files with this license:
+        unsupported/Eigen/src/LevenbergMarquardt/LMcovar.h [9:10]
+        unsupported/Eigen/src/LevenbergMarquardt/LMonestep.h [11:12]
+        unsupported/Eigen/src/LevenbergMarquardt/LMpar.h [9:10]
+        unsupported/Eigen/src/LevenbergMarquardt/LMqrsolv.h [12:13]
+        unsupported/Eigen/src/LevenbergMarquardt/LevenbergMarquardt.h [12:13]
+
+KEEP     BSD-3-Clause         80531eb3d70c47c98231eea4e77fda9b
+BELONGS ya.make
+    License text:
+           * \note This method is provided under BSD license (see the top of this file).
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        Eigen/src/Geometry/AlignedBox.h [336:336]
+
+KEEP     Apache-2.0           86a0725dcd00b87b9929258039db566c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        Eigen/src/Core/arch/Default/BFloat16.h [3:13]
+
+SKIP     GPL-1.0-or-later     86f45b1457b2a3d0b7b853315d3fd9fd
+BELONGS ya.make
+    # Not a license text, but a warning regarding third party component
+    License text:
+          * \warning MPFR C++ is licensed under the GPL.
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        unsupported/Eigen/MPRealSupport [30:30]
+
+KEEP     BSD-3-Clause         9aec543766ddc1f8b51499fdb01201cc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        Eigen/src/misc/lapacke.h [5:27]
+
+KEEP     Custom-eigen         ad365ba9e9f331e2fdcc20d8f66bac86
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        Eigen/src/LU/arch/InverseSize4.h [27:32]
+
+KEEP     MPL-2.0              b128c46701631f920f9b0e0755a07024
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        Eigen/src/Core/Dot.h [6:8]
+        Eigen/src/Core/util/Macros.h [7:9]
+        Eigen/src/SparseLU/SparseLUImpl.h [6:8]
+        Eigen/src/SparseLU/SparseLU_panel_dfs.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorBase.h [6:8]
+        unsupported/Eigen/CXX11/src/Tensor/TensorConvolution.h [6:8]
+
+KEEP     MPL-2.0              b1bf459229ecf4e4e234ed3ad62ddfc0
+BELONGS ya.make
+    License text:
+        // This Source Code Form is subject to the terms of the Mozilla Public License v. 2.0. If a copy of the MPL was not
+        // distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        unsupported/Eigen/CXX11/src/Tensor/TensorContractionSycl.h [8:9]
+
+KEEP     Mozilla-GC           b37c0ca939c87fc26148cb86eebbba85
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-mozilla-gc
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.hboehm.info/gc/license.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mozilla-gc.LICENSE
+    Files with this license:
+        Eigen/src/SparseLU/SparseLU_panel_dfs.h [21:28]
+
+KEEP     BSD-3-Clause         cd76ac7e774471b9f22b406a095943bc
+BELONGS ya.make
+    License text:
+        // Software License Agreement (BSD License)
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        Eigen/src/Geometry/AlignedBox.h [13:13]

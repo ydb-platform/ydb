@@ -1,0 +1,15 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Swagger Petstore
+  license:
+    name: MIT
+components:
+  schemas:
+    Pets:
+      type: object
+      additionalProperties: false
+    Friends1:
+      $ref: "resolved_models.yaml#/components/schemas/Pets"
+    Friends2:
+      $ref: "resolved_models.yaml#/components/schemas/Pets"

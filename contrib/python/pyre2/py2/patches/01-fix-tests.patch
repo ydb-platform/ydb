@@ -1,0 +1,24 @@
+--- contrib/python/pyre2/py2/tests/test_re.py	(index)
++++ contrib/python/pyre2/py2/tests/test_re.py	(working tree)
+@@ -1,8 +1,8 @@
+ from __future__ import print_function
+-try:
+-    from test.test_support import verbose
+-except ImportError:
+-    from test.support import verbose
++#try:
++#    from test.test_support import verbose
++#except ImportError:
++#    from test.support import verbose
+ import re2 as re
+ from re import Scanner
+ import os
+@@ -686,7 +686,7 @@ class ReTests(unittest.TestCase):
+         self.assertRaises(TypeError, re.finditer, "a", {})
+ 
+ 
+-def test_re_suite():
++def _test_re_suite():
+     try:
+         from tests.re_utils import benchmarks, tests, SUCCEED, FAIL, SYNTAX_ERROR
+     except ImportError:

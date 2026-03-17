@@ -1,0 +1,65 @@
+{% extends "layout.html" %}
+{% block header %}{% endblock %}
+{% block sidebar %}
+{% endblock %}
+{% block content %}
+    <div class="container-tight">
+        {% if login_logo_url or logo_url %}
+            <div class="text-center mb-4">
+                <a href="." class="navbar-brand navbar-brand-autodark">
+                    <img src="{{ login_logo_url or logo_url }}" height="36" alt="" />
+                </a>
+            </div>
+        {% endif %}
+        <form class="card card-md" action="{{ request.url }}" method="POST">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">{{ _("Login to your account") }}</h2>
+                {% if error %}
+                    <div class="alert alert-important alert-danger alert-dismissible"
+                         role="alert">
+                        <div class="d-flex">
+                            <div>
+                                <i class="ti ti-alert-circle"></i>
+                            </div>
+                            <div>{{ error }}</div>
+                        </div>
+                        <a class="btn-close btn-close-white"
+                           data-bs-dismiss="alert"
+                           aria-label="close"></a>
+                    </div>
+                {% endif %}
+                <div class="mb-3">
+                    <label class="form-label">{{ _("Username") }}</label>
+                    <input type="text"
+                           name="username"
+                           class="form-control {% if form_errors and form_errors.has('username') %}is-invalid{% endif %}"
+                           placeholder="{{ _('Username') }}"
+                           autocomplete="off"/>
+                    {% if form_errors and form_errors.has('username') %}
+                        <div class="invalid-feedback">{{ form_errors.msg('username') }}</div>
+                    {% endif %}
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">{{ _("Password") }}</label>
+                    <input type="password"
+                           name="password"
+                           class="form-control {% if form_errors and form_errors.has('password') %}is-invalid{% endif %}"
+                           placeholder="{{ _('Password') }}"
+                           autocomplete="off"/>
+                    {% if form_errors and form_errors.has('password') %}
+                        <div class="invalid-feedback">{{ form_errors.msg('password') }}</div>
+                    {% endif %}
+                </div>
+                <div class="mb-2">
+                    <label class="form-check">
+                        <input name="remember_me" type="checkbox" class="form-check-input" />
+                        <span class="form-check-label">{{ _("Remember me") }}</span>
+                    </label>
+                </div>
+                <div class="form-footer">
+                    <button type="submit" class="btn btn-primary w-100">{{ _("Sign in") }}</button>
+                </div>
+            </div>
+        </form>
+    </div>
+{% endblock %}

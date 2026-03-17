@@ -1,0 +1,19 @@
+--- contrib/python/complexipy/ya.make	(index)
++++ contrib/python/complexipy/ya.make	(working tree)
+@@ -15,6 +15,16 @@ PEERDIR(
+
+ NO_LINT()
+
++SET_RESOURCE_URI_FROM_JSON(SANDBOX_RESOURCE_URI resources.json)
++FROM_SANDBOX(${SANDBOX_RESOURCE_URI} OUT libcomplexipy.a)
++
++IF (OS_DARWIN)
++    LDFLAGS(
++        -framework CoreFoundation
++        -framework Security
++    )
++ENDIF()
++
+ PY_REGISTER(
+     complexipy.rust
+ )

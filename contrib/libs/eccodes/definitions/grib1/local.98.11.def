@@ -1,0 +1,36 @@
+# (C) Copyright 2005- ECMWF.
+# Supplementary data used by the analysis
+
+constant GRIBEXSection1Problem = 72 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] classOfAnalysis = marsClass : dump;
+unsigned[1] typeOfAnalysis  = marsType : dump;
+unsigned[2] streamOfAnalysis = marsStream : dump;
+ksec1expver[4] experimentVersionNumberOfAnalysis = expver : dump;
+
+unsigned[1] yearOfAnalysis  = yearOfCentury : dump;
+unsigned[1] monthOfAnalysis = month : dump;
+unsigned[1] dayOfAnalysis = day : dump;
+
+unsigned[1] hourOfAnalysis = hour : dump;
+
+unsigned[1] minuteOfAnalysis = minute : dump;
+
+unsigned[1] centuryOfAnalysis = centuryOfReferenceTimeOfData : dump;
+
+unsigned[1] originatingCentreOfAnalysis = originatingCentre : dump;
+
+unsigned[1] subcentreOfAnalysis = subCentre : dump;
+
+# spareSetToZero
+pad padding_local11_1(7);
+
+constant secondsOfAnalysis = 0;
+
+meta dateOfAnalysis  g1date(centuryOfAnalysis,yearOfAnalysis,monthOfAnalysis,dayOfAnalysis) : dump;
+meta timeOfAnalysis  time(hourOfAnalysis,minuteOfAnalysis,secondsOfAnalysis) : dump;
+
+alias mars.date = dateOfAnalysis;
+alias mars.time = timeOfAnalysis;

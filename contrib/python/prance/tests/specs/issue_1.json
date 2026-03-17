@@ -1,0 +1,22 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "version": "0.1.0",
+    "title": "test #1"
+  },
+  "host": "localhost",
+  "paths": {
+    "/test": {
+      "parameters": [
+        {
+          "in": "body",
+          "name": "ChangePasswordEntity",
+          "required": true,
+          "schema": {
+            "$ref": "./schema/ChangePasswordEntity.json"
+          }
+        }
+      ]
+    }
+  }
+}

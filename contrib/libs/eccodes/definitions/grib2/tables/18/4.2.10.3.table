@@ -1,0 +1,5 @@
+# Code table 4.2 - Parameter number by product discipline and parameter category
+0 0 Water temperature (K)
+1 1 Deviation of sea level from mean (m)
+2 2 Heat exchange coefficient (-)
+255 255 Missing

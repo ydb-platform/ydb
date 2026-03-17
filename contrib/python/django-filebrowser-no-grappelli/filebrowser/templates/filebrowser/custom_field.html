@@ -1,0 +1,30 @@
+{% load i18n fb_versions %}
+<input id="{{ final_attrs.id }}" type="text" class="vFileBrowseField{% if final_attrs.class %} {{ final_attrs.class }}{% endif %}" name="{{ final_attrs.name }}" value="{{ value.path }}" {% for k, v in final_attrs.data_attrs.items %}{{k}}="{{v}}" {% endfor %}/>
+<a href="#" onclick="FileBrowser.show(this.parentNode.getElementsByTagName('input')[0].id, '{{ url }}?pop=1{% if final_attrs.directory %}&amp;dir={{ final_attrs.directory|urlencode|urlencode }}{% endif %}{% if final_attrs.format %}&amp;filter={{ final_attrs.format }}{% endif %}');" class="fb_show">
+    <img src="{{ final_attrs.search_icon }}" alt="{% trans "Change" %}" />
+</a>
+{% if value.filetype == "Image" and value.exists %}
+{% version value.path final_attrs.ADMIN_THUMBNAIL as thumbnail_version %}
+{% if thumbnail_version %}
+<p class="preview" id="preview_{{ final_attrs.id }}">
+    <a href="{{ value.url }}" target="_blank" id="previewlink_{{ final_attrs.id }}">
+        <img id="previewimage_{{ final_attrs.id }}" src="{{ thumbnail_version.url }}" class="preview" />
+    </a>
+</p>
+{% else %}
+<p class="preview" id="preview_{{ final_attrs.id }}" style="display: none;">
+    <a href="javascript://" target="_self" id="previewlink_{{ final_attrs.id }}">
+        <img id="previewimage_{{ final_attrs.id }}" class="preview" src="" />
+    </a>
+</p>
+{% endif %}
+{% else %}
+<p class="preview" id="preview_{{ final_attrs.id }}" style="display: none;">
+    <a href="javascript://" target="_self" id="previewlink_{{ final_attrs.id }}">
+        <img id="previewimage_{{ final_attrs.id }}" class="preview" src="" />
+    </a>
+</p>
+{% endif %}
+{% if value and not value.exists %}
+<ul class="errorlist"><li>{% trans "File not found" %}</li></ul>
+{% endif %}

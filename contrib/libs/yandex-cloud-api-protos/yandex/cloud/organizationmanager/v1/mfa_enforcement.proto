@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1;organizationmanager";
+option java_package = "yandex.cloud.api.organizationmanager.v1";
+
+// MFA enforcement resource
+message MfaEnforcement {
+  // id of the MFA enforcement
+  string id = 1;
+  // organization id of the MFA enforcement
+  string organization_id = 2;
+  // acr id of the MFA enforcement
+  string acr_id = 3;
+  // the period during which the entered MFA factor is considered valid and the 
+  // corresponding acr is regarded as satisfied
+  google.protobuf.Duration ttl = 4;
+  // MFA enforcement status
+  MfaEnforcementStatus status = 5;
+  // the MFA enforcement application start time.
+  google.protobuf.Timestamp apply_at = 6;
+  // the time window during which the user is allowed to create an MFA profile. 
+  // this window is measured relative to the MFA enforcement application start time
+  // and the user's most recent successful authentication that falls under the rule 
+  // (or the user's creation time, if there has been no authentication).
+  google.protobuf.Duration enroll_window = 7;
+  // name of the MFA enforcement
+  string name = 8;
+  // description of the MFA enforcement
+  string description = 9;
+  // creation timestamp
+  google.protobuf.Timestamp created_at = 10;
+}
+
+enum MfaEnforcementStatus {
+  MFA_ENFORCEMENT_STATUS_UNSPECIFIED = 0;
+  MFA_ENFORCEMENT_STATUS_ACTIVE = 1;
+  MFA_ENFORCEMENT_STATUS_INACTIVE = 2;
+  MFA_ENFORCEMENT_STATUS_DELETING = 3;
+}

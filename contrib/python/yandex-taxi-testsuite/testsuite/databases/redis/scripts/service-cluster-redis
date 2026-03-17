@@ -1,0 +1,168 @@
+#!/bin/sh
+
+. "$TESTSUITE_LIB_UTILS"
+
+[ -z "$REDIS_TMPDIR" ] && die "REDIS_TMPDIR must be set"
+[ -z "$REDIS_CONFIGS_DIR" ] && die "REDIS_CONFIGS_DIR must be set"
+[ -z "$REDIS_HOST" ] && die "REDIS_HOST must be set"
+[ -z "$REDIS_CLUSTER_PORTS" ] && die "REDIS_CLUSTER_PORTS must be set"
+[ -z "$REDIS_CLUSTER_REPLICAS" ] && die "REDIS_CLUSTER_REPLICAS must be set"
+
+REDIS_DATADIR="$REDIS_TMPDIR/data"
+REDIS_LOGSDIR="$REDIS_TMPDIR/logs"
+REDIS_SLEEP_WORKAROUND_SECONDS=${REDIS_SLEEP_WORKAROUND_SECONDS:=15}
+
+REDIS_SERVER=$(choose_binaries_or_die valkey-server redis-server)
+REDIS_CLI=$(choose_binaries_or_die valkey-cli redis-cli)
+
+REDIS_INSTS=
+
+wait_redis_ready() {
+    local HOST=$1
+    local PORT=$2
+    for i in $(seq 1 10);
+    do
+        if [ $($REDIS_CLI -h $HOST -p $PORT ping) = PONG ] ; then
+            return ;
+        fi
+        echo "retry to connect to redis instance on $HOST:$PORT"
+        sleep 1
+    done
+    die "Failed to connect to redis instance on port $HOST:$PORT"
+}
+
+wait_redis_nodes_election() {
+    local CURRENT_REPLICAS_COUNT=0
+    local EXPECTED_REPLICAS_COUNT=999
+    local CURRENT_NODES_REPONSE=
+    local CURRENT_MASTERS_COUNT=
+    for i in $(seq 1 ${REDIS_SLEEP_WORKAROUND_SECONDS}); do
+        for port in ${REDIS_CLUSTER_PORTS}; do
+            CURRENT_NODES_REPONSE=$($REDIS_CLI -h $REDIS_HOST -p $port CLUSTER NODES)
+            CURRENT_MASTERS_COUNT=$(echo "$CURRENT_NODES_REPONSE" | grep 'master' | wc -l)
+            CURRENT_REPLICAS_COUNT=$(echo "$CURRENT_NODES_REPONSE" | grep 'slave\|replica' | wc -l)
+            EXPECTED_REPLICAS_COUNT=$(expr $CURRENT_MASTERS_COUNT \* $REDIS_CLUSTER_REPLICAS)
+            if [ "$EXPECTED_REPLICAS_COUNT" -ne "$CURRENT_REPLICAS_COUNT" ]; then
+                break
+            fi
+        done
+
+        if [ "$EXPECTED_REPLICAS_COUNT" -eq "$CURRENT_REPLICAS_COUNT" ]; then
+            return
+        fi
+
+        sleep 1
+    done
+
+    die "Failed to start redis cluster in ${REDIS_SLEEP_WORKAROUND_SECONDS} seconds. \
+        Try increasing the REDIS_SLEEP_WORKAROUND_SECONDS."
+}
+
+check_cluster_slots_response_has_all_the_ports() {
+    local PORT=$1
+    local CHECK_STATUS='BAD'
+    local MATCHED_HOST='NO'
+    local CURRENT_REDIS_SLOTS=''
+
+    CURRENT_REDIS_SLOTS=$($REDIS_CLI -h $REDIS_HOST -p $PORT CLUSTER SLOTS)
+    for CLUSTER_NODE_PORT in ${REDIS_CLUSTER_PORTS}; do
+        CHECK_STATUS='BAD'
+
+        MATCHED_HOST='NO'
+        for LINE in ${CURRENT_REDIS_SLOTS}; do
+            if [ "x$LINE" = "x$REDIS_HOST" ]; then
+                MATCHED_HOST='YES'
+            elif [ "x$MATCHED_HOST" = "xYES" ] && [ "x$LINE" = "x$CLUSTER_NODE_PORT" ]; then
+                MATCHED_HOST='NO'
+                CHECK_STATUS='OK'
+                break
+            else
+                MATCHED_HOST='NO'
+            fi
+        done
+
+        if [ "x$CHECK_STATUS" = "xBAD" ]; then
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+wait_redis_nodes_slots_update() {
+    local CHECK_STATUS='BAD'
+
+    for i in $(seq 1 ${REDIS_SLEEP_WORKAROUND_SECONDS}); do
+        CHECK_STATUS='OK'
+        for PORT in ${REDIS_CLUSTER_PORTS}; do
+            if check_cluster_slots_response_has_all_the_ports $PORT; then
+                continue
+            else
+                CHECK_STATUS='BAD'
+                break
+            fi
+        done
+
+        if [ "x$CHECK_STATUS" = "xOK" ]; then
+            return
+        fi
+
+        sleep 1
+    done
+
+
+    die "Failed to start redis cluster in ${REDIS_SLEEP_WORKAROUND_SECONDS} seconds \
+        due to CLUSTER SLOTS incomplete output. Try increasing the \
+        REDIS_SLEEP_WORKAROUND_SECONDS."
+}
+
+start() {
+    rm -rf $REDIS_DATADIR
+
+    mkdir -p $REDIS_TMPDIR
+    mkdir -p $REDIS_DATADIR
+    mkdir -p $REDIS_LOGSDIR
+
+    for port in ${REDIS_CLUSTER_PORTS}; do
+        config=$REDIS_CONFIGS_DIR/redis_cluster_node0.conf
+        pidfile="$(get_pidfile $port)"
+        logfile=$REDIS_LOGSDIR/redis_cluster$port.log
+        datadir=$REDIS_DATADIR/$port
+        echo "Starting redis cluster node on $port $logfile ..."
+        mkdir -p $datadir
+        $REDIS_SERVER $config \
+                      --pidfile $pidfile \
+                      --dir $datadir \
+                      --port $port \
+                      --dbfilename redis_cluster$port.db \
+                      --logfile "$logfile" || {
+            dump_log_stderr "$logfile"
+            die "Failed to start redis ($port) server"
+        }
+    done
+
+    for port in ${REDIS_CLUSTER_PORTS}; do
+        wait_redis_ready $REDIS_HOST $port
+        REDIS_INSTS="$REDIS_INSTS $REDIS_HOST:$port"
+    done
+
+    echo "Creating redis cluster ..."
+    $REDIS_CLI --cluster create $REDIS_INSTS \
+        --cluster-replicas $REDIS_CLUSTER_REPLICAS \
+        --cluster-yes || \
+        die "Failed to create a redis cluster"
+
+    wait_redis_nodes_election
+    wait_redis_nodes_slots_update
+
+    echo "Created redis cluster ..."
+}
+
+stop() {
+    for port in ${REDIS_CLUSTER_PORTS}; do
+        pidfile="$(get_pidfile $port)"
+        stop_daemon $REDIS_SERVER $pidfile
+    done
+}
+
+script_main "$@"

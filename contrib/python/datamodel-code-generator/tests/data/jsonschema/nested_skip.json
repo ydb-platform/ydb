@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NestedSkip",
+  "type": "object",
+  "definitions": {
+    "a.b.c.d.e": {
+      "type": "object",
+      "properties": {
+        "example1": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

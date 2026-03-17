@@ -1,0 +1,290 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-11-27 16:59+0400\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: post_office/admin.py:131
+msgid "To"
+msgstr "A"
+
+#: post_office/admin.py:151 post_office/admin.py:188 post_office/models.py:52
+#: post_office/models.py:277
+msgid "Subject"
+msgstr "Soggetto"
+
+#: post_office/admin.py:157
+#, fuzzy
+msgid "Use Template"
+msgstr "Email Template"
+
+#: post_office/admin.py:176
+msgid "HTML Email"
+msgstr "Email HTML"
+
+#: post_office/admin.py:178 post_office/admin.py:180
+msgid "Text Email"
+msgstr "Email di testo"
+
+#: post_office/admin.py:195
+msgid "Mail Body"
+msgstr "Corpo del messaggio"
+
+#: post_office/admin.py:206
+msgid "HTML Body"
+msgstr "Corpo HTML"
+
+#: post_office/admin.py:243
+#, python-brace-format
+msgid "Duplicate template for language '{language}'."
+msgstr "Template duplicato per la lingua '{language}'."
+
+#: post_office/admin.py:253 post_office/models.py:283
+#, fuzzy
+#| msgid "Languages"
+msgid "Language"
+msgstr "Lingue"
+
+#: post_office/admin.py:254 post_office/models.py:284
+msgid "Render template in alternative language"
+msgstr "Rendere template in un altra lingua"
+
+#: post_office/admin.py:286
+#, fuzzy
+msgid "Default Content"
+msgstr "Contenuto"
+
+#: post_office/admin.py:297 post_office/models.py:273
+msgid "Description"
+msgstr "Descrizione"
+
+#: post_office/admin.py:304
+msgid "Languages"
+msgstr "Lingue"
+
+#: post_office/apps.py:7
+msgid "Post Office"
+msgstr "Ufficio Postale"
+
+#: post_office/fields.py:9
+msgid "Comma-separated emails"
+msgstr "Emails separati da virgole"
+
+#: post_office/fields.py:18
+msgid "Only comma separated emails are allowed."
+msgstr "Sono consentiti soltanto emails separati da virgole"
+
+#: post_office/models.py:36
+msgid "low"
+msgstr "bassa"
+
+#: post_office/models.py:37
+msgid "medium"
+msgstr "media"
+
+#: post_office/models.py:38
+msgid "high"
+msgstr "alta"
+
+#: post_office/models.py:39
+msgid "now"
+msgstr "immediata"
+
+#: post_office/models.py:42 post_office/models.py:243
+msgid "sent"
+msgstr "inviato"
+
+#: post_office/models.py:43 post_office/models.py:243
+msgid "failed"
+msgstr "fallito"
+
+#: post_office/models.py:44
+msgid "queued"
+msgstr "in attesa"
+
+#: post_office/models.py:45
+#, fuzzy
+#| msgid "queued"
+msgid "requeued"
+msgstr "rimesso in coda"
+
+#: post_office/models.py:48
+msgid "Email From"
+msgstr "Email da"
+
+#: post_office/models.py:49
+msgid "Email To"
+msgstr "Email per"
+
+#: post_office/models.py:50
+msgid "Cc"
+msgstr "Copia"
+
+#: post_office/models.py:51
+msgid "Bcc"
+msgstr "Bcc"
+
+#: post_office/models.py:53 post_office/models.py:251
+msgid "Message"
+msgstr "Messaggio"
+
+#: post_office/models.py:54
+msgid "HTML Message"
+msgstr "HTML Messaggio"
+
+#: post_office/models.py:60 post_office/models.py:249
+msgid "Status"
+msgstr "Stato"
+
+#: post_office/models.py:61
+msgid "Priority"
+msgstr "Priorità"
+
+#: post_office/models.py:65
+msgid "Scheduled Time"
+msgstr "Tempo programmato"
+
+#: post_office/models.py:65
+msgid "The scheduled sending time"
+msgstr "L'orario di invio programmato"
+
+#: post_office/models.py:68
+msgid "Expires"
+msgstr "Scade"
+
+#: post_office/models.py:68
+msgid "Email won't be sent after this timestamp"
+msgstr "L'email non verrà inviata dopo questa data"
+
+#: post_office/models.py:72 post_office/models.py:341
+msgid "Headers"
+msgstr "Intestazioni"
+
+#: post_office/models.py:74
+#, fuzzy
+msgid "Email template"
+msgstr "Email Template"
+
+#: post_office/models.py:76
+#, fuzzy
+#| msgid "Content"
+msgid "Context"
+msgstr "Contesto"
+
+#: post_office/models.py:77
+msgid "Backend alias"
+msgstr "Alias del backend"
+
+#: post_office/models.py:81
+#, fuzzy
+#| msgid "Email To"
+msgctxt "Email address"
+msgid "Email"
+msgstr "Email per"
+
+#: post_office/models.py:82
+#, fuzzy
+#| msgid "Email To"
+msgctxt "Email addresses"
+msgid "Emails"
+msgstr "Email per"
+
+#: post_office/models.py:231
+msgid "The scheduled time may not be later than the expires time."
+msgstr "Il tempo programmato non può essere successivo al tempo di scadenza."
+
+#: post_office/models.py:246
+#, fuzzy
+msgid "Email address"
+msgstr "Email Templates"
+
+#: post_office/models.py:250
+msgid "Exception type"
+msgstr "Tipo di eccezione"
+
+#: post_office/models.py:255
+msgid "Log"
+msgstr "Registro"
+
+#: post_office/models.py:256
+msgid "Logs"
+msgstr "Registri"
+
+#: post_office/models.py:272 post_office/models.py:338
+msgid "Name"
+msgstr "Nome"
+
+#: post_office/models.py:272
+msgid "e.g: 'welcome_email'"
+msgstr "per es. 'welcome_email'"
+
+#: post_office/models.py:273
+msgid "Description of this template."
+msgstr "Descrizione di questa template."
+
+#: post_office/models.py:279
+msgid "Content"
+msgstr "Contenuto"
+
+#: post_office/models.py:280
+msgid "HTML content"
+msgstr "Contenuto in HTML"
+
+#: post_office/models.py:293
+#, fuzzy
+msgid "Default template"
+msgstr "Template predefinito"
+
+#: post_office/models.py:302
+#, fuzzy
+msgid "Email Template"
+msgstr "Email Template"
+
+#: post_office/models.py:303
+#, fuzzy
+msgid "Email Templates"
+msgstr "Email Templates"
+
+#: post_office/models.py:337
+msgid "File"
+msgstr "File"
+
+#: post_office/models.py:338
+msgid "The original filename"
+msgstr "Nome del file originale"
+
+#: post_office/models.py:339
+#, fuzzy
+#| msgid "Email To"
+msgid "Emails"
+msgstr "Email per"
+
+#: post_office/models.py:345
+msgid "Attachment"
+msgstr "Allegato"
+
+#: post_office/models.py:346
+msgid "Attachments"
+msgstr "Allegati"
+
+#: post_office/sanitizer.py:8
+msgid "Install 'bleach' to render HTML properly."
+msgstr "Installare 'bleach' per renderizzare correttamente l'HTML."
+
+#: post_office/templates/admin/post_office/email/change_form.html:4
+msgid "Resend"
+msgstr "Reinvia"

@@ -1,0 +1,66 @@
+<?xml version="1.0"?>
+<definitions 
+    xmlns:tns="http://example.com/stockquote.wsdl" 
+    xmlns:xsd1="http://example.com/stockquote.xsd" 
+    xmlns:http="http://schemas.xmlsoap.org/wsdl/http/" 
+    xmlns:mime="http://schemas.xmlsoap.org/wsdl/mime/" 
+    xmlns="http://schemas.xmlsoap.org/wsdl/"
+    name="StockQuote" 
+    targetNamespace="http://example.com/stockquote.wsdl">
+  <types>
+    <schema xmlns="http://www.w3.org/2001/XMLSchema" 
+            targetNamespace="http://example.com/stockquote.xsd">
+      <complexType name="Address">
+        <sequence>
+          <element minOccurs="0" maxOccurs="1" name="NameFirst" type="string"/>
+          <element minOccurs="0" maxOccurs="1" name="NameLast" type="string"/>
+          <element minOccurs="0" maxOccurs="1" name="Email" type="string"/>
+        </sequence>
+      </complexType>
+      <element name="TradePriceRequest">
+        <complexType>
+          <all>
+            <element name="tickerSymbol" type="string"/>
+          </all>
+        </complexType>
+      </element>
+      <element name="TradePrice">
+        <complexType>
+          <all>
+            <element name="price" type="float"/>
+          </all>
+        </complexType>
+      </element>
+    </schema>
+  </types>
+  <message name="GetLastTradePriceInput">
+    <part name="body" element="xsd1:TradePriceRequest"/>
+  </message>
+  <message name="GetLastTradePriceOutput">
+    <part name="body" element="xsd1:TradePrice"/>
+  </message>
+  <portType name="StockQuotePortType">
+    <operation name="GetLastTradePrice">
+      <input message="tns:GetLastTradePriceInput"/>
+      <output message="tns:GetLastTradePriceOutput"/>
+    </operation>
+  </portType>
+  <binding name="StockQuoteBinding" type="tns:StockQuotePortType">
+    <http:binding verb="POST"/>
+    <operation name="GetLastTradePrice">
+      <http:operation location="GetLastTradePrice"/>
+      <input>
+        <mime:content type="application/x-www-form-urlencoded"/>
+      </input>
+      <output>
+        <mime:mimeXml/>
+      </output>
+    </operation>
+  </binding>
+  <service name="StockQuoteService">
+    <documentation>My first service</documentation>
+    <port name="StockQuotePort" binding="tns:StockQuoteBinding">
+      <http:address location="http://example.com/stockquote"/>
+    </port>
+  </service>
+</definitions>

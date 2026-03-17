@@ -1,0 +1,74 @@
+Metadata-Version: 2.4
+Name: w3lib
+Version: 2.4.0
+Summary: Library of web-related functions
+Project-URL: Homepage, https://github.com/scrapy/w3lib
+Project-URL: Documentation, https://w3lib.readthedocs.io/en/latest/
+Project-URL: Source, https://github.com/scrapy/w3lib
+Project-URL: Tracker, https://github.com/scrapy/w3lib/issues
+Project-URL: Release notes, https://w3lib.readthedocs.io/en/latest/#changelog
+Author-email: Scrapy project <info@scrapy.org>
+License-Expression: BSD-3-Clause
+License-File: LICENSE
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.10
+Description-Content-Type: text/x-rst
+
+=====
+w3lib
+=====
+
+.. image:: https://github.com/scrapy/w3lib/actions/workflows/tests-ubuntu.yml/badge.svg
+   :target: https://github.com/scrapy/w3lib/actions/workflows/tests-ubuntu.yml
+
+.. image:: https://img.shields.io/codecov/c/github/scrapy/w3lib/master.svg
+   :target: http://codecov.io/github/scrapy/w3lib?branch=master
+   :alt: Coverage report
+
+
+Overview
+========
+
+This is a Python library of web-related functions, such as:
+
+* remove comments, or tags from HTML snippets
+* extract base url from HTML snippets
+* translate entites on HTML strings
+* convert raw HTTP headers to dicts and vice-versa
+* construct HTTP auth header
+* converting HTML pages to unicode
+* sanitize urls (like browsers do)
+* extract arguments from urls
+
+Requirements
+============
+
+Python 3.10+
+
+Install
+=======
+
+``pip install w3lib``
+
+Documentation
+=============
+
+See http://w3lib.readthedocs.org/
+
+License
+=======
+
+The w3lib library is licensed under the BSD license.

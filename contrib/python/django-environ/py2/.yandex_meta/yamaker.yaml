@@ -1,0 +1,4 @@
+exclude:
+- README.rst.txt # Дубль README.rst
+exclude_from_macros:
+- environ/test_env.txt

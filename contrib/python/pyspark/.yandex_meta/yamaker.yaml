@@ -1,0 +1,13 @@
+mark_as_sources:
+  - pyspark/mllib/stat/test.py
+exclude:
+  - pyspark/**/*_pb2.py
+  - pyspark/**/*_pb2.pyi
+  - pyspark/**/*_pb2_grpc.py
+exclude_from_macros:
+  - pyspark/**/*.proto
+  - pyspark/sql/connect/proto/ya.make
+keep:
+  - pyspark/sql/connect/proto/ya.make
+requirements:
+  - contrib/python/pyspark/pyspark/sql/connect/proto

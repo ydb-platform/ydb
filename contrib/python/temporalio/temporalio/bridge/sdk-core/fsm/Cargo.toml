@@ -1,0 +1,22 @@
+[package]
+name = "rustfsm"
+version = "0.1.0"
+authors = ["Spencer Judge <spencer@temporal.io>"]
+edition = "2024"
+license-file = "LICENSE.txt"
+description = "Define state machines that can accept events and produce commands"
+homepage = "https://temporal.io/"
+repository = "https://github.com/temporalio/sdk-core"
+keywords = ["state-machine", "fsm"]
+categories = ["data-structures"]
+readme = "README.md"
+
+[dependencies]
+rustfsm_procmacro = { version = "0.1", path = "rustfsm_procmacro" }
+rustfsm_trait = { version = "0.1", path = "rustfsm_trait" }
+
+[package.metadata.workspaces]
+independent = true
+
+[lints]
+workspace = true

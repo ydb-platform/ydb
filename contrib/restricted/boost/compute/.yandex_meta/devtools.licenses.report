@@ -1,0 +1,402 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-3-Clause         10c780d53468f8ec46403841a1d90c29
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 98.59
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        include/boost/compute/random/threefry_engine.hpp [150:175]
+
+KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE_1_0.txt [1:23]
+
+KEEP     BSL-1.0              aa4e261023dac76b1b286d3163a0bae7
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/compute/detail/variadic_macros.hpp at line 5
+    License text:
+        // Distributed under the Boost Software License, Version 1.0
+        // See accompanying file LICENSE_1_0.txt or copy at
+        // http://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/compute/detail/variadic_macros.hpp [4:6]
+
+KEEP     BSL-1.0              ee3962a5a0bcf4ba36442d07459aa81f
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/compute.hpp at line 5, include/boost/compute/algorithm.hpp at line 5, include/boost/compute/algorithm/accumulate.hpp at line 5, include/boost/compute/algorithm/adjacent_difference.hpp at line 5, include/boost/compute/algorithm/adjacent_find.hpp at line 5, include/boost/compute/algorithm/all_of.hpp at line 5, include/boost/compute/algorithm/any_of.hpp at line 5, include/boost/compute/algorithm/binary_search.hpp at line 5, include/boost/compute/algorithm/copy.hpp at line 5, include/boost/compute/algorithm/copy_if.hpp at line 5, include/boost/compute/algorithm/copy_n.hpp at line 5, include/boost/compute/algorithm/count.hpp at line 5, include/boost/compute/algorithm/count_if.hpp at line 5, include/boost/compute/algorithm/detail/balanced_path.hpp at line 5, include/boost/compute/algorithm/detail/binary_find.hpp at line 5, include/boost/compute/algorithm/detail/compact.hpp at line 5, include/boost/compute/algorithm/detail/copy_on_device.hpp at line 5, include/boost/compute/algorithm/detail/copy_to_device.hpp at line 5, include/boost/compute/algorithm/detail/copy_to_host.hpp at line 5, include/boost/compute/algorithm/detail/count_if_with_ballot.hpp at line 5, include/boost/compute/algorithm/detail/count_if_with_reduce.hpp at line 5, include/boost/compute/algorithm/detail/count_if_with_threads.hpp at line 5, include/boost/compute/algorithm/detail/find_extrema.hpp at line 5, include/boost/compute/algorithm/detail/find_extrema_on_cpu.hpp at line 5, include/boost/compute/algorithm/detail/find_extrema_with_atomics.hpp at line 5, include/boost/compute/algorithm/detail/find_extrema_with_reduce.hpp at line 5, include/boost/compute/algorithm/detail/find_if_with_atomics.hpp at line 5, include/boost/compute/algorithm/detail/inplace_reduce.hpp at line 5, include/boost/compute/algorithm/detail/insertion_sort.hpp at line 5, include/boost/compute/algorithm/detail/merge_path.hpp at line 5, include/boost/compute/algorithm/detail/merge_sort_on_cpu.hpp at line 5, include/boost/compute/algorithm/detail/merge_sort_on_gpu.hpp at line 5, include/boost/compute/algorithm/detail/merge_with_merge_path.hpp at line 5, include/boost/compute/algorithm/detail/radix_sort.hpp at line 5, include/boost/compute/algorithm/detail/random_fill.hpp at line 5, include/boost/compute/algorithm/detail/reduce_by_key.hpp at line 5, include/boost/compute/algorithm/detail/reduce_by_key_with_scan.hpp at line 5, include/boost/compute/algorithm/detail/reduce_on_cpu.hpp at line 5, include/boost/compute/algorithm/detail/reduce_on_gpu.hpp at line 5, include/boost/compute/algorithm/detail/scan.hpp at line 5, include/boost/compute/algorithm/detail/scan_on_cpu.hpp at line 5, include/boost/compute/algorithm/detail/scan_on_gpu.hpp at line 5, include/boost/compute/algorithm/detail/search_all.hpp at line 5, include/boost/compute/algorithm/detail/serial_accumulate.hpp at line 5, include/boost/compute/algorithm/detail/serial_count_if.hpp at line 5, include/boost/compute/algorithm/detail/serial_find_extrema.hpp at line 5, include/boost/compute/algorithm/detail/serial_merge.hpp at line 5, include/boost/compute/algorithm/detail/serial_reduce.hpp at line 5, include/boost/compute/algorithm/detail/serial_reduce_by_key.hpp at line 5, include/boost/compute/algorithm/detail/serial_scan.hpp at line 5, include/boost/compute/algorithm/equal.hpp at line 5, include/boost/compute/algorithm/equal_range.hpp at line 5, include/boost/compute/algorithm/exclusive_scan.hpp at line 5, include/boost/compute/algorithm/fill.hpp at line 5, include/boost/compute/algorithm/fill_n.hpp at line 5, include/boost/compute/algorithm/find.hpp at line 5, include/boost/compute/algorithm/find_end.hpp at line 5, include/boost/compute/algorithm/find_if.hpp at line 5, include/boost/compute/algorithm/find_if_not.hpp at line 5, include/boost/compute/algorithm/for_each.hpp at line 5, include/boost/compute/algorithm/for_each_n.hpp at line 5, include/boost/compute/algorithm/gather.hpp at line 5, include/boost/compute/algorithm/generate.hpp at line 5, include/boost/compute/algorithm/generate_n.hpp at line 5, include/boost/compute/algorithm/includes.hpp at line 5, include/boost/compute/algorithm/inclusive_scan.hpp at line 5, include/boost/compute/algorithm/inner_product.hpp at line 5, include/boost/compute/algorithm/inplace_merge.hpp at line 5, include/boost/compute/algorithm/iota.hpp at line 5, include/boost/compute/algorithm/is_partitioned.hpp at line 5, include/boost/compute/algorithm/is_permutation.hpp at line 5, include/boost/compute/algorithm/is_sorted.hpp at line 5, include/boost/compute/algorithm/lexicographical_compare.hpp at line 5, include/boost/compute/algorithm/lower_bound.hpp at line 5, include/boost/compute/algorithm/max_element.hpp at line 5, include/boost/compute/algorithm/merge.hpp at line 5, include/boost/compute/algorithm/min_element.hpp at line 5, include/boost/compute/algorithm/minmax_element.hpp at line 5, include/boost/compute/algorithm/mismatch.hpp at line 5, include/boost/compute/algorithm/next_permutation.hpp at line 5, include/boost/compute/algorithm/none_of.hpp at line 5, include/boost/compute/algorithm/nth_element.hpp at line 5, include/boost/compute/algorithm/partial_sum.hpp at line 5, include/boost/compute/algorithm/partition.hpp at line 5, include/boost/compute/algorithm/partition_copy.hpp at line 5, include/boost/compute/algorithm/partition_point.hpp at line 5, include/boost/compute/algorithm/prev_permutation.hpp at line 5, include/boost/compute/algorithm/random_shuffle.hpp at line 5, include/boost/compute/algorithm/reduce.hpp at line 5, include/boost/compute/algorithm/reduce_by_key.hpp at line 5, include/boost/compute/algorithm/remove.hpp at line 5, include/boost/compute/algorithm/remove_if.hpp at line 5, include/boost/compute/algorithm/replace.hpp at line 5, include/boost/compute/algorithm/replace_copy.hpp at line 5, include/boost/compute/algorithm/reverse.hpp at line 5, include/boost/compute/algorithm/reverse_copy.hpp at line 5, include/boost/compute/algorithm/rotate.hpp at line 5, include/boost/compute/algorithm/rotate_copy.hpp at line 5, include/boost/compute/algorithm/scatter.hpp at line 5, include/boost/compute/algorithm/scatter_if.hpp at line 5, include/boost/compute/algorithm/search.hpp at line 5, include/boost/compute/algorithm/search_n.hpp at line 5, include/boost/compute/algorithm/set_difference.hpp at line 5, include/boost/compute/algorithm/set_intersection.hpp at line 5, include/boost/compute/algorithm/set_symmetric_difference.hpp at line 5, include/boost/compute/algorithm/set_union.hpp at line 5, include/boost/compute/algorithm/sort.hpp at line 5, include/boost/compute/algorithm/sort_by_key.hpp at line 5, include/boost/compute/algorithm/stable_partition.hpp at line 5, include/boost/compute/algorithm/stable_sort.hpp at line 5, include/boost/compute/algorithm/stable_sort_by_key.hpp at line 5, include/boost/compute/algorithm/swap_ranges.hpp at line 5, include/boost/compute/algorithm/transform.hpp at line 5, include/boost/compute/algorithm/transform_if.hpp at line 5, include/boost/compute/algorithm/transform_reduce.hpp at line 5, include/boost/compute/algorithm/unique.hpp at line 5, include/boost/compute/algorithm/unique_copy.hpp at line 5, include/boost/compute/algorithm/upper_bound.hpp at line 5, include/boost/compute/allocator.hpp at line 5, include/boost/compute/allocator/buffer_allocator.hpp at line 5, include/boost/compute/allocator/pinned_allocator.hpp at line 5, include/boost/compute/async.hpp at line 5, include/boost/compute/async/future.hpp at line 5, include/boost/compute/async/wait.hpp at line 5, include/boost/compute/async/wait_guard.hpp at line 5, include/boost/compute/buffer.hpp at line 5, include/boost/compute/cl.hpp at line 5, include/boost/compute/cl_ext.hpp at line 5, include/boost/compute/closure.hpp at line 5, include/boost/compute/command_queue.hpp at line 5, include/boost/compute/config.hpp at line 5, include/boost/compute/container.hpp at line 5, include/boost/compute/container/array.hpp at line 5, include/boost/compute/container/basic_string.hpp at line 5, include/boost/compute/container/detail/scalar.hpp at line 5, include/boost/compute/container/dynamic_bitset.hpp at line 5, include/boost/compute/container/flat_map.hpp at line 5, include/boost/compute/container/flat_set.hpp at line 5, include/boost/compute/container/mapped_view.hpp at line 5, include/boost/compute/container/stack.hpp at line 5, include/boost/compute/container/string.hpp at line 5, include/boost/compute/container/valarray.hpp at line 5, include/boost/compute/container/vector.hpp at line 5, include/boost/compute/context.hpp at line 5, include/boost/compute/core.hpp at line 5, include/boost/compute/detail/assert_cl_success.hpp at line 5, include/boost/compute/detail/buffer_value.hpp at line 5, include/boost/compute/detail/cl_versions.hpp at line 5, include/boost/compute/detail/device_ptr.hpp at line 5, include/boost/compute/detail/diagnostic.hpp at line 5, include/boost/compute/detail/duration.hpp at line 5, include/boost/compute/detail/get_object_info.hpp at line 5, include/boost/compute/detail/getenv.hpp at line 5, include/boost/compute/detail/global_static.hpp at line 5, include/boost/compute/detail/is_buffer_iterator.hpp at line 5, include/boost/compute/detail/is_contiguous_iterator.hpp at line 5, include/boost/compute/detail/iterator_plus_distance.hpp at line 5, include/boost/compute/detail/iterator_range_size.hpp at line 5, include/boost/compute/detail/iterator_traits.hpp at line 5, include/boost/compute/detail/literal.hpp at line 5, include/boost/compute/detail/lru_cache.hpp at line 5, include/boost/compute/detail/meta_kernel.hpp at line 5, include/boost/compute/detail/mpl_vector_to_tuple.hpp at line 5, include/boost/compute/detail/nvidia_compute_capability.hpp at line 5, include/boost/compute/detail/parameter_cache.hpp at line 5, include/boost/compute/detail/path.hpp at line 5, include/boost/compute/detail/print_range.hpp at line 5, include/boost/compute/detail/read_write_single_value.hpp at line 5, include/boost/compute/detail/sha1.hpp at line 5, include/boost/compute/detail/vendor.hpp at line 5, include/boost/compute/detail/work_size.hpp at line 5, include/boost/compute/device.hpp at line 5, include/boost/compute/event.hpp at line 5, include/boost/compute/exception.hpp at line 5, include/boost/compute/exception/context_error.hpp at line 5, include/boost/compute/exception/no_device_found.hpp at line 5, include/boost/compute/exception/opencl_error.hpp at line 5, include/boost/compute/exception/program_build_failure.hpp at line 5, include/boost/compute/exception/set_default_queue_error.hpp at line 5, include/boost/compute/exception/unsupported_extension_error.hpp at line 5, include/boost/compute/experimental/clamp_range.hpp at line 5, include/boost/compute/experimental/malloc.hpp at line 5, include/boost/compute/experimental/sort_by_transform.hpp at line 5, include/boost/compute/experimental/tabulate.hpp at line 5, include/boost/compute/function.hpp at line 5, include/boost/compute/functional.hpp at line 5, include/boost/compute/functional/as.hpp at line 5, include/boost/compute/functional/atomic.hpp at line 5, include/boost/compute/functional/bind.hpp at line 5, include/boost/compute/functional/common.hpp at line 5, include/boost/compute/functional/convert.hpp at line 5, include/boost/compute/functional/detail/macros.hpp at line 5, include/boost/compute/functional/detail/nvidia_ballot.hpp at line 5, include/boost/compute/functional/detail/nvidia_popcount.hpp at line 5, include/boost/compute/functional/detail/unpack.hpp at line 5, include/boost/compute/functional/field.hpp at line 5, include/boost/compute/functional/geometry.hpp at line 5, include/boost/compute/functional/get.hpp at line 5, include/boost/compute/functional/hash.hpp at line 5, include/boost/compute/functional/identity.hpp at line 5, include/boost/compute/functional/integer.hpp at line 5, include/boost/compute/functional/logical.hpp at line 5, include/boost/compute/functional/math.hpp at line 5, include/boost/compute/functional/operator.hpp at line 5, include/boost/compute/functional/popcount.hpp at line 5, include/boost/compute/functional/relational.hpp at line 5, include/boost/compute/image.hpp at line 5, include/boost/compute/image/image1d.hpp at line 5, include/boost/compute/image/image2d.hpp at line 5, include/boost/compute/image/image3d.hpp at line 5, include/boost/compute/image/image_format.hpp at line 5, include/boost/compute/image/image_object.hpp at line 5, include/boost/compute/image/image_sampler.hpp at line 5, include/boost/compute/image2d.hpp at line 5, include/boost/compute/image3d.hpp at line 5, include/boost/compute/image_format.hpp at line 5, include/boost/compute/image_sampler.hpp at line 5, include/boost/compute/interop/eigen.hpp at line 5, include/boost/compute/interop/eigen/core.hpp at line 5, include/boost/compute/interop/opencv.hpp at line 5, include/boost/compute/interop/opencv/core.hpp at line 5, include/boost/compute/interop/opencv/highgui.hpp at line 5, include/boost/compute/interop/opencv/ocl.hpp at line 5, include/boost/compute/interop/opengl.hpp at line 5, include/boost/compute/interop/opengl/acquire.hpp at line 5, include/boost/compute/interop/opengl/cl_gl.hpp at line 5, include/boost/compute/interop/opengl/cl_gl_ext.hpp at line 5, include/boost/compute/interop/opengl/context.hpp at line 5, include/boost/compute/interop/opengl/gl.hpp at line 5, include/boost/compute/interop/opengl/opengl_buffer.hpp at line 5, include/boost/compute/interop/opengl/opengl_renderbuffer.hpp at line 5, include/boost/compute/interop/opengl/opengl_texture.hpp at line 5, include/boost/compute/interop/qt.hpp at line 5, include/boost/compute/interop/qt/qimage.hpp at line 5, include/boost/compute/interop/qt/qpoint.hpp at line 5, include/boost/compute/interop/qt/qpointf.hpp at line 5, include/boost/compute/interop/qt/qtcore.hpp at line 5, include/boost/compute/interop/qt/qtgui.hpp at line 5, include/boost/compute/interop/qt/qvector.hpp at line 5, include/boost/compute/interop/vtk.hpp at line 5, include/boost/compute/interop/vtk/bounds.hpp at line 5, include/boost/compute/interop/vtk/data_array.hpp at line 5, include/boost/compute/interop/vtk/matrix4x4.hpp at line 5, include/boost/compute/interop/vtk/points.hpp at line 5, include/boost/compute/iterator.hpp at line 5, include/boost/compute/iterator/buffer_iterator.hpp at line 5, include/boost/compute/iterator/constant_buffer_iterator.hpp at line 5, include/boost/compute/iterator/constant_iterator.hpp at line 5, include/boost/compute/iterator/counting_iterator.hpp at line 5, include/boost/compute/iterator/detail/get_base_iterator_buffer.hpp at line 5, include/boost/compute/iterator/detail/swizzle_iterator.hpp at line 5, include/boost/compute/iterator/discard_iterator.hpp at line 5, include/boost/compute/iterator/function_input_iterator.hpp at line 5, include/boost/compute/iterator/permutation_iterator.hpp at line 5, include/boost/compute/iterator/strided_iterator.hpp at line 5, include/boost/compute/iterator/transform_iterator.hpp at line 5, include/boost/compute/iterator/zip_iterator.hpp at line 5, include/boost/compute/kernel.hpp at line 5, include/boost/compute/lambda.hpp at line 5, include/boost/compute/lambda/context.hpp at line 5, include/boost/compute/lambda/functional.hpp at line 5, include/boost/compute/lambda/get.hpp at line 5, include/boost/compute/lambda/make_pair.hpp at line 5, include/boost/compute/lambda/make_tuple.hpp at line 5, include/boost/compute/lambda/placeholder.hpp at line 5, include/boost/compute/lambda/placeholders.hpp at line 5, include/boost/compute/lambda/result_of.hpp at line 5, include/boost/compute/memory.hpp at line 5, include/boost/compute/memory/local_buffer.hpp at line 5, include/boost/compute/memory/svm_ptr.hpp at line 5, include/boost/compute/memory_object.hpp at line 5, include/boost/compute/pipe.hpp at line 5, include/boost/compute/platform.hpp at line 5, include/boost/compute/program.hpp at line 5, include/boost/compute/random.hpp at line 5, include/boost/compute/random/bernoulli_distribution.hpp at line 5, include/boost/compute/random/default_random_engine.hpp at line 5, include/boost/compute/random/discrete_distribution.hpp at line 5, include/boost/compute/random/linear_congruential_engine.hpp at line 5, include/boost/compute/random/mersenne_twister_engine.hpp at line 5, include/boost/compute/random/normal_distribution.hpp at line 5, include/boost/compute/random/threefry_engine.hpp at line 5, include/boost/compute/random/uniform_int_distribution.hpp at line 5, include/boost/compute/random/uniform_real_distribution.hpp at line 5, include/boost/compute/source.hpp at line 5, include/boost/compute/svm.hpp at line 5, include/boost/compute/system.hpp at line 5, include/boost/compute/type_traits.hpp at line 5, include/boost/compute/type_traits/common_type.hpp at line 5, include/boost/compute/type_traits/detail/capture_traits.hpp at line 5, include/boost/compute/type_traits/is_device_iterator.hpp at line 5, include/boost/compute/type_traits/is_fundamental.hpp at line 5, include/boost/compute/type_traits/is_vector_type.hpp at line 5, include/boost/compute/type_traits/make_vector_type.hpp at line 5, include/boost/compute/type_traits/result_of.hpp at line 5, include/boost/compute/type_traits/scalar_type.hpp at line 5, include/boost/compute/type_traits/type_definition.hpp at line 5, include/boost/compute/type_traits/type_name.hpp at line 5, include/boost/compute/type_traits/vector_size.hpp at line 5, include/boost/compute/types.hpp at line 5, include/boost/compute/types/builtin.hpp at line 5, include/boost/compute/types/complex.hpp at line 5, include/boost/compute/types/fundamental.hpp at line 5, include/boost/compute/types/pair.hpp at line 5, include/boost/compute/types/size_t.hpp at line 5, include/boost/compute/types/struct.hpp at line 5, include/boost/compute/types/tuple.hpp at line 5, include/boost/compute/user_event.hpp at line 5, include/boost/compute/utility.hpp at line 5, include/boost/compute/utility/dim.hpp at line 5, include/boost/compute/utility/extents.hpp at line 5, include/boost/compute/utility/invoke.hpp at line 5, include/boost/compute/utility/program_cache.hpp at line 5, include/boost/compute/utility/source.hpp at line 5, include/boost/compute/utility/wait_list.hpp at line 5, include/boost/compute/version.hpp at line 5, include/boost/compute/wait_list.hpp at line 5
+    License text:
+        // Distributed under the Boost Software License, Version 1.0
+        // See accompanying file LICENSE_1_0.txt or copy at
+        // http://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/compute.hpp [4:6]
+        include/boost/compute/algorithm.hpp [4:6]
+        include/boost/compute/algorithm/accumulate.hpp [4:6]
+        include/boost/compute/algorithm/adjacent_difference.hpp [4:6]
+        include/boost/compute/algorithm/adjacent_find.hpp [4:6]
+        include/boost/compute/algorithm/all_of.hpp [4:6]
+        include/boost/compute/algorithm/any_of.hpp [4:6]
+        include/boost/compute/algorithm/binary_search.hpp [4:6]
+        include/boost/compute/algorithm/copy.hpp [4:6]
+        include/boost/compute/algorithm/copy_if.hpp [4:6]
+        include/boost/compute/algorithm/copy_n.hpp [4:6]
+        include/boost/compute/algorithm/count.hpp [4:6]
+        include/boost/compute/algorithm/count_if.hpp [4:6]
+        include/boost/compute/algorithm/detail/balanced_path.hpp [4:6]
+        include/boost/compute/algorithm/detail/binary_find.hpp [4:6]
+        include/boost/compute/algorithm/detail/compact.hpp [4:6]
+        include/boost/compute/algorithm/detail/copy_on_device.hpp [4:6]
+        include/boost/compute/algorithm/detail/copy_to_device.hpp [4:6]
+        include/boost/compute/algorithm/detail/copy_to_host.hpp [4:6]
+        include/boost/compute/algorithm/detail/count_if_with_ballot.hpp [4:6]
+        include/boost/compute/algorithm/detail/count_if_with_reduce.hpp [4:6]
+        include/boost/compute/algorithm/detail/count_if_with_threads.hpp [4:6]
+        include/boost/compute/algorithm/detail/find_extrema.hpp [4:6]
+        include/boost/compute/algorithm/detail/find_extrema_on_cpu.hpp [4:6]
+        include/boost/compute/algorithm/detail/find_extrema_with_atomics.hpp [4:6]
+        include/boost/compute/algorithm/detail/find_extrema_with_reduce.hpp [4:6]
+        include/boost/compute/algorithm/detail/find_if_with_atomics.hpp [4:6]
+        include/boost/compute/algorithm/detail/inplace_reduce.hpp [4:6]
+        include/boost/compute/algorithm/detail/insertion_sort.hpp [4:6]
+        include/boost/compute/algorithm/detail/merge_path.hpp [4:6]
+        include/boost/compute/algorithm/detail/merge_sort_on_cpu.hpp [4:6]
+        include/boost/compute/algorithm/detail/merge_sort_on_gpu.hpp [4:6]
+        include/boost/compute/algorithm/detail/merge_with_merge_path.hpp [4:6]
+        include/boost/compute/algorithm/detail/radix_sort.hpp [4:6]
+        include/boost/compute/algorithm/detail/random_fill.hpp [4:6]
+        include/boost/compute/algorithm/detail/reduce_by_key.hpp [4:6]
+        include/boost/compute/algorithm/detail/reduce_by_key_with_scan.hpp [4:6]
+        include/boost/compute/algorithm/detail/reduce_on_cpu.hpp [4:6]
+        include/boost/compute/algorithm/detail/reduce_on_gpu.hpp [4:6]
+        include/boost/compute/algorithm/detail/scan.hpp [4:6]
+        include/boost/compute/algorithm/detail/scan_on_cpu.hpp [4:6]
+        include/boost/compute/algorithm/detail/scan_on_gpu.hpp [4:6]
+        include/boost/compute/algorithm/detail/search_all.hpp [4:6]
+        include/boost/compute/algorithm/detail/serial_accumulate.hpp [4:6]
+        include/boost/compute/algorithm/detail/serial_count_if.hpp [4:6]
+        include/boost/compute/algorithm/detail/serial_find_extrema.hpp [4:6]
+        include/boost/compute/algorithm/detail/serial_merge.hpp [4:6]
+        include/boost/compute/algorithm/detail/serial_reduce.hpp [4:6]
+        include/boost/compute/algorithm/detail/serial_reduce_by_key.hpp [4:6]
+        include/boost/compute/algorithm/detail/serial_scan.hpp [4:6]
+        include/boost/compute/algorithm/equal.hpp [4:6]
+        include/boost/compute/algorithm/equal_range.hpp [4:6]
+        include/boost/compute/algorithm/exclusive_scan.hpp [4:6]
+        include/boost/compute/algorithm/fill.hpp [4:6]
+        include/boost/compute/algorithm/fill_n.hpp [4:6]
+        include/boost/compute/algorithm/find.hpp [4:6]
+        include/boost/compute/algorithm/find_end.hpp [4:6]
+        include/boost/compute/algorithm/find_if.hpp [4:6]
+        include/boost/compute/algorithm/find_if_not.hpp [4:6]
+        include/boost/compute/algorithm/for_each.hpp [4:6]
+        include/boost/compute/algorithm/for_each_n.hpp [4:6]
+        include/boost/compute/algorithm/gather.hpp [4:6]
+        include/boost/compute/algorithm/generate.hpp [4:6]
+        include/boost/compute/algorithm/generate_n.hpp [4:6]
+        include/boost/compute/algorithm/includes.hpp [4:6]
+        include/boost/compute/algorithm/inclusive_scan.hpp [4:6]
+        include/boost/compute/algorithm/inner_product.hpp [4:6]
+        include/boost/compute/algorithm/inplace_merge.hpp [4:6]
+        include/boost/compute/algorithm/iota.hpp [4:6]
+        include/boost/compute/algorithm/is_partitioned.hpp [4:6]
+        include/boost/compute/algorithm/is_permutation.hpp [4:6]
+        include/boost/compute/algorithm/is_sorted.hpp [4:6]
+        include/boost/compute/algorithm/lexicographical_compare.hpp [4:6]
+        include/boost/compute/algorithm/lower_bound.hpp [4:6]
+        include/boost/compute/algorithm/max_element.hpp [4:6]
+        include/boost/compute/algorithm/merge.hpp [4:6]
+        include/boost/compute/algorithm/min_element.hpp [4:6]
+        include/boost/compute/algorithm/minmax_element.hpp [4:6]
+        include/boost/compute/algorithm/mismatch.hpp [4:6]
+        include/boost/compute/algorithm/next_permutation.hpp [4:6]
+        include/boost/compute/algorithm/none_of.hpp [4:6]
+        include/boost/compute/algorithm/nth_element.hpp [4:6]
+        include/boost/compute/algorithm/partial_sum.hpp [4:6]
+        include/boost/compute/algorithm/partition.hpp [4:6]
+        include/boost/compute/algorithm/partition_copy.hpp [4:6]
+        include/boost/compute/algorithm/partition_point.hpp [4:6]
+        include/boost/compute/algorithm/prev_permutation.hpp [4:6]
+        include/boost/compute/algorithm/random_shuffle.hpp [4:6]
+        include/boost/compute/algorithm/reduce.hpp [4:6]
+        include/boost/compute/algorithm/reduce_by_key.hpp [4:6]
+        include/boost/compute/algorithm/remove.hpp [4:6]
+        include/boost/compute/algorithm/remove_if.hpp [4:6]
+        include/boost/compute/algorithm/replace.hpp [4:6]
+        include/boost/compute/algorithm/replace_copy.hpp [4:6]
+        include/boost/compute/algorithm/reverse.hpp [4:6]
+        include/boost/compute/algorithm/reverse_copy.hpp [4:6]
+        include/boost/compute/algorithm/rotate.hpp [4:6]
+        include/boost/compute/algorithm/rotate_copy.hpp [4:6]
+        include/boost/compute/algorithm/scatter.hpp [4:6]
+        include/boost/compute/algorithm/scatter_if.hpp [4:6]
+        include/boost/compute/algorithm/search.hpp [4:6]
+        include/boost/compute/algorithm/search_n.hpp [4:6]
+        include/boost/compute/algorithm/set_difference.hpp [4:6]
+        include/boost/compute/algorithm/set_intersection.hpp [4:6]
+        include/boost/compute/algorithm/set_symmetric_difference.hpp [4:6]
+        include/boost/compute/algorithm/set_union.hpp [4:6]
+        include/boost/compute/algorithm/sort.hpp [4:6]
+        include/boost/compute/algorithm/sort_by_key.hpp [4:6]
+        include/boost/compute/algorithm/stable_partition.hpp [4:6]
+        include/boost/compute/algorithm/stable_sort.hpp [4:6]
+        include/boost/compute/algorithm/stable_sort_by_key.hpp [4:6]
+        include/boost/compute/algorithm/swap_ranges.hpp [4:6]
+        include/boost/compute/algorithm/transform.hpp [4:6]
+        include/boost/compute/algorithm/transform_if.hpp [4:6]
+        include/boost/compute/algorithm/transform_reduce.hpp [4:6]
+        include/boost/compute/algorithm/unique.hpp [4:6]
+        include/boost/compute/algorithm/unique_copy.hpp [4:6]
+        include/boost/compute/algorithm/upper_bound.hpp [4:6]
+        include/boost/compute/allocator.hpp [4:6]
+        include/boost/compute/allocator/buffer_allocator.hpp [4:6]
+        include/boost/compute/allocator/pinned_allocator.hpp [4:6]
+        include/boost/compute/async.hpp [4:6]
+        include/boost/compute/async/future.hpp [4:6]
+        include/boost/compute/async/wait.hpp [4:6]
+        include/boost/compute/async/wait_guard.hpp [4:6]
+        include/boost/compute/buffer.hpp [4:6]
+        include/boost/compute/cl.hpp [4:6]
+        include/boost/compute/cl_ext.hpp [4:6]
+        include/boost/compute/closure.hpp [4:6]
+        include/boost/compute/command_queue.hpp [4:6]
+        include/boost/compute/config.hpp [4:6]
+        include/boost/compute/container.hpp [4:6]
+        include/boost/compute/container/array.hpp [4:6]
+        include/boost/compute/container/basic_string.hpp [4:6]
+        include/boost/compute/container/detail/scalar.hpp [4:6]
+        include/boost/compute/container/dynamic_bitset.hpp [4:6]
+        include/boost/compute/container/flat_map.hpp [4:6]
+        include/boost/compute/container/flat_set.hpp [4:6]
+        include/boost/compute/container/mapped_view.hpp [4:6]
+        include/boost/compute/container/stack.hpp [4:6]
+        include/boost/compute/container/string.hpp [4:6]
+        include/boost/compute/container/valarray.hpp [4:6]
+        include/boost/compute/container/vector.hpp [4:6]
+        include/boost/compute/context.hpp [4:6]
+        include/boost/compute/core.hpp [4:6]
+        include/boost/compute/detail/assert_cl_success.hpp [4:6]
+        include/boost/compute/detail/buffer_value.hpp [4:6]
+        include/boost/compute/detail/cl_versions.hpp [4:6]
+        include/boost/compute/detail/device_ptr.hpp [4:6]
+        include/boost/compute/detail/diagnostic.hpp [4:6]
+        include/boost/compute/detail/duration.hpp [4:6]
+        include/boost/compute/detail/get_object_info.hpp [4:6]
+        include/boost/compute/detail/getenv.hpp [4:6]
+        include/boost/compute/detail/global_static.hpp [4:6]
+        include/boost/compute/detail/is_buffer_iterator.hpp [4:6]
+        include/boost/compute/detail/is_contiguous_iterator.hpp [4:6]
+        include/boost/compute/detail/iterator_plus_distance.hpp [4:6]
+        include/boost/compute/detail/iterator_range_size.hpp [4:6]
+        include/boost/compute/detail/iterator_traits.hpp [4:6]
+        include/boost/compute/detail/literal.hpp [4:6]
+        include/boost/compute/detail/lru_cache.hpp [4:6]
+        include/boost/compute/detail/meta_kernel.hpp [4:6]
+        include/boost/compute/detail/mpl_vector_to_tuple.hpp [4:6]
+        include/boost/compute/detail/nvidia_compute_capability.hpp [4:6]
+        include/boost/compute/detail/parameter_cache.hpp [4:6]
+        include/boost/compute/detail/path.hpp [4:6]
+        include/boost/compute/detail/print_range.hpp [4:6]
+        include/boost/compute/detail/read_write_single_value.hpp [4:6]
+        include/boost/compute/detail/sha1.hpp [4:6]
+        include/boost/compute/detail/vendor.hpp [4:6]
+        include/boost/compute/detail/work_size.hpp [4:6]
+        include/boost/compute/device.hpp [4:6]
+        include/boost/compute/event.hpp [4:6]
+        include/boost/compute/exception.hpp [4:6]
+        include/boost/compute/exception/context_error.hpp [4:6]
+        include/boost/compute/exception/no_device_found.hpp [4:6]
+        include/boost/compute/exception/opencl_error.hpp [4:6]
+        include/boost/compute/exception/program_build_failure.hpp [4:6]
+        include/boost/compute/exception/set_default_queue_error.hpp [4:6]
+        include/boost/compute/exception/unsupported_extension_error.hpp [4:6]
+        include/boost/compute/experimental/clamp_range.hpp [4:6]
+        include/boost/compute/experimental/malloc.hpp [4:6]
+        include/boost/compute/experimental/sort_by_transform.hpp [4:6]
+        include/boost/compute/experimental/tabulate.hpp [4:6]
+        include/boost/compute/function.hpp [4:6]
+        include/boost/compute/functional.hpp [4:6]
+        include/boost/compute/functional/as.hpp [4:6]
+        include/boost/compute/functional/atomic.hpp [4:6]
+        include/boost/compute/functional/bind.hpp [4:6]
+        include/boost/compute/functional/common.hpp [4:6]
+        include/boost/compute/functional/convert.hpp [4:6]
+        include/boost/compute/functional/detail/macros.hpp [4:6]
+        include/boost/compute/functional/detail/nvidia_ballot.hpp [4:6]
+        include/boost/compute/functional/detail/nvidia_popcount.hpp [4:6]
+        include/boost/compute/functional/detail/unpack.hpp [4:6]
+        include/boost/compute/functional/field.hpp [4:6]
+        include/boost/compute/functional/geometry.hpp [4:6]
+        include/boost/compute/functional/get.hpp [4:6]
+        include/boost/compute/functional/hash.hpp [4:6]
+        include/boost/compute/functional/identity.hpp [4:6]
+        include/boost/compute/functional/integer.hpp [4:6]
+        include/boost/compute/functional/logical.hpp [4:6]
+        include/boost/compute/functional/math.hpp [4:6]
+        include/boost/compute/functional/operator.hpp [4:6]
+        include/boost/compute/functional/popcount.hpp [4:6]
+        include/boost/compute/functional/relational.hpp [4:6]
+        include/boost/compute/image.hpp [4:6]
+        include/boost/compute/image/image1d.hpp [4:6]
+        include/boost/compute/image/image2d.hpp [4:6]
+        include/boost/compute/image/image3d.hpp [4:6]
+        include/boost/compute/image/image_format.hpp [4:6]
+        include/boost/compute/image/image_object.hpp [4:6]
+        include/boost/compute/image/image_sampler.hpp [4:6]
+        include/boost/compute/image2d.hpp [4:6]
+        include/boost/compute/image3d.hpp [4:6]
+        include/boost/compute/image_format.hpp [4:6]
+        include/boost/compute/image_sampler.hpp [4:6]
+        include/boost/compute/interop/eigen.hpp [4:6]
+        include/boost/compute/interop/eigen/core.hpp [4:6]
+        include/boost/compute/interop/opencv.hpp [4:6]
+        include/boost/compute/interop/opencv/core.hpp [4:6]
+        include/boost/compute/interop/opencv/highgui.hpp [4:6]
+        include/boost/compute/interop/opencv/ocl.hpp [4:6]
+        include/boost/compute/interop/opengl.hpp [4:6]
+        include/boost/compute/interop/opengl/acquire.hpp [4:6]
+        include/boost/compute/interop/opengl/cl_gl.hpp [4:6]
+        include/boost/compute/interop/opengl/cl_gl_ext.hpp [4:6]
+        include/boost/compute/interop/opengl/context.hpp [4:6]
+        include/boost/compute/interop/opengl/gl.hpp [4:6]
+        include/boost/compute/interop/opengl/opengl_buffer.hpp [4:6]
+        include/boost/compute/interop/opengl/opengl_renderbuffer.hpp [4:6]
+        include/boost/compute/interop/opengl/opengl_texture.hpp [4:6]
+        include/boost/compute/interop/qt.hpp [4:6]
+        include/boost/compute/interop/qt/qimage.hpp [4:6]
+        include/boost/compute/interop/qt/qpoint.hpp [4:6]
+        include/boost/compute/interop/qt/qpointf.hpp [4:6]
+        include/boost/compute/interop/qt/qtcore.hpp [4:6]
+        include/boost/compute/interop/qt/qtgui.hpp [4:6]
+        include/boost/compute/interop/qt/qvector.hpp [4:6]
+        include/boost/compute/interop/vtk.hpp [4:6]
+        include/boost/compute/interop/vtk/bounds.hpp [4:6]
+        include/boost/compute/interop/vtk/data_array.hpp [4:6]
+        include/boost/compute/interop/vtk/matrix4x4.hpp [4:6]
+        include/boost/compute/interop/vtk/points.hpp [4:6]
+        include/boost/compute/iterator.hpp [4:6]
+        include/boost/compute/iterator/buffer_iterator.hpp [4:6]
+        include/boost/compute/iterator/constant_buffer_iterator.hpp [4:6]
+        include/boost/compute/iterator/constant_iterator.hpp [4:6]
+        include/boost/compute/iterator/counting_iterator.hpp [4:6]
+        include/boost/compute/iterator/detail/get_base_iterator_buffer.hpp [4:6]
+        include/boost/compute/iterator/detail/swizzle_iterator.hpp [4:6]
+        include/boost/compute/iterator/discard_iterator.hpp [4:6]
+        include/boost/compute/iterator/function_input_iterator.hpp [4:6]
+        include/boost/compute/iterator/permutation_iterator.hpp [4:6]
+        include/boost/compute/iterator/strided_iterator.hpp [4:6]
+        include/boost/compute/iterator/transform_iterator.hpp [4:6]
+        include/boost/compute/iterator/zip_iterator.hpp [4:6]
+        include/boost/compute/kernel.hpp [4:6]
+        include/boost/compute/lambda.hpp [4:6]
+        include/boost/compute/lambda/context.hpp [4:6]
+        include/boost/compute/lambda/functional.hpp [4:6]
+        include/boost/compute/lambda/get.hpp [4:6]
+        include/boost/compute/lambda/make_pair.hpp [4:6]
+        include/boost/compute/lambda/make_tuple.hpp [4:6]
+        include/boost/compute/lambda/placeholder.hpp [4:6]
+        include/boost/compute/lambda/placeholders.hpp [4:6]
+        include/boost/compute/lambda/result_of.hpp [4:6]
+        include/boost/compute/memory.hpp [4:6]
+        include/boost/compute/memory/local_buffer.hpp [4:6]
+        include/boost/compute/memory/svm_ptr.hpp [4:6]
+        include/boost/compute/memory_object.hpp [4:6]
+        include/boost/compute/pipe.hpp [4:6]
+        include/boost/compute/platform.hpp [4:6]
+        include/boost/compute/program.hpp [4:6]
+        include/boost/compute/random.hpp [4:6]
+        include/boost/compute/random/bernoulli_distribution.hpp [4:6]
+        include/boost/compute/random/default_random_engine.hpp [4:6]
+        include/boost/compute/random/discrete_distribution.hpp [4:6]
+        include/boost/compute/random/linear_congruential_engine.hpp [4:6]
+        include/boost/compute/random/mersenne_twister_engine.hpp [4:6]
+        include/boost/compute/random/normal_distribution.hpp [4:6]
+        include/boost/compute/random/threefry_engine.hpp [4:6]
+        include/boost/compute/random/uniform_int_distribution.hpp [4:6]
+        include/boost/compute/random/uniform_real_distribution.hpp [4:6]
+        include/boost/compute/source.hpp [4:6]
+        include/boost/compute/svm.hpp [4:6]
+        include/boost/compute/system.hpp [4:6]
+        include/boost/compute/type_traits.hpp [4:6]
+        include/boost/compute/type_traits/common_type.hpp [4:6]
+        include/boost/compute/type_traits/detail/capture_traits.hpp [4:6]
+        include/boost/compute/type_traits/is_device_iterator.hpp [4:6]
+        include/boost/compute/type_traits/is_fundamental.hpp [4:6]
+        include/boost/compute/type_traits/is_vector_type.hpp [4:6]
+        include/boost/compute/type_traits/make_vector_type.hpp [4:6]
+        include/boost/compute/type_traits/result_of.hpp [4:6]
+        include/boost/compute/type_traits/scalar_type.hpp [4:6]
+        include/boost/compute/type_traits/type_definition.hpp [4:6]
+        include/boost/compute/type_traits/type_name.hpp [4:6]
+        include/boost/compute/type_traits/vector_size.hpp [4:6]
+        include/boost/compute/types.hpp [4:6]
+        include/boost/compute/types/builtin.hpp [4:6]
+        include/boost/compute/types/complex.hpp [4:6]
+        include/boost/compute/types/fundamental.hpp [4:6]
+        include/boost/compute/types/pair.hpp [4:6]
+        include/boost/compute/types/size_t.hpp [4:6]
+        include/boost/compute/types/struct.hpp [4:6]
+        include/boost/compute/types/tuple.hpp [4:6]
+        include/boost/compute/user_event.hpp [4:6]
+        include/boost/compute/utility.hpp [4:6]
+        include/boost/compute/utility/dim.hpp [4:6]
+        include/boost/compute/utility/extents.hpp [4:6]
+        include/boost/compute/utility/invoke.hpp [4:6]
+        include/boost/compute/utility/program_cache.hpp [4:6]
+        include/boost/compute/utility/source.hpp [4:6]
+        include/boost/compute/utility/wait_list.hpp [4:6]
+        include/boost/compute/version.hpp [4:6]
+        include/boost/compute/wait_list.hpp [4:6]

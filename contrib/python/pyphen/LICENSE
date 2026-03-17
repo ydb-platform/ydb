@@ -1,0 +1,8 @@
+Pyphen is released under the GPL 2.0+/LGPL 2.1+/MPL 1.1 tri-license.
+See COPYING.GPL, COPYING.LGPL and COPYING.MPL for more details.
+
+Many dictionaries are included in pyphen, they come from the LibreOffice git
+repository and are distributed under GPL, LGPL and/or MPL. See the
+dictionaries and the libreoffice's repository for more details.
+
+https://git.libreoffice.org/dictionaries

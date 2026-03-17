@@ -1,0 +1,330 @@
+syntax = "proto3";
+
+package yandex.cloud.vpc.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/vpc/v1/security_group.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1;vpc";
+option java_package = "yandex.cloud.api.vpc.v1";
+
+// A set of methods for managing SecurityGroup resources.
+service SecurityGroupService {
+    // Returns the specified SecurityGroup resource.
+    //
+    // To get the list of all available SecurityGroup resources, make a [List] request.
+    rpc Get (GetSecurityGroupRequest) returns (SecurityGroup) {
+      option (google.api.http) = { get: "/vpc/v1/securityGroups/{security_group_id}" };
+    }
+
+    // Retrieves the list of SecurityGroup resources in the specified folder.
+    rpc List (ListSecurityGroupsRequest) returns (ListSecurityGroupsResponse) {
+      option (google.api.http) = { get: "/vpc/v1/securityGroups" };
+    }
+
+    // Creates a security group in the specified folder and network.
+    rpc Create (CreateSecurityGroupRequest) returns (operation.Operation) {
+        option (google.api.http) = { post: "/vpc/v1/securityGroups" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "CreateSecurityGroupMetadata"
+            response: "SecurityGroup"
+        };
+    }
+
+    // Updates the specified security group.
+    // Method starts an asynchronous operation that can be cancelled while it is in progress.
+    rpc Update (UpdateSecurityGroupRequest) returns (operation.Operation) {
+        option (google.api.http) = { patch: "/vpc/v1/securityGroups/{security_group_id}" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "UpdateSecurityGroupMetadata"
+            response: "SecurityGroup"
+        };
+    }
+
+    // Updates the rules of the specified security group.
+    rpc UpdateRules (UpdateSecurityGroupRulesRequest) returns (operation.Operation) {
+        option (google.api.http) = { patch: "/vpc/v1/securityGroups/{security_group_id}/rules" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "UpdateSecurityGroupMetadata"
+            response: "SecurityGroup"
+        };
+    }
+
+    // Updates the specified rule.
+    rpc UpdateRule (UpdateSecurityGroupRuleRequest) returns (operation.Operation) {
+        option (google.api.http) = { patch: "/vpc/v1/securityGroups/{security_group_id}/rules/{rule_id}" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "UpdateSecurityGroupRuleMetadata"
+            response: "SecurityGroupRule"
+        };
+    }
+
+    // Deletes the specified security group.
+    rpc Delete (DeleteSecurityGroupRequest) returns (operation.Operation) {
+        option (google.api.http) = { delete: "/vpc/v1/securityGroups/{security_group_id}" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "DeleteSecurityGroupMetadata"
+            response: "google.protobuf.Empty"
+        };
+    }
+
+    // Moves security groups to another folder.
+    rpc Move (MoveSecurityGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/vpc/v1/securityGroups/{security_group_id}:move" body: "*" };
+        option (yandex.cloud.api.operation) = {
+            metadata: "MoveSecurityGroupMetadata"
+            response: "SecurityGroup"
+        };
+    }
+
+    // Lists operations for the specified security groups.
+    rpc ListOperations (ListSecurityGroupOperationsRequest) returns (ListSecurityGroupOperationsResponse) {
+      option (google.api.http) = { get: "/vpc/v1/securityGroups/{security_group_id}/operations" };
+    }
+}
+
+
+message GetSecurityGroupRequest {
+    // ID of the Security Group resource to return.
+    // To get the security group ID, use a [SecurityGroup.List] request.
+    string security_group_id = 1 [(required) = true];
+}
+
+message ListSecurityGroupsRequest {
+    // ID of the folder to list security groups in.
+    // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+    string folder_id = 1 [(required) = true];
+
+    // The maximum number of results per page to return. If the number of available
+    // results is larger than [page_size],
+    // the service returns a [ListSecurityGroupsResponse.next_page_token]
+    // that can be used to get the next page of results in subsequent list requests. Default value: 100.
+    int64 page_size = 2;
+
+    // Page token. To get the next page of results, set [page_token] to the
+    // [ListSecurityGroupsResponse.next_page_token] returned by a previous list request.
+    string page_token = 3;
+
+    // A filter expression that filters resources listed in the response.
+    // The expression must specify:
+    // 1. The field name. Currently you can use filtering only on the [SecurityGroup.name] field.
+    // 2. An `=` operator.
+    // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+    string filter = 4; //filter by network_id is here
+}
+
+message ListSecurityGroupsResponse {
+    // List of SecurityGroup resources.
+    repeated SecurityGroup security_groups = 1;
+
+    // This token allows you to get the next page of results for list requests. If the number of results
+    // is larger than [ListNetworksRequest.page_size], use
+    // the [next_page_token] as the value
+    // for the [ListNetworksRequest.page_token] query parameter
+    // in the next list request. Subsequent list requests will have their own
+    // [next_page_token] to continue paging through the results.
+    string next_page_token = 2;
+}
+
+message CreateSecurityGroupRequest {
+    // ID of the folder for this request to create a security group in.
+    // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+    string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Name of the security group.
+    // The name must be unique within the folder.
+    string name = 2 [(pattern) = "|[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?"];
+
+    // Description of the security group.    
+    string description = 3 [(length) = "<=256"];
+
+    // Resource labels as `` key:value `` pairs.
+    map<string, string> labels = 4 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+
+    // ID of the Network to create security group for.
+    string network_id = 5 [(required) = true];
+
+    // Security rules specifications.
+    repeated SecurityGroupRuleSpec rule_specs = 6;
+}
+
+message SecurityGroupRuleSpec {
+    // Description of the security rule.
+    string description = 1 [(length) = "<=256"];
+
+    // Rule labels as `` key:value `` pairs.
+    map<string, string> labels = 2 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+
+    // The direction of network traffic allowed by this rule.
+    SecurityGroupRule.Direction direction = 3 [(required) = true];
+
+    // The range of ports that allow traffic to pass through. Null value means any port.
+    PortRange ports = 4; // null value means any port
+
+    // Values from [IANA protocol numbers](https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml).
+    // Null value means any protocol.
+    oneof protocol {
+        // Protocol name.
+        string protocol_name = 5;
+
+        // Protocol number from [IANA protocol numbers](https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml).
+        int64 protocol_number = 6;
+    }
+
+    oneof target {
+        // Target of the security rule.
+        option (exactly_one) = true;
+
+        // CIDR blocks to allow to recieve or send traffic.
+        CidrBlocks cidr_blocks = 7;
+
+        // ID of the security group to add rule to.
+        string security_group_id = 8;
+        
+        // Predefined target. See [security groups rules](/docs/vpc/concepts/security-groups#security-groups-rules) for more information.
+        string predefined_target = 9;
+        // string subnet_id = .. ;
+    }
+}
+
+message CreateSecurityGroupMetadata {
+    // ID of the security group that is being created.
+    string security_group_id = 1;
+}
+
+message UpdateSecurityGroupRequest {
+    // ID of the security group to update.
+    //
+    // To get the security group ID make a [SecurityGroupService.List] request.
+    string security_group_id = 1 [(required) = true, (length) = "<=50"];
+
+    // Field mask that specifies which attributes of the Address should be updated.
+    google.protobuf.FieldMask update_mask = 2;
+
+    // New name for the security group.
+    // The name must be unique within the folder.
+    string name = 3 [(pattern) = "|[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?"];
+
+    // New description of the security group.
+    string description = 4 [(length) = "<=256"];
+
+    // Security group labels as `key:value` pairs.
+    //
+    // Existing set of labels is completely replaced by the provided set, so if you just want
+    // to add or remove a label:
+    // 1. Get the current set of labels with a [SecurityGroupService.Get] request.
+    // 2. Add or remove a label in this set.
+    // 3. Send the new set in this field.
+    map<string, string> labels = 5 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+
+    // Updated rule list. All existing rules will be replaced with given list.
+    repeated SecurityGroupRuleSpec rule_specs = 6;
+}
+
+message UpdateSecurityGroupMetadata {
+    // ID of the SecurityGroup that is being updated.
+    string security_group_id = 1;
+
+    // List of added security rules IDs.
+    repeated string added_rule_ids = 2;
+}
+
+message UpdateSecurityGroupRulesRequest {
+    // ID of the SecurityGroup that is being updated with new rules.
+    string security_group_id = 1 [(required) = true];
+
+    // List of rules IDs to delete.
+    repeated string deletion_rule_ids = 2;
+
+    // Security rules specifications.
+    repeated SecurityGroupRuleSpec addition_rule_specs = 3;
+}
+
+message UpdateSecurityGroupRuleRequest {
+    // ID of the SecurityGroup to update rule in.
+    string security_group_id = 1 [(required) = true];
+
+    // ID of the rule to update.
+    string rule_id = 2 [(required) = true];
+
+    // Field mask that specifies which attributes of the Address should be updated.
+    google.protobuf.FieldMask update_mask = 3;
+
+    // New description of the rule.
+    string description = 4;
+
+    // Rule labels as `key:value` pairs.
+    //
+    // Existing set of labels is completely replaced by the provided set, so if you just want
+    // to add or remove a label:
+    // 1. Get the current set of labels with a [AddressService.Get] request.
+    // 2. Add or remove a label in this set.
+    // 3. Send the new set in this field.
+    map<string, string> labels = 5;
+}
+
+message UpdateSecurityGroupRuleMetadata {
+    // ID of the SecurityGroup that is being updated with new rules.
+    string security_group_id = 1;
+
+    // ID of the rule that is being updated.
+    string rule_id = 2;
+}
+
+message DeleteSecurityGroupRequest {
+    // ID of the security group to delete.
+    //
+    // To get a address ID make a [SecurityGroup.List] request.
+    string security_group_id = 1 [(required) = true];
+}
+
+message DeleteSecurityGroupMetadata {
+    // ID of the SecurityGroup that is being deleted.
+    string security_group_id = 1;
+}
+
+message ListSecurityGroupOperationsRequest {
+    // ID of the address to list operations for.
+    //
+    // To get a address ID make a [SecurityGroup.List] request.
+    string security_group_id = 1 [(required) = true];
+
+    // The maximum number of results per page to return. If the number of available
+    // results is larger than [page_size], the service returns a [ListSecurityGroupOperationsResponse.next_page_token]
+    // that can be used to get the next page of results in subsequent list requests.
+    // Default value: 100.
+    int64 page_size = 2;
+
+    // Page token. To get the next page of results, set [page_token] to the
+    // [ListSecurityGroupOperationsResponse.next_page_token] returned by a previous list request.
+    string page_token = 3;
+}
+
+message ListSecurityGroupOperationsResponse {
+    // List of operations for the specified security group.
+    repeated operation.Operation operations = 1;
+
+    // Token for getting the next page of the list. If the number of results is greater than
+    // the specified [ListSecurityGroupOperationsRequest.page_size], use `next_page_token` as the value
+    // for the [ListSecurityGroupOperationsRequest.page_token] parameter in the next list request.
+    //
+    // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}
+
+message MoveSecurityGroupRequest {
+    // ID of the security group to move.
+    string security_group_id = 1 [(required) = true];
+    
+    // ID of the folder to move security group to.
+    string destination_folder_id = 2 [(required) = true];
+}
+
+message MoveSecurityGroupMetadata {
+    // ID of the security group that is being moved.
+    string security_group_id = 1;
+}

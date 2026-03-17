@@ -1,0 +1,129 @@
+Metadata-Version: 2.1
+Name: python-crfsuite
+Version: 0.9.9
+Summary: Python binding for CRFsuite
+Home-page: https://github.com/scrapinghub/python-crfsuite
+Author: Terry Peng, Mikhail Korobov
+Author-email: pengtaoo@gmail.com, kmike84@gmail.com
+License: MIT
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Cython
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Scientific/Engineering
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Topic :: Text Processing :: Linguistic
+License-File: LICENSE.txt
+
+===============
+python-crfsuite
+===============
+
+.. image:: https://github.com/scrapinghub/python-crfsuite/actions/workflows/tests.yml/badge.svg
+    :target: https://github.com/scrapinghub/python-crfsuite/actions/workflows/tests.yml
+
+.. image:: https://img.shields.io/pypi/v/python-crfsuite.svg?style=flat-square
+    :target: https://pypi.python.org/pypi/python-crfsuite
+    :alt: pypi Version
+
+.. image:: https://anaconda.org/conda-forge/python-crfsuite/badges/version.svg
+    :target: https://anaconda.org/conda-forge/python-crfsuite
+    :alt: conda Version
+
+python-crfsuite is a python binding to CRFsuite_.
+
+Installation
+============
+
+Using ``pip``::
+
+    pip install python-crfsuite
+
+Using ``conda``::
+
+    conda install -c conda-forge python-crfsuite
+
+Usage
+=====
+
+See docs_ and an example_.
+
+.. _docs: http://python-crfsuite.rtfd.org/
+.. _example: https://github.com/scrapinghub/python-crfsuite/blob/master/examples/CoNLL%202002.ipynb
+
+See Also
+========
+
+sklearn-crfsuite_ is a python-crfsuite wrapper which provides
+API similar to scikit-learn.
+
+.. _sklearn-crfsuite: https://github.com/TeamHG-Memex/sklearn-crfsuite
+
+Contributing
+============
+
+* Source code: https://github.com/scrapinghub/python-crfsuite
+* Issue tracker: https://github.com/scrapinghub/python-crfsuite/issues
+
+Feel free to submit ideas, bugs reports, pull requests or regular patches.
+
+In order to run tests, install Cython_ (> 0.24.1)  and tox_, then type
+
+::
+
+    ./update_cpp.sh; tox
+
+from the source checkout.
+
+Please don't commit generated cpp files in the same commit as other files.
+
+.. _Cython: http://cython.org/
+.. _tox: http://tox.testrun.org
+
+Authors and Contributors
+========================
+
+Original authors are Terry Peng <pengtaoo@gmail.com> and
+Mikhail Korobov <kmike84@gmail.com>. Many other people contributed;
+some of them can be found at github Contributors_ page.
+
+Bundled CRFSuite_ C/C++ library is by Naoaki Okazaki & contributors.
+
+.. _Contributors: https://github.com/scrapinghub/python-crfsuite/graphs/contributors
+
+License
+=======
+
+python-crfsuite is licensed under MIT license.
+CRFsuite_ library is licensed under BSD license.
+
+.. _CRFsuite: https://github.com/chokkan/crfsuite
+
+Alternatives
+============
+
+* https://github.com/chokkan/crfsuite/tree/master/swig/python - official
+  Python wrapper, exposes C++ API using SWIG.
+* https://github.com/jakevdp/pyCRFsuite - uses C API instead of C++ API;
+  allows to use scipy sparse matrices as an input. At the time of writing
+  it is unmaintained.
+* https://github.com/bosondata/crfsuite-rs - uses a Rust wrapper with CFFI instead of C++ API;
+  allows to tag with GIL released for better performance.
+
+This package (python-crfsuite) wraps CRFsuite C++ API using Cython.
+It is faster than official SWIG wrapper and has a simpler codebase than
+a more advanced pyCRFsuite. python-crfsuite works in Python 2 and Python 3,
+doesn't have external dependencies (CRFsuite is bundled, numpy/scipy stack
+is not needed) and workarounds some of the issues with C++ CRFsuite library.

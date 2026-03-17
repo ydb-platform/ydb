@@ -1,0 +1,13 @@
+[project]
+name = "pyperformance_bm_sqlglot_v2"
+requires-python = ">=3.7"
+dependencies = [
+    "pyperf",
+    "sqlglot_v2",
+]
+urls = {repository = "https://github.com/python/pyperformance"}
+dynamic = ["version"]
+
+[tool.pyperformance]
+name = "sqlglot_v2"
+extra_opts = ["normalize"]

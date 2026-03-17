@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// A GPU cluster. For details about the concept, see [documentation](/docs/compute/concepts/gpus#gpu-clusters).
+message GpuCluster {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // GPU cluster is being created.
+    CREATING = 1;
+
+    // GPU cluster is ready to use.
+    READY = 2;
+
+    // GPU cluster encountered a problem and cannot operate.
+    ERROR = 3;
+
+    // GPU cluster is being deleted.
+    DELETING = 4;
+  }
+
+  // ID of GPU cluster.
+  string id = 1;
+
+  // ID of the folder that the GPU cluster belongs to.
+  string folder_id = 2;
+  
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the GPU cluster.
+  //
+  // The name is unique within the folder.
+  string name = 4;
+  
+  // Description of the GPU cluster.
+  string description = 5;
+
+  // GPU cluster labels as `key:value` pairs.
+  map<string, string> labels = 6;
+
+  // Status of the GPU cluster.
+  Status status = 7;
+
+  // ID of the availability zone where the GPU cluster resides.
+  string zone_id = 8;
+
+  // Type of interconnect used for this GPU cluster.
+  GpuInterconnectType interconnect_type = 9;
+
+}
+
+enum GpuInterconnectType {
+  GPU_INTERCONNECT_TYPE_UNSPECIFIED = 0;
+
+  // InfiniBand interconnect.
+  INFINIBAND = 1;
+}

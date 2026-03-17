@@ -1,0 +1,5 @@
+[console_scripts]
+marko = marko.cli:main
+
+[gui_scripts]
+

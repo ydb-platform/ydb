@@ -1,0 +1,383 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.functions.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/logging/v1/log_entry.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/functions/v1;functions";
+option java_package = "yandex.cloud.api.serverless.functions.v1";
+
+// A serverless function. For details about the concept, see [Functions](/docs/functions/concepts/function).
+message Function {
+  reserved 7;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Function is being created.
+    CREATING = 1;
+
+    // Function is ready to be invoked.
+    ACTIVE = 2;
+
+    // Function is being deleted.
+    DELETING = 3;
+
+    // Function failed.
+    ERROR = 4;
+  }
+
+  // ID of the function. Generated at creation time.
+  string id = 1;
+
+  // ID of the folder that the function belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp for the function.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the function. The name is unique within the folder.
+  string name = 4 [(length) = "3-63"];
+
+  // Description of the function.
+  string description = 5 [(length) = "0-256"];
+
+  // Function labels as `key:value` pairs.
+  map<string, string> labels = 6 [(size) = "<=64"];
+
+  // URL that needs to be requested to invoke the function.
+  string http_invoke_url = 8;
+
+  // Status of the function.
+  Status status = 9;
+}
+
+// Version of a function. For details about the concept, see [Function versions](/docs/functions/concepts/function#version).
+message Version {
+  reserved 4, 11, 15;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Version is being created.
+    CREATING = 1;
+
+    // Version is ready to use.
+    ACTIVE = 2;
+
+    // Version will be deleted soon.
+    OBSOLETE = 3;
+
+    // Version is being deleted.
+    DELETING = 4;
+  }
+
+  // ID of the version.
+  string id = 1;
+
+  // ID of the function that the version belongs to.
+  string function_id = 2;
+
+  // Description of the version.
+  string description = 3 [(length) = "0-256"];
+
+  // Creation timestamp for the version.
+  google.protobuf.Timestamp created_at = 5;
+
+  // ID of the runtime environment for the function.
+  //
+  // Supported environments and their identifiers are listed in the [Runtime environments](/docs/functions/concepts/runtime).
+  string runtime = 6;
+
+  // Entrypoint for the function: the name of the function to be called as the handler.
+  //
+  // Specified in the format `<function file name>.<handler name>`, for example, `index.myFunction`.
+  string entrypoint = 7;
+
+  // Resources allocated to the version.
+  Resources resources = 8;
+
+  // Timeout for the execution of the version.
+  //
+  // If the timeout is exceeded, Cloud Functions responds with a 504 HTTP code.
+  google.protobuf.Duration execution_timeout = 9;
+
+  // ID of the service account associated with the version.
+  string service_account_id = 10;
+
+  // Final size of the deployment package after unpacking.
+  int64 image_size = 12;
+
+  // Status of the version.
+  Status status = 13;
+
+  // Version tags. For details, see [Version tag](/docs/functions/concepts/function#tag).
+  repeated string tags = 14;
+
+  // Environment settings for the version.
+  map<string, string> environment = 16;
+
+  // Network access. If specified the version will be attached to specified network/subnet(s).
+  Connectivity connectivity = 17;
+
+  // Additional service accounts to be used by the version.
+  map<string, string> named_service_accounts = 18;
+
+  // Yandex Lockbox secrets to be used by the version.
+  repeated Secret secrets = 19;
+
+  // Options for logging from the function
+  LogOptions log_options = 20;
+
+  // S3 mounts to be used by the version.
+  repeated StorageMount storage_mounts = 21;
+
+  // Config for asynchronous invocations of the version
+  AsyncInvocationConfig async_invocation_config = 22;
+
+  // Optional size of in-memory mounted /tmp directory in bytes.
+  int64 tmpfs_size = 23;
+
+  // The maximum number of requests processed by a function instance at the same time
+  int64 concurrency = 24 [(value) = "0-16"];
+
+  // Mounts to be used by the version.
+  repeated Mount mounts = 25;
+
+  // Metadata options for the version.
+  MetadataOptions metadata_options = 26;
+}
+
+// Resources allocated to a version.
+message Resources {
+  // Amount of memory available to the version, specified in bytes, multiple of 128MB.
+  int64 memory = 1 [(value) = "134217728-8589934592"];
+}
+
+// Version deployment package.
+message Package {
+  // Name of the bucket that stores the code for the version.
+  string bucket_name = 1 [(required) = true];
+
+  // Name of the object in the bucket that stores the code for the version.
+  string object_name = 2 [(required) = true];
+
+  // SHA256 hash of the version deployment package.
+  string sha256 = 3;
+}
+
+// Version connectivity specification.
+message Connectivity {
+  // Network the version will have access to.
+  // It's essential to specify network with subnets in all availability zones.
+  string network_id = 1;
+
+  // Complete list of subnets (from the same network) the version can be attached to.
+  // It's essential to specify at least one subnet for each availability zones.
+  repeated string subnet_id = 2 [
+    (length) = ">0",
+    (unique) = true
+  ];
+}
+
+message ScalingPolicy {
+  reserved 5;
+
+  // ID of the function that the scaling policy belongs to.
+  string function_id = 1;
+
+  // Tag of the version that the scaling policy belongs to. For details, see [Version tag](/docs/functions/concepts/function#tag).
+  string tag = 2;
+
+  // Creation timestamp for the scaling policy
+  google.protobuf.Timestamp created_at = 3;
+
+  // Modification timestamp for the scaling policy
+  google.protobuf.Timestamp modified_at = 4;
+
+  // Minimum guaranteed provisioned instances count for all zones in total.
+  // Billed separately.
+  int64 provisioned_instances_count = 6;
+
+  // Upper limit for instance count in each zone.
+  // 0 means no limit.
+  int64 zone_instances_limit = 7;
+
+  // Upper limit of requests count in each zone.
+  // 0 means no limit.
+  int64 zone_requests_limit = 8;
+}
+
+// Secret for serverless function.
+message Secret {
+  // ID of Yandex Lockbox secret.
+  string id = 1;
+
+  // ID of Yandex Lockbox version.
+  string version_id = 2;
+
+  // Key in secret's payload, which value to be delivered into function environment.
+  string key = 3;
+
+  oneof reference {
+    // environment variable in which secret's value to be delivered.
+    string environment_variable = 4;
+  }
+}
+
+message LogOptions {
+  // Is logging from function disabled.
+  bool disabled = 1;
+
+  // Log entries destination.
+  oneof destination {
+    // Entry should be written to log group resolved by ID.
+    string log_group_id = 2 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+
+    // Entry should be written to default log group for specified folder.
+    string folder_id = 3 [(pattern) = "([a-zA-Z][-a-zA-Z0-9_.]{0,63})?"];
+  }
+
+  // Minimum log entry level.
+  //
+  // See [LogLevel.Level] for details.
+  yandex.cloud.logging.v1.LogLevel.Level min_level = 4;
+}
+
+message StorageMount {
+  // Use function.proto:Mount.ObjectStorage instead
+  option deprecated = true;
+
+  // S3 bucket name for mounting.
+  string bucket_id = 1 [
+    (required) = true,
+    (length) = "3-63",
+    (pattern) = "[-.0-9a-zA-Z]*"
+  ];
+
+  // S3 bucket prefix for mounting.
+  string prefix = 2;
+
+  // Mount point directory name (not path) for mounting.
+  string mount_point_name = 3 [
+    (required) = true,
+    (length) = "1-100",
+    (pattern) = "[-_0-9a-zA-Z]*"
+  ];
+
+  // Is mount read only.
+  bool read_only = 4;
+}
+
+// Mount contains an information about version's external storage mount
+message Mount {
+  reserved 2;
+  reserved 4 to 9;
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    READ_ONLY = 1;
+    READ_WRITE = 2;
+  }
+
+  // Unique mount point name. Device will be mounted into /function/storage/<name>
+  string name = 1 [
+    (required) = true,
+    (length) = "1-100",
+    (pattern) = "[-_0-9a-zA-Z]*"
+  ];
+
+  // Mount's mode
+  Mode mode = 3;
+
+  // Target mount option
+  oneof target {
+    option (exactly_one) = true;
+
+    // Object storage mounts
+    ObjectStorage object_storage = 10;
+
+    // Working disk (worker-local non-shared read-write NBS disk templates)
+    DiskSpec ephemeral_disk_spec = 11;
+  }
+
+  // ObjectStorage as a mount
+  message ObjectStorage {
+    // ObjectStorage bucket name for mounting.
+    string bucket_id = 1 [
+      (required) = true,
+      (length) = "3-63",
+      (pattern) = "[-.0-9a-zA-Z]*"
+    ];
+
+    // ObjectStorage bucket prefix for mounting.
+    string prefix = 2;
+  }
+
+  // Disk as a mount
+  message DiskSpec {
+    // The size of disk for mount in bytes
+    int64 size = 1 [(value) = ">0"];
+
+    // Optional block size of disk for mount in bytes
+    int64 block_size = 2;
+  }
+}
+
+message AsyncInvocationConfig {
+  // Target to which a result of an invocation will be sent
+  message ResponseTarget {
+    oneof target {
+      option (exactly_one) = true;
+      // Target to ignore a result
+      EmptyTarget empty_target = 1;
+      // Target to send a result to ymq
+      YMQTarget ymq_target = 2;
+    }
+  }
+
+  // Number of retries of version invocation
+  int64 retries_count = 1 [(value) = "0-100"];
+
+  // Target for successful result of the version's invocation
+  ResponseTarget success_target = 2 [(required) = true];
+
+  // Target for unsuccessful result, if all retries failed
+  ResponseTarget failure_target = 3 [(required) = true];
+
+  // Service account which can invoke version
+  string service_account_id = 4;
+}
+
+message YMQTarget {
+  // Queue ARN
+  string queue_arn = 1 [(required) = true];
+
+  // Service account which has write permission on the queue.
+  string service_account_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message EmptyTarget {}
+
+message MetadataOptions {
+  // Enabled access to GCE flavored metadata
+  MetadataOption gce_http_endpoint = 1;
+  // Enabled access to AWS flavored metadata (IMDSv1)
+  MetadataOption aws_v1_http_endpoint = 2;
+}
+
+enum MetadataOption {
+  // Option is default
+  METADATA_OPTION_UNSPECIFIED = 0;
+
+  // Option is enabled
+  ENABLED = 1;
+
+  // Option is disabled
+  DISABLED = 2;
+}

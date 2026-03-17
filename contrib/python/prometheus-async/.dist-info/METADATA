@@ -1,0 +1,103 @@
+Metadata-Version: 2.4
+Name: prometheus-async
+Version: 25.1.0
+Summary: Async helpers for prometheus_client.
+Project-URL: Documentation, https://prometheus-async.readthedocs.io/
+Project-URL: Changelog, https://prometheus-async.readthedocs.io/en/stable/changelog.html
+Project-URL: GitHub, https://github.com/hynek/prometheus-async/
+Project-URL: Funding, https://hynek.me/say-thanks/
+Author-email: Hynek Schlawack <hs@ox.cx>
+License-Expression: Apache-2.0
+License-File: LICENSE
+License-File: NOTICE
+Keywords: async,asyncio,metrics,prometheus,twisted
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Typing :: Typed
+Requires-Python: >=3.8
+Requires-Dist: prometheus-client>=0.8.0
+Requires-Dist: typing-extensions>=3.10.0; python_version < '3.10'
+Requires-Dist: wrapt
+Provides-Extra: aiohttp
+Requires-Dist: aiohttp>=3; extra == 'aiohttp'
+Provides-Extra: consul
+Requires-Dist: aiohttp>=3; extra == 'consul'
+Provides-Extra: dev
+Requires-Dist: aiohttp>=3; extra == 'dev'
+Requires-Dist: coverage[toml]; extra == 'dev'
+Requires-Dist: mypy; extra == 'dev'
+Requires-Dist: pytest; extra == 'dev'
+Requires-Dist: pytest-asyncio; extra == 'dev'
+Requires-Dist: twisted; extra == 'dev'
+Provides-Extra: docs
+Requires-Dist: aiohttp>=3; extra == 'docs'
+Requires-Dist: furo; extra == 'docs'
+Requires-Dist: myst-parser; extra == 'docs'
+Requires-Dist: sphinx; extra == 'docs'
+Requires-Dist: sphinx-notfound-page; extra == 'docs'
+Requires-Dist: twisted; extra == 'docs'
+Provides-Extra: tests
+Requires-Dist: coverage[toml]; extra == 'tests'
+Requires-Dist: pytest; extra == 'tests'
+Requires-Dist: pytest-asyncio; extra == 'tests'
+Provides-Extra: twisted
+Requires-Dist: twisted; extra == 'twisted'
+Description-Content-Type: text/markdown
+
+# prometheus-async
+
+<a href="https://prometheus-async.readthedocs.io/en/stable/"><img src="https://img.shields.io/badge/Docs-Read%20The%20Docs-black" alt="Documentation" /></a>
+<a href="https://github.com/hynek/prometheus-async/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-C06524" alt="License: Apache 2.0" /></a>
+<a href="https://pypi.org/project/prometheus-async/"><img src="https://img.shields.io/pypi/v/prometheus-async" alt="PyPI version" /></a>
+<a href="https://pepy.tech/project/prometheus-async"><img src="https://static.pepy.tech/personalized-badge/prometheus-async?period=month&amp;units=international_system&amp;left_color=grey&amp;right_color=blue&amp;left_text=Downloads%20/%20Month" alt="Downloads / Month" /></a>
+
+<!-- teaser-begin -->
+
+*prometheus-async* adds support for asynchronous frameworks to the official [Python client](https://github.com/prometheus/client_python) for the [Prometheus](https://prometheus.io/) metrics and monitoring system.
+
+Currently [*asyncio*](https://docs.python.org/3/library/asyncio.html) and [Twisted](https://twisted.org) are supported.
+
+It works by wrapping the metrics from the official client:
+
+```python
+import asyncio
+
+from aiohttp import web
+from prometheus_client import Histogram
+from prometheus_async.aio import time
+
+REQ_TIME = Histogram("req_time_seconds", "time spent in requests")
+
+@time(REQ_TIME)
+async def req(request):
+      await asyncio.sleep(1)
+      return web.Response(body=b"hello")
+```
+
+
+Even for *synchronous* applications, the metrics exposure methods can be useful since they are more powerful than the one shipped with the official client.
+For that, helper functions have been added that run them in separate threads (*asyncio*-only).
+
+The source code is hosted on [GitHub](https://github.com/hynek/prometheus-async) and the documentation on [Read the Docs](https://prometheus-async.readthedocs.io/).
+
+
+## Credits
+
+*prometheus-async* is written and maintained by [Hynek Schlawack](https://hynek.me/).
+
+The development is kindly supported by my employer [Variomedia AG](https://www.variomedia.de/), *prometheus-async*’s [Tidelift subscribers][TL], and all my amazing [GitHub Sponsors](https://github.com/sponsors/hynek).
+
+
+## *prometheus-async* for Enterprise
+
+Available as part of the [Tidelift Subscription][TL].
+
+The maintainers of *prometheus-async* and thousands of other packages are working with Tidelift to deliver commercial support and maintenance for the open source packages you use to build your applications.
+Save time, reduce risk, and improve code health, while paying the maintainers of the exact packages you use.
+
+[TL]: https://tidelift.com/?utm_source=lifter&utm_medium=referral&utm_campaign=hynek

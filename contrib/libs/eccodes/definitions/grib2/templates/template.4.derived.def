@@ -1,0 +1,8 @@
+# (C) Copyright 2005- ECMWF.
+
+#  Derived forecast
+codetable[1] derivedForecast ('4.7.table',masterDir,localDir) : dump;
+
+#  Number of forecasts in ensemble
+unsigned[1] numberOfForecastsInEnsemble  : dump;
+alias totalNumber=numberOfForecastsInEnsemble;

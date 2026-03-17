@@ -1,0 +1,50 @@
+[
+  {
+    "country_code": "AD",
+    "bank_code": "0001",
+    "primary": true,
+    "bic": "BACAADADXXX",
+    "name": "andbanc Grup Agricol Reig",
+    "short_name": "andbanc Grup Agricol Reig"
+  },
+  {
+    "country_code": "AD",
+    "bank_code": "0003",
+    "primary": true,
+    "bic": "CRDAADADXXX",
+    "name": "Credit Andorra",
+    "short_name": "Credit Andorra"
+  },
+  {
+    "country_code": "AD",
+    "bank_code": "0004",
+    "primary": true,
+    "bic": "BINAADADXXX",
+    "name": "MORA BANC SAU",
+    "short_name": "MORA BANC SAU"
+  },
+  {
+    "country_code": "AD",
+    "bank_code": "0006",
+    "primary": true,
+    "bic": "CASBADADXXX",
+    "name": "Banca Privada d'Andorra",
+    "short_name": "Banca Privada d'Andorra"
+  },
+  {
+    "country_code": "AD",
+    "bank_code": "0007",
+    "primary": true,
+    "bic": "BINAADADXXX",
+    "name": "MoraBanc",
+    "short_name": "MoraBanc"
+  },
+  {
+    "country_code": "AD",
+    "bank_code": "0008",
+    "primary": true,
+    "bic": "BSANADADXXX",
+    "name": "BancSabadell d'Andorra",
+    "short_name": "BancSabadell d'Andorra"
+  }
+]

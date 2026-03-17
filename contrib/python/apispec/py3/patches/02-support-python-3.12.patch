@@ -1,0 +1,10 @@
+--- contrib/python/apispec/py3/apispec/utils.py	(index)
++++ contrib/python/apispec/py3/apispec/utils.py	(working tree)
+@@ -4,6 +4,7 @@ the OpenAPI spec.
+ import re
+ import json
+ 
++import setuptools
+ from distutils import version
+ 
+ from apispec import exceptions

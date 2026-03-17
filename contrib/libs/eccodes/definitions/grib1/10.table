@@ -1,0 +1,4 @@
+# CODE TABLE 10, Spectral data representation mode
+1 1 The complex coefficients Xnm are stored for m>0 as pairs of real numbers
+2 2 Spherical harmonics-complex packing
+3 3 Spherical harmonics ieee packing

@@ -1,0 +1,84 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; Context Navigation{% endblock %}
+
+{% block extrahead %}
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(grp.jQuery);
+    </script>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Context Navigation</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Context Navigation</h1>
+    <div class="g-d-24">
+        <div class="grp-doc-description">
+            <p>As part of the header, <span class="grp-doc-id">#grp-context-navigation</span> wraps elements which provide contextual (page-specific) navigation and interaction possibilities.</p>
+        </div>
+    </div>
+    <div class="g-d-c">
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Breadcrumbs</h1>
+                    <p>The breadcrumbs are defined in a <a href="https://docs.djangoproject.com/en/1.5/ref/templates/builtins/#std:templatetag-block" target="_blank" class="grp-external">block</a> <span class="grp-doc-django">{% templatetag openblock %} block breadcrumbs {% templatetag closeblock %}</span>. They are always written as a plain <span class="grp-doc-dom"><span>ul</span></span> with <span class="grp-doc-dom"><span>li</span></span> containing links and the last <span class="grp-doc-dom"><span>li</span></span> showing the title of the page you are currently dealing with.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} block breadcrumbs {% templatetag closeblock %}
+    <ul>
+        <li><a href="link goes in here">{% trans "Home" %}</a></li>
+        <li><a href="link goes in here">Link</a></li>
+        <li>That's where you are</li>
+    </ul>
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Page-Tools</h1>
+                    <p>The page-tools are a container for contextual interactions. They are currently used with the change-form, defining options for expanding and collapsing all items on a page. They've been introduced as a placeholder for any sort of contextual options which might be needed with future versions of Grappelli.</p> 
+                    <p>Page-Tools are defined in a <a href="https://docs.djangoproject.com/en/1.5/ref/templates/builtins/#std:templatetag-block" target="_blank" class="grp-external">block</a> <span class="grp-doc-django">{% templatetag openblock %} block page-tools {% templatetag closeblock %}</span>. They are always written as a plain <span class="grp-doc-dom"><span>ul</span></span> with <span class="grp-doc-dom"><span>li</span></span> containing links for the interactions. Those might be plain text or icons. Using the latter requires to add <span class="grp-doc-class">.grp-tools</span> to the link. Make sure to use a custom icon fitting the size then.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} block page-tools {% templatetag closeblock %}
+    <ul>
+        <li><a href="link goes in here">Do something with the current page or its elements</a></li>
+        <li><a href="link goes in here" class="grp-tool">Icon</a></li>
+    </ul>
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+    </div>
+{% endblock %}
+

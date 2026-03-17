@@ -1,0 +1,164 @@
+--- contrib/python/ecdsa/ecdsa/test_curves.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_curves.py	(working tree)
+@@ -8,1 +8,1 @@ except ImportError:
+-from .curves import (
++from ecdsa.curves import (
+@@ -16,3 +16,3 @@
+-from .ellipticcurve import CurveFp, PointJacobi, CurveEdTw
+-from . import der
+-from .util import number_to_string
++from ecdsa.ellipticcurve import CurveFp, PointJacobi, CurveEdTw
++from ecdsa import der
++from ecdsa.util import number_to_string
+--- contrib/python/ecdsa/ecdsa/test_der.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_der.py	(working tree)
+@@ -14,3 +14,3 @@ from six import b
+-from ._compat import str_idx_as_int
+-from .curves import NIST256p, NIST224p
+-from .der import (
++from ecdsa._compat import str_idx_as_int
++from ecdsa.curves import NIST256p, NIST224p
++from ecdsa.der import (
+--- contrib/python/ecdsa/ecdsa/test_ecdh.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_ecdh.py	(working tree)
+@@ -12,1 +12,1 @@ try:
+-from .curves import (
++from ecdsa.curves import (
+@@ -20,2 +20,2 @@ from .curves import (
+-from .curves import curves
+-from .ecdh import (
++from ecdsa.curves import curves
++from ecdsa.ecdh import (
+@@ -28,2 +28,2 @@
+-from .keys import SigningKey, VerifyingKey
+-from .ellipticcurve import CurveEdTw
++from ecdsa.keys import SigningKey, VerifyingKey
++from ecdsa.ellipticcurve import CurveEdTw
+--- contrib/python/ecdsa/ecdsa/test_ecdsa.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_ecdsa.py	(working tree)
+@@ -11,1 +11,1 @@ try:
+-from .ecdsa import (
++from ecdsa.ecdsa import (
+--- contrib/python/ecdsa/ecdsa/test_ellipticcurve.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_ellipticcurve.py	(working tree)
+@@ -16,2 +16,2 @@ try:
+-from .numbertheory import inverse_mod
+-from .ellipticcurve import CurveFp, INFINITY, Point, CurveEdTw
++from ecdsa.numbertheory import inverse_mod
++from ecdsa.ellipticcurve import CurveFp, INFINITY, Point, CurveEdTw
+--- contrib/python/ecdsa/ecdsa/test_jacobi.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_jacobi.py	(working tree)
+@@ -17,2 +17,2 @@ import platform
+-from .ellipticcurve import CurveFp, PointJacobi, INFINITY, Point
+-from .ecdsa import (
++from ecdsa.ellipticcurve import CurveFp, PointJacobi, INFINITY, Point
++from ecdsa.ecdsa import (
+@@ -26,2 +26,2 @@ from .ecdsa import (
+-from .numbertheory import inverse_mod
+-from .util import randrange
++from ecdsa.numbertheory import inverse_mod
++from ecdsa.util import randrange
+--- contrib/python/ecdsa/ecdsa/test_keys.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_keys.py	(working tree)
+@@ -16,1 +16,1 @@ import array
+-from .keys import (
++from ecdsa.keys import (
+@@ -18,1 +18,1 @@ import array
+-from .der import (
++from ecdsa.der import (
+@@ -24,1 +24,1 @@ import array
+-from .util import (
++from ecdsa.util import (
+@@ -32,3 +32,3 @@ from .util import (
+-from .curves import NIST256p, Curve, BRAINPOOLP160r1, Ed25519, Ed448
+-from .ellipticcurve import Point, PointJacobi, CurveFp, INFINITY
+-from .ecdsa import generator_brainpoolp160r1
++from ecdsa.curves import NIST256p, Curve, BRAINPOOLP160r1, Ed25519, Ed448
++from ecdsa.ellipticcurve import Point, PointJacobi, CurveFp, INFINITY
++from ecdsa.ecdsa import generator_brainpoolp160r1
+--- contrib/python/ecdsa/ecdsa/test_malformed_sigs.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_malformed_sigs.py	(working tree)
+@@ -30,6 +30,6 @@ import sys
+-from .keys import SigningKey
+-from .keys import BadSignatureError
+-from .util import sigencode_der, sigencode_string
+-from .util import sigdecode_der, sigdecode_string
+-from .curves import curves, SECP112r2, SECP128r1
+-from .der import (
++from ecdsa.keys import SigningKey
++from ecdsa.keys import BadSignatureError
++from ecdsa.util import sigencode_der, sigencode_string
++from ecdsa.util import sigdecode_der, sigdecode_string
++from ecdsa.curves import curves, SECP112r2, SECP128r1
++from ecdsa.der import (
+@@ -43,1 +43,1 @@ try:
+-from .ellipticcurve import CurveEdTw
++from ecdsa.ellipticcurve import CurveEdTw
+--- contrib/python/ecdsa/ecdsa/test_numbertheory.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_numbertheory.py	(working tree)
+@@ -18,1 +18,1 @@ try:
+-from .numbertheory import (
++from ecdsa.numbertheory import (
+--- contrib/python/ecdsa/ecdsa/test_pyecdsa.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_pyecdsa.py	(working tree)
+@@ -21,4 +21,4 @@ from hypothesis import given
+-from .keys import SigningKey, VerifyingKey
+-from .keys import BadSignatureError, MalformedPointError, BadDigestError
+-from . import util
+-from .util import (
++from ecdsa.keys import SigningKey, VerifyingKey
++from ecdsa.keys import BadSignatureError, MalformedPointError, BadDigestError
++from ecdsa import util
++from ecdsa.util import (
+@@ -29,4 +29,4 @@ from hypothesis import given
+-from .util import sigdecode_der, sigdecode_strings, sigdecode_string
+-from .util import number_to_string, encoded_oid_ecPublicKey, MalformedSignature
+-from .curves import Curve, UnknownCurveError
+-from .curves import (
++from ecdsa.util import sigdecode_der, sigdecode_strings, sigdecode_string
++from ecdsa.util import number_to_string, encoded_oid_ecPublicKey, MalformedSignature
++from ecdsa.curves import Curve, UnknownCurveError
++from ecdsa.curves import (
+@@ -50,1 +50,1 @@ from .curves import (
+-from .ecdsa import (
++from ecdsa.ecdsa import (
+@@ -56,4 +56,4 @@ from .curves import (
+-from .ellipticcurve import Point
+-from . import der
+-from . import rfc6979
+-from . import ecdsa
++from ecdsa.ellipticcurve import Point
++from ecdsa import der
++from ecdsa import rfc6979
++from ecdsa import ecdsa
+--- contrib/python/ecdsa/ecdsa/test_rw_lock.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_rw_lock.py	(working tree)
+@@ -12,1 +12,1 @@ except ImportError:
+-from ._rwlock import RWLock
++from ecdsa._rwlock import RWLock
+--- contrib/python/ecdsa/ecdsa/test_eddsa.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_eddsa.py	(working tree)
+@@ -11,2 +11,2 @@ except ImportError:
+-from .ellipticcurve import PointEdwards, INFINITY, CurveEdTw
+-from .eddsa import (
++from ecdsa.ellipticcurve import PointEdwards, INFINITY, CurveEdTw
++from ecdsa.eddsa import (
+@@ -20,3 +20,3 @@ from .eddsa import (
+-from .ecdsa import generator_256, curve_256
+-from .errors import MalformedPointError
+-from ._compat import a2b_hex, compat26_str
++from ecdsa.ecdsa import generator_256, curve_256
++from ecdsa.errors import MalformedPointError
++from ecdsa._compat import a2b_hex, compat26_str
+--- contrib/python/ecdsa/ecdsa/test_sha3.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_sha3.py	(working tree)
+@@ -19,2 +19,2 @@ except ImportError:
+-from ._sha3 import shake_256
+-from ._compat import bytes_to_int, int_to_bytes
++from ecdsa._sha3 import shake_256
++from ecdsa._compat import bytes_to_int, int_to_bytes
+--- contrib/python/ecdsa/ecdsa/test_ecdsa.py	(index)
++++ contrib/python/ecdsa/ecdsa/test_ecdsa.py	(working tree)
+@@ -30 +30 @@ from ecdsa.ecdsa import (
+-from .ellipticcurve import Point
++from ecdsa.ellipticcurve import Point

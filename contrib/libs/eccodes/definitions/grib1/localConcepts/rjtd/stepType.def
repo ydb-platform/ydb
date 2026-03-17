@@ -1,0 +1,24 @@
+# stepType for JMA
+# In case of a repeated entry:
+#  set uses the FIRST one
+#  get returns the LAST match
+
+"instant" = {timeRangeIndicator=1;}
+"instant" = {timeRangeIndicator=10;}
+"instant" = {timeRangeIndicator=0;}
+"avg"     = {timeRangeIndicator=3;}
+"avgfc"   = {timeRangeIndicator=113;}
+"avgd"    = {timeRangeIndicator=113;}
+"accum"   = {timeRangeIndicator=2;}
+"accum"   = {timeRangeIndicator=4;}
+"diff"    = {timeRangeIndicator=5;}
+"avgua"   = {timeRangeIndicator=123;}
+"avgia"   = {timeRangeIndicator=124;}
+
+# Specific to JMA
+"avgas"   = {timeRangeIndicator=128;}
+"avgad"   = {timeRangeIndicator=130;}
+
+"varas"   = {timeRangeIndicator=129;}
+"varad"   = {timeRangeIndicator=131;}
+"varins"  = {timeRangeIndicator=132;}

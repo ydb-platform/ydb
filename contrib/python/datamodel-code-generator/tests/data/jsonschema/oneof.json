@@ -1,0 +1,20 @@
+{
+    "properties": {
+        "item": {
+            "properties": {
+                "timeout": {
+                    "oneOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "integer"
+                        }
+                    ]
+                }
+            },
+            "type": "object"
+        }
+    }
+}
+

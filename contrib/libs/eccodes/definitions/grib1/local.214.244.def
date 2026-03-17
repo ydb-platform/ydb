@@ -1,0 +1,265 @@
+# (C) Copyright 2005- ECMWF.
+
+#
+# # SREPS Short-Range EPS information
+#
+# Last update: 20070223
+#
+# Compatibility with MARS
+#
+#localDefinitionNumber
+#Class
+#Type
+#Stream
+#experimentVersionNumber
+#Number
+#Total
+#
+#************_EXPERIMENT_************
+#Experiment_Identifier_1
+#Experiment_Identifier_2
+#Sub-Experiment_Identifier_1
+#Sub-Experiment_Identifier_2
+#
+#************_PRODUCT_***************
+#Original_CodeTable_2_Version_Number
+#Original_Parameter_Iden_(CodeTable2)
+#Original_Parameter_Identifier_1
+#Original_Parameter_Identifier_2
+#Product_Identifier_1
+#Product_Identifier_2
+#
+# Thresholds and Distributions
+#
+#Threshold_[Distribution]_(0=n,1=yes)
+#Threshold_[Distribution]_Units
+#At_least__[Distribut._Proportion_Of]
+#Less_Than_[To_Overall_Distribution]
+#
+#zeroForFutureProducts
+#
+#************_ENSEMBLE_**************
+#Number_Combination_Ensembles_(1=no)
+#Show_Combination_E._[2]_(0=no,1=yes)
+#Show_Combination_E._[3]_(0=no,1=yes)
+#Show_Combination_E._[4]_(0=no,1=yes)
+#zeroForFutureCombinations
+#Total_Number_Members_Used
+#Total_Number_Members_Possible
+#Total_Number_Members_Missing
+#Ensemble_Combination_Number
+#Ensemble_Identifier_1
+#Ensemble_Identifier_2
+#Local_Number_Members_Used
+#Local_Number_Members_Possible
+#Local_Number_Members_Missing
+#
+#listMembersUsed                         -       LIST    -       Local_Number_Members_Used
+#Used_Model_LBC
+#endlistMembersUsed                      -       ENDLIST -       listMembersUsed
+#
+#listMembersMissing                      -       LIST    -       Local_Number_Members_Missing
+#Missing_Model_LBC
+#endlistMembersMissing                   -       ENDLIST -       listMembersMissing
+#
+# More than one Combination
+#
+#listEnsembleCombination2                -       LIST    -       Show_Combination_E._[2]_(0=no,1=yes)
+#Ensemble_Combinat._Number_(0=no)_[2]
+#Ensemble_Identifier_1_[2]
+#Ensemble_Identifier_2_[2]
+#Local_Number_Members_Used_[2]
+#Local_Number_Members_Possible_[2]
+#Local_Number_Members_Missing_[2]
+#Date_[2]
+#Hour_[2]
+#Minute_[2]
+#Time_Range_One_[2]
+#Time_Range_Two_[2]
+#endlistEnsembleCombination2             -       ENDLIST -       listEnsembleCombination2
+#
+#listMembersUsed_[2]                     -       LIST    -       Local_Number_Members_Used_[2]
+#Used_Model_LBC_[2]
+#endlistMembersUsed_[2]                  -       ENDLIST -       listMembersUsed_[2]
+#
+#listMembersMissing_[2]                  -       LIST    -       Local_Number_Members_Missing_[2]
+#Missing_Model_LBC_[2]
+#endlistMembersMissing_[2]               -       ENDLIST -       listMembersMissing_[2]
+#
+#listEnsembleCombination3                -       LIST    -       Show_Combination_E._[3]_(0=no,1=yes)
+#Ensemble_Combinat._Number_(0=no)_[3]
+#Ensemble_Identifier_1_[3]
+#Ensemble_Identifier_1_[3]
+#Local_Number_Members_Used_[3]
+#Local_Number_Members_Possible_[3]
+#Local_Number_Members_Missing_[3]
+#Date_[3]
+#Hour_[3]
+#Minute_[3]
+#Time_Range_One_[3]
+#Time_Range_Two_[3]
+#endlistEnsembleCombination3             -       ENDLIST -       listEnsembleCombination3
+#
+#listMembersUsed_[3]                     -       LIST    -       Local_Number_Members_Used_[3]
+#Used_Model_LBC_[3]                      -       A4
+#endlistMembersUsed_[3]                  -       ENDLIST -       listMembersUsed_[3]
+#
+#listMembersMissing_[3]                  -       LIST    -       Local_Number_Members_Missing_[3]
+#Missing_Model_LBC_[3]                   -       A4
+#endlistMembersMissing_[3]               -       ENDLIST -       listMembersMissing_[3]
+#
+#listEnsembleCombination4                -       LIST    -       Show_Combination_E._[4]_(0=no,1=yes)
+#Ensemble_Combinat._Number_(0=no)_[4]
+#Ensemble_Identifier_1_[4]
+#Ensemble_Identifier_2_[4]
+#Local_Number_Members_Used_[4]
+#Local_Number_Members_Possible_[4]
+#Local_Number_Members_Missing_[4]
+#Date_[4]
+#Hour_[4]
+#Minute_[4]
+#Time_Range_One_[4]
+#Time_Range_Two_[4]
+#endlistEnsembleCombination4             -       ENDLIST -       listEnsembleCombination4
+#
+#listMembersUsed_[4]                     -       LIST    -       Local_Number_Members_Used_[4]
+#Used_Model_LBC_[4]
+#endlistMembersUsed_[4]                  -       ENDLIST -       listMembersUsed_[4]
+#
+#listMembersMissing_[4]                  -       LIST    -       Local_Number_Members_Missing_[4]
+#Missing_Model_LBC_[4]
+#endlistMembersMissing_[4]               -       ENDLIST -       listMembersMissing_[4]
+#
+# EXTRA INFORMATION like 191
+#*********_EXTRA_DATA_***************
+#Extra_Data_FreeFormat_(0=none)
+#Data_Descriptor_Bytes                   -       BYTES   -       Extra_Data_FreeFormat_(0=none)
+#padToAMultipleOf80Bytes                 -       PADFROM n/a
+#
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] perturbationNumber : dump;
+alias number = perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble  : dump;
+
+ascii[4]    '************_EXPERIMENT_************';
+ascii[8]    'Experiment_Identifier';
+ascii[8]    'Sub-Experiment_Identifier';
+
+ascii[4]    '************_PRODUCT_***************';
+unsigned[1]  Original_CodeTable_2_Version_Number  : dump;
+unsigned[1]  Original_Parameter_Iden_CodeTable2   : dump;
+ascii[8]    'Original_Parameter_Identifier';
+ascii[8]    'Product_Identifier';
+
+# Thresholds and Distributions
+unsigned[2]  Threshold_Or_Distribution_0_no_1_yes  : dump;
+ascii[4]    'Threshold_Or_Distribution_Units';
+unsigned[4]  At_least__Or_Distribut_Proportion_Of  : dump;
+unsigned[4]  Less_Than_Or_To_Overall_Distribution  : dump;
+
+pad padding_loc244_1(40);
+
+ascii[4]    '************_ENSEMBLE_**************';
+unsigned[2]  Number_Combination_Ensembles_1_none  : dump;
+unsigned[1]  Show_Combination_Ensem_E2_0_no_1_yes  : dump;
+unsigned[1]  Show_Combination_Ensem_E3_0_no_1_yes  : dump;
+unsigned[1]  Show_Combination_Ensem_E4_0_no_1_yes  : dump;
+
+pad padding_loc244_2(7);
+
+unsigned[2]  Total_Number_Members_Used  : dump;
+unsigned[2]  Total_Number_Members_Possible : dump;
+unsigned[2]  Total_Number_Members_Missing : dump;
+unsigned[2]  Ensemble_Combination_Number : dump;
+ascii[8]    'Ensemble_Identifier';
+unsigned[2]  Local_Number_Members_Used : dump;
+unsigned[2]  Local_Number_Members_Possible : dump;
+unsigned[2]  Local_Number_Members_Missing : dump;
+
+listMembersUsed list(Local_Number_Members_Used){
+ ascii[4]    'Used_Model_LBC';
+}
+
+listMembersMissing list(Local_Number_Members_Missing){
+ ascii[4]    'Missing_Model_LBC';
+}
+
+#
+# More than one Combination
+#
+
+if (Show_Combination_Ensem_E2_0_no_1_yes == 1){
+ unsigned[2]  Ensemble_Combinat_Number_0_none_E2 : dump;
+ ascii[8]    'Ensemble_Identifier_E2';
+ unsigned[2]  Local_Number_Members_Used_E2 : dump;
+ unsigned[2]  Local_Number_Members_Possible_E2 : dump;
+ unsigned[2]  Local_Number_Members_Missing_E2 : dump;
+ unsigned[3]  Date_E2   : dump;
+ unsigned[1]  Hour_E2   : dump;
+ unsigned[1]  Minute_E2   : dump;
+ unsigned[2]  Time_Range_One_E2  : dump;
+ unsigned[2]  Time_Range_Two_E2   : dump;
+
+ listMembersUsed2 list(Local_Number_Members_Used_E2){
+  ascii[4]    'Used_Model_LBC_E2';
+ }
+
+ listMembersMissing2 list(Local_Number_Members_Missing_E2){
+  ascii[4]    'Missing_Model_LBC_E2';
+ }
+}
+
+if (Show_Combination_Ensem_E3_0_no_1_yes == 1){
+ unsigned[2]  Ensemble_Combinat_Number_0_none_E3 : dump;
+ ascii[8]    'Ensemble_Identifier_E3';
+ unsigned[2]  Local_Number_Members_Used_E3   : dump;
+ unsigned[2]  Local_Number_Members_Possible_E3   : dump;
+ unsigned[2]  Local_Number_Members_Missing_E3   : dump;
+ unsigned[3]  Date_E3   : dump;
+ unsigned[1]  Hour_E3   : dump;
+ unsigned[1]  Minute_E3   : dump;
+ unsigned[2]  Time_Range_One_E3   : dump;
+ unsigned[2]  Time_Range_Two_E3   : dump;
+
+ listMembersUsed3 list(Local_Number_Members_Used_E3){
+  ascii[4]    'Used_Model_LBC_E3';
+ }
+
+ listMembersMissing3 list(Local_Number_Members_Missing_E3){
+  ascii[4]    'Missing_Model_LBC_E3';
+ }
+}
+
+if (Show_Combination_Ensem_E4_0_no_1_yes == 1){
+ unsigned[2]  Ensemble_Combinat_Number_0_none_E4  : dump;
+ ascii[8]    'Ensemble_Identifier_E4';
+ unsigned[2]  Local_Number_Members_Used_E4   : dump;
+ unsigned[2]  Local_Number_Members_Possible_E4   : dump;
+ unsigned[2]  Local_Number_Members_Missing_E4   : dump;
+ unsigned[3]  Date_E4   : dump;
+ unsigned[1]  Hour_E4   : dump;
+ unsigned[1]  Minute_E4   : dump;
+ unsigned[2]  Time_Range_One_E4  : dump;
+ unsigned[2]  Time_Range_Two_E4   : dump;
+
+ listMembersUsed4 list(Local_Number_Members_Used_E4){
+  ascii[4]    'Used_Model_LBC_E4';
+ }
+
+ listMembersMissing4 list(Local_Number_Members_Missing_E4){
+  ascii[4]    'Missing_Model_LBC_E4';
+ }
+}
+
+#
+# EXTRA INFORMATION like 191
+#
+ascii[4]    '*********_EXTRA_DATA_***************';
+unsigned[2]  Extra_Data_FreeFormat_0_none   : dump;
+position offsetFreeFormData;
+unsigned[1] freeFormData[Extra_Data_FreeFormat_0_none]  : dump;
+
+padtomultiple padding_loc244_3(offsetSection1,80);

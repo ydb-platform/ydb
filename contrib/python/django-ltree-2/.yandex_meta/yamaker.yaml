@@ -1,0 +1,2 @@
+requirements:
+  - psycopg: contrib/python/psycopg2

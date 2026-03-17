@@ -1,0 +1,7 @@
+--- a/src/decoders/dng.cpp
++++ a/src/decoders/dng.cpp
+@@ -238,1 +238,3 @@ void CLASS lossy_dng_load_raw()
+-    jpeg_read_header(&cinfo, TRUE);
++    int rc = jpeg_read_header(&cinfo, TRUE);
++    if (rc != 1)
++      throw LIBRAW_EXCEPTION_DECODE_JPEG;

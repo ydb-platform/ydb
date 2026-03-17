@@ -1,0 +1,39 @@
+{% for decorator in decorators -%}
+{{ decorator }}
+{% endfor -%}
+class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comment }}{% endif %}
+{%- if description %}
+    """
+    {{ description | indent(4) }}
+    """
+{%- endif %}
+{%- if not fields and not description %}
+    pass
+{%- endif %}
+{%- if config %}
+{%- filter indent(4) %}
+{% include 'Config.jinja2' %}
+{%- endfilter %}
+{%- endif %}
+{%- for field in fields -%}
+    {%- if not field.annotated and field.field %}
+    {{ field.name }}: {{ field.type_hint }} = {{ field.field }}
+    {%- else %}
+    {%- if field.annotated %}
+    {{ field.name }}: {{ field.annotated }}
+    {%- else %}
+    {{ field.name }}: {{ field.type_hint }}
+    {%- endif %}
+    {%- if not (field.required or (field.represented_default == 'None' and field.strip_default_none))
+            %} = {{ field.represented_default }}
+    {%- endif -%}
+    {%- endif %}
+    {%- if field.docstring %}
+    """
+    {{ field.docstring | indent(4) }}
+    """
+    {%- endif %}
+{%- for method in methods -%}
+    {{ method }}
+{%- endfor -%}
+{%- endfor -%}

@@ -1,0 +1,9 @@
+# (C) Copyright 2005- ECMWF.
+
+constant domain  = "g";
+constant levtype = "sfc";
+constant param   = "128.128";
+
+alias mars.param   = param;
+alias mars.levtype = levtype;
+#alias mars.domain  = domain;

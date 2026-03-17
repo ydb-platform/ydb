@@ -1,0 +1,26 @@
+# assert(local=1)
+meta verificationDate         g1verificationdate(dataDate, dataTime, endStep) : read_only;
+meta monthlyVerificationDate  g1monthlydate(verificationDate) : dump,no_copy;
+alias mars.date             = monthlyVerificationDate;
+
+meta verificationYear          evaluate(verificationDate/10000);
+meta monthlyVerificationYear   evaluate(monthlyVerificationDate/10000);
+meta verificationMonth         evaluate( (verificationDate/100)%100 );
+meta monthlyVerificationMonth  evaluate( (monthlyVerificationDate/100)%100 );
+
+alias monthlyVerificationTime = validityTime;
+
+#
+# See GRIB-422, GRIB-497, GRIB-766, GRIB-833
+#
+if (class is "em" || class is "e2" || class is "ea" || class is "ep" ||
+    class is "rd" || class is "mc" || class is "et" || class is "l5")
+{
+   alias mars.step = endStep;
+}
+else
+{
+   alias mars.step = startStep;
+}
+
+alias mars.number=perturbationNumber;

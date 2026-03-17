@@ -1,0 +1,8 @@
+--- contrib/python/lazy/py3/lazy/tests/test_lazy.py	(index)
++++ contrib/python/lazy/py3/lazy/tests/test_lazy.py	(working tree)
+@@ -155,1 +155,1 @@ class LazyTests(TestCase):
+-        self.assertEqual(Foo.foo.__module__, "lazy.tests.test_lazy")
++        self.assertEqual(Foo.foo.__module__, "__tests__.test_lazy")
+@@ -159,1 +159,1 @@ class LazyTests(TestCase):
+-        self.assertEqual(Foo.bar.__module__, "lazy.tests.test_lazy")
++        self.assertEqual(Foo.bar.__module__, "__tests__.test_lazy")

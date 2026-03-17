@@ -1,0 +1,17 @@
+/* -- Import Basic Documentstructure CSS ---------- */
+
+@import url('content_documentstructure.css');
+
+/* -- Language Specific Settings ---------- */
+
+body#tinymce h2:before          { content: "Nagłówek 1"; }
+body#tinymce h2:before          { content: "Nagłówek 2"; }
+body#tinymce h3:before          { content: "Nagłówek 3"; }
+body#tinymce h4:before          { content: "Nagłówek 4"; }
+body#tinymce ol:before          { content: "Lista numerowana"; }
+body#tinymce ul:before          { content: "Lista nienumerowana"; }
+body#tinymce p:before           { content: "Paragraf"; }
+body#tinymce code:before        { content: "Kod"; }
+body#tinymce pre:before         { content: "Preformatowane"; }
+body#tinymce blockquote:before  { content: "Cytat"; }
+body#tinymce div:before         { content: "Blok"; }

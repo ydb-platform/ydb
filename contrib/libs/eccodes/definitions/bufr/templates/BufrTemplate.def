@@ -1,0 +1,64 @@
+"synopLand" = { unexpandedDescriptors = 307080; }
+"synopLandFromCoastalAndIslandStations" = { unexpandedDescriptors = 307079; }
+"synopMobil" = { unexpandedDescriptors = 307090; }
+"surfaceObservationOneHour" = { unexpandedDescriptors = 307091; }
+"synopOneHour" = { unexpandedDescriptors = 307096; }
+"snow" = { unexpandedDescriptors = 307101; }
+"pilotPressureCoordinate" = { unexpandedDescriptors = 309050; }
+"pilotHeightCoordinate" = { unexpandedDescriptors = 309051; }
+"temp" = { unexpandedDescriptors = 309052; }
+"tempDrop" = { unexpandedDescriptors = 309053; }
+"climat" = { unexpandedDescriptors = 307073; }
+"mooredBuoys" = { unexpandedDescriptors = 315008; }
+"driftingBuoys" = { unexpandedDescriptors = 315009; }
+"subSurfaceProfilingFloats" = { unexpandedDescriptors = 315003; }
+"XbtTemperatureProfile" = { unexpandedDescriptors = 315004; }
+"Trackob" = { unexpandedDescriptors = 308010; }
+"AtovsHirs" = { unexpandedDescriptors = 310008 ; }
+"AtovsAmsuA" = { unexpandedDescriptors = 310009 ; }
+"AtovsAmsuB" = { unexpandedDescriptors = 310010 ; }
+"AtovsAmsuB" = { unexpandedDescriptors = 310010 ; }
+"AtovsFieldOfView" = { unexpandedDescriptors = 310011 ; }
+"AtovsChannel" = { unexpandedDescriptors = 310012 ; }
+"AtovsChannel" = { unexpandedDescriptors = 310012 ; }
+"Avhrr" = { unexpandedDescriptors = 310013 ; }
+"MeteosatRadiance" = { unexpandedDescriptors = 310015 ; }
+"MsgRadiance" = { unexpandedDescriptors = 310016 ; }
+"SsmisTemperature" = { unexpandedDescriptors = 310025 ; }
+"SatelliteRadioOccultation" = { unexpandedDescriptors = 310026 ; }
+"MipasOrGomos" = { unexpandedDescriptors = 310030 ; }
+"Cris" = { unexpandedDescriptors = 310060 ; }
+"Atms" = { unexpandedDescriptors = 310061 ; }
+"Viirs" = { unexpandedDescriptors = 310062 ; }
+"seaSurfaceTemperature" = { unexpandedDescriptors = 310063 ; }
+"aerosolOpticalThickness" = { unexpandedDescriptors = 310064 ; }
+"OmpsNadirProfile" = { unexpandedDescriptors = 310065 ; }
+"OmpsTotalColumn" = { unexpandedDescriptors = 310066 ; }
+"OmpsTotalColumn" = { unexpandedDescriptors = 310065 ; }
+"amdar" = { unexpandedDescriptors = 311005 ; }
+"WigosAmdar" = { unexpandedDescriptors = 311010 ; }
+"aircraftReport" = { unexpandedDescriptors = 311001 ; }
+"aircraftAscentDescentProfile" = { unexpandedDescriptors = 311008 ; }
+"aircraftAscentDescentProfile" = { unexpandedDescriptors = 311009 ; }
+"aircraftReportWithSecondsAndPressure" = { unexpandedDescriptors = [301051, 4006,7002, 10004,12001, 11001, 11002, 11031, 11032, 11033, 20041] ; }
+"Iagos" = { unexpandedDescriptors = 311011 ; }
+"Hirs" = { unexpandedDescriptors = 312014 ; }
+"microwaveSoundingUnit" = { unexpandedDescriptors = 312016 ; }
+"stratosphericSoundingUnit" = { unexpandedDescriptors = 312018 ; }
+"waveScatterometer" = { unexpandedDescriptors = 312020 ; }
+"windScatterometer" = { unexpandedDescriptors = 312021 ; }
+"radarAltimeter" = { unexpandedDescriptors = 312022 ; }
+"waveScatterometerEnhanced" = { unexpandedDescriptors = 312024 ; }
+"Quickscat" = { unexpandedDescriptors = 312026 ; }
+"SeawindsQuickscat" = { unexpandedDescriptors = 312028 ; }
+"AatsrSeaSurfaceTemperature" = { unexpandedDescriptors = 312045 ; }
+"Meris" = { unexpandedDescriptors = 312050 ; }
+"oceanCrossSpectraWvs" = { unexpandedDescriptors = 312051 ; }
+"radarAltimeter2" = { unexpandedDescriptors = 312052 ; }
+"oceanWaveSpectra" = { unexpandedDescriptors = 312053 ; }
+"AscatL1b" = { unexpandedDescriptors = 312058 ; }
+"AscatL1bL2" = { unexpandedDescriptors = 312061 ; }
+"Smos" = { unexpandedDescriptors = 312070 ; }
+"Siral" = { unexpandedDescriptors = 312071 ; }
+"IasiL1c" = { unexpandedDescriptors = 340007 ; }
+"SaralAltika" = { unexpandedDescriptors = 340011 ; }

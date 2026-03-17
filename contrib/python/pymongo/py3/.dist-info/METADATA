@@ -1,0 +1,281 @@
+Metadata-Version: 2.4
+Name: pymongo
+Version: 4.16.0
+Summary: PyMongo - the Official MongoDB Python driver
+Project-URL: Homepage, https://www.mongodb.org
+Project-URL: Documentation, https://www.mongodb.com/docs/languages/python/pymongo-driver/current/
+Project-URL: Source, https://github.com/mongodb/mongo-python-driver
+Project-URL: Tracker, https://jira.mongodb.org/projects/PYTHON/issues
+Author: The MongoDB Python Team
+License-Expression: Apache-2.0
+License-File: LICENSE
+Keywords: bson,gridfs,mongo,mongodb,pymongo
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Database
+Classifier: Typing :: Typed
+Requires-Python: >=3.9
+Requires-Dist: dnspython<3.0.0,>=2.6.1
+Provides-Extra: aws
+Requires-Dist: pymongo-auth-aws<2.0.0,>=1.1.0; extra == 'aws'
+Provides-Extra: docs
+Requires-Dist: furo==2025.12.19; extra == 'docs'
+Requires-Dist: readthedocs-sphinx-search~=0.3; extra == 'docs'
+Requires-Dist: sphinx-autobuild>=2020.9.1; extra == 'docs'
+Requires-Dist: sphinx-rtd-theme<4,>=2; extra == 'docs'
+Requires-Dist: sphinx<9,>=5.3; extra == 'docs'
+Requires-Dist: sphinxcontrib-shellcheck<2,>=1; extra == 'docs'
+Provides-Extra: encryption
+Requires-Dist: certifi>=2023.7.22; (os_name == 'nt' or sys_platform == 'darwin') and extra == 'encryption'
+Requires-Dist: pymongo-auth-aws<2.0.0,>=1.1.0; extra == 'encryption'
+Requires-Dist: pymongocrypt<2.0.0,>=1.13.0; extra == 'encryption'
+Provides-Extra: gssapi
+Requires-Dist: pykerberos>=1.2.4; (os_name != 'nt') and extra == 'gssapi'
+Requires-Dist: winkerberos>=0.5.0; (os_name == 'nt') and extra == 'gssapi'
+Provides-Extra: ocsp
+Requires-Dist: certifi>=2023.7.22; (os_name == 'nt' or sys_platform == 'darwin') and extra == 'ocsp'
+Requires-Dist: cryptography>=42.0.0; extra == 'ocsp'
+Requires-Dist: pyopenssl>=23.2.0; extra == 'ocsp'
+Requires-Dist: requests<3.0,>=2.23.0; extra == 'ocsp'
+Requires-Dist: service-identity>=23.1.0; extra == 'ocsp'
+Provides-Extra: snappy
+Requires-Dist: python-snappy>=0.6.0; extra == 'snappy'
+Provides-Extra: test
+Requires-Dist: importlib-metadata>=7.0; (python_version < '3.13') and extra == 'test'
+Requires-Dist: pytest-asyncio>=0.24.0; extra == 'test'
+Requires-Dist: pytest>=8.2; extra == 'test'
+Provides-Extra: zstd
+Requires-Dist: backports-zstd>=1.0.0; (python_version < '3.14') and extra == 'zstd'
+Description-Content-Type: text/markdown
+
+# PyMongo
+
+[![PyPI Version](https://img.shields.io/pypi/v/pymongo)](https://pypi.org/project/pymongo)
+[![Python Versions](https://img.shields.io/pypi/pyversions/pymongo)](https://pypi.org/project/pymongo)
+[![Monthly Downloads](https://static.pepy.tech/badge/pymongo/month)](https://pepy.tech/project/pymongo)
+[![API Documentation Status](https://readthedocs.org/projects/pymongo/badge/?version=stable)](http://pymongo.readthedocs.io/en/stable/api?badge=stable)
+
+## About
+
+The PyMongo distribution contains tools for interacting with MongoDB
+database from Python. The `bson` package is an implementation of the
+[BSON format](http://bsonspec.org) for Python. The `pymongo` package is
+a native Python driver for MongoDB, offering both synchronous and asynchronous APIs. The `gridfs` package is a
+[gridfs](https://github.com/mongodb/specifications/blob/master/source/gridfs/gridfs-spec.md/)
+implementation on top of `pymongo`.
+
+PyMongo supports MongoDB 4.0, 4.2, 4.4, 5.0, 6.0, 7.0, and 8.0. PyMongo follows [semantic versioning](https://semver.org/spec/v2.0.0.html) for its releases.
+
+## Documentation
+
+Documentation is available at
+[mongodb.com](https://www.mongodb.com/docs/languages/python/pymongo-driver/current/).
+
+[API documentation](https://pymongo.readthedocs.io/en/stable/api/) and the [full changelog](https://pymongo.readthedocs.io/en/stable/changelog.html) for each release is available at [readthedocs.io](https://pymongo.readthedocs.io/en/stable/index.html).
+
+## Support / Feedback
+
+For issues with, questions about, or feedback for PyMongo, please look
+into our [support channels](https://support.mongodb.com/welcome). Please
+do not email any of the PyMongo developers directly with issues or
+questions - you're more likely to get an answer on
+[StackOverflow](https://stackoverflow.com/questions/tagged/mongodb)
+(using a "mongodb" tag).
+
+## Bugs / Feature Requests
+
+Think you've found a bug? Want to see a new feature in PyMongo? Please
+open a case in our issue management tool, JIRA:
+
+-   [Create an account and login](https://jira.mongodb.org).
+-   Navigate to [the PYTHON
+    project](https://jira.mongodb.org/browse/PYTHON).
+-   Click **Create Issue** - Please provide as much information as
+    possible about the issue type and how to reproduce it.
+
+Bug reports in JIRA for all driver projects (i.e. PYTHON, CSHARP, JAVA)
+and the Core Server (i.e. SERVER) project are **public**.
+
+### How To Ask For Help
+
+Please include all of the following information when opening an issue:
+
+-   Detailed steps to reproduce the problem, including full traceback,
+    if possible.
+
+-   The exact python version used, with patch level:
+
+```bash
+python -c "import sys; print(sys.version)"
+```
+
+-   The exact version of PyMongo used, with patch level:
+
+```bash
+python -c "import pymongo; print(pymongo.version); print(pymongo.has_c())"
+```
+
+-   The operating system and version (e.g. Windows 7, OSX 10.8, ...)
+
+-   Web framework or asynchronous network library used, if any, with
+    version (e.g. Django 1.7, mod_wsgi 4.3.0, gevent 1.0.1, Tornado
+    4.0.2, ...)
+
+### Security Vulnerabilities
+
+If you've identified a security vulnerability in a driver or any other
+MongoDB project, please report it according to the [instructions
+here](https://www.mongodb.com/docs/manual/tutorial/create-a-vulnerability-report/).
+
+## Installation
+
+PyMongo can be installed with [pip](http://pypi.python.org/pypi/pip):
+
+```bash
+python -m pip install pymongo
+```
+
+You can also download the project source and do:
+
+```bash
+pip install .
+```
+
+Do **not** install the "bson" package from pypi. PyMongo comes with
+its own bson package; running "pip install bson" installs a third-party
+package that is incompatible with PyMongo.
+
+## Dependencies
+
+PyMongo supports CPython 3.9+ and PyPy3.9+.
+
+Required dependencies:
+
+Support for `mongodb+srv://` URIs requires [dnspython](https://pypi.python.org/pypi/dnspython)
+
+Optional dependencies:
+
+GSSAPI authentication requires
+[pykerberos](https://pypi.python.org/pypi/pykerberos) on Unix or
+[WinKerberos](https://pypi.python.org/pypi/winkerberos) on Windows. The
+correct dependency can be installed automatically along with PyMongo:
+
+```bash
+python -m pip install "pymongo[gssapi]"
+```
+
+MONGODB-AWS authentication requires
+[pymongo-auth-aws](https://pypi.org/project/pymongo-auth-aws/):
+
+```bash
+python -m pip install "pymongo[aws]"
+```
+
+OCSP (Online Certificate Status Protocol) requires
+[PyOpenSSL](https://pypi.org/project/pyOpenSSL/),
+[requests](https://pypi.org/project/requests/),
+[service_identity](https://pypi.org/project/service_identity/) and may
+require [certifi](https://pypi.python.org/pypi/certifi):
+
+```bash
+python -m pip install "pymongo[ocsp]"
+```
+
+Wire protocol compression with snappy requires
+[python-snappy](https://pypi.org/project/python-snappy):
+
+```bash
+python -m pip install "pymongo[snappy]"
+```
+
+Wire protocol compression with zstandard requires
+[backports.zstd](https://pypi.org/project/backports.zstd)
+when used with Python versions before 3.14:
+
+```bash
+python -m pip install "pymongo[zstd]"
+```
+
+Client-Side Field Level Encryption requires
+[pymongocrypt](https://pypi.org/project/pymongocrypt/) and
+[pymongo-auth-aws](https://pypi.org/project/pymongo-auth-aws/):
+
+```bash
+python -m pip install "pymongo[encryption]"
+```
+You can install all dependencies automatically with the following
+command:
+
+```bash
+python -m pip install "pymongo[gssapi,aws,ocsp,snappy,zstd,encryption]"
+```
+
+## Examples
+
+Here's a basic example (for more see the *examples* section of the
+docs):
+
+```pycon
+>>> import pymongo
+>>> client = pymongo.MongoClient("localhost", 27017)
+>>> db = client.test
+>>> db.name
+'test'
+>>> db.my_collection
+Collection(Database(MongoClient('localhost', 27017), 'test'), 'my_collection')
+>>> db.my_collection.insert_one({"x": 10}).inserted_id
+ObjectId('4aba15ebe23f6b53b0000000')
+>>> db.my_collection.insert_one({"x": 8}).inserted_id
+ObjectId('4aba160ee23f6b543e000000')
+>>> db.my_collection.insert_one({"x": 11}).inserted_id
+ObjectId('4aba160ee23f6b543e000002')
+>>> db.my_collection.find_one()
+{'x': 10, '_id': ObjectId('4aba15ebe23f6b53b0000000')}
+>>> for item in db.my_collection.find():
+...     print(item["x"])
+...
+10
+8
+11
+>>> db.my_collection.create_index("x")
+'x_1'
+>>> for item in db.my_collection.find().sort("x", pymongo.ASCENDING):
+...     print(item["x"])
+...
+8
+10
+11
+>>> [item["x"] for item in db.my_collection.find().limit(2).skip(1)]
+[8, 11]
+```
+
+## Learning Resources
+
+- MongoDB Learn - [Python
+courses](https://learn.mongodb.com/catalog?labels=%5B%22Language%22%5D&values=%5B%22Python%22%5D).
+- [Python Articles on Developer
+Center](https://www.mongodb.com/developer/languages/python/).
+
+## Testing
+
+The easiest way to run the tests is to run the following from the repository root.
+
+```bash
+pip install -e ".[test]"
+pytest
+```
+
+For more advanced testing scenarios, see the [contributing guide](./CONTRIBUTING.md#running-tests-locally).

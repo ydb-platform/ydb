@@ -1,0 +1,246 @@
+td.CoverValue
+{
+  text-align: right;
+  white-space: nowrap;
+}
+
+.coveredLine.show_coveredLine
+{
+  background-color: var(--covered_color) !important;
+}
+
+.partialCoveredLine.show_partialCoveredLine
+{
+  background-color: var(--partial_covered_color) !important;
+}
+
+.uncoveredLine.show_uncoveredLine
+{
+  background-color: var(--uncovered_color) !important;
+}
+
+.excludedLine.show_excludedLine
+{
+  background-color: var(--excluded_color) !important;
+}
+
+.linebranch, .linecondition, .linedecision, .linecall, .linecount, .lineblockids
+{
+  font-family: monospace;
+  border-right: 1px gray solid;
+  background-color: lightgray;
+  white-space: nowrap;
+}
+.linebranch, .linecondition, .linedecision, .linecall
+{
+  text-align: left;
+}
+.linecount
+{
+  text-align: right;
+}
+
+details summary {
+  cursor:pointer;
+}
+
+.linebranchDetails[open]>summary::before,
+.lineconditionDetails[open]>summary::before,
+.linedecisionDetails[open]>summary::before,
+.linecallDetails[open]>summary::before
+{
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 80;
+  display: block;
+  cursor: default;
+  content: " ";
+  background: rgba(0, 0, 0, 0);
+}
+
+.linebranchSummary, .lineconditionSummary, .linedecisionSummary, .linecallSummary
+{
+  white-space: nowrap;
+}
+
+.linebranchContents, .lineconditionContents, .linedecisionContents, .linecallContents
+{
+  font-family: monospace;
+  font-size: medium;
+  text-align: left;
+  white-space: nowrap;
+  position: absolute;
+  padding: 1em;
+  background: white;
+  border: solid gray 1px;
+  box-shadow: 5px 5px 10px gray;
+  z-index: 1; /* show in front of the table entries */
+}
+
+.functionName
+{
+  font-style: italic !important;
+  font-weight: bolder !important;
+}
+
+.excludedBranch
+{
+  color: var(--takenBranch_color) !important;
+}
+
+.takenBranch
+{
+  color: var(--takenBranch_color) !important;
+}
+
+.notTakenBranch
+{
+  color: var(--notTakenBranch_color) !important;
+}
+
+.excludedCondition
+{
+  color: var(--takenCondition_color) !important;
+}
+
+.takenCondition
+{
+  color: var(--takenCondition_color) !important;
+}
+
+.notTakenCondition
+{
+  color: var(--notTakenCondition_color) !important;
+}
+
+.takenDecision
+{
+  color: var(--takenDecision_color) !important;
+}
+
+.notTakenDecision
+{
+  color: var(--notTakenDecision_color) !important;
+}
+
+.uncheckedDecision
+{
+  color: var(--uncheckedDecision_color) !important;
+}
+
+.excludedCall
+{
+  color: var(--invokedCall_color) !important;
+}
+
+.invokedCall
+{
+  color: var(--invokedCall_color) !important;
+}
+
+.notInvokedCall
+{
+  color: var(--notInvokedCall_color) !important;
+}
+
+.src
+{
+  padding-left: 12px;
+  text-align: left;
+
+  font-family: monospace;
+  white-space: pre;
+
+  tab-size: var(--tab_size);
+  -moz-tab-size: var(--tab_size);
+}
+
+span.takenBranch,
+span.notTakenBranch,
+span.takenDecision,
+span.notTakenDecision,
+span.uncheckedDecision
+{
+  font-family: monospace;
+  font-weight: bold;
+}
+
+pre
+{
+  height : 15px;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.listOfFunctions td, .listOfFunctions th {
+  padding: 0 10px;
+}
+.listOfFunctions th
+{
+  text-align: center;
+  color: white;
+  background-color: SteelBlue;
+}
+.listOfFunctions tr > td {
+  background: aliceblue;
+}
+.listOfFunctions tr:nth-child(even) > td {
+  background: LightSteelBlue
+}
+.listOfFunctions tr:hover > td
+{
+  background-color: #ddd;
+}
+.listOfFunctions tr > td > a
+{
+  text-decoration: none;
+  color: inherit;
+}
+
+.source-line
+{
+  height : 15px;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.lineno
+{
+  background-color: #EFE383;
+  border-right: 1px solid #BBB15F;
+  text-align: right;
+  unicode-bidi: embed;
+  font-family: monospace;
+  white-space: pre;
+}
+
+.lineno > a
+{
+  text-decoration: none;
+  color: inherit;
+}
+
+.file-source table
+{
+  border-spacing: 0;
+}
+
+.file-source table td,
+.file-source table th
+{
+  padding: 1px 10px;
+}
+
+.file-source table th
+{
+  font-family: monospace;
+  font-weight: bold;
+}
+
+.file-source table td:last-child
+{
+  width: 100%;
+}

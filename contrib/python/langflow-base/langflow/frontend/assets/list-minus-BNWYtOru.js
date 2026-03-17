@@ -1,0 +1,1 @@
+import{a8 as t}from"./index-Cp3b7MWQ.js";const e=[["path",{d:"M11 12H3",key:"51ecnj"}],["path",{d:"M16 6H3",key:"1wxfjs"}],["path",{d:"M16 18H3",key:"12xzn7"}],["path",{d:"M21 12h-6",key:"bt1uis"}]],a=t("list-minus",e);export{e as __iconNode,a as default};

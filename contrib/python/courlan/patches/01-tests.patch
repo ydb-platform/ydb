@@ -1,0 +1,31 @@
+--- contrib/python/courlan/tests/unit_tests.py	(index)
++++ contrib/python/courlan/tests/unit_tests.py	(working tree)
+@@ -49,7 +49,10 @@ from courlan.urlutils import _parse, is_known_link
+
+
+ logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+-RESOURCES_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), "data")
++
++import yatest.common as yc
++TEST_DIR = os.path.abspath(os.path.dirname(yc.source_path(__file__)))
++RESOURCES_DIR = os.path.join(TEST_DIR, "data")
+
+
+ def test_baseurls():
+@@ -748,6 +751,7 @@ def test_domain_filter():
+     # assert domain_filter("test.invalidtld") is False
+
+
++@pytest.mark.skip("No internet in CI")
+ def test_urlcheck_redirects():
+     "Test redirection checks."
+     assert check_url("https://www.httpbun.com/status/200", with_redirects=True) == (
+@@ -1053,6 +1057,7 @@ def test_extraction():
+     assert len(links) == 1 and not links_priority
+
+
++@pytest.mark.skip("No internet in CI")
+ def test_cli():
+     """test the command-line interface"""
+     testargs = [
+

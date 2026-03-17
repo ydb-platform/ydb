@@ -1,0 +1,5 @@
+# Code table 4.216 - Elevation of snow-covered terrain
+# 0-90 Elevation in increments of 100 m
+# 91-253 Reserved
+254 254 Clouds
+255 255 Missing

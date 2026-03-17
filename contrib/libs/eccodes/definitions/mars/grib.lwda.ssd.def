@@ -1,0 +1,5 @@
+alias mars.step = endStep;
+alias mars.anoffset=offsetToEndOf4DvarWindow;
+
+alias mars.instrument = instrumentType;
+alias mars.ident = satelliteNumber;

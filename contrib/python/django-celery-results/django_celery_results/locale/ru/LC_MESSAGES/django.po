@@ -1,0 +1,185 @@
+# Russian translation strings for django-celery-results.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# ILDAR MINNAKHMETOV <ildarworld@gmail.com>, 2021.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-11-09 19:16+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator:  ILDAR MINNAKHMETOV <ildarworld@gmail.com>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: django_celery_results/admin.py:38
+msgid "Parameters"
+msgstr "Параметры"
+
+#: django_celery_results/admin.py:45
+msgid "Result"
+msgstr "Результаты"
+
+#: django_celery_results/apps.py:14
+msgid "Celery Results"
+msgstr "Результаты Celery"
+
+#: django_celery_results/models.py:28
+msgid "Task ID"
+msgstr "ID Задачи"
+
+#: django_celery_results/models.py:29
+msgid "Celery ID for the Task that was run"
+msgstr "Celery ID задачи"
+
+#: django_celery_results/models.py:32
+msgid "Task Name"
+msgstr "Название задачи"
+
+#: django_celery_results/models.py:33
+msgid "Name of the Task which was run"
+msgstr "Название задачи которая была запущена"
+
+#: django_celery_results/models.py:36
+msgid "Task Positional Arguments"
+msgstr "Аргументы задачи"
+
+#: django_celery_results/models.py:37
+msgid "JSON representation of the positional arguments used with the task"
+msgstr "JSON с позиционными аргументами задачи (*args)"
+
+#: django_celery_results/models.py:41
+msgid "Task Named Arguments"
+msgstr "Именованные аргументы задачи"
+
+#: django_celery_results/models.py:42
+msgid "JSON representation of the named arguments used with the task"
+msgstr "JSON с именованными аргументами задачи (**kwargs)"
+
+#: django_celery_results/models.py:47
+msgid "Task State"
+msgstr "Статус задачи"
+
+#: django_celery_results/models.py:48
+msgid "Current state of the task being run"
+msgstr "Текущий статус запущенной задачи"
+
+#: django_celery_results/models.py:51
+msgid "Worker"
+msgstr "Воркер"
+
+#: django_celery_results/models.py:51
+msgid "Worker that executes the task"
+msgstr "Воркер который выполняет задачу"
+
+#: django_celery_results/models.py:55 django_celery_results/models.py:186
+msgid "Result Content Type"
+msgstr "Тип контента результата"
+
+#: django_celery_results/models.py:56 django_celery_results/models.py:187
+msgid "Content type of the result data"
+msgstr "Тип контента данных результата"
+
+#: django_celery_results/models.py:59 django_celery_results/models.py:191
+msgid "Result Encoding"
+msgstr "Кодировка результата"
+
+#: django_celery_results/models.py:60 django_celery_results/models.py:192
+msgid "The encoding used to save the task result data"
+msgstr "Кодировка использованная для сохранения данных результата"
+
+#: django_celery_results/models.py:63 django_celery_results/models.py:196
+msgid "Result Data"
+msgstr "Данные результата"
+
+#: django_celery_results/models.py:64 django_celery_results/models.py:197
+msgid ""
+"The data returned by the task.  Use content_encoding and content_type fields "
+"to read."
+msgstr "Данные, которые вернула задача. Используйте content_encoding и content_type для чтения."
+
+#: django_celery_results/models.py:68 django_celery_results/models.py:176
+msgid "Created DateTime"
+msgstr "Дата и время создания"
+
+#: django_celery_results/models.py:69
+msgid "Datetime field when the task result was created in UTC"
+msgstr "Дата и время когда результат был создан (UTC)"
+
+#: django_celery_results/models.py:72 django_celery_results/models.py:181
+msgid "Completed DateTime"
+msgstr "Дата и время завершения"
+
+#: django_celery_results/models.py:73
+msgid "Datetime field when the task was completed in UTC"
+msgstr "Дата и время когда задача была завершена (UTC)"
+
+#: django_celery_results/models.py:76
+msgid "Traceback"
+msgstr "Traceback"
+
+#: django_celery_results/models.py:77
+msgid "Text of the traceback if the task generated one"
+msgstr "Текст traceback, если есть"
+
+#: django_celery_results/models.py:80
+msgid "Task Meta Information"
+msgstr "Метаинформация задачи"
+
+#: django_celery_results/models.py:81
+msgid ""
+"JSON meta information about the task, such as information on child tasks"
+msgstr ""
+"JSON мета-информация о задаче, к примеру о дочерних задачах"
+
+#: django_celery_results/models.py:91
+msgid "task result"
+msgstr "результат задачи"
+
+#: django_celery_results/models.py:92
+msgid "task results"
+msgstr "результаты задач"
+
+#: django_celery_results/models.py:129 django_celery_results/models.py:171
+msgid "Group ID"
+msgstr "ID группы"
+
+#: django_celery_results/models.py:130
+msgid "Celery ID for the Chord header group"
+msgstr "Celery ID для заголовка группы"
+
+#: django_celery_results/models.py:134
+msgid ""
+"JSON serialized list of task result tuples. use .group_result() to decode"
+msgstr ""
+"JSON-список кортежей результата. Используйте .group_result() для декодирования"
+
+#: django_celery_results/models.py:140
+msgid "Starts at len(chord header) and decrements after each task is finished"
+msgstr "Начинается в len(chord header) и уменьшается после каждого завершенного задания"
+
+#: django_celery_results/models.py:172
+msgid "Celery ID for the Group that was run"
+msgstr "Celery ID для группы которая была запущена"
+
+#: django_celery_results/models.py:177
+msgid "Datetime field when the group result was created in UTC"
+msgstr "Дата и время если результат группы был создан (UTC)"
+
+#: django_celery_results/models.py:182
+msgid "Datetime field when the group was completed in UTC"
+msgstr "Дата и время, когда группа была завершена (UTC)"
+
+#: django_celery_results/models.py:217
+msgid "group result"
+msgstr "результат группы"
+
+#: django_celery_results/models.py:218
+msgid "group results"
+msgstr "результаты групп"

@@ -1,0 +1,6 @@
+# assert(local=1)
+meta verificationDate         g1verificationdate(dataDate, dataTime, endStep) : read_only;
+meta monthlyVerificationDate  g1monthlydate(verificationDate) : dump,no_copy;
+alias mars.date             = monthlyVerificationDate;
+
+alias mars.step = startStep;

@@ -1,0 +1,11 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.1100, Hovmoller-type grid with no averaging or other statistical processing
+# This template is experimental, was not validated at the time of publication
+# and should be used only for bilateral previously agreed tests
+transient template_is_experimental = 1 : hidden;
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.horizontal.def"

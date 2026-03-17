@@ -1,0 +1,9 @@
+{# -*- engine: jinja -*- #}
+{% if function_list %}
+<div class="m-3">
+  <details>
+    <summary>List of functions</summary>
+    {% include "functions_page.content.html" %}
+  </details>
+</div>
+{% endif -%}

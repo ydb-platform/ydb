@@ -1,0 +1,63 @@
+'S' = {
+  parameterCategory                 =             255;
+  parameterNumber                   =             255;
+  scaleFactorOfFirstFixedSurface    =               0;
+  scaledValueOfFirstFixedSurface    =               0;
+  typeOfFirstFixedSurface           =             119;
+  typeOfSecondFixedSurface          =             255;
+}
+'H' = {
+  parameterCategory                 =             255;
+  parameterNumber                   =             255;
+  scaleFactorOfFirstFixedSurface    =               0;
+  scaledValueOfFirstFixedSurface    =               0;
+  typeOfFirstFixedSurface           =             103;
+  typeOfSecondFixedSurface          =             255;
+}
+'P' = {
+  ZLMULT                            =   1.0000000e-02;
+  parameterCategory                 =             255;
+  parameterNumber                   =             255;
+  scaleFactorOfFirstFixedSurface    =               0;
+  scaledValueOfFirstFixedSurface    =               0;
+  typeOfFirstFixedSurface           =             100;
+  typeOfSecondFixedSurface          =             255;
+}
+'V' = {
+  parameterCategory                 =             255;
+  parameterNumber                   =             255;
+  scaleFactorOfFirstFixedSurface    =               0;
+  scaledValueOfFirstFixedSurface    =               0;
+  typeOfFirstFixedSurface           =             109;
+  typeOfSecondFixedSurface          =             255;
+}
+'T' = {
+  parameterCategory                 =             255;
+  parameterNumber                   =             255;
+  scaleFactorOfFirstFixedSurface    =               0;
+  scaledValueOfFirstFixedSurface    =               0;
+  typeOfFirstFixedSurface           =              20;
+  typeOfSecondFixedSurface          =             255;
+}
+'KT' = {
+  ZLBASE                            =   1.5000000e-01;
+  parameterCategory                 =             255;
+  parameterNumber                   =             255;
+  scaleFactorOfFirstFixedSurface    =               0;
+  scaledValueOfFirstFixedSurface    =               0;
+  typeOfFirstFixedSurface           =              20;
+  typeOfSecondFixedSurface          =             255;
+}
+'KB' = {
+  ZLBASE                            =   1.5000000e-01;
+  parameterCategory                 =             255;
+  parameterNumber                   =             255;
+  scaleFactorOfFirstFixedSurface    =               0;
+  scaledValueOfFirstFixedSurface    =               0;
+  typeOfFirstFixedSurface           =              20;
+  typeOfSecondFixedSurface          =             255;
+}
+'default' = {
+  typeOfFirstFixedSurface           =             255;
+  typeOfSecondFixedSurface          =             255;
+}

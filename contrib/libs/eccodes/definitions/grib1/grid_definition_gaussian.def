@@ -1,0 +1,92 @@
+unsigned[2] Ni : can_be_missing,dump;
+alias numberOfPointsAlongAParallel= Ni ;
+alias Nx =Ni;
+alias geography.Ni=Ni;
+
+signed[2] Nj : dump;
+alias numberOfPointsAlongAMeridian=Nj;
+alias Ny=Nj;
+alias geography.Nj=Nj;
+
+# Latitudes and Longitudes of the first and the last points
+# Resolution and component flags
+include "grib1/grid_first_last_resandcomp.def";
+
+# Di - i direction increment
+unsigned[2] iDirectionIncrement : can_be_missing,dump,edition_specific;
+meta geography.iDirectionIncrementInDegrees scale(iDirectionIncrement,oneConstant,grib1divider,truncateDegrees) : can_be_missing,dump;
+alias Di = iDirectionIncrement;
+
+# N - number of parallels between a pole and the equator
+unsigned[2] N : dump ;
+alias numberOfParallelsBetweenAPoleAndTheEquator=N;
+alias geography.N=N;
+
+# for change_scanning_direction
+alias yFirst=latitudeOfFirstGridPointInDegrees;
+alias yLast=latitudeOfLastGridPointInDegrees;
+alias xFirst=longitudeOfFirstGridPointInDegrees;
+alias xLast=longitudeOfLastGridPointInDegrees;
+
+include "grib1/scanning_mode.def";
+
+pad padding_grid4_1(4);
+
+alias latitudeFirstInDegrees  = latitudeOfFirstGridPointInDegrees;
+alias longitudeFirstInDegrees = longitudeOfFirstGridPointInDegrees;
+alias latitudeLastInDegrees   = latitudeOfLastGridPointInDegrees;
+alias longitudeLastInDegrees  = longitudeOfLastGridPointInDegrees;
+alias DiInDegrees = iDirectionIncrementInDegrees;
+
+meta global global_gaussian(N,Ni,iDirectionIncrement,
+                            latitudeOfFirstGridPoint,
+                            longitudeOfFirstGridPoint,
+                            latitudeOfLastGridPoint,
+                            longitudeOfLastGridPoint,
+                            PLPresent,pl) = 0 : dump;
+
+# With legacy mode support
+meta numberOfDataPoints number_of_points_gaussian(Ni,Nj,PLPresent,pl,N,
+  latitudeOfFirstGridPointInDegrees,longitudeOfFirstGridPointInDegrees,
+  latitudeOfLastGridPointInDegrees,longitudeOfLastGridPointInDegrees,one) : dump;
+
+# Use the new algorithm for counting. No support for legacy mode
+meta numberOfDataPointsExpected number_of_points_gaussian(Ni,Nj,PLPresent,pl,N,
+  latitudeOfFirstGridPointInDegrees,longitudeOfFirstGridPointInDegrees,
+  latitudeOfLastGridPointInDegrees,longitudeOfLastGridPointInDegrees,zero) : dump;
+
+meta legacyGaussSubarea evaluate(numberOfDataPoints != numberOfDataPointsExpected);
+
+alias numberOfPoints=numberOfDataPoints;
+# alias numberOfExpectedPoints=numberOfDataPoints;
+meta numberOfValues number_of_values(values,bitsPerValue,numberOfDataPoints,bitmapPresent,bitmap,numberOfCodedValues) : dump;
+#alias ls.valuesCount=numberOfValues;
+
+if(missing(Ni)){
+   iterator gaussian_reduced(numberOfPoints,missingValue,values,
+       latitudeOfFirstGridPointInDegrees,longitudeOfFirstGridPointInDegrees,
+       latitudeOfLastGridPointInDegrees,longitudeOfLastGridPointInDegrees,
+       N,pl,Nj);
+   nearest reduced(values,radius,Nj,pl);
+
+   #meta sumPlArray sum(pl);
+   #meta dataGlobal evaluate( sumPlArray == (numberOfValues+numberOfMissing) );
+} else {
+   iterator   gaussian(numberOfPoints,missingValue,values,longitudeFirstInDegrees,
+            DiInDegrees  ,Ni,Nj,iScansNegatively ,
+            latitudeFirstInDegrees, latitudeLastInDegrees,
+            N,jScansPositively);
+   nearest regular(values,radius,Ni,Nj);
+}
+
+meta latLonValues latlonvalues(values);
+alias latitudeLongitudeValues=latLonValues;
+meta latitudes latitudes(values,0);
+meta longitudes longitudes(values,0);
+meta distinctLatitudes latitudes(values,1);
+meta distinctLongitudes longitudes(values,1);
+
+meta isOctahedral octahedral_gaussian(N, Ni, PLPresent, pl) = 0 : no_copy,dump;
+
+meta gaussianGridName gaussian_grid_name(N, Ni, isOctahedral);
+alias gridName=gaussianGridName;

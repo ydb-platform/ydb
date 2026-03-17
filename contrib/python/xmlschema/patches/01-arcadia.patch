@@ -1,0 +1,143 @@
+--- contrib/python/xmlschema/xmlschema/extras/codegen.py	(index)
++++ contrib/python/xmlschema/xmlschema/extras/codegen.py	(working tree)
+@@ -12,6 +12,7 @@
+ This module contains abstact base class and helper
+ functions for building XSD based code generators.
+ """
++import importlib.util
+ import os
+ import re
+ import sys
+@@ -66,7 +67,8 @@ class GeneratorMeta(ABCMeta):
+ 
+     def __new__(mcs, name, bases, attrs):
+         module = sys.modules.get(attrs['__module__'])
+-        module_path = getattr(module, '__file__', os.getcwd())
++        module_spec = importlib.util.find_spec(module.__name__)
++        module_path = module_spec.origin if module_spec and module_spec.origin else os.getcwd()
+ 
+         formal_language = None
+         searchpaths = []
+--- contrib/python/xmlschema/xmlschema/extras/wsdl.py	(index)
++++ contrib/python/xmlschema/xmlschema/extras/wsdl.py	(working tree)
+@@ -496,7 +496,7 @@ class Wsdl11Document(XmlDocument):
+             if cls is None:
+                 cls = XMLSchema10
+ 
+-            xsd_filepath = str(SCHEMAS_DIR.joinpath('WSDL', 'wsdl.xsd'))
++            xsd_filepath = SCHEMAS_DIR.joinpath('WSDL', 'wsdl.xsd')
+             if isinstance(schema, XMLSchemaBase):
+                 self.schema = schema
+             else:
+--- contrib/python/xmlschema/xmlschema/locations.py	(index)
++++ contrib/python/xmlschema/xmlschema/locations.py	(working tree)
+@@ -7,6 +7,7 @@
+ #
+ # @author Davide Brunato <brunato@sissa.it>
+ #
++import importlib.resources
+ import pathlib
+ from collections.abc import Iterable
+ from typing import Optional, Any, MutableMapping, Iterator, TypeVar
+@@ -35,7 +35,7 @@ def get_locations(locations: Optional[LocationsType], base_url: Optional[str] = 
+         return NamespaceResourcesMap(normalize_locations(locations, base_url))
+ 
+ 
+-SCHEMAS_DIR = pathlib.Path(__file__).parent.joinpath('schemas')
++SCHEMAS_DIR = importlib.resources.files(__package__) / "schemas"
+ 
+ ###
+ # Standard locations for well-known namespaces
+@@ -64,22 +64,22 @@ LOCATIONS: LocationsMapType = {
+ # Fallback locations for well-known namespaces
+ FALLBACK_LOCATIONS: LocationsMapType = {
+     nm.XSD_NAMESPACE: [
+-        SCHEMAS_DIR.joinpath('XSD_1.0', 'XMLSchema.xsd').as_uri(),
+-        SCHEMAS_DIR.joinpath('XSD_1.1', 'XMLSchema.xsd').as_uri(),
+-        SCHEMAS_DIR.joinpath('XSD_1.1', 'XMLSchema.xsd').as_uri(),
++        SCHEMAS_DIR.joinpath('XSD_1.0', 'XMLSchema.xsd'),
++        SCHEMAS_DIR.joinpath('XSD_1.1', 'XMLSchema.xsd'),
++        SCHEMAS_DIR.joinpath('XSD_1.1', 'XMLSchema.xsd'),
+     ],
+-    nm.XML_NAMESPACE: SCHEMAS_DIR.joinpath('XML', 'xml.xsd').as_uri(),
+-    nm.XSI_NAMESPACE: SCHEMAS_DIR.joinpath('XSI', 'XMLSchema-instance.xsd').as_uri(),
+-    nm.HFP_NAMESPACE: SCHEMAS_DIR.joinpath('HFP', 'XMLSchema-hasFacetAndProperty.xsd').as_uri(),
+-    nm.VC_NAMESPACE: SCHEMAS_DIR.joinpath('XSI', 'XMLSchema-versioning.xsd').as_uri(),
+-    nm.XLINK_NAMESPACE: SCHEMAS_DIR.joinpath('XLINK', 'xlink.xsd').as_uri(),
+-    nm.XHTML_NAMESPACE: SCHEMAS_DIR.joinpath('XHTML', 'xhtml1-strict.xsd').as_uri(),
+-    nm.WSDL_NAMESPACE: SCHEMAS_DIR.joinpath('WSDL', 'wsdl.xsd').as_uri(),
+-    nm.SOAP_NAMESPACE: SCHEMAS_DIR.joinpath('WSDL', 'wsdl-soap.xsd').as_uri(),
+-    nm.SOAP_ENVELOPE_NAMESPACE: SCHEMAS_DIR.joinpath('WSDL', 'soap-envelope.xsd').as_uri(),
+-    nm.SOAP_ENCODING_NAMESPACE: SCHEMAS_DIR.joinpath('WSDL', 'soap-encoding.xsd').as_uri(),
+-    nm.DSIG_NAMESPACE: SCHEMAS_DIR.joinpath('DSIG', 'xmldsig-core-schema.xsd').as_uri(),
+-    nm.DSIG11_NAMESPACE: SCHEMAS_DIR.joinpath('DSIG', 'xmldsig11-schema.xsd').as_uri(),
+-    nm.XENC_NAMESPACE: SCHEMAS_DIR.joinpath('XENC', 'xenc-schema.xsd').as_uri(),
+-    nm.XENC11_NAMESPACE: SCHEMAS_DIR.joinpath('XENC', 'xenc-schema-11.xsd').as_uri(),
++    nm.XML_NAMESPACE: SCHEMAS_DIR.joinpath('XML', 'xml.xsd'),
++    nm.XSI_NAMESPACE: SCHEMAS_DIR.joinpath('XSI', 'XMLSchema-instance.xsd'),
++    nm.HFP_NAMESPACE: SCHEMAS_DIR.joinpath('HFP', 'XMLSchema-hasFacetAndProperty.xsd'),
++    nm.VC_NAMESPACE: SCHEMAS_DIR.joinpath('VC', 'XMLSchema-versioning.xsd'),
++    nm.XLINK_NAMESPACE: SCHEMAS_DIR.joinpath('XLINK', 'xlink.xsd'),
++    nm.XHTML_NAMESPACE: SCHEMAS_DIR.joinpath('XHTML', 'xhtml1-strict.xsd'),
++    nm.WSDL_NAMESPACE: SCHEMAS_DIR.joinpath('WSDL', 'wsdl.xsd'),
++    nm.SOAP_NAMESPACE: SCHEMAS_DIR.joinpath('WSDL', 'wsdl-soap.xsd'),
++    nm.SOAP_ENVELOPE_NAMESPACE: SCHEMAS_DIR.joinpath('WSDL', 'soap-envelope.xsd'),
++    nm.SOAP_ENCODING_NAMESPACE: SCHEMAS_DIR.joinpath('WSDL', 'soap-encoding.xsd'),
++    nm.DSIG_NAMESPACE: SCHEMAS_DIR.joinpath('DSIG', 'xmldsig-core-schema.xsd'),
++    nm.DSIG11_NAMESPACE: SCHEMAS_DIR.joinpath('DSIG', 'xmldsig11-schema.xsd'),
++    nm.XENC_NAMESPACE: SCHEMAS_DIR.joinpath('XENC', 'xenc-schema.xsd'),
++    nm.XENC11_NAMESPACE: SCHEMAS_DIR.joinpath('XENC', 'xenc-schema-11.xsd'),
+ }
+--- contrib/python/xmlschema/xmlschema/translation.py	(index)
++++ contrib/python/xmlschema/xmlschema/translation.py	(working tree)
+@@ -8,6 +8,7 @@
+ # @author Davide Brunato <brunato@sissa.it>
+ #
+ #
++import importlib.resources
+ from collections.abc import Iterable
+ from typing import cast, Any, Optional, Union
+ import gettext as _gettext
+@@ -35,7 +36,7 @@ def activate(localedir: Union[None, str, Path] = None,
+     global _installed
+ 
+     if localedir is None:  # pragma: no cover
+-        localedir = Path(__file__).parent.joinpath('locale').resolve()
++        localedir = importlib.resources.files(__package__).joinpath('locale')
+ 
+     translation = _gettext.translation(
+         domain='xmlschema',
+--- contrib/python/xmlschema/xmlschema/validators/schemas.py	(index)
++++ contrib/python/xmlschema/xmlschema/validators/schemas.py	(working tree)
+@@ -1876,10 +1876,10 @@ class XMLSchema10(XMLSchemaBase):
+     """
+     builders = XsdBuilders()
+ 
+-    META_SCHEMA = SCHEMAS_DIR.joinpath('XSD_1.0', 'XMLSchema.xsd').as_uri()
++    META_SCHEMA = SCHEMAS_DIR.joinpath('XSD_1.0', 'XMLSchema.xsd')
+     BASE_SCHEMAS = {
+-        nm.XML_NAMESPACE: SCHEMAS_DIR.joinpath('XML', 'xml.xsd').as_uri(),
+-        nm.XSI_NAMESPACE: SCHEMAS_DIR.joinpath('XSI', 'XMLSchema-instance.xsd').as_uri(),
++        nm.XML_NAMESPACE: SCHEMAS_DIR.joinpath('XML', 'xml.xsd'),
++        nm.XSI_NAMESPACE: SCHEMAS_DIR.joinpath('XSI', 'XMLSchema-instance.xsd'),
+     }
+ 
+ 
+@@ -1922,12 +1922,12 @@ class XMLSchema11(XMLSchemaBase):
+     builders = XsdBuilders()
+ 
+     XSD_VERSION = '1.1'
+-    META_SCHEMA = SCHEMAS_DIR.joinpath('XSD_1.1', 'XMLSchema.xsd').as_uri()
++    META_SCHEMA = SCHEMAS_DIR.joinpath('XSD_1.1', 'XMLSchema.xsd')
+     BASE_SCHEMAS = {
+-        nm.XML_NAMESPACE: SCHEMAS_DIR.joinpath('XML', 'xml.xsd').as_uri(),
+-        nm.XSI_NAMESPACE: SCHEMAS_DIR.joinpath('XSI', 'XMLSchema-instance.xsd').as_uri(),
+-        nm.VC_NAMESPACE: SCHEMAS_DIR.joinpath('VC', 'XMLSchema-versioning.xsd').as_uri(),
+-        nm.XSD_NAMESPACE: SCHEMAS_DIR.joinpath('XSD_1.1', 'xsd11-extra.xsd').as_uri(),
++        nm.XML_NAMESPACE: SCHEMAS_DIR.joinpath('XML', 'xml.xsd'),
++        nm.XSI_NAMESPACE: SCHEMAS_DIR.joinpath('XSI', 'XMLSchema-instance.xsd'),
++        nm.VC_NAMESPACE: SCHEMAS_DIR.joinpath('VC', 'XMLSchema-versioning.xsd'),
++        nm.XSD_NAMESPACE: SCHEMAS_DIR.joinpath('XSD_1.1', 'xsd11-extra.xsd'),
+     }
+ 
+ 

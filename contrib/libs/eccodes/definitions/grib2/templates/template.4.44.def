@@ -1,0 +1,19 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.44, Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for aerosol
+# It is recommended not to use this template. PDT 4.48 should be used instead with optical wave length range set to missing
+transient template_is_deprecated = 1 : hidden;
+
+# GRIB-530: Special case for aerosol thanks to WMO error
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.aerosol.def"
+include "grib2/templates/template.4.aerosol_size.def"
+include "grib2/templates/template.4.generating_process.def"
+
+# GRIB-530: Special case for aerosol thanks to WMO error
+include "grib2/templates/template.4.forecast_time_44.def"
+
+include "grib2/templates/template.4.point_in_time.def"
+include "grib2/templates/template.4.horizontal.def"
+

@@ -1,0 +1,688 @@
+--- contrib/python/suds-jurko/suds/__init__.py	(index)
++++ contrib/python/suds-jurko/suds/__init__.py	(working tree)
+@@ -28 +28 @@ import sys
+-from version import __build__, __version__
++from .version import __build__, __version__
+@@ -37 +37 @@ class MethodNotFound(Exception):
+-        Exception.__init__(self, u"Method not found: '%s'" % name)
++        Exception.__init__(self, "Method not found: '%s'" % name)
+@@ -41 +41 @@ class PortNotFound(Exception):
+-        Exception.__init__(self, u"Port not found: '%s'" % name)
++        Exception.__init__(self, "Port not found: '%s'" % name)
+@@ -45 +45 @@ class ServiceNotFound(Exception):
+-        Exception.__init__(self, u"Service not found: '%s'" % name)
++        Exception.__init__(self, "Service not found: '%s'" % name)
+@@ -49 +49 @@ class TypeNotFound(Exception):
+-        Exception.__init__(self, u"Type not found: '%s'" % tostr(name))
++        Exception.__init__(self, "Type not found: '%s'" % tostr(name))
+@@ -74 +74 @@ class WebFault(Exception):
+-            Exception.__init__(self, u"Server raised fault: '%s'" %
++            Exception.__init__(self, "Server raised fault: '%s'" %
+@@ -107 +107 @@ def tostr(object, encoding=None):
+-    if isinstance(object, basestring):
++    if isinstance(object, str):
+@@ -115 +115 @@ def tostr(object, encoding=None):
+-            if isinstance(item, basestring):
++            if isinstance(item, str):
+@@ -125 +125 @@ def tostr(object, encoding=None):
+-            if isinstance(item, basestring):
++            if isinstance(item, str):
+@@ -134,2 +134,2 @@ def tostr(object, encoding=None):
+-        for item in object.items():
+-            if isinstance(item[0], basestring):
++        for item in list(object.items()):
++            if isinstance(item[0], str):
+@@ -140 +140 @@ def tostr(object, encoding=None):
+-            if isinstance(item[1], basestring):
++            if isinstance(item[1], str):
+@@ -148 +148 @@ def tostr(object, encoding=None):
+-        return unicode(object)
++        return str(object)
+@@ -158 +158 @@ if sys.version_info < (3, 0):
+-    from cStringIO import StringIO as BytesIO
++    from io import StringIO as BytesIO
+@@ -168 +168 @@ class UnicodeMixin(object):
+-        __str__ = lambda x: unicode(x).encode('utf-8')
++        __str__ = lambda x: str(x).encode('utf-8')
+@@ -180,2 +180,2 @@ def byte_str(s='', encoding='utf-8', input_encoding='utf-8', errors='strict'):
+-    assert isinstance(s, basestring)
+-    if isinstance(s, unicode):
++    assert isinstance(s, str)
++    if isinstance(s, str):
+--- contrib/python/suds-jurko/suds/argparser.py	(index)
++++ contrib/python/suds-jurko/suds/argparser.py	(working tree)
+@@ -164 +164 @@ class _ArgParser:
+-            param_name = self.__kwargs.keys()[0]
++            param_name = list(self.__kwargs.keys())[0]
+@@ -266 +266 @@ class _ArgParser:
+-        for frame, n in zip(stack[1:], xrange(len(ancestry))):
++        for frame, n in zip(stack[1:], range(len(ancestry))):
+--- contrib/python/suds-jurko/suds/bindings/binding.py	(index)
++++ contrib/python/suds-jurko/suds/bindings/binding.py	(working tree)
+@@ -91 +91 @@ class Binding:
+-        raise Exception, 'not implemented'
++        raise Exception('not implemented')
+@@ -289 +289 @@ class Binding:
+-        raise Exception, 'not implemented'
++        raise Exception('not implemented')
+@@ -342 +342 @@ class Binding:
+-        raise Exception, 'not implemented'
++        raise Exception('not implemented')
+--- contrib/python/suds-jurko/suds/builder.py	(index)
++++ contrib/python/suds-jurko/suds/builder.py	(working tree)
+@@ -37 +37 @@ class Builder:
+-        if isinstance(name, basestring):
++        if isinstance(name, str):
+--- contrib/python/suds-jurko/suds/cache.py	(index)
++++ contrib/python/suds-jurko/suds/cache.py	(working tree)
+@@ -31 +31 @@ try:
+-    import cPickle as pickle
++    import pickle as pickle
+@@ -139 +139 @@ class FileCache(Cache):
+-            arg = duration.items()[0]
++            arg = list(duration.items())[0]
+--- contrib/python/suds-jurko/suds/client.py	(index)
++++ contrib/python/suds-jurko/suds/client.py	(working tree)
+@@ -40 +40 @@ from suds.wsdl import Definitions
+-import sudsobject
++from . import sudsobject
+@@ -42 +42 @@ import sudsobject
+-from cookielib import CookieJar
++from http.cookiejar import CookieJar
+@@ -44,2 +44,2 @@ from copy import deepcopy
+-import httplib
+-from urlparse import urlparse
++import http.client
++from urllib.parse import urlparse
+@@ -184 +184 @@ class Client(UnicodeMixin):
+-            s.append('\n\n%s' % unicode(sd))
++            s.append('\n\n%s' % str(sd))
+@@ -226 +226 @@ class Factory:
+-            except Exception, e:
++            except Exception as e:
+@@ -315 +315 @@ class ServiceSelector:
+-            raise Exception, 'No services defined'
++            raise Exception('No services defined')
+@@ -321 +321 @@ class ServiceSelector:
+-                raise ServiceNotFound, 'at [%d]' % name
++                raise ServiceNotFound('at [%d]' % name)
+@@ -328 +328 @@ class ServiceSelector:
+-            raise ServiceNotFound, name
++            raise ServiceNotFound(name)
+@@ -416 +416 @@ class PortSelector:
+-            raise Exception, 'No ports defined: %s' % self.__qn
++            raise Exception('No ports defined: %s' % self.__qn)
+@@ -422 +422 @@ class PortSelector:
+-                raise PortNotFound, qn
++                raise PortNotFound(qn)
+@@ -430 +430 @@ class PortSelector:
+-            raise PortNotFound, qn
++            raise PortNotFound(qn)
+@@ -491 +491 @@ class MethodSelector:
+-            raise MethodNotFound, qn
++            raise MethodNotFound(qn)
+@@ -522 +522 @@ class Method:
+-        except WebFault, e:
++        except WebFault as e:
+@@ -525 +525 @@ class Method:
+-            return (httplib.INTERNAL_SERVER_ERROR, e)
++            return (http.client.INTERNAL_SERVER_ERROR, e)
+@@ -616 +616 @@ class SoapClient:
+-        except TransportError, e:
++        except TransportError as e:
+@@ -626,2 +626,2 @@ class SoapClient:
+-            status = httplib.OK
+-        if status in (httplib.ACCEPTED, httplib.NO_CONTENT):
++            status = http.client.OK
++        if status in (http.client.ACCEPTED, http.client.NO_CONTENT):
+@@ -631 +631 @@ class SoapClient:
+-            if status == httplib.OK:
++            if status == http.client.OK:
+@@ -660 +660 @@ class SoapClient:
+-            if status in (httplib.OK, httplib.INTERNAL_SERVER_ERROR):
++            if status in (http.client.OK, http.client.INTERNAL_SERVER_ERROR):
+@@ -665 +665 @@ class SoapClient:
+-                    if status != httplib.INTERNAL_SERVER_ERROR:
++                    if status != http.client.INTERNAL_SERVER_ERROR:
+@@ -671,2 +671,2 @@ class SoapClient:
+-                    return (httplib.INTERNAL_SERVER_ERROR, fault)
+-            if status != httplib.OK:
++                    return (http.client.INTERNAL_SERVER_ERROR, fault)
++            if status != http.client.OK:
+@@ -691 +691 @@ class SoapClient:
+-            return (httplib.OK, result)
++            return (http.client.OK, result)
+@@ -720 +720 @@ class SoapClient:
+-        if isinstance(action, unicode):
++        if isinstance(action, str):
+@@ -745 +745 @@ class SimClient(SoapClient):
+-        return kwargs.has_key(SimClient.injkey)
++        return SimClient.injkey in kwargs
+--- contrib/python/suds-jurko/suds/mx/__init__.py	(index)
++++ contrib/python/suds-jurko/suds/mx/__init__.py	(working tree)
+@@ -46 +46 @@ class Content(Object):
+-        for k,v in kwargs.items():
++        for k,v in list(kwargs.items()):
+@@ -55,2 +55 @@ class Content(Object):
+-                raise AttributeError, \
+-                    'Content has no attribute %s' % name
++                raise AttributeError('Content has no attribute %s' % name)
+--- contrib/python/suds-jurko/suds/mx/appender.py	(index)
++++ contrib/python/suds-jurko/suds/mx/appender.py	(working tree)
+@@ -211 +211 @@ class PropertyAppender(Appender):
+-        for item in p.items():
++        for item in list(p.items()):
+@@ -243 +243 @@ class DictAppender(Appender):
+-        for item in d.items():
++        for item in list(d.items()):
+--- contrib/python/suds-jurko/suds/mx/literal.py	(index)
++++ contrib/python/suds-jurko/suds/mx/literal.py	(working tree)
+@@ -134,3 +134,2 @@ class Typed(Core):
+-            raise Exception, \
+-                'content (end) mismatch: top=(%s) cont=(%s)' % \
+-                (current, content)
++            raise Exception('content (end) mismatch: top=(%s) cont=(%s)' % \
++                (current, content))
+--- contrib/python/suds-jurko/suds/mx/typer.py	(index)
++++ contrib/python/suds-jurko/suds/mx/typer.py	(working tree)
+@@ -36 +36 @@ class Typer:
+-        long : ('long', NS.xsdns),
++        int : ('long', NS.xsdns),
+@@ -39 +39 @@ class Typer:
+-        unicode : ('string', NS.xsdns),
++        str : ('string', NS.xsdns),
+--- contrib/python/suds-jurko/suds/options.py	(index)
++++ contrib/python/suds-jurko/suds/options.py	(working tree)
+@@ -135,3 +135,3 @@ class Options(Skin):
+-            Definition('service', (int, basestring), None),
+-            Definition('port', (int, basestring), None),
+-            Definition('location', basestring, None),
++            Definition('service', (int, str), None),
++            Definition('port', (int, str), None),
++            Definition('location', str, None),
+--- contrib/python/suds-jurko/suds/plugin.py	(index)
++++ contrib/python/suds-jurko/suds/plugin.py	(working tree)
+@@ -208 +208 @@ class PluginContainer:
+-            raise Exception, 'plugin domain (%s), invalid' % name
++            raise Exception('plugin domain (%s), invalid' % name)
+@@ -255 +255 @@ class Method:
+-            except Exception, pe:
++            except Exception as pe:
+--- contrib/python/suds-jurko/suds/properties.py	(index)
++++ contrib/python/suds-jurko/suds/properties.py	(working tree)
+@@ -70 +70 @@ class Link(object):
+-            raise Exception, 'Already linked'
++            raise Exception('Already linked')
+@@ -75 +75 @@ class Link(object):
+-                raise Exception, 'Duplicate domain "%s" found' % d
++                raise Exception('Duplicate domain "%s" found' % d)
+@@ -78,3 +78,3 @@ class Link(object):
+-                raise Exception, 'Duplicate domain "%s" found' % d
+-        kA = pA.keys()
+-        kB = pB.keys()
++                raise Exception('Duplicate domain "%s" found' % d)
++        kA = list(pA.keys())
++        kB = list(pB.keys())
+@@ -83 +83 @@ class Link(object):
+-                raise Exception, 'Duplicate key %s found' % k
++                raise Exception('Duplicate key %s found' % k)
+@@ -86 +86 @@ class Link(object):
+-                raise Exception, 'Duplicate key %s found' % k
++                raise Exception('Duplicate key %s found' % k)
+@@ -180 +180 @@ class Definition:
+-                raise AttributeError,msg
++                raise AttributeError(msg)
+@@ -254 +254 @@ class Properties:
+-        for n,v in other.items():
++        for n,v in list(other.items()):
+@@ -375 +375 @@ class Properties:
+-        keys.update(self.definitions.keys())
++        keys.update(list(self.definitions.keys()))
+@@ -411 +411 @@ class Properties:
+-        for d in self.definitions.values():
++        for d in list(self.definitions.values()):
+@@ -437 +437 @@ class Properties:
+-        for d in self.definitions.values():
++        for d in list(self.definitions.values()):
+@@ -440 +440 @@ class Properties:
+-        for d in self.defined.items():
++        for d in list(self.defined.items()):
+--- contrib/python/suds-jurko/suds/sax/__init__.py	(index)
++++ contrib/python/suds-jurko/suds/sax/__init__.py	(working tree)
+@@ -48 +48 @@ def splitPrefix(name):
+-    if isinstance(name, basestring) and ':' in name:
++    if isinstance(name, str) and ':' in name:
+--- contrib/python/suds-jurko/suds/sax/attribute.py	(index)
++++ contrib/python/suds-jurko/suds/sax/attribute.py	(working tree)
+@@ -174 +174 @@ class Attribute(UnicodeMixin):
+-        return u'%s="%s"' % (n, v)
++        return '%s="%s"' % (n, v)
+--- contrib/python/suds-jurko/suds/sax/date.py	(index)
++++ contrib/python/suds-jurko/suds/sax/date.py	(working tree)
+@@ -68 +68 @@ class Date(UnicodeMixin):
+-        elif isinstance(value, basestring):
++        elif isinstance(value, str):
+@@ -118 +118 @@ class DateTime(UnicodeMixin):
+-        elif isinstance(value, basestring):
++        elif isinstance(value, str):
+@@ -176 +176 @@ class Time(UnicodeMixin):
+-        elif isinstance(value, basestring):
++        elif isinstance(value, str):
+--- contrib/python/suds-jurko/suds/sax/document.py	(index)
++++ contrib/python/suds-jurko/suds/sax/document.py	(working tree)
+@@ -55 +55 @@ class Document:
+-        if isinstance(node, basestring):
++        if isinstance(node, str):
+--- contrib/python/suds-jurko/suds/sax/element.py	(index)
++++ contrib/python/suds-jurko/suds/sax/element.py	(working tree)
+@@ -161 +161 @@ class Element(UnicodeMixin):
+-        for item in self.nsprefixes.items():
++        for item in list(self.nsprefixes.items()):
+@@ -570 +570 @@ class Element(UnicodeMixin):
+-        for item in self.nsprefixes.items():
++        for item in list(self.nsprefixes.items()):
+@@ -574 +574 @@ class Element(UnicodeMixin):
+-        for item in self.specialprefixes.items():
++        for item in list(self.specialprefixes.items()):
+@@ -595 +595 @@ class Element(UnicodeMixin):
+-        for item in self.nsprefixes.items():
++        for item in list(self.nsprefixes.items()):
+@@ -599 +599 @@ class Element(UnicodeMixin):
+-        for item in self.specialprefixes.items():
++        for item in list(self.specialprefixes.items()):
+@@ -620 +620 @@ class Element(UnicodeMixin):
+-        for p,u in self.nsprefixes.items():
++        for p,u in list(self.nsprefixes.items()):
+@@ -733 +733 @@ class Element(UnicodeMixin):
+-        for a in [unicode(a) for a in self.attributes]:
++        for a in [str(a) for a in self.attributes]:
+@@ -758 +758 @@ class Element(UnicodeMixin):
+-        for a in [unicode(a) for a in self.attributes]:
++        for a in [str(a) for a in self.attributes]:
+@@ -788 +788 @@ class Element(UnicodeMixin):
+-        for item in self.nsprefixes.items():
++        for item in list(self.nsprefixes.items()):
+@@ -887 +887 @@ class Element(UnicodeMixin):
+-        if isinstance(index, basestring):
++        if isinstance(index, str):
+@@ -893 +893 @@ class Element(UnicodeMixin):
+-        if isinstance(index, basestring):
++        if isinstance(index, str):
+@@ -930 +930 @@ class NodeIterator:
+-    def next(self):
++    def __next__(self):
+@@ -1002 +1002 @@ class PrefixNormalizer:
+-        for ns in n.nsprefixes.items():
++        for ns in list(n.nsprefixes.items()):
+@@ -1081 +1081 @@ class PrefixNormalizer:
+-        for u, p in self.prefixes.items():
++        for u, p in list(self.prefixes.items()):
+--- contrib/python/suds-jurko/suds/sax/enc.py	(index)
++++ contrib/python/suds-jurko/suds/sax/enc.py	(working tree)
+@@ -49 +49 @@ class Encoder:
+-        if isinstance(s, basestring):
++        if isinstance(s, str):
+@@ -63 +63 @@ class Encoder:
+-        if isinstance(s, basestring) and self.needsEncoding(s):
++        if isinstance(s, str) and self.needsEncoding(s):
+@@ -76 +76 @@ class Encoder:
+-        if isinstance(s, basestring) and '&' in s:
++        if isinstance(s, str) and '&' in s:
+--- contrib/python/suds-jurko/suds/sax/parser.py	(index)
++++ contrib/python/suds-jurko/suds/sax/parser.py	(working tree)
+@@ -50 +50 @@ class Handler(ContentHandler):
+-        node = Element(unicode(name))
++        node = Element(str(name))
+@@ -52,2 +52,2 @@ class Handler(ContentHandler):
+-            n = unicode(a)
+-            v = unicode(attrs.getValue(a))
++            n = str(a)
++            v = str(attrs.getValue(a))
+@@ -66 +66 @@ class Handler(ContentHandler):
+-                node.expns = unicode(attribute.value)
++                node.expns = str(attribute.value)
+@@ -70 +70 @@ class Handler(ContentHandler):
+-            node.nsprefixes[prefix] = unicode(attribute.value)
++            node.nsprefixes[prefix] = str(attribute.value)
+@@ -75 +75 @@ class Handler(ContentHandler):
+-        name = unicode(name)
++        name = str(name)
+@@ -78 +78 @@ class Handler(ContentHandler):
+-            current.text = Text(u''.join(current.charbuffer))
++            current.text = Text(''.join(current.charbuffer))
+@@ -88 +88 @@ class Handler(ContentHandler):
+-        text = unicode(content)
++        text = str(content)
+--- contrib/python/suds-jurko/suds/sax/text.py	(index)
++++ contrib/python/suds-jurko/suds/sax/text.py	(working tree)
+@@ -25 +25 @@ from suds.sax import *
+-class Text(unicode):
++class Text(str):
+@@ -78 +78 @@ class Text(unicode):
+-        joined = u''.join((self, other))
++        joined = ''.join((self, other))
+@@ -115 +115 @@ class Raw(Text):
+-        joined = u''.join((self, other))
++        joined = ''.join((self, other))
+--- contrib/python/suds-jurko/suds/servicedefinition.py	(index)
++++ contrib/python/suds-jurko/suds/servicedefinition.py	(working tree)
+@@ -83 +83 @@ class ServiceDefinition(UnicodeMixin):
+-            for op in port.binding.operations.values():
++            for op in list(port.binding.operations.values()):
+@@ -141 +141 @@ class ServiceDefinition(UnicodeMixin):
+-        for t in self.wsdl.schema.types.values():
++        for t in list(self.wsdl.schema.types.values()):
+@@ -155 +155 @@ class ServiceDefinition(UnicodeMixin):
+-        used += [ns[0] for ns in self.wsdl.root.nsprefixes.items()]
++        used += [ns[0] for ns in list(self.wsdl.root.nsprefixes.items())]
+@@ -238 +238 @@ class ServiceDefinition(UnicodeMixin):
+-        except Exception, e:
++        except Exception as e:
+--- contrib/python/suds-jurko/suds/serviceproxy.py	(index)
++++ contrib/python/suds-jurko/suds/serviceproxy.py	(working tree)
+@@ -73 +73 @@ class ServiceProxy(UnicodeMixin):
+-        return unicode(self.__client__)
++        return str(self.__client__)
+--- contrib/python/suds-jurko/suds/store.py	(index)
++++ contrib/python/suds-jurko/suds/store.py	(working tree)
+@@ -569 +569 @@ class DocumentStore:
+-            raise Exception, 'location "%s" not in document store' % location
++            raise Exception('location "%s" not in document store' % location)
+--- contrib/python/suds-jurko/suds/sudsobject.py	(index)
++++ contrib/python/suds-jurko/suds/sudsobject.py	(working tree)
+@@ -113 +113 @@ class Factory:
+-        for a in dict.items():
++        for a in list(dict.items()):
+@@ -149 +149 @@ class Object(UnicodeMixin):
+-            raise AttributeError, "%s has no attribute '%s'" % (cls, name)
++            raise AttributeError("%s has no attribute '%s'" % (cls, name))
+@@ -182 +182 @@ class Iter:
+-    def next(self):
++    def __next__(self):
+@@ -274 +274 @@ class Printer:
+-        if isinstance(object, basestring):
++        if isinstance(object, str):
+@@ -328 +328 @@ class Printer:
+-        for item in d.items():
++        for item in list(d.items()):
+--- contrib/python/suds-jurko/suds/transport/__init__.py	(index)
++++ contrib/python/suds-jurko/suds/transport/__init__.py	(working tree)
+@@ -57 +57 @@ class Request(UnicodeMixin):
+-        return u"""\
++        return """\
+@@ -92 +92 @@ class Reply(UnicodeMixin):
+-        return u"""\
++        return """\
+--- contrib/python/suds-jurko/suds/transport/http.py	(index)
++++ contrib/python/suds-jurko/suds/transport/http.py	(working tree)
+@@ -25,2 +25,2 @@ import base64
+-from cookielib import CookieJar
+-import httplib
++from http.cookiejar import CookieJar
++import http.client
+@@ -29,2 +29,2 @@ import sys
+-import urllib2
+-from urlparse import urlparse
++import urllib.request, urllib.error, urllib.parse
++from urllib.parse import urlparse
+@@ -65 +65 @@ class HttpTransport(Transport):
+-            u2request = urllib2.Request(url)
++            u2request = urllib.request.Request(url)
+@@ -68 +68 @@ class HttpTransport(Transport):
+-        except urllib2.HTTPError, e:
++        except urllib.error.HTTPError as e:
+@@ -77 +77 @@ class HttpTransport(Transport):
+-            u2request = urllib2.Request(url, msg, headers)
++            u2request = urllib.request.Request(url, msg, headers)
+@@ -88 +88 @@ class HttpTransport(Transport):
+-            result = Reply(httplib.OK, headers, fp.read())
++            result = Reply(http.client.OK, headers, fp.read())
+@@ -90,2 +90,2 @@ class HttpTransport(Transport):
+-        except urllib2.HTTPError, e:
+-            if e.code in (httplib.ACCEPTED, httplib.NO_CONTENT):
++        except urllib.error.HTTPError as e:
++            if e.code in (http.client.ACCEPTED, http.client.NO_CONTENT):
+@@ -143 +143 @@ class HttpTransport(Transport):
+-            return urllib2.build_opener(*self.u2handlers())
++            return urllib.request.build_opener(*self.u2handlers())
+@@ -155 +155 @@ class HttpTransport(Transport):
+-        handlers.append(urllib2.ProxyHandler(self.proxy))
++        handlers.append(urllib.request.ProxyHandler(self.proxy))
+@@ -166 +166 @@ class HttpTransport(Transport):
+-            part = urllib2.__version__.split('.', 1)
++            part = urllib.request.__version__.split('.', 1)
+@@ -168 +168 @@ class HttpTransport(Transport):
+-        except Exception, e:
++        except Exception as e:
+--- contrib/python/suds-jurko/suds/transport/https.py	(index)
++++ contrib/python/suds-jurko/suds/transport/https.py	(working tree)
+@@ -24 +24 @@ from suds.transport.http import HttpTransport
+-import urllib2
++import urllib.request, urllib.error, urllib.parse
+@@ -58 +58 @@ class HttpAuthenticated(HttpTransport):
+-        self.pm = urllib2.HTTPPasswordMgrWithDefaultRealm()
++        self.pm = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+@@ -80 +80 @@ class HttpAuthenticated(HttpTransport):
+-        handlers.append(urllib2.HTTPBasicAuthHandler(self.pm))
++        handlers.append(urllib.request.HTTPBasicAuthHandler(self.pm))
+--- contrib/python/suds-jurko/suds/transport/options.py	(index)
++++ contrib/python/suds-jurko/suds/transport/options.py	(working tree)
+@@ -56,2 +56,2 @@ class Options(Skin):
+-            Definition('username', basestring, None),
+-            Definition('password', basestring, None)]
++            Definition('username', str, None),
++            Definition('password', str, None)]
+--- contrib/python/suds-jurko/suds/umx/__init__.py	(index)
++++ contrib/python/suds-jurko/suds/umx/__init__.py	(working tree)
+@@ -43 +43 @@ class Content(Object):
+-        for k,v in kwargs.items():
++        for k,v in list(kwargs.items()):
+@@ -52,2 +52 @@ class Content(Object):
+-                raise AttributeError, \
+-                    'Content has no attribute %s' % name
++                raise AttributeError('Content has no attribute %s' % name)
+--- contrib/python/suds-jurko/suds/umx/core.py	(index)
++++ contrib/python/suds-jurko/suds/umx/core.py	(working tree)
+@@ -98 +98 @@ class Core:
+-        if isinstance(content.text, basestring):
++        if isinstance(content.text, str):
+--- contrib/python/suds-jurko/suds/version.py	(index)
++++ contrib/python/suds-jurko/suds/version.py	(working tree)
+@@ -1,26 +1,26 @@
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the (LGPL) GNU Lesser General Public License as
+-# published by the Free Software Foundation; either version 3 of the
+-# License, or (at your option) any later version.
+-#
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU Library Lesser General Public License for more details at
+-# ( http://www.gnu.org/licenses/lgpl.html ).
+-#
+-# You should have received a copy of the GNU Lesser General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+-
+-"""
+-Module containing the library's version information.
+-
+-  This version information has been extracted into a separate file so it can be
+-read from the setup.py script without having to import the suds package itself.
+-See the setup.py script for more detailed information.
+-
+-"""
+-
+-__version__ = "0.6"
+-__build__ = ""
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the (LGPL) GNU Lesser General Public License as
++# published by the Free Software Foundation; either version 3 of the
++# License, or (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU Library Lesser General Public License for more details at
++# ( http://www.gnu.org/licenses/lgpl.html ).
++#
++# You should have received a copy of the GNU Lesser General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
++
++"""
++Module containing the library's version information.
++
++  This version information has been extracted into a separate file so it can be
++read from the setup.py script without having to import the suds package itself.
++See the setup.py script for more detailed information.
++
++"""
++
++__version__ = "0.6"
++__build__ = ""
+--- contrib/python/suds-jurko/suds/wsdl.py	(index)
++++ contrib/python/suds-jurko/suds/wsdl.py	(working tree)
+@@ -34,2 +34,2 @@ import re
+-import soaparray
+-from urlparse import urljoin
++from . import soaparray
++from urllib.parse import urljoin
+@@ -235 +235 @@ class Definitions(WObject):
+-            operations = p.binding.type.operations.values()
++            operations = list(p.binding.type.operations.values())
+@@ -252,2 +252,2 @@ class Definitions(WObject):
+-        for b in self.bindings.values():
+-            for op in b.operations.values():
++        for b in list(self.bindings.values()):
++            for op in list(b.operations.values()):
+@@ -485 +485 @@ class PortType(NamedObject):
+-        for op in self.operations.values():
++        for op in list(self.operations.values()):
+@@ -508 +508 @@ class PortType(NamedObject):
+-                    raise Exception, "msg '%s', not-found" % f.message
++                    raise Exception("msg '%s', not-found" % f.message)
+@@ -522 +522 @@ class PortType(NamedObject):
+-        except Exception, e:
++        except Exception as e:
+@@ -657 +657 @@ class Binding(NamedObject):
+-        for op in self.operations.values():
++        for op in list(self.operations.values()):
+@@ -686,2 +686 @@ class Binding(NamedObject):
+-            raise Exception, \
+-                "operation '%s' not defined in portType" % op.name
++            raise Exception("operation '%s' not defined in portType" % op.name)
+@@ -723 +722 @@ class Binding(NamedObject):
+-                raise Exception, "message'%s', not-found" % mn
++                raise Exception("message'%s', not-found" % mn)
+@@ -730,2 +729 @@ class Binding(NamedObject):
+-                raise Exception, \
+-                    "message '%s' has not part named '%s'" % (ref, pn)
++                raise Exception("message '%s' has not part named '%s'" % (ref, pn))
+@@ -744,2 +742 @@ class Binding(NamedObject):
+-            raise Exception, \
+-                "operation '%s' not defined in portType" % op.name
++            raise Exception("operation '%s' not defined in portType" % op.name)
+@@ -754,2 +751 @@ class Binding(NamedObject):
+-            raise Exception, \
+-                "fault '%s' not defined in portType '%s'" % (fault.name, self.type.name)
++            raise Exception("fault '%s' not defined in portType '%s'" % (fault.name, self.type.name))
+@@ -857 +853 @@ class Service(NamedObject):
+-            for m in p.methods.values():
++            for m in list(p.methods.values()):
+--- contrib/python/suds-jurko/suds/xsd/__init__.py	(index)
++++ contrib/python/suds-jurko/suds/xsd/__init__.py	(working tree)
+@@ -62,2 +62,2 @@ def isqref(object):
+-        isinstance(object[0], basestring) and \
+-        isinstance(object[1], basestring))
++        isinstance(object[0], str) and \
++        isinstance(object[1], str))
+--- contrib/python/suds-jurko/suds/xsd/deplist.py	(index)
++++ contrib/python/suds-jurko/suds/xsd/deplist.py	(working tree)
+@@ -80 +80 @@ class DepList:
+-                    ref = top[1].next()
++                    ref = next(top[1])
+@@ -140 +140 @@ if __name__ == '__main__':
+-    print [x[0] for x in L.sort()]
++    print([x[0] for x in L.sort()])
+--- contrib/python/suds-jurko/suds/xsd/query.py	(index)
++++ contrib/python/suds-jurko/suds/xsd/query.py	(working tree)
+@@ -57 +57 @@ class Query(Object):
+-        raise Exception, 'not-implemented by subclass'
++        raise Exception('not-implemented by subclass')
+--- contrib/python/suds-jurko/suds/xsd/schema.py	(index)
++++ contrib/python/suds-jurko/suds/xsd/schema.py	(working tree)
+@@ -107 +107 @@ class SchemaCollection(UnicodeMixin):
+-        namespaces = self.namespaces.keys()
++        namespaces = list(self.namespaces.keys())
+@@ -264 +264 @@ class Schema(UnicodeMixin):
+-        for item in schema.attributes.items():
++        for item in list(schema.attributes.items()):
+@@ -269 +269 @@ class Schema(UnicodeMixin):
+-        for item in schema.elements.items():
++        for item in list(schema.elements.items()):
+@@ -274 +274 @@ class Schema(UnicodeMixin):
+-        for item in schema.types.items():
++        for item in list(schema.types.items()):
+@@ -279 +279 @@ class Schema(UnicodeMixin):
+-        for item in schema.groups.items():
++        for item in list(schema.groups.items()):
+@@ -284 +284 @@ class Schema(UnicodeMixin):
+-        for item in schema.agrps.items():
++        for item in list(schema.agrps.items()):
+--- contrib/python/suds-jurko/suds/xsd/sxbase.py	(index)
++++ contrib/python/suds-jurko/suds/xsd/sxbase.py	(working tree)
+@@ -466 +466 @@ class SchemaObject(UnicodeMixin):
+-        return unicode(self.str())
++        return str(self.str())
+@@ -523 +523 @@ class Iter:
+-        def next(self):
++        def __next__(self):
+@@ -574 +574 @@ class Iter:
+-    def next(self):
++    def __next__(self):
+@@ -583 +583 @@ class Iter:
+-            result = frame.next()
++            result = next(frame)
+@@ -586 +586 @@ class Iter:
+-                return self.next()
++                return next(self)
+@@ -591 +591 @@ class Iter:
+-            return self.next()
++            return next(self)
+--- contrib/python/suds-jurko/suds/xsd/sxbasic.py	(index)
++++ contrib/python/suds-jurko/suds/xsd/sxbasic.py	(working tree)
+@@ -29 +29 @@ from suds.reader import DocumentReader
+-from urlparse import urljoin
++from urllib.parse import urljoin
+@@ -670 +670 @@ class Include(SchemaObject):
+-                raise Exception, '%s mismatch' % TNS
++                raise Exception('%s mismatch' % TNS)
+--- contrib/python/suds-jurko/suds/xsd/sxbuiltin.py	(index)
++++ contrib/python/suds-jurko/suds/xsd/sxbuiltin.py	(working tree)
+@@ -65 +65 @@ class XBoolean(XBuiltin):
+-            if isinstance(value, basestring):
++            if isinstance(value, str):
+@@ -81 +81 @@ class XInteger(XBuiltin):
+-            if isinstance(value, basestring) and len(value):
++            if isinstance(value, str) and len(value):
+@@ -97,2 +97,2 @@ class XLong(XBuiltin):
+-            if isinstance(value, basestring) and len(value):
+-                return long(value)
++            if isinstance(value, str) and len(value):
++                return int(value)
+@@ -100 +100 @@ class XLong(XBuiltin):
+-            if isinstance(value, (int, long)):
++            if isinstance(value, int):
+@@ -113 +113 @@ class XFloat(XBuiltin):
+-            if isinstance(value, basestring) and len(value):
++            if isinstance(value, str) and len(value):
+@@ -129 +129 @@ class XDate(XBuiltin):
+-            if isinstance(value, basestring) and len(value):
++            if isinstance(value, str) and len(value):
+@@ -145 +145 @@ class XTime(XBuiltin):
+-            if isinstance(value, basestring) and len(value):
++            if isinstance(value, str) and len(value):
+@@ -161 +161 @@ class XDateTime(XBuiltin):
+-            if isinstance(value, basestring) and len(value):
++            if isinstance(value, str) and len(value):

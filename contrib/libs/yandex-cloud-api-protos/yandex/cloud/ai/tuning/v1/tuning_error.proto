@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.tuning.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/tuning/v1;fomo";
+option java_package = "yandex.cloud.api.ai.tuning.v1";
+
+message TuningError {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    PUBLIC = 1;
+    INTERNAL = 2;
+  }
+
+  string tuning_task_id = 1;
+  string message = 2;
+  Type type = 3;
+}

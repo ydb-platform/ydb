@@ -1,0 +1,8 @@
+fragment {{ name }} on {{ type }} {
+{%- if typename %}
+  __typename
+{%- endif %}
+{%- for field in fields %}
+  {{ field }}
+{%- endfor %}
+}

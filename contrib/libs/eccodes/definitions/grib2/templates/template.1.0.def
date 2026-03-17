@@ -1,0 +1,5 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 1.0, Calendar Definition
+
+include "grib2/templates/template.1.calendar.def"

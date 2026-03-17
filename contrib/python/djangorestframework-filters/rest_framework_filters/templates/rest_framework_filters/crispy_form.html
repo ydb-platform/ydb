@@ -1,0 +1,18 @@
+{% load rest_framework_filters %}
+{% load crispy_forms_tags %}
+{% load i18n %}
+
+<h2>{% trans "Field filters" %}</h2>
+<form method="get">
+    {% crispy filter.form %}
+
+    {% for related_name, filterset in filter.related_filtersets.items %}
+    <fieldset>
+        <legend>{{ filter|label:related_name }}</legend>
+
+        {% crispy filterset.form %}
+    </fieldset>
+    {% endfor %}
+
+    <button type="submit" class="btn btn-primary">Submit</button>
+</form>

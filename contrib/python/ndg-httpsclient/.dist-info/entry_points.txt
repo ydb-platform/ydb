@@ -1,0 +1,3 @@
+[console_scripts]
+ndg_httpclient = ndg.httpsclient.utils:main
+

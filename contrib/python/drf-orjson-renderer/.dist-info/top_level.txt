@@ -1,0 +1,2 @@
+drf_orjson_renderer
+version

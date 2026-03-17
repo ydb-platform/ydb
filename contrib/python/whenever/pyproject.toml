@@ -1,0 +1,114 @@
+[project]
+name = "whenever"
+authors = [
+    {name = "Arie Bovenberg", email = "a.c.bovenberg@gmail.com"},
+]
+maintainers = [
+    {name = "Arie Bovenberg", email = "a.c.bovenberg@gmail.com"},
+]
+readme = "README.md"
+version = "0.8.8"
+license = "MIT"
+description = "Modern datetime library for Python"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Python",
+    "Programming Language :: Rust",
+    "Typing :: Typed",
+]
+dependencies = [
+    "tzdata>=2020.1; sys_platform == 'win32'",
+]
+keywords = [
+    "datetime", "typesafe", "rust", "date", "time", "timezone", "utc",
+    "zoneinfo", "tzdata", "tzdb"
+]
+
+
+[project.urls]
+Documentation = "https://whenever.readthedocs.io"
+Repository = "https://github.com/ariebovenberg/whenever"
+Issues = "https://github.com/ariebovenberg/whenever/issues"
+Changelog = "https://github.com/ariebovenberg/whenever/blob/main/CHANGELOG.md"
+
+[tool.black]
+line-length = 79
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.hg
+  | \.git
+  | \.mypy_cache
+  | \.venv
+  | _build
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = 'black'
+line_length = 79
+combine_as_imports = true
+
+[tool.mypy]
+warn_unused_ignores = true
+strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "tests.*",
+]
+check_untyped_defs = true
+disable_error_code = ["no-untyped-def"]
+
+# ignore errors in extension module
+[[tool.mypy.overrides]]
+module = [
+    "whenever._whenever",
+    "_interpreters",
+    "tzdata",
+    "pydantic_core",
+    "pydantic",
+]
+ignore_missing_imports = true
+
+[tool.setuptools.packages]
+find = { where = ["pysrc"] }
+
+# We essentially use three build systems:
+# - We use maturin to build the binary distributions for different
+#   platforms in CI, since it is very convenient for this purpose.
+# - We need setuptools to allow enabling/disabling building the Rust
+#   extension using the environment variable, since maturin does not support this.
+# - To actually build the Rust extension with setuptools, we need
+#   setuptools_rust.
+[tool.maturin]
+python-source = "pysrc"
+module-name = "whenever._whenever"
+
+[build-system]
+requires = [
+    "setuptools",
+    "wheel",
+]
+# We need a custom backend to make the inclusion of setuptools_rust conditional
+# on the environment variable.
+# Follows the approach from setuptools.pypa.io/en/latest/build_meta.html#dynamic-build-dependencies-and-other-build-meta-tweaks
+build-backend = "backend"
+backend-path = ["_custom_pybuild"]

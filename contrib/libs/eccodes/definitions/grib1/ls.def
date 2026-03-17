@@ -1,0 +1,16 @@
+alias ls.centre=centre;
+#alias ls.param=marsParam;
+alias ls.shortName=shortName;
+
+alias ls.dataType = dataType;
+
+alias ls.date=date;
+alias ls.stepRange = stepRange;
+
+alias ls.gridType=gridType;
+alias ls.numberOfValues=numberOfValues;
+
+alias ls.levelType=indicatorOfTypeOfLevel;
+alias ls.level=level;
+
+alias ls.packingType=packingType;

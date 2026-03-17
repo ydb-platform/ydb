@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package yandex.cloud.metastore.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/metastore/v1;metastore";
+option java_package = "yandex.cloud.api.metastore.v1";
+
+message MaintenanceWindow {
+  oneof policy {
+    option (exactly_one) = true;
+
+    // The cluster may be restarted for maintenance at any time.
+    AnytimeMaintenanceWindow anytime = 1;
+
+    // Maintenance is allowed only within the specified weekly window.
+    WeeklyMaintenanceWindow weekly_maintenance_window = 2;
+  }
+}
+
+message AnytimeMaintenanceWindow {}
+
+message WeeklyMaintenanceWindow {
+  enum WeekDay {
+    // Day of the week is not specified.
+    WEEK_DAY_UNSPECIFIED = 0;
+
+    // Monday.
+    MON = 1;
+
+    // Tuesday.
+    TUE = 2;
+
+    // Wednesday.
+    WED = 3;
+
+    // Thursday.
+    THU = 4;
+
+    // Friday.
+    FRI = 5;
+
+    // Saturday.
+    SAT = 6;
+
+    // Sunday.
+    SUN = 7;
+  }
+
+  // Day of the week when maintenance can occur.
+  WeekDay day = 1;
+
+  // Hour of the day in UTC when the maintenance window starts.
+  int64 hour = 2 [(value) = "1-24"];
+}
+
+message MaintenanceOperation {
+  // Information about the maintenance operation.
+  string info = 1 [(length) = "<=256"];
+
+  // Maintenance is postponed until the specified timestamp.
+  google.protobuf.Timestamp delayed_until = 2;
+
+  // Timestamp of the latest successfully completed maintenance.
+  google.protobuf.Timestamp latest_maintenance_time = 3;
+
+  // Timestamp of the next scheduled maintenance window.
+  google.protobuf.Timestamp next_maintenance_window_time = 4;
+}

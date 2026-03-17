@@ -1,0 +1,74 @@
+{% load static admin_list i18n %}
+<div class="grp-module grp-changelist-results">
+    <table id="result_list" cellspacing="0" class="grp-table grp-sortable">
+        <thead>
+            <tr>
+                <th scope="col">
+                    <div class="grp-text">
+                        <span>{% trans "Name" %}</span>
+                    </div>
+                </th>
+                <th scope="col">
+                    <div class="grp-text">
+                        <span>{% trans "Default" %}</span>
+                    </div>
+                </th>
+                <th scope="col">
+                    <div class="grp-text">
+                        <span>{% trans "Value" %}</span>
+                    </div>
+                </th>
+                <th scope="col">
+                    <div class="grp-text">
+                        <span>{% trans "Is modified" %}</span>
+                    </div>
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in config_values %}
+                <tr class="grp-row {% cycle 'grp-row-even' 'grp-row-odd' %}">
+                    <td>
+                        <div class="grp-text"><strong>{{ item.name }}</strong></div>
+                        <p class="grp-help">{{ item.help_text|linebreaksbr }}</p>
+                    </td>
+                    <td>
+                        <div class="grp-text"><span>{{ item.default }}</span></div>
+                    </td>
+                    <td>
+                        {{ item.form_field }}
+                        {% if item.form_field.errors %}
+                            <ul class="errorlist">
+                                {% for error in item.form_field.errors %}<li>{{ error }}</li>{% endfor %}
+                            </ul>
+                        {% endif %}
+                    </td>
+                    <td style="text-align: center;">
+                        {% if item.modified %}
+                            <img src="{% static 'admin/img/icon-yes.'|add:icon_type %}" alt="{{ item.modified }}" />
+                        {% else %}
+                            <img src="{% static 'admin/img/icon-no.'|add:icon_type %}" alt="{{ item.modified }}" />
+                        {% endif %}
+                        <br />
+                        <a href="#" class="reset-link"
+                            data-field-id="{{ item.form_field.auto_id }}"
+                            data-field-type="{% spaceless %}
+                            {% if item.is_checkbox %}checkbox
+                            {% elif item.is_date %}date
+                            {% elif item.is_datetime %}datetime
+                            {% endif %}
+                            {% endspaceless %}"
+                            data-default="{% spaceless %}
+                            {% if item.is_checkbox %}{% if item.raw_default %} true {% else %} false {% endif %}
+                            {% elif item.is_date %}{{ item.raw_default|date:"U" }}
+                            {% elif item.is_datetime %}{{ item.raw_default|date:"U" }}
+                            {% else %}{{ item.default }}
+                            {% endif %}
+                            {% endspaceless %}">{% trans "Reset to default" %}
+                        </a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

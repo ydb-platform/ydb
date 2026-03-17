@@ -1,0 +1,18 @@
+# Product discipline 0 - Meteorological products, parameter category 5: long-wave radiation
+0 0 Net long-wave radiation flux (surface) (W m-2)
+1 1 Net long-wave radiation flux (top of atmosphere) (W m-2)
+2 2 Long-wave radiation flux (W m-2)
+3 3 Downward long-wave radiation flux (W m-2)
+4 4 Upward long-wave radiation flux (W m-2)
+5 5 Net long-wave radiation flux (W m-2)
+6 6 Net long-wave radiation flux, clear sky (W m-2)
+7 7 Brightness temperature (K)
+8 8 Downward long-wave radiation flux, clear sky (W m-2)
+9 9 Near IR albedo for diffuse radiation (%)
+10 10 Near IR albedo for direct radiation (%)
+11 11 Near IR albedo for direct radiation, geometric component (%)
+12 12 Near IR albedo for direct radiation, isotropic component (%)
+13 13 Near IR albedo for direct radiation, volumetric component (%)
+# 14-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

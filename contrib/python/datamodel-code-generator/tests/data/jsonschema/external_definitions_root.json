@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Person",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "name": {
+            "$ref": "external_definitions.json#/elegantName"
+        }
+    },
+    "required": [
+        "name"
+    ]
+}

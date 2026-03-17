@@ -1,0 +1,3 @@
+[flake8.extension]
+N4=flake8_broken_line:check_line_breaks
+

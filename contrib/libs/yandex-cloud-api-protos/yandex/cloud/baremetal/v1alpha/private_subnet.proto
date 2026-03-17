@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package yandex.cloud.baremetal.v1alpha;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/baremetal/v1alpha/dhcp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/baremetal/v1alpha;baremetal";
+option java_package = "yandex.cloud.api.baremetal.v1alpha";
+
+// A PrivateSubnet resource.
+message PrivateSubnet {
+  // Reserved for future use.
+  reserved 10 to 99, 101 to 199;
+
+  // ID of the private subnet.
+  string id = 1;
+
+  // ID of the cloud that the private subnet belongs to.
+  string cloud_id = 2;
+
+  // ID of the folder that the private subnet belongs to.
+  string folder_id = 3;
+
+  // Name of the private subnet.
+  // The name is unique within the folder.
+  string name = 4;
+
+  // Optional description of the private subnet.
+  string description = 5;
+
+  // Status of the private subnet.
+  Status status = 6;
+
+  // ID of the availability zone where the server resides.
+  string zone_id = 7;
+
+  // ID of the hardware pool that the private subnet belongs to.
+  string hardware_pool_id = 8;
+
+  // Optional VRF options for the private subnet. If missing, the private subnet will be unrouted,
+  // i.e. it will lack a DHCP server and routing capabilities between this subnet and other private
+  // subnets.
+  VrfOptions vrf_options = 9;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 100;
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 200;
+
+  // Private subnet status.
+  enum Status {
+    // Unspecified private subnet status.
+    STATUS_UNSPECIFIED = 0;
+
+    // Private subnet is being created.
+    CREATING = 1;
+
+    // Private subnet is ready to use.
+    READY = 2;
+
+    // Private subnet is being updated.
+    UPDATING = 3;
+
+    // Private subnet is being deleted.
+    DELETING = 4;
+
+    // Private subnet encountered a problem and cannot operate.
+    ERROR = 5;
+  }
+
+  // VRF options for the private subnet.
+  message VrfOptions {
+    // ID of the VRF.
+    string vrf_id = 1;
+
+    // CIDR block for the subnet.
+    string cidr = 2;
+
+    // DHCP options for the subnet.
+    DhcpOptions dhcp_options = 3;
+
+    // Gateway IP address for the subnet.
+    string gateway_ip = 4;
+  }
+}

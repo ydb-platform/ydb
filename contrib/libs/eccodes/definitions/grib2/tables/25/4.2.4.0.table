@@ -1,0 +1,8 @@
+# Code table 4.2 - Parameter number by product discipline and parameter category
+0 0 Temperature (K)
+1 1 Electron temperature (K)
+2 2 Proton temperature (K)
+3 3 Ion temperature (K)
+4 4 Parallel temperature (K)
+5 5 Perpendicular temperature (K)
+255 255 Missing

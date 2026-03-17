@@ -1,0 +1,120 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; >Predefined Layouts{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Predefined Layouts</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Predefined Layouts</h1>
+    <div class="xg-d-c-fluid">
+        <div class="g-d-24">
+            <div class="grp-doc-description">
+                <p>There are several predefined layouts based on the <a href="{% url 'grp_doc_mueller_grid_system' %}">grid system</a> Grappelli uses.</p>
+            </div>
+        </div>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Layout 2-Columns: Fixed &amp; Fluid</h1>
+                    <p>The layout with the class <span class="grp-doc-class">.l-2c-fluid</span> contains two child columns: The column <span class="grp-doc-class">.c-1</span> has a fixed width and the column <span class="grp-doc-class">.c-2</span> a fluid width. By adding <span class="grp-doc-class">.l-d-#</span> to the layout class, you define the number of columns for <span class="grp-doc-class">.c-1</span>.</p>
+                </div>
+            </div>
+            <div class="g-d-c-fluid">
+                <div class="grp-doc-code-source">
+                    <div class="l-2c-fluid l-d-4">
+				        <div class="c-1"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-1</span></p></div>
+				        <div class="c-2"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-2</span></p></div>
+				    </div>
+				    <div class="l-2c-fluid l-d-8">
+				        <div class="c-1"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-1</span></p></div>
+				        <div class="c-2"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-2</span></p></div>
+				    </div>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<div class="l-2c-fluid l-d-4">
+    <div class="c-1"> ... </div>
+    <div class="c-2"> ... </div>
+</div>
+<div class="l-2c-fluid l-d-8">
+    <div class="c-1"> ... </div>
+    <div class="c-2"> ... </div>
+</div>
+{% endfilter %}</code></pre></div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h2>Reverse this Layout</h2>
+                    <p>It is easy to reverse this layout: If you want to switch the order of the columns, just change the layout class to <span class="grp-doc-class">.l-2cr-fluid</span>.</p>
+                </div>
+            </div>
+            <div class="g-d-c-fluid">
+                <div class="grp-doc-code-source">
+                    <div class="l-2cr-fluid l-d-4">
+				        <div class="c-1"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-1</span></p></div>
+				        <div class="c-2"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-2</span></p></div>
+				    </div>
+				    <div class="l-2cr-fluid l-d-8">
+				        <div class="c-1"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-1</span></p></div>
+				        <div class="c-2"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-2</span></p></div>
+				    </div>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<div class="l-2cr-fluid l-d-4">
+    <div class="c-1"> ... </div>
+    <div class="c-2"> ... </div>
+</div>
+<div class="l-2cr-fluid l-d-8">
+    <div class="c-1"> ... </div>
+    <div class="c-2"> ... </div>
+</div>
+{% endfilter %}</code></pre></div>
+            </div>
+             <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h2>Use this Layout inside a Grid</h2>
+                    <p>You may also use this layout within a grid container or grid-based columns: Just put the layout <span class="grp-doc-class">.l-2c-fluid</span> (or the reversed <span class="grp-doc-class">.l-2cr-fluid</span>) inside a <span class="grp-doc-class">.g-d-#</span>.</p>
+                </div>
+            </div>
+            <div class="g-d-c-fluid">
+                <div class="grp-doc-code-source">
+                	<div class="g-d-18">
+	                    <div class="l-2c-fluid l-d-4">
+					        <div class="c-1"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-1</span></p></div>
+					        <div class="c-2"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-2</span></p></div>
+					    </div>
+					    <div class="l-2cr-fluid l-d-4">
+					        <div class="c-1"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-1</span></p></div>
+					        <div class="c-2"><p style="margin: 10px 0; padding: 7px 5px; background: #c30;"><span class="grp-doc-class">.c-2</span></p></div>
+					    </div>
+					</div>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<div class="g-d-18">
+    <div class="l-2c-fluid l-d-4">
+        <div class="c-1"> ... </div>
+        <div class="c-2"> ... </div>
+    </div>
+    <div class="l-2cr-fluid l-d-4">
+        <div class="c-1"> ... </div>
+        <div class="c-2"> ... </div>
+    </div>
+</div>
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+    </div>
+{% endblock %}
+

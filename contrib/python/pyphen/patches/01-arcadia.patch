@@ -1,0 +1,8 @@
+--- contrib/python/pyphen/pyphen/__init__.py	(index)
++++ contrib/python/pyphen/pyphen/__init__.py	(working tree)
+@@ -219 +219,4 @@ class Pyphen:
+-        path = Path(filename) if filename else LANGUAGES[language_fallback(lang)]
++        if filename and not isinstance(filename, (str, Path)):
++            path = filename
++        else:
++            path = Path(filename) if filename else LANGUAGES[language_fallback(lang)]

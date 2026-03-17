@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<definitions 
+    xmlns:tns="http://example.com/stockquote.wsdl" 
+    xmlns:xsd1="http://example.com/stockquote.xsd" 
+    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" 
+    xmlns="http://schemas.xmlsoap.org/wsdl/"
+    name="StockQuote" 
+    targetNamespace="http://example.com/stockquote.wsdl">
+  <types>
+    <schema xmlns="http://www.w3.org/2001/XMLSchema" 
+            targetNamespace="http://test.python-zeep.org/imports"
+            xmlns:tns="http://test.python-zeep.org/imports">
+      <import schemaLocation="test_import_2.xsd" namespace="http://example.com/stockquote.xsd"/>
+    </schema>
+    <schema xmlns="http://www.w3.org/2001/XMLSchema" 
+            targetNamespace="http://test.python-zeep.org/something"
+            xmlns:tns="http://test.python-zeep.org/something">
+      <import namespace="http://schemas.xmlsoap.org/soap/encoding/" 
+              schemaLocation="http://schemas.xmlsoap.org/soap/encoding/"/>
+    </schema>
+  </types>
+  <message name="GetLastTradePriceInput">
+    <part name="body" element="xsd1:TradePriceRequest"/>
+  </message>
+  <message name="GetLastTradePriceOutput">
+    <part name="body" element="xsd1:TradePrice"/>
+  </message>
+  <message name="FaultMessageMsg1">
+    <part name="fault1" element="xsd1:Fault1"/>
+  </message>
+  <message name="FaultMessageMsg2">
+    <part name="fault2" element="xsd1:Fault2"/>
+  </message>
+  <portType name="StockQuotePortType">
+    <operation name="GetLastTradePrice">
+      <input message="tns:GetLastTradePriceInput"/>
+      <output message="tns:GetLastTradePriceOutput"/>
+      <fault message="tns:FaultMessageMsg1" name="fault1"/>
+      <fault message="tns:FaultMessageMsg2" name="fault2"/>
+    </operation>
+  </portType>
+</definitions>

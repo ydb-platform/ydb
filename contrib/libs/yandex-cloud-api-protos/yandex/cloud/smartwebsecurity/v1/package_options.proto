@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+
+package yandex.cloud.smartwebsecurity.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/smartwebsecurity/v1;smartwebsecurity";

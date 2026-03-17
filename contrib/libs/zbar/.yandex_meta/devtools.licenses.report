@@ -1,0 +1,186 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     LGPL-2.1-or-later AND LGPL-2.1-or-later 5b6c2e53787dfb013ef0394c76faf9e3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 90.48
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        zbar/qrcode.h [2:5]
+        zbar/qrcode/bch15_5.h [2:5]
+        zbar/qrcode/qrdectxt.c [2:5]
+        zbar/qrcode/rs.h [3:6]
+        zbar/qrcode/util.h [2:5]
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 92.68
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        zbar/qrcode/bch15_5.c [2:5]
+        zbar/qrcode/binarize.c [2:5]
+        zbar/qrcode/binarize.h [2:5]
+        zbar/qrcode/qrdec.c [2:5]
+        zbar/qrcode/qrdec.h [2:5]
+        zbar/qrcode/rs.c [3:6]
+        zbar/qrcode/util.c [2:5]
+
+KEEP     Public-Domain        8ae8be9d64c6ee50f9e12440347e48de
+BELONGS ya.make
+    License text:
+          Based on the public domain implementation by Robert J. Jenkins Jr.*/
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        zbar/qrcode/isaac.c [2:2]
+        zbar/qrcode/isaac.h [2:2]
+
+KEEP     LGPL-2.1-or-later    99c18e710ecd43122eb55e189bfdf373
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 89.43
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        include/zbar.h [6:19]
+        include/zbar/zbargtk.h [6:19]
+        zbar/config.c [6:19]
+        zbar/convert.c [6:19]
+        zbar/debug.h [6:19]
+        zbar/decoder.c [6:19]
+        zbar/decoder.h [6:19]
+        zbar/decoder/code128.c [6:19]
+        zbar/decoder/code128.h [6:19]
+        zbar/decoder/code39.c [6:19]
+        zbar/decoder/code39.h [6:19]
+        zbar/decoder/ean.c [6:19]
+        zbar/decoder/ean.h [6:19]
+        zbar/decoder/i25.c [6:19]
+        zbar/decoder/i25.h [6:19]
+        zbar/decoder/pdf417.c [6:19]
+        zbar/decoder/pdf417.h [6:19]
+        zbar/decoder/pdf417_hash.h [6:19]
+        zbar/error.c [6:19]
+        zbar/error.h [6:19]
+        zbar/event.h [6:19]
+        zbar/image.c [6:19]
+        zbar/image.h [6:19]
+        zbar/img_scanner.c [6:19]
+        zbar/img_scanner.h [6:19]
+        zbar/jpeg.c [6:19]
+        zbar/mutex.h [6:19]
+        zbar/processor.c [6:19]
+        zbar/processor.h [6:19]
+        zbar/processor/lock.c [6:19]
+        zbar/processor/null.c [6:19]
+        zbar/processor/posix.c [6:19]
+        zbar/processor/posix.h [6:19]
+        zbar/processor/win.c [6:19]
+        zbar/processor/x.c [6:19]
+        zbar/refcnt.c [6:19]
+        zbar/refcnt.h [6:19]
+        zbar/scanner.c [6:19]
+        zbar/svg.h [6:19]
+        zbar/symbol.c [6:19]
+        zbar/symbol.h [6:19]
+        zbar/thread.h [6:19]
+        zbar/timer.h [6:19]
+        zbar/video.c [6:19]
+        zbar/video.h [6:19]
+        zbar/video/null.c [6:19]
+        zbar/video/v4l1.c [6:19]
+        zbar/video/v4l2.c [6:19]
+        zbar/video/vfw.c [6:19]
+        zbar/window.c [6:19]
+        zbar/window.h [6:19]
+        zbar/window/dib.c [6:19]
+        zbar/window/null.c [6:19]
+        zbar/window/win.c [6:19]
+        zbar/window/win.h [6:19]
+        zbar/window/x.c [6:19]
+        zbar/window/x.h [6:19]
+        zbar/window/ximage.c [6:19]
+        zbar/window/xv.c [6:19]
+
+KEEP     Public-Domain        cbeedfd8b3710b1a5feaae02d991ed5d
+BELONGS ya.make
+    License text:
+        /*Written by Timothy B. Terriberry (tterribe@xiph.org) 1999-2009 public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        zbar/qrcode/isaac.c [1:1]
+        zbar/qrcode/isaac.h [1:1]
+
+KEEP     BSD-3-Clause         e0038c90688df154e559f8f4a2221347
+BELONGS ya.make
+    License text:
+          Portions (C) Xiph.Org Foundation 1994-2008, BSD-style license.*/
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        zbar/qrcode/qrdec.c [3125:3125]
+
+KEEP     LGPL-2.1-or-later    f52cdf89d999a9908663d3bf63349432
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 89.43
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        include/zbar/Decoder.h [6:19]
+        include/zbar/Exception.h [6:19]
+        include/zbar/Image.h [6:19]
+        include/zbar/ImageScanner.h [6:19]
+        include/zbar/Processor.h [6:19]
+        include/zbar/QZBar.h [6:19]
+        include/zbar/QZBarImage.h [6:19]
+        include/zbar/Scanner.h [6:19]
+        include/zbar/Symbol.h [6:19]
+        include/zbar/Video.h [6:19]
+        include/zbar/Window.h [6:19]

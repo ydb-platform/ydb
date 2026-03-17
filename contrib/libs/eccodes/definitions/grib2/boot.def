@@ -1,0 +1,58 @@
+# (C) Copyright 2005- ECMWF.
+#
+# This software is licensed under the terms of the Apache Licence Version 2.0
+# which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+#
+# In applying this licence, ECMWF does not waive the privileges and immunities granted to it by
+# virtue of its status as an intergovernmental organisation nor does it submit to any jurisdiction.
+#
+
+# This gets updated twice a year by WMO.
+# See https://community.wmo.int/en/wis/latest-version
+constant tablesVersionLatestOfficial = 34 : edition_specific;
+# If this is different from the official version, then it is the pre-operational version
+constant tablesVersionLatest = 34 : edition_specific;
+
+constant false = 0 : hidden;
+constant true = 1 : hidden;
+constant million = 1000000 : hidden;
+constant grib2divider = 1000000;
+alias extraDimensionPresent = zero;
+transient angleSubdivisions = grib2divider; # micro degrees
+transient forceStepUnits = 255 : hidden;
+
+meta gts_header gts_header() : no_copy,hidden,read_only;
+meta gts_TTAAii gts_header(20,6) : no_copy,hidden,read_only;
+meta gts_CCCC gts_header(27,4) : no_copy,hidden,read_only;
+meta gts_ddhh00 gts_header(32,6) : no_copy,hidden,read_only;
+
+transient missingValue = 9999;
+constant ieeeFloats = 1 : edition_specific;
+constant isHindcast = 0;
+
+include "grib2/section.0.def"
+
+template core "grib2/sections.def";
+
+#if(!new()) {
+#  lookup[4] endOfProduct(0);
+#  while(endOfProduct != `7777`) {
+#    template core "grib2/sections.def";
+#    lookup[4] endOfProduct(0);
+#  }
+#}
+
+template section_8 "grib2/section.8.def";
+
+# ECC-1779: Add keys to identify experimental and deprecated templates
+# The low-level transient keys template_is_XXX
+# are set inside the template definition files
+concept isTemplateDeprecated(false) {
+    1 = { template_is_deprecated = 1; }
+}
+concept isTemplateExperimental(false) {
+    1 = { template_is_experimental = 1; }
+}
+
+# ECC-1806
+transient paramIdForConversion = 0;

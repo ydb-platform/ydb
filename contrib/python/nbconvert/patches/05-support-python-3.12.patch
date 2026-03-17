@@ -1,0 +1,10 @@
+--- contrib/python/nbconvert/nbconvert/utils/version.py	(index)
++++ contrib/python/nbconvert/nbconvert/utils/version.py	(working tree)
+@@ -8,6 +8,7 @@ It is a bit ridiculous that we need these.
+ # Copyright (c) Jupyter Development Team.
+ # Distributed under the terms of the Modified BSD License.
+ 
++import setuptools
+ from distutils.version import LooseVersion
+ 
+ 

@@ -1,0 +1,71 @@
+# (C) Copyright 2005- ECMWF.
+
+# moved here to allow different bitsPerValue in second order packing
+unsigned[1] bitsPerValue : dump ;
+alias numberOfBitsContainingEachPackedValue = bitsPerValue;
+alias accuracy = bitsPerValue;
+constant constantFieldHalfByte=8;
+
+# For grib1 -> grib2
+#constant dataRepresentationTemplateNumber = 0;
+
+position offsetBeforeData;
+
+if( bitmapPresent || !GDSPresent ) {
+  # For grib1 -> grib2
+  constant bitMapIndicator = 0;
+
+  meta codedValues data_g1simple_packing(
+  #simple_packing args
+     section4Length,
+     offsetBeforeData,
+     offsetSection4,
+     unitsFactor,
+     unitsBias,
+     changingPrecision,
+     numberOfCodedValues,
+     bitsPerValue,
+     referenceValue,
+     binaryScaleFactor,
+     decimalScaleFactor,
+     optimizeScaleFactor,
+  #g1simple_packing args
+     halfByte,
+     packingType,
+     grid_ieee,precision
+  ) : read_only;
+  meta values data_apply_bitmap(codedValues,bitmap,missingValue,binaryScaleFactor) : dump;
+  alias data.packedValues = codedValues;
+} else {
+
+    # For grib1 -> grib2
+    constant bitMapIndicator = 255;
+
+    meta values data_g1simple_packing(
+      section4Length,
+      offsetBeforeData,
+      offsetSection4,
+      unitsFactor,
+      unitsBias,
+      changingPrecision,
+      numberOfCodedValues,
+      bitsPerValue,
+      referenceValue,
+      binaryScaleFactor,
+      decimalScaleFactor,
+      optimizeScaleFactor,
+      halfByte,
+      packingType,
+      grid_ieee,precision
+    ) : dump;
+    alias data.packedValues = values;
+}
+
+
+
+meta numberOfCodedValues number_of_coded_values(bitsPerValue,offsetBeforeData,offsetAfterData,halfByte,numberOfValues) : dump;
+
+meta packingError simple_packing_error(bitsPerValue,binaryScaleFactor,decimalScaleFactor,referenceValue,ibm) : no_copy;
+meta unpackedError simple_packing_error(zero,binaryScaleFactor,decimalScaleFactor,referenceValue,ieee) : no_copy;
+template statistics "common/statistics_grid.def";
+template missing_values "common/missing_values_grid.def";

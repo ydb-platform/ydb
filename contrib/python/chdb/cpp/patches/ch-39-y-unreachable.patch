@@ -1,0 +1,77 @@
+--- contrib/python/chdb/cpp/src/Functions/FunctionsRound.h	(index)
++++ contrib/python/chdb/cpp/src/Functions/FunctionsRound.h	(working tree)
+@@ -19,6 +19,8 @@
+ #include <base/sort.h>
+ #include <algorithm>
+ 
++#include <util/system/compiler.h>
++
+ #ifdef __SSE4_1__
+     #include <smmintrin.h>
+ #else
+@@ -149,8 +151,8 @@ struct IntegerRoundingComputation
+                 return x;
+             }
+         }
+-
+-        std::unreachable();
++        
++        Y_UNREACHABLE();
+     }
+ 
+     static ALWAYS_INLINE T compute(T x, T scale)
+@@ -164,7 +166,7 @@ struct IntegerRoundingComputation
+                 return computeImpl(x, scale);
+         }
+ 
+-        std::unreachable();
++        Y_UNREACHABLE();
+     }
+ 
+     static ALWAYS_INLINE void compute(const T * __restrict in, size_t scale, T * __restrict out)
+@@ -252,7 +254,7 @@ inline float roundWithMode(float x, RoundingMode mode)
+         case RoundingMode::Trunc: return truncf(x);
+     }
+ 
+-    std::unreachable();
++    Y_UNREACHABLE();
+ }
+ 
+ inline double roundWithMode(double x, RoundingMode mode)
+@@ -265,7 +267,7 @@ inline double roundWithMode(double x, RoundingMode mode)
+         case RoundingMode::Trunc: return trunc(x);
+     }
+ 
+-    std::unreachable();
++    Y_UNREACHABLE();
+ }
+ 
+ template <typename T>
+--- contrib/python/chdb/cpp/src/Functions/toStartOfInterval.cpp	(index)
++++ contrib/python/chdb/cpp/src/Functions/toStartOfInterval.cpp	(working tree)
+@@ -11,6 +11,7 @@
+ #include <Functions/IFunction.h>
+ #include <IO/WriteHelpers.h>
+ 
++#include <util/system/compiler.h>
+ 
+ namespace DB
+ {
+@@ -144,7 +145,7 @@ public:
+             }
+         }
+ 
+-        std::unreachable();
++        Y_UNREACHABLE();
+     }
+ 
+     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const override
+@@ -231,7 +232,7 @@ private:
+                 return execute<TimeDataType, TimeColumnType, DataTypeDate, IntervalKind::Kind::Year>(time_data_type, time_column, num_units, result_type, time_zone, input_rows_count, scale);
+         }
+ 
+-        std::unreachable();
++        Y_UNREACHABLE();
+     }
+ 
+     template <typename TimeDataType, typename TimeColumnType, typename ResultDataType, IntervalKind::Kind unit>

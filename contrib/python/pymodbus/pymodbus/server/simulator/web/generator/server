@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Modbus simulator.</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/apple60.png">
+  <link rel="apple-touch-icon" sizes="76x76" href="/apple76.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="/apple120.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="/apple152.png">
+  <link rel="stylesheet" type="text/css" href="/pymodbus.css">
+  <!--REFRESH-->
+</head>
+<body>
+  <body>
+    <center><h1>Server</h1></center>
+    <fieldset class="tools_fieldset" width="30%">
+      <legend>Status</legend>
+      Uptime: <!--UPTIME-->
+    </fieldset>
+    <fieldset class="tools_fieldset" width="30%">
+      <legend>Status</legend>
+      <form action="/api/server" method="get">
+        <input type="submit" value="Restart" name="submit" />
+      </form>
+    </fieldset>
+  </body>
+</html>

@@ -1,0 +1,290 @@
+Metadata-Version: 2.1
+Name: django-dynamic-raw-id
+Version: 4.4
+Summary: raw_id_fields widget replacement that handles display of an object's string value on change.
+Home-page: https://github.com/lincolnloop/django-dynamic-raw-id
+License: MIT
+Keywords: django,widget,field,admin,raw-id,foreignkey
+Author: Martin Mahner
+Requires-Python: >=3.8,<4.0
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Django
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Dist: django (>=3.2)
+Project-URL: Bugtracker, https://github.com/lincolnloop/django-dynamic-raw-id/issues
+Project-URL: Source, https://github.com/lincolnloop/django-dynamic-raw-id
+Description-Content-Type: text/markdown
+
+![PyPi Version](https://img.shields.io/pypi/v/django-dynamic-raw-id.svg)
+![Github Actions](https://github.com/lincolnloop/django-dynamic-raw-id/actions/workflows/test.yml/badge.svg)
+
+# django-dynamic-raw-id
+
+A Django admin raw_id_fields widget replacement that handles display of an object's
+string value on change and can be overridden via a template.
+
+See this example:
+
+<img src="https://d.pr/i/1kv7d.png" style="max-height: 400px;" alt="Screenshot of Django Admin"/>
+
+## Compatibility Matrix:
+
+| Py/Dj     | 3.8 | 3.9 | 3.10 | 3.11 | 3.12 |
+| --------- | --- | --- | ---- | ---- | ---- |
+| 3.2 (LTS) | ✓   | ✓   | ✓    | ✓    | ✓    |
+| 4.0       | ✓   | ✓   | ✓    | ✓    | ✓    |
+| 4.1       | ✓   | ✓   | ✓    | ✓    | ✓    |
+| 4.2 (LTS) | ✓   | ✓   | ✓    | ✓    | ✓    |
+| 5.0       | —   | —   | ✓    | ✓    | ✓    |
+| 5.1       | —   | —   | ✓    | ✓    | ✓    |
+
+## Rationale
+
+By default, Django’s admin loads all possible related instances into a select-box
+interface (`<select>`) for fields that are ForeignKey. This can result in long load
+times and unresponsive admin pages for models with thousands of instances, or with
+multiple ForeinKeys.
+
+The normal fix is to use Django's [ModelAdmin.raw_id_fields][raw_id_docs],
+but by default it _only_ shows the raw id of the related model instance, which is
+somewhat unhelpful.
+
+This package improves the user experience by providing the string representation or
+other customized text for the related instance, linked to that instance's admin
+change form, in addition to the raw id itself.
+
+## Installation
+
+Install the package with `pip``:
+
+```bash
+$ pip install django-dynamic-raw-id
+```
+
+Put `dynamic_raw_id` to your list of `INSTALLED_APPS`:
+
+```python
+INSTALLED_APPS = (
+  # ... other apps
+  'dynamic_raw_id',
+)
+```
+
+And add the `urlpattern`. Make sure its listed _before_ the generic `admin.site.urls`
+urlpattern include:
+
+```python
+urlpatterns = [
+  # ...
+  path('admin/dynamic_raw_id/', include('dynamic_raw_id.urls')),
+  path("admin/", admin.site.urls),
+]
+```
+
+`dynamic_raw_id` comes with some static files so don't forget to run
+`manage.py collectstatic`.
+
+## Usage
+
+To start using django-dynamic-raw-id in your application all you need to do is
+implement `DynamicRawIDMixin` in your `ModelAdmin` class and add the desired
+fields to a list of `dynamic_raw_id_fields``:
+
+```python
+from dynamic_raw_id.admin import DynamicRawIDMixin
+
+class UserProfileAdmin(DynamicRawIDMixin, admin.ModelAdmin):
+  dynamic_raw_id_fields = ('user',)
+```
+
+You can use dynamic_raw_id widgets in a Admin filter as well:
+
+```python
+from dynamic_raw_id.admin import DynamicRawIDMixin
+from dynamic_raw_id.filters import DynamicRawIDFilter
+
+
+class UserProfileAdmin(DynamicRawIDMixin, admin.ModelAdmin):
+  list_filter = (
+    ('dynamic_raw_id_fk', DynamicRawIDFilter),
+  )
+```
+
+### Customizing the value of the dynamic widget
+
+The coolest feature of django-dynamic-raw-id is the ability to customize the output
+of the value displayed alongside the `DynamicRawIDWidget`. There is a basic
+implementation if all you want is your object's `__unicode__` value. To change
+the value displayed all you need to do is implement the correct template.
+
+django-dynamic-raw-id looks for this template
+structure `dynamic_raw_id/<app>/<model>.html`
+and `dynamic_raw_id/<app>/multi_<model>.html` (for multi-value lookups).
+
+For instance, if I have a blog post with a `User` dynamic_raw_id field that I want
+display as `Firstname Lastname`, I would create the template
+`dynamic_raw_id/auth/user.html` with:
+
+```html
+<span>{{ object.0.first_name }} {{ object.0.last_name }}</span>
+```
+
+### A custom admin URL prefix
+
+If you have your admin _and_ the dynamic_raw_id scripts located on a different
+prefix than `/admin/dynamic_raw_id/` you need adjust the `DYNAMIC_RAW_ID_MOUNT_URL`
+Javascript variable.
+
+Example:
+
+```python
+# In case the app is setup at /foobar/dynamic_raw_id/
+path('foobar/dynamic_raw_id/', include('dynamic_raw_id.urls')),
+```
+
+```html
+<script>
+  window.DYNAMIC_RAW_ID_MOUNT_URL = "{% url 'admin:index' %}";
+</script>
+```
+
+An ideal place is the admin `admin/base_site.html` template. Full example:
+
+```html
+{% extends "admin/base_site.html" %} {% block extrahead %} {{ block.super }}
+<script>
+  window.DYNAMIC_RAW_ID_MOUNT_URL = "{% url 'admin:index' %}";
+</script>
+{% endblock %}
+```
+
+# Testing and Local Development
+
+The testsuite uses Selenium to do frontend tests, we require Firefox and
+[geckodriver][geckodriver] to be installed. You can install geckodriver on OS X with
+Homebrew:
+
+```bash
+$ brew install geckodriver
+```
+
+Run the testsuite in your local environment using:
+
+```bash
+# If you don't have Poetry yet, install it globally.
+$ pip install poetry
+
+# Install Dependencies once and run pytest
+$ poetry install
+$ poetry run pytest
+```
+
+Or use tox to test against various Django and Python versions:
+
+```bash
+# If you don't have Tox yet, install it globally.
+$ pip install tox
+
+# Run tox against multiple Python versions.
+$ tox
+```
+
+You can open a Poetry shell to invoke the test suite or other 'manage.py' commands
+by calling the `django-admin` tool with the test app settings.
+
+This also allows you to run the internal testing app in a testserver, to preview a
+sample of what django-dynamic-raw-id is doing:
+
+```shell
+$ poetry shell
+
+$ django-admin migrate
+$ django-admin createsuperuser
+$ django-admin runserver
+```
+
+[raw_id_docs]: https://docs.djangoproject.com/en/dev/ref/contrib/admin/#django.contrib.admin.ModelAdmin.raw_id_fields
+[geckodriver]: https://github.com/mozilla/geckodriver
+
+# Changelog
+
+## v4.3 (2024-11-23)
+
+- Django 5.1 compatibility and tests.
+- Empty filter form field after submission. https://github.com/lincolnloop/django-dynamic-raw-id/issues/109
+
+## v4.2 (2024-06-18)
+
+- Fix Multi Widgets which was showing multiple commas after save. #103
+
+## v4.1 (2024-05-20)
+
+- Overall code cleanup.
+- Refactored tests. Now full test coverage.
+
+## v4.0 (2024-04-21)
+
+- Django 4.2 compatibility and tests.
+- Django 5.0 compatibility and tests.
+- Requires Python 3.8 or up.
+- Switch package management to Poetry.
+
+## v3.0 (2022-03-20)
+
+- Django 4.0 compatibility and tests.
+- Requires Django 3.2 or up.
+- Requires Python 3.7 or up.
+- _Note:_ You may now need to change the order and put the dynamic-raw-id
+  include before the generic admin include. See Readme for details.
+
+## v2.8 (2020-12-02)
+
+- Django 3.1 compatibility and tests.
+
+## v2.7 (2020-05-02)
+
+- Django 3.0 compatibility and tests.
+
+## v2.6 (2019-06-21)
+
+- BACKWARDS INCOMPATIBLE: Dropped support for Django <1.11.
+- BACKWARDS INCOMPATIBLE: Dropped support for Python 3.4.
+- Django 2.2 compatibility and tests.
+- General code cleanup.
+- Pipenv support for local development.
+- Some visual fixes around icons and alignment.
+
+## v2.5 (2018-12-09)
+
+- Django 2.1 compatibility and tests.
+
+## v2.4 (2018-04-09)
+
+- Fixes missing icons in Admin views.
+- Fixes missing JS handling when using a custom /admin/ url.
+
+## v2.3 (2018-01-18)
+
+- BACKWARDS INCOMPATIBLE: Renamed the project to `django-dynamic-raw-id`.
+  to reflect what it's actually doing.
+- Fixed glass lookup icon in Django 1.10 and below.
+- Specific ordering of media asset loading.
+
+## v1.2 (2018-01-17)
+
+- Multiple fixes and enhancements.
+- Full Selenium based testsuite.
+- Django 2.0 and Python 3 compatibility.
+- pipenv support.
+

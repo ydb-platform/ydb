@@ -1,0 +1,9 @@
+[pytest11]
+httpd_server = pytest_server_fixtures.httpd
+jenkins_server = pytest_server_fixtures.jenkins
+mongodb_server = pytest_server_fixtures.mongo
+postgres_server = pytest_server_fixtures.postgres
+redis_server = pytest_server_fixtures.redis
+s3 = pytest_server_fixtures.s3
+xvfb_server = pytest_server_fixtures.xvfb
+

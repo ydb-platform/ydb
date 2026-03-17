@@ -1,0 +1,28 @@
+# -*- text -*-
+#
+# Copyright (c) 2009      Cisco Systems, Inc.  All rights reserved.
+#
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for the resilient mapper.
+#
+[orte-rmaps-resilient:file-not-found]
+The specified file that describes the fault groups for this system:
+
+FILE: %s
+
+was not found. Please verify the file name and location.
+#
+[orte-rmaps-resilient:num-procs]
+The resilient mapper requires that you specify the number of processes
+to be launched for each application. Please provide the required information
+and try again.
+
+Alternatively, if you truly wish to take advantage of the -perxxx options
+or to simply launch one process on every available slot, do not specify the
+resilient mapper. Mpirun will automatically select the appropriate mapper
+to support your request.

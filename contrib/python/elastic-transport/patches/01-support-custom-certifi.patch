@@ -1,0 +1,11 @@
+--- contrib/python/elastic-transport/elastic_transport/_node/_http_aiohttp.py	(43c934ffb73a8b674a69f571628d6e47f167e028)
++++ contrib/python/elastic-transport/elastic_transport/_node/_http_aiohttp.py	(36977721ffb5bd95310e033dda2244cf4252cdfd)
+@@ -99,7 +99,7 @@ class AiohttpHttpNode(BaseAsyncNode):
+                         )
+ 
+                 if ca_certs is not None:
+-                    if os.path.isfile(ca_certs):
++                    if callable(ca_certs) or os.path.isfile(ca_certs):
+                         ssl_context.load_verify_locations(cafile=ca_certs)
+                     elif os.path.isdir(ca_certs):
+                         ssl_context.load_verify_locations(capath=ca_certs)

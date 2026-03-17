@@ -1,0 +1,29 @@
+# (C) Copyright 2005- ECMWF.
+
+constant sphericalHarmonics=1;
+# constant dataRepresentationType  = 50;
+
+# Pentagonal resolution parameter
+unsigned[4] J : dump;
+alias pentagonalResolutionParameterJ=J;
+alias geography.J=J;
+
+# Pentagonal resolution parameter
+unsigned[4] K : dump;
+alias pentagonalResolutionParameterK=K;
+alias geography.K=K;
+
+# Pentagonal resolution parameter
+unsigned[4] M : dump;
+alias pentagonalResolutionParameterM = M;
+alias geography.M=M;
+
+# Representation type indicating the method used to define the norm
+codetable[1] spectralType ('3.6.table',masterDir,localDir) = 1 : no_copy;
+alias spectralDataRepresentationType=spectralType;
+
+# Representation mode indicating the order of the coefficients
+codetable[1] spectralMode ('3.7.table',masterDir,localDir) = 1 : no_copy;
+alias spectralDataRepresentationMode=spectralMode;
+
+constant isGridded = false;

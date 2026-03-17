@@ -1,0 +1,183 @@
+--- contrib/python/aioresponses/tests/test_aioresponses.py	(index)
++++ contrib/python/aioresponses/tests/test_aioresponses.py	(working tree)
+@@ -8,9 +8,10 @@ from unittest.mock import patch
+ 
+ from aiohttp import hdrs
+ from aiohttp import http
++from aiohttp import web
+ from aiohttp.client import ClientSession
+ from aiohttp.client_reqrep import ClientResponse
+-from ddt import ddt, data
++from aiohttp.test_utils import TestServer
+ from packaging.version import Version
+ 
+ try:
+@@ -31,10 +32,11 @@ from aioresponses import CallbackResult, aioresponses
+ 
+ 
+-@ddt
+ class AIOResponsesTestCase(AsyncTestCase):
+ 
+     async def setup(self):
+         self.url = 'http://example.com/api?foo=bar#fragment'
+         self.session = ClientSession()
++        self.external_server = self.make_external_server()
++        await self.external_server.start_server()
+ 
+     async def teardown(self):
+@@ -46,24 +48,43 @@ class AIOResponsesTestCase(AsyncTestCase):
+     def run_async(self, coroutine: Union[Coroutine, Generator]):
+         return self.loop.run_until_complete(coroutine)
+ 
++    def make_external_server(self):
++        """
++        В оригинальном коде для тестирования passthrough исполняются настоящие
++        запросы до сайта http://httpbin.org. В sandbox нет интернета, потому я заменил
++        httpbin на локальный сервер. Осторожнее при обновлении!
++        """
++        async def testserver_status_201(request):
++            return web.Response(status=201)
++
++        async def testserver_get(request):
++            return web.Response()
++
++        app = web.Application()
++        app.router.add_get('/status/201', testserver_status_201)
++        app.router.add_get('/get', testserver_get)
++
++        return TestServer(app)
++
+     async def request(self, url: str):
+         return await self.session.get(url)
+ 
+-    @data(
+-        hdrs.METH_HEAD,
+-        hdrs.METH_GET,
+-        hdrs.METH_POST,
+-        hdrs.METH_PUT,
+-        hdrs.METH_PATCH,
+-        hdrs.METH_DELETE,
+-        hdrs.METH_OPTIONS,
+-    )
+-    @patch('aioresponses.aioresponses.add')
+     @fail_on(unused_loop=False)
+-    def test_shortcut_method(self, http_method, mocked):
+-        with aioresponses() as m:
+-            getattr(m, http_method.lower())(self.url)
+-            mocked.assert_called_once_with(self.url, method=http_method)
++    def test_shortcut_method(self):
++        for http_method in (
++            hdrs.METH_HEAD,
++            hdrs.METH_GET,
++            hdrs.METH_POST,
++            hdrs.METH_PUT,
++            hdrs.METH_PATCH,
++            hdrs.METH_DELETE,
++            hdrs.METH_OPTIONS,
++        ):
++            with self.subTest(), \
++                    patch('aioresponses.aioresponses.add') as mocked, \
++                    aioresponses() as m:
++                getattr(m, http_method.lower())(self.url)
++                mocked.assert_called_once_with(self.url, method=http_method)
+ 
+     @aioresponses()
+     def test_returned_instance(self, m):
+@@ -369,1 +390,1 @@ class AIOResponsesTestCase(AsyncTestCase):
+-        external_api = 'http://httpbin.org/status/201'
++        external_api = str(self.external_server.make_url('/status/201'))
+@@ -386,1 +407,1 @@ class AIOResponsesTestCase(AsyncTestCase):
+-        external_api = 'http://httpbin.org/get'
++        external_api = str(self.external_server.make_url('/get'))
+@@ -400,1 +421,1 @@ class AIOResponsesTestCase(AsyncTestCase):
+-            self.assertEqual(str(ext.url), 'http://httpbin.org/get?foo=bar')
++            self.assertEqual(str(ext.url), external_api + '?foo=bar')
+--- contrib/python/aioresponses/tests/test_compat.py	(index)
++++ contrib/python/aioresponses/tests/test_compat.py	(working tree)
+@@ -2,7 +2,6 @@
+ from typing import Union
+ from unittest import TestCase
+ 
+-from ddt import ddt, data
+ from yarl import URL
+ 
+ from aioresponses.compat import merge_params
+@@ -12,7 +11,6 @@ def get_url(url: str, as_str: bool) -> Union[URL, str]:
+     return url if as_str else URL(url)
+ 
+ 
+-@ddt
+ class CompatTestCase(TestCase):
+     use_default_loop = False
+ 
+@@ -20,29 +18,33 @@ class CompatTestCase(TestCase):
+         self.url_with_parameters = 'http://example.com/api?foo=bar#fragment'
+         self.url_without_parameters = 'http://example.com/api?#fragment'
+ 
+-    @data(True, False)
+-    def test_no_params_returns_same_url__as_str(self, as_str):
+-        url = get_url(self.url_with_parameters, as_str)
+-        self.assertEqual(
+-            merge_params(url, None), URL(self.url_with_parameters)
+-        )
+-
+-    @data(True, False)
+-    def test_empty_params_returns_same_url__as_str(self, as_str):
+-        url = get_url(self.url_with_parameters, as_str)
+-        self.assertEqual(merge_params(url, {}), URL(self.url_with_parameters))
+-
+-    @data(True, False)
+-    def test_both_with_params_returns_corrected_url__as_str(self, as_str):
+-        url = get_url(self.url_with_parameters, as_str)
+-        self.assertEqual(
+-            merge_params(url, {'x': 42}),
+-            URL('http://example.com/api?foo=bar&x=42#fragment'),
+-        )
+-
+-    @data(True, False)
+-    def test_base_without_params_returns_corrected_url__as_str(self, as_str):
+-        expected_url = URL('http://example.com/api?x=42#fragment')
+-        url = get_url(self.url_without_parameters, as_str)
+-
+-        self.assertEqual(merge_params(url, {'x': 42}), expected_url)
++    def test_no_params_returns_same_url__as_str(self):
++        for as_str in (True, False):
++            with self.subTest():
++                url = get_url(self.url_with_parameters, as_str)
++                self.assertEqual(
++                    merge_params(url, None), URL(self.url_with_parameters)
++                )
++
++    def test_empty_params_returns_same_url__as_str(self):
++        for as_str in (True, False):
++            with self.subTest():
++                url = get_url(self.url_with_parameters, as_str)
++                self.assertEqual(merge_params(url, {}), URL(self.url_with_parameters))
++
++    def test_both_with_params_returns_corrected_url__as_str(self):
++        for as_str in (True, False):
++            with self.subTest():
++                url = get_url(self.url_with_parameters, as_str)
++                self.assertEqual(
++                    merge_params(url, {'x': 42}),
++                    URL('http://example.com/api?foo=bar&x=42#fragment'),
++                )
++
++    def test_base_without_params_returns_corrected_url__as_str(self):
++        for as_str in (True, False):
++            with self.subTest():
++                expected_url = URL('http://example.com/api?x=42#fragment')
++                url = get_url(self.url_without_parameters, as_str)
++
++                self.assertEqual(merge_params(url, {'x': 42}), expected_url)
+--- contrib/python/aioresponses/tests/test_aioresponses.py	(index)
++++ contrib/python/aioresponses/tests/test_aioresponses.py	(working tree)
+@@ -818,7 +818,7 @@ class AIOResponseRedirectTest(AsyncTestCase):
+         self.assertEqual(len(response.history), 1)
+         self.assertEqual(str(response.history[0].url), url)
+ 
+-    async def test_pass_through_unmatched_requests(self):
++    async def _test_pass_through_unmatched_requests(self):
+         matched_url = "https://matched_example.org"
+         unmatched_url = "https://httpbin.org/get"
+         params_unmatched = {'foo': 'bar'}

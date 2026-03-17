@@ -1,0 +1,131 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2020-02-07 23:25+0100\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Bor Plestenjak <bplestenjak@gmail.com>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: sl_SI\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n%100==1 ? 0 : n%100==2 ? 1 : n%100==3 || n"
+"%100==4 ? 2 : 3);\n"
+
+#: admin.py:66
+msgid "Initial version."
+msgstr "Začetna različica."
+
+#: admin.py:170
+#, python-format
+msgid "Reverted to previous version, saved on %(datetime)s"
+msgstr "Povrnjeno na prejšnjo različico, shranjeno %(datetime)s"
+
+#: admin.py:194
+#, python-format
+msgid "Recover %(name)s"
+msgstr "Obnovi %(name)s"
+
+#: admin.py:210
+#, python-format
+msgid "Revert %(name)s"
+msgstr "Povrni prejšnjo različico %(name)s"
+
+#: admin.py:245 templates/reversion/change_list.html:7
+#: templates/reversion/recover_form.html:10
+#: templates/reversion/recover_list.html:10
+#, python-format
+msgid "Recover deleted %(name)s"
+msgstr "Obnovi izbrisane %(name)s"
+
+#: models.py:33
+#, python-format
+msgid "Could not save %(object_repr)s version - missing dependency."
+msgstr "Različice %(object_repr)s ni bilo možno shraniti zaradi manjkajočih odvisnosti."
+
+#: models.py:46
+msgid "date created"
+msgstr "datum nastanka"
+
+#: models.py:55
+msgid "user"
+msgstr "uporabnik"
+
+#: models.py:61
+msgid "comment"
+msgstr "opomba"
+
+#: models.py:233
+#, python-format
+msgid "Could not load %(object_repr)s version - incompatible version data."
+msgstr "Različice %(object_repr)s ni bilo možno naložiti zaradi nezdružljivih podatkov."
+
+#: models.py:237
+#, python-format
+msgid "Could not load %(object_repr)s version - unknown serializer %(format)s."
+msgstr "Različice %(object_repr)s ni bilo možno naložiti zaradi neznane serializacije %(format)s."
+
+#: templates/reversion/object_history.html:8
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr "Za povrnitev objekta na prejšnjo različico izberi datum iz spodnjega seznama."
+
+#: templates/reversion/object_history.html:15
+#: templates/reversion/recover_list.html:23
+msgid "Date/time"
+msgstr "Datum/čas"
+
+#: templates/reversion/object_history.html:16
+msgid "User"
+msgstr "Uporabnik"
+
+#: templates/reversion/object_history.html:17
+msgid "Action"
+msgstr "Dejanje"
+
+#: templates/reversion/object_history.html:38
+msgid ""
+"This object doesn't have a change history. It probably wasn't added via this "
+"admin site."
+msgstr "Ta objekt nima zgodovine sprememb. Verjetno ni bil dodan preko te strani za administracijo."
+
+#: templates/reversion/recover_form.html:7
+#: templates/reversion/recover_list.html:7
+#: templates/reversion/revision_form.html:7
+msgid "Home"
+msgstr "Domov"
+
+#: templates/reversion/recover_form.html:20
+msgid "Press the save button below to recover this version of the object."
+msgstr "Za obnovitev te različice objekta spodaj pritisni gumb shrani."
+
+#: templates/reversion/recover_list.html:17
+msgid ""
+"Choose a date from the list below to recover a deleted version of an object."
+msgstr  "Za obnovitev izbrisanega objekta izberi datum iz spodnjega seznama."
+
+#: templates/reversion/recover_list.html:37
+msgid "There are no deleted objects to recover."
+msgstr "Ni izbrisanih objektov za obnovitev."
+
+#: templates/reversion/revision_form.html:11
+msgid "History"
+msgstr "Zgodovina"
+
+#: templates/reversion/revision_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Povrni %(verbose_name)s"
+
+#: templates/reversion/revision_form.html:21
+msgid "Press the save button below to revert to this version of the object."
+msgstr "Za povrnitev te različice objekta spodaj pritisni gumb shrani."
+

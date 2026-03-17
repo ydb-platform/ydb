@@ -1,0 +1,17 @@
+openapi: "3.1.0"
+components:
+  schemas:
+    Foo:
+      type: object
+      properties:
+        bar:
+          type: array
+          items:
+            enum:
+              - hello
+              - goodbye
+            maxLength: 5
+            minLength: 1
+            type: string
+            pattern: "^.*$"
+          maxItems: 3

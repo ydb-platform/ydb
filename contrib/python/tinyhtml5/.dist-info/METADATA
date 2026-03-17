@@ -1,0 +1,62 @@
+Metadata-Version: 2.1
+Name: tinyhtml5
+Version: 2.0.0
+Summary: HTML parser based on the WHATWG HTML specification
+Keywords: html,parser
+Author-email: James Graham <james@hoppipolla.co.uk>
+Maintainer-email: CourtBouillon <contact@courtbouillon.org>
+Requires-Python: >=3.9
+Description-Content-Type: text/x-rst
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Text Processing :: Markup :: HTML
+Requires-Dist: webencodings >=0.5.1
+Requires-Dist: sphinx ; extra == "doc"
+Requires-Dist: sphinx_rtd_theme ; extra == "doc"
+Requires-Dist: pytest ; extra == "test"
+Requires-Dist: ruff ; extra == "test"
+Project-URL: Changelog, https://github.com/CourtBouillon/tinyhtml5/releases
+Project-URL: Code, https://github.com/CourtBouillon/tinyhtml5
+Project-URL: Documentation, https://doc.courtbouillon.org/tinyhtml5/
+Project-URL: Donation, https://opencollective.com/courtbouillon
+Project-URL: Homepage, https://github.com/CourtBouillon/tinyhtml5
+Project-URL: Issues, https://github.com/CourtBouillon/tinyhtml5/issues
+Provides-Extra: doc
+Provides-Extra: test
+
+**A tiny HTML5 parser**
+
+tinyhtml5 is a HTML5 parser that transforms a possibly malformed HTML document
+into an ElementTree tree.
+
+This module is a simplified fork of html5lib, written and maintained by James
+Graham, Sam Sneddon, Łukasz Langa and Will Kahn-Greene.
+
+* Free software: MIT license
+* For Python 3.9+, tested on CPython and PyPy
+* Documentation: https://doc.courtbouillon.org/tinyhtml5
+* Changelog: https://github.com/CourtBouillon/tinyhtml5/releases
+* Code, issues, tests: https://github.com/CourtBouillon/tinyhtml5
+* Code of conduct: https://www.courtbouillon.org/code-of-conduct
+* Professional support: https://www.courtbouillon.org
+* Donation: https://opencollective.com/courtbouillon
+
+Copyrights are retained by their contributors, no copyright assignment is
+required to contribute to tinyhtml5. Unless explicitly stated otherwise, any
+contribution intentionally submitted for inclusion is licensed under the MIT
+license, without any additional terms or conditions. For full authorship
+information, see the version control history.
+

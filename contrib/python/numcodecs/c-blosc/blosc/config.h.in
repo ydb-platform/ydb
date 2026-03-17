@@ -1,0 +1,11 @@
+#ifndef _CONFIGURATION_HEADER_GUARD_H_
+#define _CONFIGURATION_HEADER_GUARD_H_
+
+#cmakedefine HAVE_LZ4 @HAVE_LZ4@
+#cmakedefine HAVE_SNAPPY @HAVE_SNAPPY@
+#cmakedefine HAVE_ZLIB @HAVE_ZLIB@
+#cmakedefine HAVE_ZSTD @HAVE_ZSTD@
+#cmakedefine BLOSC_DLL_EXPORT @DLL_EXPORT@
+
+
+#endif

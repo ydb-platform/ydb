@@ -1,0 +1,63 @@
+--- contrib/python/celery/py2/celery/apps/worker.py	(index)
++++ contrib/python/celery/py2/celery/apps/worker.py	(working tree)
+@@ -148,7 +148,7 @@ class Worker(WorkController):
+         # for when users sends bug reports.
+         use_image = term.supports_images()
+         if use_image:
+-            print(term.imgcat(static.logo()))
++            print(term.resource_imgcat(static.logo_resource()))
+         print(safe_str(''.join([
+             string(self.colored.cyan(
+                 ' \n', self.startup_info(artlines=not use_image))),
+--- contrib/python/celery/py2/celery/utils/static/__init__.py	(index)
++++ contrib/python/celery/py2/celery/utils/static/__init__.py	(working tree)
+@@ -9,7 +9,19 @@ def get_file(*args):
+     return os.path.join(os.path.abspath(os.path.dirname(__file__)), *args)
+ 
+ 
++def get_file_resource(*args):
++    # type: (*str) -> str
++    """Get resource key for static file."""
++    return os.path.join(os.path.dirname(__file__), *args)
++
++
+ def logo():
+     # type: () -> bytes
+     """Celery logo image."""
+     return get_file('celery_128.png')
++
++
++def logo_resource():
++    # type: () -> bytes
++    """Celery logo image."""
++    return get_file_resource('celery_128.png')
+--- contrib/python/celery/py2/celery/utils/term.py	(index)
++++ contrib/python/celery/py2/celery/utils/term.py	(working tree)
+@@ -9,6 +9,8 @@ import platform
+ import sys
+ from functools import reduce
+ 
++from library.python import resource
++
+ from celery.five import python_2_unicode_compatible, string
+ from celery.platforms import isatty
+ 
+@@ -178,7 +180,18 @@ def _read_as_base64(path):
+         return encoded if type(encoded) == 'str' else encoded.decode('ascii')
+ 
+ 
++def _read_resource_as_base64(path):
++    encoded = base64.b64encode(resource.resfs_read(path))
++    return encoded if type(encoded) == 'str' else encoded.decode('ascii')
++
++
+ def imgcat(path, inline=1, preserve_aspect_ratio=0, **kwargs):
+     return '\n%s1337;File=inline=%d;preserveAspectRatio=%d:%s%s' % (
+         _IMG_PRE, inline, preserve_aspect_ratio,
+         _read_as_base64(path), _IMG_POST)
++
++
++def resource_imgcat(path, inline=1, preserve_aspect_ratio=0, **kwargs):
++    return '\n%s1337;File=inline=%d;preserveAspectRatio=%d:%s%s' % (
++        _IMG_PRE, inline, preserve_aspect_ratio,
++        _read_resource_as_base64(path), _IMG_POST)

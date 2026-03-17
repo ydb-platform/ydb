@@ -1,0 +1,17 @@
+--- contrib/python/statsmodels/py3/statsmodels/datasets/utils.py	(index)
++++ contrib/python/statsmodels/py3/statsmodels/datasets/utils.py	(working tree)
+@@ -321,6 +321,14 @@ def load_csv(base_file, csv_name, sep=',', convert_float=False):
+     """Standard simple csv loader"""
+     filepath = dirname(abspath(base_file))
+     filename = join(filepath,csv_name)
++
++    from os.path import relpath
++    import pkgutil
++    from io import BytesIO
++
++    csv_name = join(relpath(filepath, dirname(abspath(__file__))), csv_name)
++    filename = BytesIO(pkgutil.get_data('statsmodels.datasets', csv_name))
++
+     engine = 'python' if sep != ',' else 'c'
+     float_precision = {}
+     if engine == 'c':

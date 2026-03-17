@@ -1,0 +1,160 @@
+syntax = "proto3";
+
+package yandex.cloud.k8s.marketplace.v1;
+
+import "google/api/annotations.proto";
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/k8s/marketplace/v1/helm_release.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/marketplace/v1;k8s_marketplace";
+option java_package = "yandex.cloud.api.k8s.marketplace.v1";
+
+// A set of methods for managing Helm release.
+service HelmReleaseService {
+
+  // Retrieves the list of Helm releases in the specified Kubernetes Cluster.
+  rpc List (ListHelmReleasesRequest) returns (ListHelmReleasesResponse) {
+    option (google.api.http) = {get: "/managed-kubernetes/marketplace/v1/helm-releases"};
+  }
+
+  // Returns the specified Helm release.
+  rpc Get (GetHelmReleaseRequest) returns (HelmRelease) {
+    option (google.api.http) = {get: "/managed-kubernetes/marketplace/v1/helm-releases/{id}"};
+  }
+
+  // Installs helm release into specified Kubernetes Cluster.
+  rpc Install (InstallHelmReleaseRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/managed-kubernetes/marketplace/v1/helm-releases:install"
+      body: "*"
+    };
+
+    option (yandex.cloud.api.operation) = {
+      metadata: "InstallHelmReleaseMetadata"
+      response: "HelmRelease"
+    };
+  }
+
+  // Updates helm release.
+  rpc Update (UpdateHelmReleaseRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/managed-kubernetes/marketplace/v1/helm-releases/{id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateHelmReleaseMetadata"
+      response: "HelmRelease"
+    };
+  }
+
+  // Uninstalls helm release.
+  rpc Uninstall (UninstallHelmReleaseRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UninstallHelmReleaseMetadata"
+      response: "google.protobuf.Empty"
+    };
+    option (google.api.http) = {
+      post: "/managed-kubernetes/marketplace/v1/helm-releases/uninstall/{id}:uninstall"
+      body: "*"
+    };
+  }
+}
+
+message ListHelmReleasesRequest {
+  // The ID of the Kubernetes cluster to list Helm releases from.
+  string cluster_id = 1 [(required) = true];
+
+  // The maximum number of results per page that should be returned.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Token for pagination to retrieve the next page of results.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListHelmReleasesResponse {
+  // List of Helm releases in the Kubernetes cluster.
+  repeated HelmRelease helm_releases = 1;
+
+  // Token for retrieving the next page of Helm releases.
+  string next_page_token = 2;
+}
+
+message GetHelmReleaseRequest {
+  // The ID of the Helm release to retrieve.
+  string id = 1 [(required) = true];
+}
+
+message InstallHelmReleaseRequest {
+  // The ID of the Kubernetes cluster where the Helm release is to be installed.
+  string cluster_id = 1 [(required) = true];
+
+  // The product version ID to install.
+  string product_version_id = 2;
+
+  // User-defined values for the Helm chart during installation.
+  repeated ValueWithKey user_values = 3;
+}
+
+message InstallHelmReleaseMetadata {
+  // The ID of the Kubernetes cluster where the Helm release is being installed.
+  string cluster_id = 1;
+
+  // The ID of the Helm release being installed.
+  string helm_release_id = 2;
+
+  // The ID of the product version being deployed.
+  string product_version_id = 3;
+}
+
+message UpdateHelmReleaseRequest {
+  // The ID of the Helm release to update.
+  string id = 1 [(required) = true];
+
+  // The ID of the new product version for the release.
+  string product_version_id = 2;
+
+  // Custom user values to apply during the update.
+  repeated ValueWithKey user_values = 3;
+}
+
+message UpdateHelmReleaseMetadata {
+  // The ID of the Kubernetes cluster where the Helm release is being updated.
+  string cluster_id = 1;
+
+  // The ID of the Helm release being updated.
+  string helm_release_id = 2;
+
+  // The ID of the new product version to update the Helm release to.
+  string product_version_id = 3;
+}
+
+message UninstallHelmReleaseRequest {
+  // The ID of the Helm release to retrieve.
+  string id = 1 [(required) = true];
+}
+
+message UninstallHelmReleaseMetadata {
+  // The ID of the Kubernetes cluster where the release is being uninstalled.
+  string cluster_id = 1 [(required) = true];
+
+  // The ID of the Helm release being uninstalled.
+  string helm_release_id = 2 [(required) = true];
+}
+
+message ValueWithKey {
+  // The key associated with the value.
+  string key = 1 [(required) = true];
+
+  // The value associated with the key.
+  Value value = 2;
+}
+
+message Value {
+  oneof value {
+    // The typed string value.
+    string typed_value = 1;
+  }
+}

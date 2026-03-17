@@ -1,0 +1,5 @@
+# ECMWF concept type of level
+'entireAtmosphere' = {indicatorOfTypeOfLevel=200;level=0;}
+'entireOcean' = {indicatorOfTypeOfLevel=201;level=0;}
+'oceanWave' = {indicatorOfTypeOfLevel=211;}
+'oceanMixedLayer' = {indicatorOfTypeOfLevel=212;}

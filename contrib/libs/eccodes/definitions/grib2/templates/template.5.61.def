@@ -1,0 +1,12 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 5.61, Grid point data - Simple packing with logarithmic preprocessing
+
+# This template is experimental, was not validated at the time of publication and should be used only for bilateral previously agreed tests
+transient template_is_experimental = 1 : hidden;
+
+constant typeOfPreProcessing = 1;
+
+include "grib2/templates/template.5.packing.def"
+
+ieeefloat preProcessingParameter : read_only;

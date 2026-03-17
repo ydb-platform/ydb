@@ -1,0 +1,22 @@
+# LC-WFV table of suite names
+0 unknown Unknown
+1 ecmf Wave model run by ECMWF
+2 egrr Wave model run by UKMO
+3 fnmo Wave model run by FNMOC
+4 cwao Wave model run by ECCC
+5 kwbc Wave model run by NCEP
+6 lfpw Wave model run by METFR
+7 edzw Wave model run by DWD
+8 ammc Wave model run by BoM
+# Note: For MeteoFrance code==85 and subcentre==202
+#       lops = Laboratoire D'Oceanographie Physique et Spatiale
+9 lops Wave model run by LOPS
+10 rjtd Wave model run by JMA
+11 rksl Wave model run by KMA
+12 lemm Wave model run by PRTOS
+13 ekmi Wave model run by DMI
+14 niwa Wave model run by NIWA
+15 enmi Wave model run by METNO
+16 sabm Wave model run by SHN/SM
+17 nzkl Wave model run by NZMS
+18 cnmc Wave model run by METEOAM

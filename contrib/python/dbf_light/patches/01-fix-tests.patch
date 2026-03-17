@@ -1,0 +1,15 @@
+--- contrib/python/dbf_light/tests/test_module.py	(index)
++++ contrib/python/dbf_light/tests/test_module.py	(working tree)
+@@ -17,7 +17,11 @@ except NameError:
+ 
+ @pytest.fixture
+ def dir_fixtures(request):
+-    return path.join(path.dirname(path.abspath(request.module.__file__)), 'fixtures')
++    try:
++        import yatest.common
++        return yatest.common.test_source_path(path.join('fixtures'))
++    except:
++        return path.join(path.dirname(path.abspath(request.module.__file__)), 'fixtures')
+ 
+ 
+ @pytest.fixture

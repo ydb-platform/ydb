@@ -1,0 +1,5 @@
+--- a/include/boost/numeric/ublas/exception.hpp	(index)
++++ b/include/boost/numeric/ublas/exception.hpp	(working tree)
+@@ -73,1 +73,1 @@ namespace boost { namespace numeric { namespace ublas {
+-        // virtual const char *what () const throw () {
++        // virtual const char *what () const noexcept {

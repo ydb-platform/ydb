@@ -1,0 +1,74 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.12, Transverse Mercator
+include "grib2/templates/template.3.shape_of_the_earth.def"
+
+constant isGridded = true;
+
+unsigned[4] Ni : dump;
+alias numberOfPointsAlongAParallel = Ni;
+alias Nx = Ni;
+alias numberOfPointsAlongXAxis = Ni;
+alias geography.Ni=Ni;
+
+unsigned[4] Nj : dump;
+alias numberOfPointsAlongAMeridian = Nj;
+alias Ny = Nj;
+alias numberOfPointsAlongYAxis = Nj;
+alias geography.Nj=Nj;
+
+# LaR - geographic latitude of reference point
+signed[4] latitudeOfReferencePoint: edition_specific,no_copy ;
+alias LaR = latitudeOfReferencePoint;
+meta geography.latitudeOfReferencePointInDegrees scale(latitudeOfReferencePoint,oneConstant,grib2divider,truncateDegrees) : dump;
+
+# LoR - geographic longitude of reference point
+signed[4] longitudeOfReferencePoint : edition_specific,no_copy;
+alias LoR = longitudeOfReferencePoint;
+meta geography.longitudeOfReferencePointInDegrees scale(longitudeOfReferencePoint,oneConstant,grib2divider,truncateDegrees) : dump;
+
+include "grib2/templates/template.3.resolution_flags.def"
+
+# m - scale factor at reference point ratio of distance on map to distance on spheroid
+# (IEEE 32-bit floating-point values)
+ieeefloat scaleFactorAtReferencePoint : edition_specific,no_copy;
+alias m = scaleFactorAtReferencePoint;
+alias geography.m=m;
+
+# XR - false easting, i-direction coordinate of reference point in units of 10-2 m
+signed[4] XR : edition_specific,no_copy;
+alias falseEasting = XR;
+meta geography.XRInMetres scale(XR,one,hundred) : dump;
+
+# YR - false northing, j-direction coordinate of reference point in units of 10-2 m
+signed[4] YR : edition_specific,no_copy ;
+alias falseNorthing = YR;
+meta geography.YRInMetres scale(YR,one,hundred) : dump;
+
+include "grib2/templates/template.3.scanning_mode.def"
+
+# Di - i-direction increment length in units of 10-2 m
+unsigned[4] Di : edition_specific,no_copy;
+alias iDirectionIncrementGridLength = Di;
+meta geography.DiInMetres scale(Di,oneConstant,hundred,truncateDegrees) : dump;
+
+# Dj - j-direction increment length in units of 10-2 m
+unsigned[4] Dj : edition_specific,no_copy;
+alias jDirectionIncrementGridLength = Dj;
+meta geography.DjInMetres scale(Dj,oneConstant,hundred,truncateDegrees) : dump;
+
+# x1 - i-direction coordinate of the first grid point in units of 10-2 m
+signed[4] X1 : no_copy;
+meta geography.X1InGridLengths scale(X1,one,hundred) : dump;
+
+# y1 - j-direction coordinate of the first grid point in units of 10-2 m
+signed[4] Y1 : no_copy;
+meta geography.Y1InGridLengths scale(Y1,one,hundred) : dump;
+
+# x2 - i-direction coordinate of the last grid point in units of 10-2 m
+signed[4] X2 : no_copy;
+meta geography.X2InGridLengths scale(X2,one,hundred) : dump;
+
+# y2 - j-direction coordinate of the last grid point in units of 10-2 m
+signed[4] Y2 : no_copy;
+meta geography.Y2InGridLengths scale(Y2,one,hundred) : dump;

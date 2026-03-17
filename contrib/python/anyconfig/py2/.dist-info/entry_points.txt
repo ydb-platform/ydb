@@ -1,0 +1,3 @@
+[console_scripts]
+anyconfig_cli = anyconfig.cli:main
+

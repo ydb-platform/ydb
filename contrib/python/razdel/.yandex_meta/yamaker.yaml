@@ -1,0 +1,4 @@
+keep:
+- razdel/tests/data/* # Сами ресурсы отсутствуют в wheel и sdist, поэтому не даем автоматике их удалить
+exclude_from_macros:
+- razdel/tests/data/*

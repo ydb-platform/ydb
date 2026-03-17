@@ -1,0 +1,61 @@
+{
+  "openapi" : "3.0.0",
+  "components" : {
+    "schemas" : {
+      "UserId" : {
+        "type" : "string"
+      },
+      "Tweet" : {
+        "type" : "object",
+        "properties" : {
+          "author_id" : {
+            "$ref" : "#/components/schemas/UserId"
+          }
+        }
+      },
+      "Users": {
+        "type": "array",
+        "items": [{
+          "$ref":  "#/components/schemas/UserId"
+        }]
+      },
+      "FileHash": {
+        "type": "string",
+        "minLength": 32,
+        "maxLength": 32,
+        "pattern": "^[a-fA-F\\d]{32}$",
+        "description": "For file"
+      },
+      "ImageHash": {
+        "$ref": "#/components/schemas/FileHash",
+        "maxLength": 64,
+        "minLength": 64
+      },
+       "FileRequest": {
+        "type": "object",
+        "required": ["file_hash"],
+        "properties": {
+          "file_hash": {
+            "$ref": "#/components/schemas/FileHash"
+          }
+        }
+      },
+      "ImageRequest": {
+        "type": "object",
+        "required": ["file_hash"],
+        "properties": {
+          "image_hash": {
+            "$ref": "#/components/schemas/ImageHash",
+            "description": "For image"
+          }
+        }
+      },
+      "FileHashes": {
+        "type": "array",
+        "items": {
+           "$ref": "#/components/schemas/FileHash"
+        }
+      }
+    }
+  }
+}

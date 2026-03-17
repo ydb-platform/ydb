@@ -1,0 +1,20 @@
+ -*- text -*-
+#
+# Copyright (c) 2004-2008 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for Open PAL CRS framework.
+#
+[none:select-warning]
+Error: 'none' component selected.
+       Checkpoint/Restart functionality may not work properly.
+       Make sure that you have configured with and are using a fully functional
+       CRS component.
+       To disable this warning set the following MCA parmeter:
+           --mca crs_none_select_warning 0

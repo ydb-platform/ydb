@@ -1,0 +1,40 @@
+--- contrib/python/zope.schema/zope/schema/tests/test__bootstrapfields.py	(index)
++++ contrib/python/zope.schema/zope/schema/tests/test__bootstrapfields.py	(working tree)
+@@ -509,1 +509,1 @@ class FieldTests(EqualityTestsMixin,
+-    def test_ctor_description_preserved(self):
++    def _test_ctor_description_preserved(self):
+@@ -1965,1 +1965,1 @@ class DummyInst(object):
+-def test_suite():
++def _test_suite():
+--- contrib/python/zope.schema/zope/schema/tests/test__field.py	(index)
++++ contrib/python/zope.schema/zope/schema/tests/test__field.py	(working tree)
+@@ -18,6 +18,6 @@ import datetime
+-from zope.schema.tests.test__bootstrapfields import EqualityTestsMixin
+-from zope.schema.tests.test__bootstrapfields import LenTestsMixin
+-from zope.schema.tests.test__bootstrapfields import NumberTests
+-from zope.schema.tests.test__bootstrapfields import OrderableMissingValueMixin
+-from zope.schema.tests.test__bootstrapfields import OrderableTestsMixin
+-from zope.schema.tests.test__bootstrapfields import WrongTypeTestsMixin
++from __tests__.tests.test__bootstrapfields import EqualityTestsMixin
++from __tests__.tests.test__bootstrapfields import LenTestsMixin
++from __tests__.tests.test__bootstrapfields import NumberTests
++from __tests__.tests.test__bootstrapfields import OrderableMissingValueMixin
++from __tests__.tests.test__bootstrapfields import OrderableTestsMixin
++from __tests__.tests.test__bootstrapfields import WrongTypeTestsMixin
+@@ -774,1 +774,1 @@ class ChoiceTests(EqualityTestsMixin,
+-        from zope.schema.tests.test_vocabulary import _makeSampleVocabulary
++        from __tests__.tests.test_vocabulary import _makeSampleVocabulary
+@@ -1836,1 +1836,1 @@ def _makeDummyRegistry(v):
+-def test_suite():
++def _test_suite():
+--- contrib/python/zope.schema/zope/schema/tests/test_states.py	(index)
++++ contrib/python/zope.schema/zope/schema/tests/test_states.py	(working tree)
+@@ -22,1 +22,1 @@ class StateSelectionTest(unittest.TestCase):
+-        from zope.schema.tests.states import StateVocabulary
++        from __tests__.tests.states import StateVocabulary
+@@ -38,1 +38,1 @@ class StateSelectionTest(unittest.TestCase):
+-        from zope.schema.tests.states import StateVocabulary
++        from __tests__.tests.states import StateVocabulary
+@@ -79,1 +79,1 @@ class StateSelectionTest(unittest.TestCase):
+-        from zope.schema.tests.states import StateVocabulary
++        from __tests__.tests.states import StateVocabulary

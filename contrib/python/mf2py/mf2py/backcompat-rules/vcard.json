@@ -1,0 +1,108 @@
+{
+    "type": [
+        "h-card"
+    ], 
+    "properties": {
+        "tel": [
+            "p-tel"
+        ], 
+        "honorific-suffix": [
+            "p-honorific-suffix"
+        ], 
+        "family-name": [
+            "p-family-name"
+        ], 
+        "photo": [
+            "u-photo"
+        ], 
+        "logo": [
+            "u-logo"
+        ], 
+        "postal-code": [
+            "p-postal-code"
+        ], 
+        "country-name": [
+            "p-country-name"
+        ], 
+        "uid": [
+            "u-uid"
+        ], 
+        "category": [
+            "p-category"
+        ], 
+        "adr": [
+            "p-adr", 
+            "h-adr"
+        ], 
+        "locality": [
+            "p-locality"
+        ], 
+        "nickname": [
+            "p-nickname"
+        ], 
+        "label": [
+            "p-label"
+        ], 
+        "note": [
+            "p-note"
+        ], 
+        "street-address": [
+            "p-street-address"
+        ], 
+        "latitude": [
+            "p-latitude"
+        ], 
+        "email": [
+            "u-email"
+        ], 
+        "bday": [
+            "dt-bday"
+        ], 
+        "extended-address": [
+            "p-extended-address"
+        ], 
+        "additional-name": [
+            "p-additional-name"
+        ], 
+        "organization-unit": [
+            "p-organization-unit"
+        ], 
+        "given-name": [
+            "p-given-name"
+        ], 
+        "key": [
+            "u-key"
+        ], 
+        "org": [
+            "p-org"
+        ], 
+        "honorific-prefix": [
+            "p-honorific-prefix"
+        ], 
+        "geo": [
+            "p-geo", 
+            "h-geo"
+        ], 
+        "fn": [
+            "p-name"
+        ], 
+        "url": [
+            "u-url"
+        ], 
+        "region": [
+            "p-region"
+        ], 
+        "longitude": [
+            "p-longitude"
+        ], 
+        "organization-name": [
+            "p-organization-name"
+        ],
+        "title": [
+            "p-job-title"
+        ],
+        "role": [
+            "p-role"
+        ]
+    }
+}

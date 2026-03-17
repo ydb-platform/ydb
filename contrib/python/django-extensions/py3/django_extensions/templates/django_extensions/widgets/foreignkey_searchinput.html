@@ -1,0 +1,61 @@
+{% load i18n %}
+<input type="text" id="lookup_{{ name }}" value="{{ label }}" style="display:none;" />
+<a href="{{ related_url }}{{ url }}" class="related-lookup" id="lookup_id_{{ name }}" onclick="return showRelatedObjectLookupPopup(this);"></a>
+<script type="text/javascript">
+(function($) {
+    var current_value = $('#id_{{ name }}').val();
+    var new_value = null;
+
+    // Show lookup input
+    $('#lookup_{{ name }}').show();
+    function reset() {
+        $('#id_{{ name }}, #lookup_{{ name }}').val('');
+    };
+    function lookup(query) {
+        $.get('{{ search_path }}', {
+            'search_fields': '{{ search_fields }}',
+            'app_label': '{{ app_label }}',
+            'model_name': '{{ model_name }}',
+            'object_pk': query
+        }, function(data) {
+            $('#lookup_{{ name }}').val(data);
+            current_value = query;
+        });
+    };
+    $('#id_{{ name }}').bind('keyup', function(event) {
+        if ($(this).val()) {
+            if (event.keyCode == 27) {
+                reset();
+            } else {
+                lookup($(this).val());
+            };
+        };
+    });
+    $('#lookup_{{ name }}').bind('keyup', function(event) {
+        if ($(this).val()) {
+            if (event.keyCode == 27) {
+                reset();
+            }
+        }
+    });
+    $('#lookup_{{ name }}').autocomplete('{{ search_path }}', {
+        extraParams: {
+            'search_fields': '{{ search_fields }}',
+            'app_label': '{{ app_label }}',
+            'model_name': '{{ model_name }}'
+        },
+        onItemSelect: function(item) {
+            $('#id_{{ name }}').val(item.data[0]);
+        }
+    });
+    function check() {
+        new_value = $('#id_{{ name }}').val();
+        if (new_value) {
+            if (new_value != current_value) {
+                lookup(new_value);
+            }
+        }
+    };
+    timeout = window.setInterval(check, 300);
+})((typeof window.jQuery == 'undefined' && typeof window.django != 'undefined')? django.jQuery : jQuery);
+</script>

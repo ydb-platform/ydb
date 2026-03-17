@@ -1,0 +1,6 @@
+--- contrib/python/pygit2/pygit2/settings.py	(index)
++++ contrib/python/pygit2/pygit2/settings.py	(working tree)
+@@ -191,1 +191,2 @@ class Settings:
+-        option(Option.SET_SSL_CERT_LOCATIONS, cert_file, cert_dir)
++        if cert_file and cert_dir:
++            option(Option.SET_SSL_CERT_LOCATIONS, cert_file, cert_dir)

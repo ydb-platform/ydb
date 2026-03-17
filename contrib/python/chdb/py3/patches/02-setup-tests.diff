@@ -1,0 +1,94 @@
+--- a/tests/test_query_json.py	(index)
++++ b/tests/test_query_json.py	(working tree)
+@@ -29,14 +29,14 @@ dict1 = {
+         {"deep": {"level2": {"level3": 100.3}}},
+         {"mixed_list": [{"a": 1}, {"a": 666}]},
+         {"nested_int": 1, "mixed": "text", "float_val": 3.14},
+-        {"list_val": [1,2,3], "tuple_val": (4,5)},
++        {"list_val": [1,2,3], "tuple_val": [4,5]},
+         {"multi_type": [1, "two", 3.0, True]},
+         None,
+         1,
+         'a'
+     ],
+     "c4": [
+-        {"coordinates": [1.1, 2.2], "tags": ("urgent", "important")},
++        {"coordinates": [1.1, 2.2], "tags": ["urgent", "important"]},
+         {"metadata": {"created_at": "2024-01-01", "active": True}},
+         {"scores": [85.5, 92.3, 77.8], "status": "pass"},
+         {"nested_list": [[1,2], [3,4], [5,6]]},
+@@ -127,10 +127,10 @@ dict3 = {
+         {"deep": {"level2": {"level3": 100.3}}},
+         {"mixed_list": [{"a": 1}, {"a": 666}]},
+         {"nested_int": 1, "mixed": "text", "float_val": 3.14},
+-        {"list_val": [1,2,3], "tuple_val": (4,5)},
++        {"list_val": [1,2,3], "tuple_val": [4,5]},
+     ],
+     "c4": [
+-        {"coordinates": [1.1, 2.2], "tags": ("urgent", "important")},
++        {"coordinates": [1.1, 2.2], "tags": ["urgent", "important"]},
+         {"metadata": {"created_at": "2024-01-01", "active": True}},
+         {"scores": [85.5, 92.3, 77.8], "status": "pass"},
+         {"nested_list": [[1,2], [3,4], [5,6]]},
+--- a/tests/test_query_py.py	(index)
++++ b/tests/test_query_py.py	(working tree)
+@@ -12,6 +12,8 @@ import pyarrow.json
+ import pyarrow.parquet
+ import chdb
+ 
++import yatest.common as yc
++
+ 
+ EXPECTED = """"auxten",9
+ "jerry",7
+@@ -156,7 +158,7 @@ class TestQueryPy(unittest.TestCase):
+ 
+     def test_query_arrow5(self):
+         arrow_table = pa.parquet.read_table(
+-            "data/sample_2021-04-01_performance_mobile_tiles.parquet"
++            yc.test_source_path("data/sample_2021-04-01_performance_mobile_tiles.parquet")
+         )
+         # print("Arrow Schema:\n", arrow_table.schema)
+         ret = chdb.query("SELECT * FROM Python(arrow_table) LIMIT 1", "JSONCompact")
+--- a/tests/test_state2_dataframe.py	(index)
++++ b/tests/test_state2_dataframe.py	(working tree)
+@@ -10,12 +10,14 @@ import chdb
+ import os
+ from urllib.request import urlretrieve
+ 
++import yatest.common as yc
++
+ 
+ class TestChDBDataFrame(unittest.TestCase):
+     @classmethod
+     def setUpClass(cls):
+         # Download parquet file if it doesn't exist
+-        parquet_file = "hits_0.parquet"
++        parquet_file = yc.test_source_path("hits_0.parquet")
+         if not os.path.exists(parquet_file):
+             print(f"Downloading {parquet_file}...")
+             url = "https://datasets.clickhouse.com/hits_compatible/athena_partitioned/hits_0.parquet"
+@@ -36,7 +38,7 @@ class TestChDBDataFrame(unittest.TestCase):
+                 cls.hits[col] = cls.hits[col].astype(str)
+ 
+         # Load queries
+-        with open("queries.sql") as f:
++        with open(yc.test_source_path("queries.sql")) as f:
+             cls.queries = f.readlines()
+ 
+     def setUp(self):
+--- a/tests/utils.py	(index)
++++ b/tests/utils.py	(working tree)
+@@ -1,9 +1,9 @@
+ import re
+ import os
+ 
+-current_dir = os.path.dirname(os.path.abspath(__file__))
+-data_file = os.path.join(
+-    current_dir, "../tests/data/alltypes_dictionary.parquet")
++import yatest.common as yc
++
++data_file = yc.test_source_path("data/alltypes_dictionary.parquet")
+ 
+ # reset elapsed time to 0.0 from output, since it will be different each time
+ # eg: "elapsed": 0.001015,

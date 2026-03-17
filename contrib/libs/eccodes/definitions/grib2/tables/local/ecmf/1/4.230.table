@@ -1,0 +1,12 @@
+# Code table 4.230 - Atmospheric chemical constituent type for ECMWF
+65524 65524 Stratospheric Ozone
+65525 65525 Nitrate aerosol
+65526 65526 Condensable gas type 1
+65527 65527 Condensable gas type 2a
+65528 65528 Condensable gas type 2b
+65529 65529 Toluene and less reactive aromatics
+65530 65530 Xylene and more reactive aromatics
+65531 65531 Biomass burning volatile organic compounds
+65532 65532 Anthropogenic volatile organic compounds
+65533 65533 Nitrate Coarse Mode
+65534 65534 Nitrate Fine Mode

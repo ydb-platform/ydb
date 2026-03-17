@@ -1,0 +1,786 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.sqlserver.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "google/type/timeofday.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/mdb/sqlserver/v1/backup.proto";
+import "yandex/cloud/mdb/sqlserver/v1/cluster.proto";
+import "yandex/cloud/mdb/sqlserver/v1/config/sqlserver2016sp2.proto";
+import "yandex/cloud/mdb/sqlserver/v1/config/sqlserver2017.proto";
+import "yandex/cloud/mdb/sqlserver/v1/config/sqlserver2019.proto";
+import "yandex/cloud/mdb/sqlserver/v1/database.proto";
+import "yandex/cloud/mdb/sqlserver/v1/user.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/sqlserver/v1;sqlserver";
+option java_outer_classname = "PSCS";
+option java_package = "yandex.cloud.api.mdb.sqlserver.v1";
+
+// A set of methods for managing SQL Server clusters.
+service ClusterService {
+  // Returns the specified SQL Server cluster.
+  //
+  // To get the list of available SQL Server clusters, make a [List] request.
+  rpc Get(GetClusterRequest) returns (Cluster) {
+    option (google.api.http) = {get: "/mdb/sqlserver/v1/clusters/{cluster_id}"};
+  }
+
+  // Retrieves the list of SQL Server clusters that belong to the specified folder.
+  rpc List(ListClustersRequest) returns (ListClustersResponse) {
+    option (google.api.http) = {get: "/mdb/sqlserver/v1/clusters"};
+  }
+
+  // Creates an SQL Server cluster in the specified folder.
+  rpc Create(CreateClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/mdb/sqlserver/v1/clusters"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateClusterMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Modifies the specified SQL Server cluster.
+  rpc Update(UpdateClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/mdb/sqlserver/v1/clusters/{cluster_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateClusterMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Deletes the specified SQL Server cluster.
+  rpc Delete(DeleteClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/mdb/sqlserver/v1/clusters/{cluster_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteClusterMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Starts the specified SQL Server cluster.
+  rpc Start(StartClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/mdb/sqlserver/v1/clusters/{cluster_id}:start"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "StartClusterMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Stops the specified SQL Server cluster.
+  rpc Stop(StopClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/mdb/sqlserver/v1/clusters/{cluster_id}:stop"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "StopClusterMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Moves the specified SQL Server cluster to the specified folder.
+  rpc Move(MoveClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/mdb/sqlserver/v1/clusters/{cluster_id}:move"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "MoveClusterMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Creates a backup for the specified SQL Server cluster.
+  rpc Backup(BackupClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/mdb/sqlserver/v1/clusters/{cluster_id}:backup"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "BackupClusterMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Creates a new SQL Server cluster using the specified backup.
+  rpc Restore(RestoreClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/mdb/sqlserver/v1/clusters:restore"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RestoreClusterMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Starts a manual failover for a cluster.
+  rpc StartFailover(StartClusterFailoverRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/mdb/sqlserver/v1/clusters/{cluster_id}:startFailover"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "StartClusterFailoverMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Retrieves logs for the specified SQL Server cluster.
+  //
+  // For more information about logs, see the [Logs](/docs/managed-sqlserver/operations/cluster-logs) section in the documentation.
+  rpc ListLogs(ListClusterLogsRequest) returns (ListClusterLogsResponse) {
+    option (google.api.http) = {get: "/mdb/sqlserver/v1/clusters/{cluster_id}:logs"};
+  }
+
+  // Retrieves the list of operations for the specified SQL Server cluster.
+  rpc ListOperations(ListClusterOperationsRequest) returns (ListClusterOperationsResponse) {
+    option (google.api.http) = {get: "/mdb/sqlserver/v1/clusters/{cluster_id}/operations"};
+  }
+
+  // Retrieves the list of available backups for the specified SQL Server cluster.
+  rpc ListBackups(ListClusterBackupsRequest) returns (ListClusterBackupsResponse) {
+    option (google.api.http) = {get: "/mdb/sqlserver/v1/clusters/{cluster_id}/backups"};
+  }
+
+  // Retrieves the list of hosts for the specified SQL Server cluster.
+  rpc ListHosts(ListClusterHostsRequest) returns (ListClusterHostsResponse) {
+    option (google.api.http) = {get: "/mdb/sqlserver/v1/clusters/{cluster_id}/hosts"};
+  }
+
+  // Updates the specified hosts.
+  rpc UpdateHosts(UpdateClusterHostsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/mdb/sqlserver/v1/clusters/{cluster_id}/hosts:batchUpdate"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateClusterHostsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetClusterRequest {
+  // ID of the SQL Server cluster to return.
+  //
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListClustersRequest {
+  // ID of the folder to list SQL Server clusters in.
+  //
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return.
+  //
+  // If the number of available results is larger than [page_size], the service returns a [ListClustersResponse.next_page_token] that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the [ListClustersResponse.next_page_token] returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  //
+  // The expression must specify:
+  //
+  // 1. A field name to filter by. Currently you can only use filtering with the [Cluster.name] field.
+  // 2. A conditional operator. Can be either `=` or `!=` for single values, `IN` or `NOT IN` for lists of values.
+  // 3. A value. Must be 1-63 characters long and match the regular expression `[a-zA-Z0-9_-]+`.
+  //
+  // Example of a filter expression: `name NOT IN 'test,beta'`.
+  //
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListClustersResponse {
+  // List of SQL Server clusters.
+  repeated Cluster clusters = 1;
+
+  // Token that allows you to get the next page of results for list requests.
+  //
+  // If the number of results is larger than [ListClustersRequest.page_size], use the `next_page_token` as the value for the [ListClustersRequest.page_token] parameter in the next list request. Each subsequent list request has its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateClusterRequest {
+  // ID of the folder to create the SQL Server cluster in.
+  //
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the SQL Server cluster. The name must be unique within the folder.
+  string name = 2 [
+    (required) = true,
+    (length) = "<=63",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Description of the SQL Server cluster.
+  string description = 3 [(length) = "<=256"];
+
+  // Custom labels for the SQL Server cluster as `key:value` pairs.
+  // For example, "project":"mvp" or "source":"dictionary".
+  map<string, string> labels = 4 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // Deployment environment of the SQL Server cluster.
+  Cluster.Environment environment = 5;
+
+  // Configurations of SQL Server and hosts of the cluster.
+  ConfigSpec config_spec = 6;
+
+  // One or more configurations of databases to be created in the SQL Server cluster.
+  repeated DatabaseSpec database_specs = 7;
+
+  // One or more configurations of database users to be created in the SQL Server cluster.
+  repeated UserSpec user_specs = 8;
+
+  // One or more configurations of hosts to be created in the SQL Server cluster.
+  repeated HostSpec host_specs = 9;
+
+  // ID of the network to create the SQL Server cluster in.
+  string network_id = 10 [(length) = "<=50"];
+
+  // User security groups.
+  repeated string security_group_ids = 11;
+
+  // Determines whether the cluster is protected from being deleted.
+  bool deletion_protection = 12;
+
+  // Name of SQL Collation that cluster will be created with.
+  string sqlcollation = 13 [(length) = "<=100"];
+
+  // Host groups hosting VMs of the cluster.
+  repeated string host_group_ids = 14;
+
+  // ID of the service account used for access to Object Storage.
+  string service_account_id = 15;
+}
+
+message CreateClusterMetadata {
+  // ID of the SQL Server cluster being created.
+  string cluster_id = 1;
+}
+
+message UpdateClusterRequest {
+  // ID of the SQL Server cluster to update.
+  //
+  // To get the SQL Server cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Field mask that specifies which fields of the SQL Server cluster should be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // New description of the SQL Server cluster.
+  string description = 3 [(length) = "<=256"];
+
+  // Custom labels for the SQL Server cluster as `key:value` pairs.
+  //
+  // For example, `"project":"mvp"` or `"source":"dictionary"`.
+  //
+  // The new set of labels completely replaces the old one.
+  //
+  // To add a label, request the current set with the [ClusterService.Get] method, then send an [ClusterService.Update] request with the new label added to the set.
+  map<string, string> labels = 4 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // New configuration and resources for hosts in the SQL Server cluster.
+  ConfigSpec config_spec = 5;
+
+  // New name for the SQL Server cluster.
+  string name = 6 [
+    (length) = "<=63",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // User security groups.
+  repeated string security_group_ids = 7;
+
+  // Determines whether the cluster is protected from being deleted.
+  bool deletion_protection = 8;
+
+  // ID of the service account used for access to Object Storage.
+  string service_account_id = 9;
+}
+
+message UpdateClusterMetadata {
+  // ID of the SQL Server cluster being updated.
+  string cluster_id = 1;
+}
+
+message DeleteClusterRequest {
+  // ID of the SQL Server cluster to delete.
+  //
+  // To get the SQL Server cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteClusterMetadata {
+  // ID of the SQL Server cluster being deleted.
+  string cluster_id = 1;
+}
+
+message BackupClusterRequest {
+  // ID of the SQL Server cluster to back up.
+  //
+  // To get the SQL Server cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message BackupClusterMetadata {
+  // ID of the SQL Server cluster being backed up.
+  string cluster_id = 1;
+}
+
+message RestoreClusterRequest {
+  reserved 3;
+  // ID of the backup to create a new cluster from.
+  //
+  // To get the backup ID, use a [ClusterService.ListBackups] request.
+  string backup_id = 1 [(required) = true];
+
+  // Timestamp of the moment to which the SQL Server cluster should be restored.
+  google.protobuf.Timestamp time = 2 [(required) = true];
+
+  // Name of the new SQL Server cluster to be created from the backup. The name must be unique within the folder.
+  string name = 4 [
+    (required) = true,
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Description of the new SQL Server cluster to be created from the backup.
+  string description = 5 [(length) = "<=256"];
+
+  // Custom labels for the new SQL Server cluster to be created from the backup as `key:value` pairs.
+  //
+  // For example, `"project":"mvp"` or `"source":"dictionary"`.
+  map<string, string> labels = 6 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // Deployment environment of the new SQL Server cluster to be created from the backup.
+  Cluster.Environment environment = 7;
+
+  // Configuration for the new SQL Server cluster to be created from the backup.
+  ConfigSpec config_spec = 8;
+
+  // Configurations for SQL Server hosts that should be added to the cluster being created from the backup.
+  repeated HostSpec host_specs = 9;
+
+  // ID of the network to create the SQL Server cluster in.
+  string network_id = 10 [(length) = "<=50"];
+
+  // ID of the folder to create the SQL Server cluster in.
+  //
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 11 [(length) = "<=50"];
+
+  // User security groups.
+  repeated string security_group_ids = 12;
+
+  // Determines whether the cluster is protected from being deleted.
+  bool deletion_protection = 13;
+
+  // Host groups hosting VMs of the cluster.
+  repeated string host_group_ids = 14;
+
+  // ID of the service account used for access to Object Storage.
+  string service_account_id = 15;
+}
+
+message RestoreClusterMetadata {
+  // ID of the new SQL Server cluster being created from a backup.
+  string cluster_id = 1;
+
+  // ID of the backup being used for creating a cluster.
+  string backup_id = 2;
+}
+
+message StartClusterFailoverRequest {
+  // ID of SQL Server cluster.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Host name to switch master role to.
+  //
+  // To get this name, make a [ClusterService.ListHosts] request.
+  string host_name = 2 [(length) = "<=253"];
+}
+
+message StartClusterFailoverMetadata {
+  // ID of the SQL Server cluster being failovered.
+  string cluster_id = 1;
+}
+
+message LogRecord {
+  // Log record timestamp.
+  google.protobuf.Timestamp timestamp = 1;
+
+  // Contents of the log record.
+  map<string, string> message = 2;
+}
+
+message ListClusterLogsRequest {
+  // ID of the SQL Server cluster to request logs for.
+  //
+  // To get the SQL Server cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Columns from the logs table to request.
+  //
+  // If no columns are specified, entire log records are returned.
+  repeated string column_filter = 2;
+
+  // Type of the service to request logs about.
+  //
+  ServiceType service_type = 3;
+
+  enum ServiceType {
+    SERVICE_TYPE_UNSPECIFIED = 0;
+
+    // SQL Server error log.
+    SQLSERVER_ERROR = 1;
+
+    // SQL Server application log.
+    SQLSERVER_APPLICATION = 2;
+  }
+
+  // Specifies a moment that the logs are requested from.
+  google.protobuf.Timestamp from_time = 4;
+
+  // Specifies a moment that the logs are requested till.
+  google.protobuf.Timestamp to_time = 5;
+
+  // The maximum number of results per page to return.
+  //
+  // If the number of available results is larger than [page_size], the service returns a [ListClusterLogsResponse.next_page_token] that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 6 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the [ListClusterLogsResponse.next_page_token] returned by the previous list request.
+  string page_token = 7 [(length) = "<=100"];
+
+  // The service returns [next_page_token] even if the current page is empty.
+  bool always_next_page_token = 8;
+
+  // A filter expression that filters resources listed in the response.
+  //
+  // The expression must specify:
+  //
+  // 1. A field name to filter by. Currently filtering can be applied to the [LogRecord.logs.message.hostname] field only.
+  // 2. A conditional operator. Can be either `=` or `!=` for single values, `IN` or `NOT IN` for lists of values.
+  // 3. A value. Must be 1-63 characters long and match the regular expression `[a-z0-9.-]{1,61}`.
+  //
+  // Example of a filter: `message.hostname='node1.db.cloud.yandex.net'`.
+  //
+  string filter = 9 [(length) = "<=1000"];
+}
+
+message ListClusterLogsResponse {
+  // Requested log records.
+  repeated LogRecord logs = 1;
+
+  // Token that allows you to get the next page of results for list requests.
+  //
+  // If the number of results is larger than [ListClusterLogsRequest.page_size], use the [next_page_token] as the value for the [ListClusterLogsRequest.page_token] query parameter in the next list request.
+  //
+  // Each subsequent list request has its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListClusterOperationsRequest {
+  // ID of the SQL Server cluster to list operations for.
+  //
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return.
+  //
+  // If the number of available results is larger than [page_size], the service returns a [ListClusterOperationsResponse.next_page_token] that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the [ListClusterOperationsResponse.next_page_token] returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListClusterOperationsResponse {
+  // List of operations for the specified SQL Server cluster.
+  repeated operation.Operation operations = 1;
+
+  // Token that allows you to get the next page of results for list requests.
+  //
+  // If the number of results is larger than [ListClusterOperationsRequest.page_size], use the [next_page_token] as the value for the [ListClusterOperationsRequest.page_token] query parameter in the next list request.
+  //
+  // Each subsequent list request has its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListClusterBackupsRequest {
+  // ID of the SQL Server cluster.
+  //
+  // To get the SQL Server cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return.
+  //
+  // If the number of available results is larger than [page_size], the service returns a [ListClusterBackupsResponse.next_page_token] that can be used to get the next page of results in subsequent list requests.
+  //
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the [ListClusterBackupsResponse.next_page_token] returned by the previous list request.
+  //
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListClusterBackupsResponse {
+  // List of SQL Server backups.
+  repeated Backup backups = 1;
+
+  // Token that allows you to get the next page of results for list requests.
+  //
+  // If the number of results is larger than [ListClusterBackupsRequest.page_size], use the [next_page_token] as the value for the [ListClusterBackupsRequest.page_token] query parameter in the next list request.
+  //
+  // Each subsequent list request has its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListClusterHostsRequest {
+  // ID of the SQL Server cluster.
+  //
+  // To get the SQL Server cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return.
+  //
+  // If the number of available results is larger than [page_size], the service returns a [ListClusterHostsResponse.next_page_token] that can be used to get the next page of results in subsequent list requests.
+  //
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the [ListClusterHostsResponse.next_page_token] returned by the previous list request.
+  //
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListClusterHostsResponse {
+  // List of SQL Server hosts.
+  repeated Host hosts = 1;
+
+  // Token that allows you to get the next page of results for list requests.
+  //
+  // If the number of results is larger than [ListClusterHostsRequest.page_size], use the [next_page_token] as the value for the [ListClusterHostsRequest.page_token] query parameter in the next list request.
+  //
+  // Each subsequent list request has its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message StartClusterRequest {
+  // ID of the SQL Server cluster to start.
+  //
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message StartClusterMetadata {
+  // ID of the SQL Server cluster being started.
+  string cluster_id = 1;
+}
+
+message StopClusterRequest {
+  // ID of the SQL Server cluster to stop.
+  //
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message StopClusterMetadata {
+  // ID of the SQL Server cluster being stopped.
+  string cluster_id = 1;
+}
+
+message MoveClusterRequest {
+  // ID of the SQL Server cluster to move.
+  //
+  // To get the cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the destination folder.
+  //
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string destination_folder_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message MoveClusterMetadata {
+  // ID of the SQL Server cluster being moved.
+  string cluster_id = 1;
+  // ID of the source folder.
+  string source_folder_id = 2;
+  // ID of the destination folder.
+  string destination_folder_id = 3;
+}
+
+message UpdateClusterHostsMetadata {
+  // ID of the SQL Server cluster to update hosts in.
+  string cluster_id = 1;
+
+  // Names of the hosts being updated.
+  repeated string host_names = 2;
+}
+
+message HostSpec {
+  // ID of the availability zone where the host resides.
+  //
+  // To get the list of available zones, use the [yandex.cloud.compute.v1.ZoneService.List] request.
+  //
+  string zone_id = 1 [(length) = "<=50"];
+
+  // ID of the subnet that the host should belong to. This subnet should be a part of the network that the cluster belongs to.
+  //
+  // The ID of the network is set in the field [Cluster.network_id].
+  string subnet_id = 2 [(length) = "<=50"];
+
+  // Determines whether the host gets a public IP address on creation.
+  //
+  // After a host has been created, this setting cannot be changed. To remove an assigned public IP, or to assign a public IP to a host without one, recreate the host with [assign_public_ip] set as needed.
+  //
+  // Possible values:
+  // * `false` - do not assign a public IP to the host;
+  // * `true` - assign a public IP to the host.
+  bool assign_public_ip = 3;
+}
+
+message UpdateHostSpec {
+  // Name of the host to update.
+  //
+  // To get the SQL Server host name, use a [ClusterService.ListHosts] request.
+  string host_name = 1 [(required) = true];
+
+  // Field mask that specifies which fields of the SQL Server host should be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Determines whether the host gets a public IP address on creation.
+  bool assign_public_ip = 3;
+}
+
+message UpdateClusterHostsRequest {
+  // ID of the SQL Server cluster to update hosts in.
+  // To get the SQL Server cluster ID, use a [ClusterService.List] request.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // New configurations to apply to hosts.
+  repeated UpdateHostSpec update_host_specs = 2 [(size) = ">0"];
+}
+
+message ConfigSpec {
+  // Version of SQL Server used in the cluster.
+  //
+  // Possible values:
+  // * 2016sp2std,
+  // * 2016sp2ent,
+  // * 2017std,
+  // * 2017ent,
+  // * 2019std,
+  // * 2019ent.
+  string version = 1; // No formal validation, a list of supported versions should suffice.
+
+  // Configuration of an SQL Server cluster.
+  oneof sqlserver_config {
+    // Configuration for an SQL Server 2016 SP2 Standard edition cluster.
+    config.SQLServerConfig2016sp2std sqlserver_config_2016sp2std = 2 [json_name = "sqlserverConfig_2016sp2std"];
+
+    // Configuration for an SQL Server 2016 SP2 Enterprise edition cluster.
+    config.SQLServerConfig2016sp2ent sqlserver_config_2016sp2ent = 5 [json_name = "sqlserverConfig_2016sp2ent"];
+
+    // Configuration for an SQL Server 2017 Standard edition cluster.
+    config.SQLServerConfig2017std sqlserver_config_2017std = 8 [json_name = "sqlserverConfig_2017std"];
+
+    // Configuration for an SQL Server 2017 Enterprise edition cluster.
+    config.SQLServerConfig2017ent sqlserver_config_2017ent = 9 [json_name = "sqlserverConfig_2017ent"];
+
+    // Configuration for an SQL Server 2019 Standard edition cluster.
+    config.SQLServerConfig2019std sqlserver_config_2019std = 10 [json_name = "sqlserverConfig_2019std"];
+
+    // Configuration for an SQL Server 2019 Enterprise edition cluster.
+    config.SQLServerConfig2019ent sqlserver_config_2019ent = 11 [json_name = "sqlserverConfig_2019ent"];
+  }
+
+  // Resources allocated to SQL Server hosts.
+  Resources resources = 3;
+
+  // Start time for the daily backup in UTC timezone.
+  //
+  google.type.TimeOfDay backup_window_start = 4;
+
+  // Database access policy.
+  Access access = 6;
+
+  // Secondary replicas connection mode
+  ClusterConfig.SecondaryConnections secondary_connections = 7;
+}

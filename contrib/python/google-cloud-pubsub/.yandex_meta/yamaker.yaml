@@ -1,0 +1,8 @@
+requirements:
+  - contrib/python/google-cloud-pubsub/proto
+keep:
+  - proto/ya.make
+exclude_from_macros:
+  - proto/ya.make
+  - google/cloud/pubsub_v1/proto/pubsub.proto
+  - google/cloud/pubsub_v1/proto/schema.proto

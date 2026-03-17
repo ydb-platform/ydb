@@ -1,0 +1,19 @@
+# (C) Copyright 2005- ECMWF.
+
+codetable[2] originatingCentre  'common/c-1.table' : dump;
+unsigned[1]  updateSequenceNumber;
+
+flags[1] section1Flags 'bufr/section1_flags.table' = 128 : hidden; # = section 2 present
+
+unsigned[1] dataCategory;
+unsigned[1] dataSubCategory;
+unsigned[2] localTablesVersionNumber;
+
+unsigned[1] yearOfCentury;
+unsigned[1] month;
+unsigned[1] day;
+unsigned[1] hour;
+unsigned[1] minute;
+unsigned[1] masterTablesVersionNumber;
+
+alias masterTableNumber = editionNumber; # ?

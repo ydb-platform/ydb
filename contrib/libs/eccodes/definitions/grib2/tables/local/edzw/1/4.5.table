@@ -1,0 +1,19 @@
+#im Vorgriff auf eine offizielle WMO-Regelung
+25 25 Highest level where radar reflectivity exceeds the specified value (echo top for a given threshold of reflectivity)
+192 ML  ML start level of mixed layer parcel(CAPE/CIN)
+193 MU  MU start level of most unstable parcel(CAPE/CIN)
+194 LFC Level of free convection
+#195-197 reserved
+198 radarElev radarElev Radar antenna elevation angle (degree)
+199 radarElevComposite radarElevComposite radarElevComposite 
+#200 reserved
+201 hor Surface: horizontal plane
+202 vE  Surface: vertical plane facing east
+203 vN  Surface: vertical plane facing north
+204 vS  Surface: vertical plane facing south
+205 vW  Surface: vertical plane facing west
+206 N   Surface: plane normal to the sun (radiation)
+207 NO  Surface: plane normal to the sun without orographic shading (radiation)
+208 208 Surface: horizontal plane including orographic shading (radiation)
+209 209 Surface: tangent plane to terrain including orographic shading (radiation)
+255 255 Missing

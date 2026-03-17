@@ -1,0 +1,143 @@
+# (C) Copyright 2005- ECMWF.
+
+# Copernicus regional reanalysis (CARRA/CERRA)
+constant marsClass = 'rr';
+
+alias tigge_short_name=shortName;
+alias short_name=shortName;
+alias parameter=paramId;
+alias tigge_name=name;
+
+alias parameter.paramId=paramId;
+alias parameter.shortName=shortName;
+alias parameter.units=units;
+alias parameter.name=name;
+
+# Special UERRA rule for level type 103 'Specified height level above ground (m)'
+#if(typeOfFirstFixedSurface == 103) {
+#    # only the parameters above 10m
+#    if (level > 10) {
+#        constant heightLevelName = 'hl';
+#        alias mars.levtype = heightLevelName;
+#        # levelist was unaliased in template.4.horizontal.def so we must have it back
+#        alias mars.levelist = level;
+#    }
+#}
+#if(typeOfFirstFixedSurface == 118) {
+#    constant levTypeName = 'ml';
+#    alias mars.levtype = levTypeName;
+#}
+
+# See GRIB-871 and ECC-854
+if(typeOfFirstFixedSurface == 151 && typeOfSecondFixedSurface == 151) {
+    alias level = bottomLevel;
+}
+
+alias mars.expver = marsExpver;
+alias mars.class  = marsClass;
+alias mars.param = paramId;
+alias mars.origin = centre;
+
+if (section2Used == 1) {
+    alias mars.origin = crraSuiteID; # origin is the suiteName
+    unalias mars.domain;
+    unalias mars.model;
+}
+
+# See GRIB-911 re typeOfProcessedData values in UERRA
+concept marsType(unknown) {
+
+   fc = {
+     typeOfProcessedData = 1;
+   }
+   "9" = {
+     typeOfProcessedData = 1;
+   }
+
+   an = {
+     typeOfProcessedData = 0;
+   }
+   "2" = {
+     typeOfProcessedData = 0;
+   }
+
+   # See ECC-456. Special rule for Swedish data
+   # oi is Optimal Interpolation
+   oi = {
+     centre = 82;
+     typeOfGeneratingProcess = 0;
+     generatingProcessIdentifier = 50;
+   }
+   "4" = {
+     centre = 82;
+     typeOfGeneratingProcess = 0;
+     generatingProcessIdentifier = 50;
+   }
+}
+
+# get the values from the 1st most outer loop which matter
+meta outerLoopLengthOfTimeRange element(lengthOfTimeRange, 0);
+meta outerLoopTypeOfStatisticalProcessing element(typeOfStatisticalProcessing, 0);
+meta outerLoopTypeOfTimeIncrement element(typeOfTimeIncrement, 0);
+
+# See GRIB-205 re no_copy
+# Cannot use typeOfProcessedData for stream. See GRIB-911
+concept marsStream(unknown) {
+
+    oper = {
+      productDefinitionTemplateNumber = 0;
+    }
+    oper = {
+      productDefinitionTemplateNumber = 8;
+    }
+    enda = {
+      productDefinitionTemplateNumber = 11;
+    }
+    enda = {
+      productDefinitionTemplateNumber = 1;
+    }
+    moda = {
+      productDefinitionTemplateNumber = 8;
+      outerLoopTypeOfTimeIncrement = 1;
+    }
+    # avgd, mind, maxd
+    dame = {
+      productDefinitionTemplateNumber = 8;
+      outerLoopTypeOfTimeIncrement = 1;
+      outerLoopLengthOfTimeRange = 21;
+    }
+    # accumd
+    dame = {
+      productDefinitionTemplateNumber = 8;
+      outerLoopTypeOfTimeIncrement = 1;
+      outerLoopLengthOfTimeRange = 24;
+    }
+} : no_copy,read_only;
+
+alias mars.stream = marsStream;
+alias mars.type   = marsType;
+
+if (marsStream is "moda") {
+  meta verificationDate g1verificationdate(dataDate, dataTime, outerLoopLengthOfTimeRange) : read_only;
+  meta monthlyVerificationDate g1monthlydate(verificationDate) : no_copy;
+  alias mars.date = monthlyVerificationDate;
+
+  unalias mars.time;
+  unalias mars.step;
+}
+
+if (marsStream is "dame") {
+  if (!(outerLoopTypeOfStatisticalProcessing == 3 || outerLoopTypeOfStatisticalProcessing == 2)) {
+    # not mind or maxd
+    alias mars.date = validityDate;
+  }
+
+  if (outerLoopLengthOfTimeRange == 24) {
+    # accumd
+    meta verificationDate g1verificationdate(dataDate, dataTime, outerLoopLengthOfTimeRange) : read_only;
+    alias mars.date = verificationDate;
+  }
+
+  unalias mars.time;
+  unalias mars.step;
+}

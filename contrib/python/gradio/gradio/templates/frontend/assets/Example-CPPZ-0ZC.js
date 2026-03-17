@@ -1,0 +1,1 @@
+import"./svelte/svelte_internal_flags_async.js";import*as t from"./svelte/svelte_internal_client.js";function f(a,p){t.next();var e=t.text();t.template_effect(()=>t.set_text(e,p.value||"")),t.append(a,e)}export{f as default};

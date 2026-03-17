@@ -1,0 +1,42 @@
+#Code Table obstat.10.0:  Data selection criteria
+1 Active Active data 
+2 All All data
+3 Non_Active Not Active data
+4 Best_Active Best active wind
+5 Used Used data
+6 VarQC_Rej VarQC rejected data
+7 Blacklisted Blacklisted data
+8 Failed Failed data
+9 Passed_FgCheck Data that passed FG check
+10 Non_Rejected All non rejected data
+11 VarBC_Passive VarBC passive channels
+12 Failed_FG_Non_Black Data failed FG check but not blacklisted
+13 Failed_FG_VarQC_Rej Data failed FG check and VARQC rejected
+#14-19 Reserved for additional standard IFS flags
+20 QI_LE_20 AMVs with QI <= 20
+21 QI_LE_66 AMVs with 20 < QI <=65
+22 QI_GE_65 AMVs with QI > 65
+23 QI_GE_80 AMVs with QI > 80
+24 QI_GE_90 AMVs with QI > 90
+#25-29 Reserved for additional AMVs flags
+30 Clear_LE_70%WV_80%IR CSR data with clear fraction < 70 % (WV) and < 80 % (IR)
+31 Clear_GE_70%WV_80%IR CSR data with clear fraction >= 70 % (WV) and >= 80 % (IR)
+32 Clear_100% CSR data completely clear (according to IR window channel)
+33 Clear_GE_40%WV CSR data with clear fraction >= 40 % (WV)
+34 Clear_GE_70%WV CSR data with clear fraction >= 70 % (WV)
+35 Clear_100%WV CSR data completely clear (according to WV channel)
+#36-39 Reserved for additional CSR flags
+40 Clear Clear
+41 Used_Clear Used clear data
+42 Used_Cloudy_Rainy Used cloudy and rainy data
+43 All_Cloudy_Rainy All cloudy and rainy data
+44 Used_ObsCld_FGClr Used Obs cloudy and FG clear
+45 Used_ObsClr_FGCld Used Obs clear and FG cloudy
+#44-49 Reserved for additional radiances flags
+50 Good_ozone Good ozone data
+51 Daytime Day time data
+52 Nighttime Night time data
+#53-69 Reserved for additional ozone, trace gases and Aerosol flags
+#70-79 Reserved for GPSRO flags
+#80-89 Reserved for scatterometer flags
+#33-255 Reserved

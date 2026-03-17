@@ -1,0 +1,33 @@
+# (C) Copyright 2005- ECMWF.
+# MARS labelling or ensemble forecast data (with hindcast support)
+
+constant GRIBEXSection1Problem = 69 - section1Length;
+
+#used in local definition 13
+transient localFlag=2 : hidden;
+
+template mars_labeling "grib1/mars_labeling.def";
+#1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=26;
+
+if (stepType is "instant" ) {
+  alias productDefinitionTemplateNumber=epsPoint;
+} else {
+  alias productDefinitionTemplateNumber=epsContinuous;
+}
+
+constant wrongPadding=1 : hidden;
+
+unsigned[1] number  : dump;
+unsigned[1] numberOfForecastsInEnsemble    : dump;
+alias totalNumber=numberOfForecastsInEnsemble;
+unsigned[4] referenceDate  : dump;
+unsigned[4] climateDateFrom  : dump;
+unsigned[4] climateDateTo  : dump;
+pad padding_loc26_1(6);
+alias perturbationNumber=number;
+
+alias local.referenceDate= referenceDate;
+alias local.climateDateFrom= climateDateFrom;
+alias local.climateDateTo= climateDateTo;

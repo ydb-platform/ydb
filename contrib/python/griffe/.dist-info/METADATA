@@ -1,0 +1,210 @@
+Metadata-Version: 2.4
+Name: griffe
+Version: 2.0.0
+Summary: Signatures for entire Python programs. Extract the structure, the frame, the skeleton of your project, to generate API documentation or find breaking changes in your API.
+Project-URL: Homepage, https://mkdocstrings.github.io/griffe
+Project-URL: Documentation, https://mkdocstrings.github.io/griffe
+Project-URL: Changelog, https://mkdocstrings.github.io/griffe/changelog
+Project-URL: Repository, https://github.com/mkdocstrings/griffe
+Project-URL: Issues, https://github.com/mkdocstrings/griffe/issues
+Project-URL: Discussions, https://github.com/mkdocstrings/griffe/discussions
+Project-URL: Gitter, https://gitter.im/mkdocstrings/griffe
+Project-URL: Funding, https://github.com/sponsors/pawamoy
+Author-email: Timothée Mazzucotelli <dev@pawamoy.fr>
+License-Expression: ISC
+License-File: LICENSE
+Keywords: api,breaking-changes,dynamic-analysis,signature,static-analysis
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Documentation
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Documentation
+Classifier: Topic :: Utilities
+Classifier: Typing :: Typed
+Requires-Python: >=3.10
+Requires-Dist: griffecli==2.0.0
+Requires-Dist: griffelib==2.0.0
+Provides-Extra: pypi
+Requires-Dist: griffelib[pypi]==2.0.0; extra == 'pypi'
+Description-Content-Type: text/markdown
+
+# Griffe
+
+[![ci](https://github.com/mkdocstrings/griffe/workflows/ci/badge.svg)](https://github.com/mkdocstrings/griffe/actions?query=workflow%3Aci)
+[![documentation](https://img.shields.io/badge/docs-mkdocs-708FCC.svg?style=flat)](https://mkdocstrings.github.io/griffe/)
+[![pypi version](https://img.shields.io/pypi/v/griffe.svg)](https://pypi.org/project/griffe/)
+[![gitter](https://img.shields.io/badge/matrix-chat-4db798.svg?style=flat)](https://app.gitter.im/#/room/#mkdocstrings_griffe:gitter.im)
+[![radicle](https://img.shields.io/badge/rad-clone-6666FF.svg?style=flat)](https://app.radicle.at/nodes/seed.radicle.at/rad:z4M5XTPDD4Wh1sm8iPCenF85J3z8Z)
+
+<img src="https://raw.githubusercontent.com/mkdocstrings/griffe/main/logo.svg" alt="Griffe logo, created by François Rozet" width="200" align="right">
+
+Signatures for entire Python programs. Extract the structure, the frame, the skeleton of your project, to generate API documentation or find breaking changes in your API.
+
+Griffe, pronounced "grif" (`/ɡʁif/`), is a french word that means "claw",
+but also "signature" in a familiar way. "On reconnaît bien là sa griffe."
+
+- [User guide](https://mkdocstrings.github.io/griffe/guide/users/)
+- [Contributor guide](https://mkdocstrings.github.io/griffe/guide/contributors/)
+- [API reference](https://mkdocstrings.github.io/griffe/reference/api/)
+
+## Installation
+
+```bash
+pip install griffe
+```
+
+With [`uv`](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install griffe
+```
+
+## Usage
+
+### Dump JSON-serialized API
+
+**On the command line**, pass the names of packages to the `griffe dump` command:
+
+```console
+$ griffe dump httpx fastapi
+{
+  "httpx": {
+    "name": "httpx",
+    ...
+  },
+  "fastapi": {
+    "name": "fastapi",
+    ...
+  }
+}
+```
+
+See the [Serializing chapter](https://mkdocstrings.github.io/griffe/guide/users/serializing/) for more examples.
+
+### Check for API breaking changes
+
+Pass a relative path to the `griffe check` command:
+
+```console
+$ griffe check mypackage --verbose
+mypackage/mymodule.py:10: MyClass.mymethod(myparam):
+Parameter kind was changed:
+  Old: positional or keyword
+  New: keyword-only
+```
+
+For `src` layouts:
+
+```console
+$ griffe check --search src mypackage --verbose
+src/mypackage/mymodule.py:10: MyClass.mymethod(myparam):
+Parameter kind was changed:
+  Old: positional or keyword
+  New: keyword-only
+```
+
+It's also possible to directly **check packages from PyPI.org**
+(or other indexes configured through `PIP_INDEX_URL`).
+This feature requires that you install Griffe with the `pypi` extra:
+
+```bash
+pip install griffe[pypi]
+```
+
+The command syntax is:
+
+```bash
+griffe check package_name -b project-name==2.0 -a project-name==1.0
+```
+
+See the [Checking chapter](https://mkdocstrings.github.io/griffe/guide/users/checking/) for more examples.
+
+### Load and navigate data with Python
+
+**With Python**, loading a package:
+
+```python
+import griffe
+
+fastapi = griffe.load("fastapi")
+```
+
+Finding breaking changes:
+
+```python
+import griffe
+
+previous = griffe.load_git("mypackage", ref="0.2.0")
+current = griffe.load("mypackage")
+
+for breakage in griffe.find_breaking_changes(previous, current):
+    ...
+```
+
+See the [Loading chapter](https://mkdocstrings.github.io/griffe/guide/users/loading/) for more examples.
+
+## Sponsors
+
+<!-- sponsors-start -->
+
+<div id="premium-sponsors" style="text-align: center;">
+
+<div id="silver-sponsors"><b>Silver sponsors</b><p>
+<a href="https://fastapi.tiangolo.com/"><img alt="FastAPI" src="https://raw.githubusercontent.com/tiangolo/fastapi/master/docs/en/docs/img/logo-margin/logo-teal.png" style="height: 200px; "></a><br>
+<a href="https://docs.pydantic.dev/latest/"><img alt="Pydantic" src="https://pydantic.dev/assets/for-external/pydantic_logfire_logo_endorsed_lithium_rgb.svg" style="height: 180px; "></a><br>
+</p></div>
+
+<div id="bronze-sponsors"><b>Bronze sponsors</b><p>
+<a href="https://www.nixtla.io/"><picture><source media="(prefers-color-scheme: light)" srcset="https://www.nixtla.io/img/logo/full-black.svg"><source media="(prefers-color-scheme: dark)" srcset="https://www.nixtla.io/img/logo/full-white.svg"><img alt="Nixtla" src="https://www.nixtla.io/img/logo/full-black.svg" style="height: 60px; "></picture></a><br>
+</p></div>
+</div>
+
+---
+
+<div id="sponsors"><p>
+<a href="https://github.com/ofek"><img alt="ofek" src="https://avatars.githubusercontent.com/u/9677399?u=386c330f212ce467ce7119d9615c75d0e9b9f1ce&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/samuelcolvin"><img alt="samuelcolvin" src="https://avatars.githubusercontent.com/u/4039449?u=42eb3b833047c8c4b4f647a031eaef148c16d93f&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/tlambert03"><img alt="tlambert03" src="https://avatars.githubusercontent.com/u/1609449?u=922abf0524b47739b37095e553c99488814b05db&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/ssbarnea"><img alt="ssbarnea" src="https://avatars.githubusercontent.com/u/102495?u=c7bd9ddf127785286fc939dd18cb02db0a453bce&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/femtomc"><img alt="femtomc" src="https://avatars.githubusercontent.com/u/34410036?u=f13a71daf2a9f0d2da189beaa94250daa629e2d8&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/cmarqu"><img alt="cmarqu" src="https://avatars.githubusercontent.com/u/360986?v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/kolenaIO"><img alt="kolenaIO" src="https://avatars.githubusercontent.com/u/77010818?v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/ramnes"><img alt="ramnes" src="https://avatars.githubusercontent.com/u/835072?u=3fca03c3ba0051e2eb652b1def2188a94d1e1dc2&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/machow"><img alt="machow" src="https://avatars.githubusercontent.com/u/2574498?u=c41e3d2f758a05102d8075e38d67b9c17d4189d7&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/BenHammersley"><img alt="BenHammersley" src="https://avatars.githubusercontent.com/u/99436?u=4499a7b507541045222ee28ae122dbe3c8d08ab5&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/trevorWieland"><img alt="trevorWieland" src="https://avatars.githubusercontent.com/u/28811461?u=74cc0e3756c1d4e3d66b5c396e1d131ea8a10472&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/MarcoGorelli"><img alt="MarcoGorelli" src="https://avatars.githubusercontent.com/u/33491632?u=7de3a749cac76a60baca9777baf71d043a4f884d&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/analog-cbarber"><img alt="analog-cbarber" src="https://avatars.githubusercontent.com/u/7408243?u=642fc2bdcc9904089c62fe5aec4e03ace32da67d&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/OdinManiac"><img alt="OdinManiac" src="https://avatars.githubusercontent.com/u/22727172?u=36ab20970f7f52ae8e7eb67b7fcf491fee01ac22&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/rstudio-sponsorship"><img alt="rstudio-sponsorship" src="https://avatars.githubusercontent.com/u/58949051?u=0c471515dd18111be30dfb7669ed5e778970959b&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/schlich"><img alt="schlich" src="https://avatars.githubusercontent.com/u/21191435?u=6f1240adb68f21614d809ae52d66509f46b1e877&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/butterlyn"><img alt="butterlyn" src="https://avatars.githubusercontent.com/u/53323535?v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/livingbio"><img alt="livingbio" src="https://avatars.githubusercontent.com/u/10329983?v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/NemetschekAllplan"><img alt="NemetschekAllplan" src="https://avatars.githubusercontent.com/u/912034?v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/EricJayHartman"><img alt="EricJayHartman" src="https://avatars.githubusercontent.com/u/9259499?u=7e58cc7ec0cd3e85b27aec33656aa0f6612706dd&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/15r10nk"><img alt="15r10nk" src="https://avatars.githubusercontent.com/u/44680962?u=f04826446ff165742efa81e314bd03bf1724d50e&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/activeloopai"><img alt="activeloopai" src="https://avatars.githubusercontent.com/u/34816118?v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/roboflow"><img alt="roboflow" src="https://avatars.githubusercontent.com/u/53104118?v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/cmclaughlin"><img alt="cmclaughlin" src="https://avatars.githubusercontent.com/u/1061109?u=ddf6eec0edd2d11c980f8c3aa96e3d044d4e0468&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/blaisep"><img alt="blaisep" src="https://avatars.githubusercontent.com/u/254456?u=97d584b7c0a6faf583aa59975df4f993f671d121&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/RapidataAI"><img alt="RapidataAI" src="https://avatars.githubusercontent.com/u/104209891?v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/rodolphebarbanneau"><img alt="rodolphebarbanneau" src="https://avatars.githubusercontent.com/u/46493454?u=6c405452a40c231cdf0b68e97544e07ee956a733&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/theSymbolSyndicate"><img alt="theSymbolSyndicate" src="https://avatars.githubusercontent.com/u/111542255?v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/blakeNaccarato"><img alt="blakeNaccarato" src="https://avatars.githubusercontent.com/u/20692450?u=bb919218be30cfa994514f4cf39bb2f7cf952df4&v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/ChargeStorm"><img alt="ChargeStorm" src="https://avatars.githubusercontent.com/u/26000165?v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/Alphadelta14"><img alt="Alphadelta14" src="https://avatars.githubusercontent.com/u/480845?v=4" style="height: 32px; border-radius: 100%;"></a>
+<a href="https://github.com/Cusp-AI"><img alt="Cusp-AI" src="https://avatars.githubusercontent.com/u/178170649?v=4" style="height: 32px; border-radius: 100%;"></a>
+</p></div>
+
+
+*And 7 more private sponsor(s).*
+
+<!-- sponsors-end -->

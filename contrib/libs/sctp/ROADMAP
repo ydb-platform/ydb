@@ -1,0 +1,45 @@
+TOUR
+----
+COPYING.lib	Licensing terms of libsctp	
+
+COPYING		Licensing terms of other pieces of the package
+
+README		Read this before developing.
+
+ChangeLog	What has changed since the last release?
+
+AUTHORS		Developers name list.
+
+INSTALL		How to build and install this package.
+
+doc/		All the relevant Internet Drafts and RFC's.
+
+doc/states.txt	This is a detailed state table for SCTP.  It makes a
+		pretty good index for RFC2960 too...
+
+man/		SCTP man pages
+
+src/		Implementation of the user space library, include files - 
+		this should go, some day, into glibc - as well as a set
+		of SCTP test tools and test programs.  
+
+src/apps	SCTP test applications.
+
+src/func_tests	SCTP functional tests.
+
+src/lib		Sources for SCTP library libsctp.a.
+
+src/testlib	Sources for SCTP test library libsctputil.a.
+
+src/include/netinet
+                Header files needed for user space development.
+
+bin/		Scripts for lksctp build, installation and execution.
+
+test/		Testframe functional and unit tests. These tests use a 
+		framework which enables running lksctp code in userspace.
+
+test/linux/include
+		This include heirarchy includes special versions of
+		kernel include files needed by the user-space test
+		frame.

@@ -1,0 +1,10 @@
+# Product discipline 0 - Meteorological products, parameter category 16: forecast radar imagery
+0 0 Equivalent radar reflectivity factor for rain (mm6 m-3)
+1 1 Equivalent radar reflectivity factor for snow (mm6 m-3)
+2 2 Equivalent radar reflectivity factor for parameterized convection (mm6 m-3)
+3 3 Echo top (m)
+4 4 Reflectivity (dB)
+5 5 Composite reflectivity (dB)
+# 6-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

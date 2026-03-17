@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1;
+
+option java_package = "yandex.cloud.api.speechsense.v1";
+option java_outer_classname = "ProjectServiceProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1;speechsense";
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/speechsense/v1/project.proto";
+
+
+service ProjectService {
+
+  // rpc for creating speechsense project
+  rpc Create(CreateProjectRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateProjectMetadata"
+      response: "Project"
+    };
+  };
+
+}
+
+message CreateProjectRequest {
+  // project name
+  string name = 1;
+
+  // id of connection the project should belong too
+  string connection_id = 2;
+
+  // project description
+  string description = 3;
+
+  // project filters
+  repeated FieldFilter filters = 4;
+}
+
+message CreateProjectMetadata {
+  string id = 1;
+}

@@ -1,0 +1,6 @@
+Supervisor is Copyright (c) 2006-2015 Agendaless Consulting and Contributors.
+(http://www.agendaless.com), All Rights Reserved
+
+medusa was (is?) Copyright (c) Sam Rushing.
+
+http_client.py code Copyright (c) by Daniel Krech, http://eikeon.com/.

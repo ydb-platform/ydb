@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.regression;
+
+import "google/protobuf/timestamp.proto";
+
+import "yandex/cloud/loadtesting/api/v1/regression/widget.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/regression;regression";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.regression";
+
+// Regression dashboard.
+message Dashboard {
+    // Content of regression dashboard.
+    message Content {
+        // Widgets.
+        repeated Widget widgets = 1;
+    }
+
+    // ID of the dashboard.
+    string id = 1;
+
+    // Name of the dashboard.
+    string name = 2;
+
+    // Description of the dashboard.
+    string description = 3;
+
+    // Creation timestamp.
+    google.protobuf.Timestamp created_at = 4;
+
+    // Last update timestamp.
+    google.protobuf.Timestamp updated_at = 5;
+
+    // UA or SA that created the dashboard.
+    string created_by = 6;
+
+    // UA or SA that updated the dashboard last time.
+    string updated_by = 7;
+
+    // Etag of the dashboard.
+    string etag = 8;
+
+    // Dashboard content.
+    Content content = 9;
+}

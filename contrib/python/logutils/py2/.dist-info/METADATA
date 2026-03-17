@@ -1,0 +1,38 @@
+Metadata-Version: 2.1
+Name: logutils
+Version: 0.3.5
+Summary: Logging utilities
+Home-page: http://code.google.com/p/logutils/
+Author: Vinay Sajip
+Author-email: vinay_sajip@red-dove.com
+License: Copyright (C) 2010-2017 by Vinay Sajip. All Rights Reserved. See LICENSE.txt for license.
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Software Development
+
+The logutils package provides a set of handlers for the Python standard
+library's logging package.
+
+Some of these handlers are out-of-scope for the standard library, and
+so they are packaged here. Others are updated versions which have
+appeared in recent Python releases, but are usable with older versions
+of Python and so are packaged here.
+
+The source code repository is at:
+
+https://bitbucket.org/vinay.sajip/logutils/
+
+Documentation is available at:
+
+https://logutils.readthedocs.io/
+
+https://pythonhosted.org/logutils/
+
+

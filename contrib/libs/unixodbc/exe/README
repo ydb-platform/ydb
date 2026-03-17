@@ -1,0 +1,48 @@
+***************************************************************
+* This code is GPL.                                           *
+* This software is a unixODBC component and may NOT be        *
+* distributed seperately.                                     *
+*                                                             *
+* Peter Harvey 21.FEB.99 pharvey@codebydesign.com             *
+***************************************************************
+
++-------------------------------------------------------------+
+| unixODBC                                                    |
++-------------------------------------------------------------+
+
+isql/iusql
+
+	This is a utility which can be used to submit SQL to a 
+	data source and to format/output results. It can be 
+	used in batch or interactive mode.
+
+odbcinst
+
+
+	This utility has been created for install script/RPM
+	writers. It is a command line interface to key
+	functionality in the odbcinst lib. It does not copy
+	any files (ie libs) but it will modify the ODBC
+	System Information for the user.
+
+dltest
+
+	This is a utility which can be used to check a share
+	library to see if it can be loaded and if a given
+	symbol exists in it.
+
+	This can be useful when debugging a problem with a 
+	share library or in a makefile situation.
+
+dbfio
+
+	This utility is used to test the functionality of the
+	DBFIO library.
+
++-------------------------------------------------------------+
+| Peter Harvey                                                |
+| pharvey@codebydesign.com                                    |
+| www.unixodbc.org
+| 27.JAN.99                                                   |
++-------------------------------------------------------------+
+

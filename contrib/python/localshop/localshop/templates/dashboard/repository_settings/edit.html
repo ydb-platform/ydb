@@ -1,0 +1,39 @@
+{% extends "dashboard/repository_settings/base.html" %}
+{% load i18n %}
+
+{% block content_panel %}
+    <div class="panel panel-default">
+        <div class="panel-heading">Edit information</div>
+        <div class="panel-body">
+
+            <form method="post" action="{% url 'dashboard:repository_edit' slug=view.repository.slug %}" class="form-stacked">
+                {% include "partial/_form_fields.html" %}
+
+                <div class="form-group form-actions">
+                    <button type="submit" class="btn btn-primary"><span class="icon-ok icon-white"></span> Save</button>
+                </div>
+                {% csrf_token %}
+            </form>
+        </div>
+    </div>
+
+
+    <div class="panel panel-danger">
+        <div class="panel-heading">Delete repository</div>
+        <div class="panel-body">
+            <form method="post" action="{% url 'dashboard:repository_delete' slug=view.repository.slug %}" class="form-stacked">
+                <p>
+                    Delete the {{ repository }} repository?
+                    <strong>This will also delete all associated packages!</strong>
+                </p>
+
+                <div class="form-group form-actions">
+                    <button type="submit" class="btn btn-danger"><span class="icon-trash icon-white"></span> Delete</button>
+                </div>
+                {% csrf_token %}
+            </form>
+        </div>
+    </div>
+
+{% endblock %}
+

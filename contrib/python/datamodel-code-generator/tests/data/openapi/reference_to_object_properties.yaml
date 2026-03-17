@@ -1,0 +1,38 @@
+openapi: "3.0.3"
+info:
+  title: Example
+  version: 1.0.0
+
+paths: {}
+
+components:
+  schemas:
+    Id:
+      type: string
+    Parent:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        name:
+          type: string
+        pet:
+          $ref: "#/components/schemas/Pet"
+    Child:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        parent_id:
+          $ref: "#/components/schemas/Parent/properties/id"
+        name:
+          type: string
+        pet:
+          $ref: "#/components/schemas/Parent/properties/pet"
+    Pet:
+      type: object
+      properties:
+        name:
+          type: string
+        age:
+          type: integer

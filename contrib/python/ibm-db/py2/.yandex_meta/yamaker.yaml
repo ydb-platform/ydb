@@ -1,0 +1,14 @@
+requirements:
+  - contrib/python/ibm-db/py2/clidriver
+exclude_from_macros:
+  - clidriver/ya.make
+exclude:
+  - certs/*
+  - testfunctions.py
+  - ibm_db.py
+  - ibm_db_tests/*
+  - ibmdb_tests.py
+copy:
+  - ibm_db.[ch]
+keep:
+  - clidriver/ya.make

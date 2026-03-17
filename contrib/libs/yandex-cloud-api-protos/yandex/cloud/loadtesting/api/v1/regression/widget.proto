@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.regression;
+
+import "yandex/cloud/loadtesting/api/v1/report/kpi.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/regression;regression";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.regression";
+
+// Regression dashboard widget.
+message Widget {
+    // Widget position.
+    message LayoutPosition {
+        // X.
+        int64 x = 1;
+
+        // Y.
+        int64 y = 2;
+
+        // Width.
+        int64 width = 3;
+        
+        // Height.
+        int64 height = 4;
+    }
+    
+    // Widget position.
+    LayoutPosition position = 1;
+
+    oneof widget {
+        // Chart widget.
+        ChartWidget chart = 2;
+
+        // Text widget.
+        TextWidget text = 3;
+
+        // Title widget.
+        TitleWidget title = 4;
+    }
+}
+
+// Regression chart.
+message ChartWidget {
+    // ID of the chart.
+    string id = 1;
+
+    // Name of the chart.
+    string name = 2;
+
+    // Description of the chart.
+    string description = 3;
+
+    // Test filter selector to show KPI values for.
+    string filter_str = 4;
+
+    // Test case to show KPI values for.
+    string test_case = 5;
+
+    // KPIs to show.
+    repeated report.Kpi kpis = 6;
+}
+
+// Text widget.
+message TextWidget {
+    // Text string.
+    string text = 1;
+}
+
+// Title widget.
+message TitleWidget {
+    // Title size.
+    enum TitleSize {
+        // Unspecified.
+        TITLE_SIZE_UNSPECIFIED = 0;
+
+        // Extra small.
+        TITLE_SIZE_XS = 1;
+
+        // Small.
+        TITLE_SIZE_S = 2;
+
+        // Medium.
+        TITLE_SIZE_M = 3;
+
+        // Large.
+        TITLE_SIZE_L = 4;
+    }
+
+    // Title string.
+    string text = 1;
+
+    // Title size. 
+    TitleSize size = 2;
+}

@@ -1,0 +1,7 @@
+--- contrib/python/language-data/language_data/names.py	(index)
++++ contrib/python/language-data/language_data/names.py	(working tree)
+@@ -88 +88,3 @@ def name_to_code(category, name, language: str = "und"):
+-        TRIES[trie_name] = load_trie(data_filename("trie/{}.marisa".format(trie_name)))
++        import importlib.resources
++        with importlib.resources.as_file(data_filename("trie/{}.marisa".format(trie_name))) as f:
++            TRIES[trie_name] = load_trie(f)

@@ -1,0 +1,2 @@
+exclude:
+  - tasks/test.py

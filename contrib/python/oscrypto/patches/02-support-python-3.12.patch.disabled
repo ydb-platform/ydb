@@ -1,0 +1,18 @@
+--- contrib/python/oscrypto/tests/__init__.py	(index)
++++ contrib/python/oscrypto/tests/__init__.py	(working tree)
+@@ -1,7 +1,6 @@
+ # coding: utf-8
+ from __future__ import unicode_literals, division, absolute_import, print_function
+ 
+-import imp
+ import os
+ import unittest
+ 
+@@ -94,6 +93,7 @@ def _import_from(mod, path, mod_dir=None):
+         return None
+ 
+     try:
++        import imp
+         mod_info = imp.find_module(mod_dir, [path])
+         return imp.load_module(mod, *mod_info)
+     except ImportError:

@@ -1,0 +1,10 @@
+# Concept destineOrigin
+"DWD"                                       = { centre=98; subCentre=78; }
+"Meteo-France"                              = { centre=98; subCentre=84; }
+"Meteo-France"                              = { centre=98; subCentre=85; }
+"MPI-M"                                     = { centre=98; subCentre=252; }
+"AWI"                                       = { centre=98; subCentre=253; }
+"BSC"                                       = { centre=98; subCentre=1000; }
+"CSC"                                       = { centre=98; subCentre=1001; }
+"DKRZ"                                      = { centre=98; subCentre=1002; }
+"Climate DT consortium (CSC,AWI,BSC,MPI-M)" = { centre=98; subCentre=1003; }

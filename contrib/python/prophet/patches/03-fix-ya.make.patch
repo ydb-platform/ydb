@@ -1,0 +1,31 @@
+--- contrib/python/prophet/ya.make	(index)
++++ contrib/python/prophet/ya.make	(working tree)
+@@ -26,4 +26,6 @@ ADDINCL(
+ )
+ 
++NO_COMPILER_WARNINGS()
++
+ NO_LINT()
+ 
+@@ -38,6 +37,21 @@ PY_SRCS(
+     prophet/plot.py
+     prophet/serialize.py
+     prophet/utilities.py
++    _prophet/stan_model/prophet_model.pyx
++)
++
++RUN_PROGRAM(
++    contrib/python/pystan/py3/bin/pystan_model _prophet/stan_model/prophet_model.pyx
++    OUT_NOAUTO _prophet/stan_model/prophet_model.pyx
++    OUTPUT_INCLUDES stan/io/var_context.hpp py_var_context.hpp stan_fit.hpp boost/random/additive_combine.hpp pystan/io.pxd pystan/stan_fit.pxd prophet_model.hpp numpy/arrayobject.h numpy/ufuncobject.h numpy/ndarrayobject.h numpy/ndarraytypes.h numpy/arrayscalars.h numpy/__init__.pxd
++)
++
++RUN_PROGRAM(
++    contrib/libs/stan/stan/command
++    stan/unix/prophet.stan --o=_prophet/stan_model/prophet_model.hpp
++    IN stan/unix/prophet.stan
++    OUT_NOAUTO _prophet/stan_model/prophet_model.hpp
++    OUTPUT_INCLUDES stan/model/model_header.hpp
+ )
+ 
+ RESOURCE_FILES(

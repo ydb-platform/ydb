@@ -1,0 +1,9 @@
+# Product Discipline 1: Hydrologic products, Parameter Category 0: Hydrology basic products
+0 0 Flash flood guidance (Encoded as an accumulation over a floating subinterval of time between the reference time and valid time) (kg m-2)
+1 1 Flash flood runoff (Encoded as an accumulation over a floating subinterval of time) (kg m-2)
+2 2 Remotely sensed snow cover (Code table 4.215)
+3 3 Elevation of snow covered terrain (Code table 4.216)
+4 4 Snow water equivalent percent of normal (%)
+5 5 Baseflow-groundwater runoff (kg m-2)
+6 6 Storm surface runoff (kg m-2)
+255 255 Missing

@@ -1,0 +1,8 @@
+class BoundingBox(BaseModel):
+    type: str
+    coordinates: List[List[List[Union[float, str]]]]
+
+
+class Model(BaseModel):
+    bounding_box: Optional[BoundingBox] = None
+    attributes: Optional[Dict[str, Any]] = None

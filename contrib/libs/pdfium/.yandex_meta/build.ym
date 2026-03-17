@@ -1,0 +1,62 @@
+{% extends '//builtin/bag.ym' %}
+
+{% block current_version %}chromium/6721{% endblock %}
+
+{% block current_url %}
+https://pdfium.googlesource.com/pdfium/+archive/refs/heads/{{self.version().strip()}}.tar.gz
+{% endblock %}
+
+{% block prepare_env %}
+{{super()}}
+# googlesource +archive tarballs are flat (no top-level dir).
+# bag.ym uses tar --strip-components=1 which fails on flat archives.
+# Repack the archive with a top-level directory to make it compatible.
+ARCHIVE=${RESOURCES}/{{self.current_url().strip() | basename}}
+REPACK_DIR=$(mktemp -d)
+mkdir -p ${REPACK_DIR}/pdfium
+tar xf ${ARCHIVE} -C ${REPACK_DIR}/pdfium
+tar czf ${ARCHIVE} -C ${REPACK_DIR} pdfium
+rm -rf ${REPACK_DIR}
+{% endblock %}
+
+{% block patch_source %}
+{{super()}}
+# Remove unnecessary directories for minimal build
+rm -rf testing/ samples/ docs/
+# Remove xfa source files (only stubs are needed)
+find xfa/ -name '*.cc' -delete 2>/dev/null || true
+# Remove devendored and unused directories:
+# - third_party/lcms/ -> PEERDIR contrib/libs/lcms2
+# - third_party/libopenjpeg/ -> PEERDIR contrib/libs/openjpeg
+# - third_party/freetype/ -> ADDINCL contrib/libs/freetype/src/psnames
+# - third_party/skia/ -> PDF_USE_SKIA not defined
+# - v8/ -> PDF_ENABLE_V8 not defined
+rm -rf v8/ third_party/skia/ third_party/lcms/ third_party/libopenjpeg/ third_party/freetype/
+# Fix pstables.h: use Arcadia's freetype instead of bundled
+sed -i 's|#include "third_party/freetype/include/pstables.h"|#include "pstables.h"|' \
+    core/fxge/freetype/fx_freetype.cpp
+# Replace dead third_party includes with #error #include
+# (skia: PDF_USE_SKIA not defined; lcms/openjpeg: in #else of USE_SYSTEM_* blocks)
+find core/ fpdfsdk/ -type f \( -name '*.cpp' -o -name '*.h' \) -exec \
+    sed -i 's|^#include "third_party/\(skia\|lcms\|libopenjpeg\)/|#error #include "third_party/\1/|' {} +
+# Clean up nogncheck comments on error lines
+find core/ fpdfsdk/ -type f \( -name '*.cpp' -o -name '*.h' \) -exec \
+    sed -i 's|"  // nogncheck$|"|' {} +
+{% endblock %}
+
+{% block keep_sources %}
+ya.make
+build/build_config.h
+{% endblock %}
+
+{% block prepare_yamake %}
+# ya.make is maintained manually and preserved via keep_sources.
+# Skip auto-generation from bag.ym template.
+:
+{% endblock %}
+
+{% block move_to_output %}
+{{super()}}
+cp -R core/ fpdfsdk/ constants/ third_party/ public/ build/ ${OUTPUT}/
+cp -R fxjs/ partition_alloc/ xfa/ ${OUTPUT}/ 2>/dev/null || true
+{% endblock %}

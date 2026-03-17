@@ -1,0 +1,283 @@
+# Korean (Korea) translations for humanize.
+# Copyright (C) 2013
+# This file is distributed under the same license as the humanize project.
+# @youngrok, 2013.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2020-02-08 20:05+0200\n"
+"PO-Revision-Date: 2013-07-10 11:38+0900\n"
+"Last-Translator: @youngrok\n"
+"Language-Team: ko_KR <LL@li.org>\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"Generated-By: Babel 0.9.6\n"
+"X-Generator: Poedit 1.5.7\n"
+
+#: src/humanize/number.py:24
+#, fuzzy
+msgctxt "0"
+msgid "th"
+msgstr "번째"
+
+#: src/humanize/number.py:25
+#, fuzzy
+msgctxt "1"
+msgid "st"
+msgstr "번째"
+
+#: src/humanize/number.py:26
+#, fuzzy
+msgctxt "2"
+msgid "nd"
+msgstr "번째"
+
+#: src/humanize/number.py:27
+#, fuzzy
+msgctxt "3"
+msgid "rd"
+msgstr "번째"
+
+#: src/humanize/number.py:28
+#, fuzzy
+msgctxt "4"
+msgid "th"
+msgstr "번째"
+
+#: src/humanize/number.py:29
+#, fuzzy
+msgctxt "5"
+msgid "th"
+msgstr "번째"
+
+#: src/humanize/number.py:30
+#, fuzzy
+msgctxt "6"
+msgid "th"
+msgstr "번째"
+
+#: src/humanize/number.py:31
+#, fuzzy
+msgctxt "7"
+msgid "th"
+msgstr "번째"
+
+#: src/humanize/number.py:32
+#, fuzzy
+msgctxt "8"
+msgid "th"
+msgstr "번째"
+
+#: src/humanize/number.py:33
+#, fuzzy
+msgctxt "9"
+msgid "th"
+msgstr "번째"
+
+#: src/humanize/number.py:62
+msgid "million"
+msgstr "%(value)s million"
+
+#: src/humanize/number.py:63
+msgid "billion"
+msgstr "milliard"
+
+#: src/humanize/number.py:64
+#, fuzzy
+msgid "trillion"
+msgstr "%(value)s billion"
+
+#: src/humanize/number.py:65
+#, fuzzy
+msgid "quadrillion"
+msgstr "%(value)s quadrillion"
+
+#: src/humanize/number.py:66
+#, fuzzy
+msgid "quintillion"
+msgstr "%(value)s quintillion"
+
+#: src/humanize/number.py:67
+#, fuzzy
+msgid "sextillion"
+msgstr "%(value)s sextillion"
+
+#: src/humanize/number.py:68
+#, fuzzy
+msgid "septillion"
+msgstr "%(value)s septillion"
+
+#: src/humanize/number.py:69
+#, fuzzy
+msgid "octillion"
+msgstr "%(value)s octillion"
+
+#: src/humanize/number.py:70
+#, fuzzy
+msgid "nonillion"
+msgstr "%(value)s nonillion"
+
+#: src/humanize/number.py:71
+#, fuzzy
+msgid "decillion"
+msgstr "%(value)s décillion"
+
+#: src/humanize/number.py:72
+#, fuzzy
+msgid "googol"
+msgstr "%(value)s gogol"
+
+#: src/humanize/number.py:108
+msgid "one"
+msgstr "하나"
+
+#: src/humanize/number.py:109
+msgid "two"
+msgstr "둘"
+
+#: src/humanize/number.py:110
+msgid "three"
+msgstr "셋"
+
+#: src/humanize/number.py:111
+msgid "four"
+msgstr "넷"
+
+#: src/humanize/number.py:112
+msgid "five"
+msgstr "다섯"
+
+#: src/humanize/number.py:113
+msgid "six"
+msgstr "여섯"
+
+#: src/humanize/number.py:114
+msgid "seven"
+msgstr "일곱"
+
+#: src/humanize/number.py:115
+msgid "eight"
+msgstr "여덟"
+
+#: src/humanize/number.py:116
+msgid "nine"
+msgstr "아홉"
+
+#: src/humanize/time.py:68 src/humanize/time.py:131
+msgid "a moment"
+msgstr "잠깐"
+
+#: src/humanize/time.py:70
+msgid "a second"
+msgstr "1초"
+
+#: src/humanize/time.py:72
+#, python-format
+msgid "%d second"
+msgid_plural "%d seconds"
+msgstr[0] "%d초"
+msgstr[1] "%d초"
+
+#: src/humanize/time.py:74
+msgid "a minute"
+msgstr "1분"
+
+#: src/humanize/time.py:77
+#, python-format
+msgid "%d minute"
+msgid_plural "%d minutes"
+msgstr[0] "%d분"
+msgstr[1] "%d분"
+
+#: src/humanize/time.py:79
+msgid "an hour"
+msgstr "1시간"
+
+#: src/humanize/time.py:82
+#, python-format
+msgid "%d hour"
+msgid_plural "%d hours"
+msgstr[0] "%d heure"
+msgstr[1] "%d시간"
+
+#: src/humanize/time.py:85
+msgid "a day"
+msgstr "하루"
+
+#: src/humanize/time.py:87 src/humanize/time.py:90
+#, python-format
+msgid "%d day"
+msgid_plural "%d days"
+msgstr[0] "%d jour"
+msgstr[1] "%d일"
+
+#: src/humanize/time.py:92
+msgid "a month"
+msgstr "한달"
+
+#: src/humanize/time.py:94
+#, python-format
+msgid "%d month"
+msgid_plural "%d months"
+msgstr[0] "%d mois"
+msgstr[1] "%d개월"
+
+#: src/humanize/time.py:97
+msgid "a year"
+msgstr "1년"
+
+#: src/humanize/time.py:99 src/humanize/time.py:108
+#, python-format
+msgid "1 year, %d day"
+msgid_plural "1 year, %d days"
+msgstr[0] "1년 %d일"
+msgstr[1] "1년 %d일"
+
+#: src/humanize/time.py:102
+msgid "1 year, 1 month"
+msgstr "1년, 1개월"
+
+#: src/humanize/time.py:105
+#, python-format
+msgid "1 year, %d month"
+msgid_plural "1 year, %d months"
+msgstr[0] "1년, %d개월"
+msgstr[1] "1년, %d개월"
+
+#: src/humanize/time.py:110
+#, python-format
+msgid "%d year"
+msgid_plural "%d years"
+msgstr[0] "%d 년"
+msgstr[1] "%d ans"
+
+#: src/humanize/time.py:128
+#, python-format
+msgid "%s from now"
+msgstr "%s 후"
+
+#: src/humanize/time.py:128
+#, python-format
+msgid "%s ago"
+msgstr "%s 전"
+
+#: src/humanize/time.py:132
+msgid "now"
+msgstr "방금"
+
+#: src/humanize/time.py:151
+msgid "today"
+msgstr "오늘"
+
+#: src/humanize/time.py:153
+msgid "tomorrow"
+msgstr "내일"
+
+#: src/humanize/time.py:155
+msgid "yesterday"
+msgstr "어제"

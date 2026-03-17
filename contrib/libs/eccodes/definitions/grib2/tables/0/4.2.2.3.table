@@ -1,0 +1,13 @@
+0 0 Soil type (Code table 4.213)
+1 1 Upper layer soil temperature (K)
+2 2 Upper layer soil moisture (kg m-3)
+3 3 Lower layer soil moisture (kg m-3)
+4 4 Bottom layer soil temperature (K)
+5 5 Liquid volumetric soil moisture (non-frozen) (Proportion)
+6 6 Number of soil layers in root zone (Numeric)
+7 7 Transpiration stress-onset (soil moisture) (Proportion)
+8 8 Direct evaporation cease (soil moisture) (Proportion)
+9 9 Soil porosity (Proportion)
+12 12 Transpiration stress-onset (soil moisture) (kg m-3)
+255 255 Missing
+

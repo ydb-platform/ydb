@@ -1,0 +1,51 @@
+{
+  "type": "object",
+  "properties": {
+    "firstName": {
+      "type": "string"
+    },
+    "childYaml": {
+      "$ref": "external_child.yaml#/Yaml"
+    },
+    "childJson": {
+      "$ref": "external_child.json#/Json"
+    },
+    "childDuplicateJson": {
+      "$ref": "external_child.json#/Json"
+    },
+    "childLocal": {
+      "$ref": "#Local"
+    },
+    "nested": {
+        "items": [
+            {
+              "childLocal": {
+                "$ref": "#Local"
+              }
+            }
+        ]
+    }
+  },
+  "items": {
+    "childLocal": {
+           "$ref": "#Local"
+    }
+  },
+  "additionalProperties": {
+        "childLocal": {
+           "$ref": "#Local"
+    }
+  },
+  "anyOf": [
+    {    "childLocal": {
+           "$ref": "#Local"
+        }
+    }
+  ],
+  "allOf": [
+    {    "childLocal": {
+           "$ref": "#Local"
+        }
+    }
+  ]
+}

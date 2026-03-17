@@ -1,0 +1,2 @@
+[opentelemetry_instrumentor]
+aio-pika = opentelemetry.instrumentation.aio_pika:AioPikaInstrumentor

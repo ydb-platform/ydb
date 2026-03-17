@@ -1,0 +1,148 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 7.50002, grid_second_order, grid_second_order_boustrophedonic
+
+meta groupWidths unsigned_bits(widthOfWidths,numberOfGroups) : read_only;
+meta groupLengths unsigned_bits(widthOfLengths,numberOfGroups) : read_only;
+meta firstOrderValues unsigned_bits(widthOfFirstOrderValues,numberOfGroups) : read_only;
+# meta countOfGroupLengths sum(groupLengths);
+transient halfByte=0;
+
+position offsetBeforeData;
+
+if(bitmapPresent) {
+   meta codedValues data_g1second_order_general_extended_packing(
+	#simple_packing args
+     section7Length,
+     offsetBeforeData,
+     offsetSection7,
+     unitsFactor,
+     unitsBias,
+     changingPrecision,
+     numberOfCodedValues,
+     bitsPerValue,
+     referenceValue,
+     binaryScaleFactor,
+     decimalScaleFactor,
+     optimizeScaleFactor,
+	#g1second_order_row_by_row args
+	 halfByte,
+	 packingType,
+	 grid_ieee,
+	 precision,
+	 widthOfFirstOrderValues,
+	 firstOrderValues,
+	 N1,
+	 N2,
+	 numberOfGroups,
+	 numberOfGroups,
+	 numberOfSecondOrderPackedValues,
+	 keyNotPresent,
+	 groupWidths,
+	 widthOfWidths,
+	 groupLengths,
+	 widthOfLengths,
+	 NL,
+	 SPD,
+	 widthOfSPD,
+	 orderOfSPD,
+	 numberOfPoints
+   ): read_only;
+   alias data.packedValues = codedValues;
+
+   if (boustrophedonicOrdering) {
+       meta preBitmapValues data_apply_bitmap(codedValues,bitmap,missingValue,binaryScaleFactor) : read_only;
+       meta values data_apply_boustrophedonic(preBitmapValues,numberOfRows,numberOfColumns,numberOfPoints,pl) : dump;
+   } else {
+       meta values data_apply_bitmap(codedValues,bitmap,missingValue,binaryScaleFactor) : dump;
+   }
+
+} else {
+	if (boustrophedonicOrdering) {
+	   meta codedValues data_g1second_order_general_extended_packing(
+		#simple_packing args
+		 section7Length,
+		 offsetBeforeData,
+		 offsetSection7,
+		 unitsFactor,
+		 unitsBias,
+		 changingPrecision,
+		 numberOfCodedValues,
+		 bitsPerValue,
+		 referenceValue,
+		 binaryScaleFactor,
+		 decimalScaleFactor,
+         optimizeScaleFactor,
+		#g1second_order_row_by_row args
+		 halfByte,
+		 packingType,
+		 grid_ieee,
+		 precision,
+		 widthOfFirstOrderValues,
+		 firstOrderValues,
+		 N1,
+		 N2,
+		 numberOfGroups,
+		 numberOfGroups,
+		 numberOfSecondOrderPackedValues,
+		 keyNotPresent,
+		 groupWidths,
+		 widthOfWidths,
+		 groupLengths,
+		 widthOfLengths,
+		 NL,
+		 SPD,
+		 widthOfSPD,
+		 orderOfSPD,
+		 numberOfPoints
+		) : dump;
+
+		meta values data_apply_boustrophedonic(codedValues,numberOfRows,numberOfColumns,numberOfPoints,pl) : dump;
+
+	} else {
+	   meta values data_g1second_order_general_extended_packing(
+		#simple_packing args
+		 section7Length,
+		 offsetBeforeData,
+		 offsetSection7,
+		 unitsFactor,
+		 unitsBias,
+		 changingPrecision,
+		 numberOfCodedValues,
+		 bitsPerValue,
+		 referenceValue,
+		 binaryScaleFactor,
+		 decimalScaleFactor,
+         optimizeScaleFactor,
+		#g1second_order_row_by_row args
+		 halfByte,
+		 packingType,
+		 grid_ieee,
+		 precision,
+		 widthOfFirstOrderValues,
+		 firstOrderValues,
+		 N1,
+		 N2,
+		 numberOfGroups,
+		 numberOfGroups,
+		 numberOfSecondOrderPackedValues,
+		 keyNotPresent,
+		 groupWidths,
+		 widthOfWidths,
+		 groupLengths,
+		 widthOfLengths,
+		 NL,
+		 SPD,
+		 widthOfSPD,
+		 orderOfSPD,
+		 numberOfPoints
+		 ) : dump;
+		 alias codedValues=values;
+	}
+    alias data.packedValues = values;
+}
+
+meta packingError simple_packing_error(bitsPerValue,binaryScaleFactor,decimalScaleFactor,referenceValue,ieee) : no_copy;
+
+template statistics "common/statistics_grid.def";
+template missing_values "common/missing_values_grid.def";

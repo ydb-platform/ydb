@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.assistants.v1.searchindex;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/assistants/v1/searchindex;searchindex";
+option java_package = "yandex.cloud.api.ai.assistants.v1.searchindex";
+
+// Represents a file that has been indexed within a search index.
+message SearchIndexFile {
+  // Unique identifier of the file that was used for indexing.
+  string id = 1;
+
+  // ID of the search index that contains this file.
+  string search_index_id = 2;
+
+  // Identifier of the subject who created the file in the search index.
+  string created_by = 3;
+
+  // Timestamp representing when the file was created.
+  google.protobuf.Timestamp created_at = 4;
+}

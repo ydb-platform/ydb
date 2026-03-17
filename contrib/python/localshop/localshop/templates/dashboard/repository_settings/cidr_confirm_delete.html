@@ -1,0 +1,16 @@
+{% extends "dashboard/repository_settings/base.html" %}
+{% load i18n %}
+
+{% block content_panel %}
+<h1>CIDR overview</h1>
+
+<form method="post" action="" class="form-horizontal">
+    <p>Delete the CIDR {{ cidr }}?</p>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary"><span class="icon-trash icon-white"></span> Delete</button>
+        <a href="{% url 'dashboard:cidr_index' repo=view.repository.slug %}" class="btn">Cancel</a>
+    </div>
+    {% csrf_token %}
+</form>
+{% endblock %}

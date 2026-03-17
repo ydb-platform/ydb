@@ -1,0 +1,169 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1;loadtesting";
+option java_package = "yandex.cloud.api.loadtesting.api.v1";
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/loadtesting/api/v1/regression/dashboard.proto";
+import "yandex/cloud/validation.proto";
+
+// A set of methods for managing Load Testing Regression Dashboards.
+service RegressionDashboardService {
+  // Creates a regression dashboard in the specified folder.
+  rpc Create(CreateRegressionDashboardRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/loadtesting/api/v1/regressionDashboards" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateRegressionDashboardMetadata"
+      response: "regression.Dashboard"
+    };
+  };
+
+  // Returns the specified regression dashboard.
+  //
+  // To get the list of all available regression dashboards, make a [List] request.
+  rpc Get(GetRegressionDashboardRequest) returns (regression.Dashboard) {
+    option (google.api.http) = { get: "/loadtesting/api/v1/regressionDashboards/{dashboard_id}" };
+  };
+
+  // Retrieves the list of regression dashboards in the specified folder.
+  rpc List(ListRegressionDashboardsRequest) returns (ListRegressionDashboardsResponse) {
+    option (google.api.http) = { get: "/loadtesting/api/v1/regressionDashboards" };
+  };
+
+  // Deletes the specified regression dashboard.
+  rpc Delete(DeleteRegressionDashboardRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/loadtesting/api/v1/regressionDashboards/{dashboard_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteRegressionDashboardMetadata"
+      response: "google.protobuf.Empty"
+    };
+  };
+  
+  // Updates the specified regression dashboard.
+  rpc Update(UpdateRegressionDashboardRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/loadtesting/api/v1/regressionDashboards/{dashboard_id}" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateRegressionDashboardMetadata"
+      response: "regression.Dashboard"
+    };
+  };
+}
+
+message CreateRegressionDashboardRequest {
+  // ID of the folder to create a regression dashboard in.
+  string folder_id = 1 [(required) = true, (length) = "<=54"];
+
+  // Name of the dashboard.
+  string name = 2 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Description of the dashboard.
+  string description = 3 [(length) = "<=1024"];
+
+  // Content of the dashboard.
+  regression.Dashboard.Content content = 4;
+}
+
+message CreateRegressionDashboardMetadata {
+  // ID of the dashboard that is being created.
+  string dashboard_id = 1;
+}
+
+message GetRegressionDashboardRequest {
+  // ID of the dashboard to return.
+  string dashboard_id = 1 [(required) = true, (length) = "<=50"];
+
+  reserved 2; // mask in private_v1
+}
+
+message DeleteRegressionDashboardRequest {
+  // ID of the dashboard to delete.
+  string dashboard_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The current etag of the dashboard.
+  string etag = 2;
+}
+
+message DeleteRegressionDashboardMetadata {
+  // ID of the dashboard that is being deleted.
+  string dashboard_id = 1;
+}
+
+message ListRegressionDashboardsRequest {
+  // ID of the folder to list dashboards in.
+  string folder_id = 1 [(required) = true, (length) = "<=54"];
+
+  reserved 2; // mask in private_v1
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListRegressionDashboardsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 3 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set `page_token` to the 
+  // [ListRegressionDashboardsResponse.next_page_token] returned by a previous list request.
+  string page_token = 4 [(length) = "<=100"];
+
+  // A filter expression that filters dashboards listed in the response.
+  //
+  // The filter expression may contain multiple field expressions joined by `AND`.
+  // The field expression must specify:
+  // 1. The field name.
+  // 2. An operator:
+  //    - `=`, `!=`, `CONTAINS`, for single values.
+  //    - `IN` or `NOT IN` for lists of values.
+  // 3. The value. String values must be encosed in `"`, boolean values are {`true`, `false`}, timestamp values in ISO-8601.
+  //
+  // Currently supported fields:
+  // - `id` [yandex.cloud.loadtesting.api.v1.regression.Dashboard.id]
+  //   - operators: `=`, `!=`, `IN`, `NOT IN`
+  // - `name` [yandex.cloud.loadtesting.api.v1.regression.Dashboard.name]
+  //   - operators: `=`, `!=`, `IN`, `NOT IN`, `CONTAINS`
+  //
+  // Examples: 
+  // - `id IN ("1", "2", "3")`
+  // - `name CONTAINS "my-dashboard" AND id NOT IN ("4", "5")`
+  string filter = 5 [(length) = "<=1000"];
+}
+
+message ListRegressionDashboardsResponse {
+  // List of dashboards in the specified folder.
+  repeated regression.Dashboard dashboards = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListRegressionDashboardsRequest.page_size], use `next_page_token` as the value
+  // for the [ListRegressionDashboardsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2 [(length) = "<=100"];
+}
+
+message UpdateRegressionDashboardRequest {
+  // ID of the dashboards to update.
+  string dashboard_id = 1 [(required) = true];
+
+  // The current etag of the dashboard.
+  string etag = 2;
+  
+  // Field mask that specifies which attributes of the dashboard are going to be updated.
+  google.protobuf.FieldMask update_mask = 3;
+  
+  // New name of the dashboard.
+  string name = 4 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  
+  // New description of the dashboard.
+  string description = 5 [(length) = "<=1024"];
+  
+  // New content of the dashboard.
+  regression.Dashboard.Content content = 6;
+}
+
+message UpdateRegressionDashboardMetadata {
+  // ID of the dashboard that is being updated.
+  string dashboard_id = 1;
+}

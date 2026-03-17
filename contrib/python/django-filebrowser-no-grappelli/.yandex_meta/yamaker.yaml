@@ -1,0 +1,6 @@
+requirements:
+  - Pillow
+exclude:
+  - tests/requirements.txt
+keep:
+  - tests/tmp.db

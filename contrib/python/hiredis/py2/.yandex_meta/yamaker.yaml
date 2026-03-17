@@ -1,0 +1,4 @@
+requirements:
+  - contrib/libs/hiredis
+copy:
+  - src/*

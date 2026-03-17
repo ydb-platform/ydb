@@ -1,0 +1,80 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2015-11-10 17:40+0100\n"
+"PO-Revision-Date: 2015-02-16 23:58+0200\n"
+"Last-Translator:   <admin@admin.com>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Translated-Using: django-rosetta 0.7.4\n"
+
+#: admin.py:152 templates/adminsortable2/tabular-1.5.html:9
+#: templates/adminsortable2/tabular-1.6.html:9
+msgid "Sort"
+msgstr "Сортировать"
+
+#: admin.py:175
+#, fuzzy
+#| msgid "Move selected to first page"
+msgid "Move selected to specific page"
+msgstr "Переместить выбранные на первую страницу"
+
+#: admin.py:179
+#, fuzzy
+#| msgid "Move selected to next page"
+msgid "Move selected ... pages back"
+msgstr "Переместить выделенные на следующую страницу"
+
+#: admin.py:183
+#, fuzzy
+#| msgid "Move selected to next page"
+msgid "Move selected ... pages forward"
+msgstr "Переместить выделенные на следующую страницу"
+
+#: admin.py:187
+msgid "Move selected to first page"
+msgstr "Переместить выбранные на первую страницу"
+
+#: admin.py:191
+msgid "Move selected to last page"
+msgstr "Переместить выделенные на последнюю страницу"
+
+#: templates/adminsortable2/stacked-1.5.html:10
+#: templates/adminsortable2/stacked-1.6.html:10
+#: templates/adminsortable2/tabular-1.5.html:31
+#: templates/adminsortable2/tabular-1.6.html:31
+msgid "View on site"
+msgstr "Смотреть на сайте"
+
+#: templates/adminsortable2/stacked-1.5.html:28
+#: templates/adminsortable2/stacked-1.6.html:28
+#: templates/adminsortable2/tabular-1.5.html:78
+#: templates/adminsortable2/tabular-1.6.html:77
+msgid "Remove"
+msgstr "Удалить"
+
+#: templates/adminsortable2/stacked-1.5.html:29
+#: templates/adminsortable2/stacked-1.6.html:29
+#: templates/adminsortable2/tabular-1.5.html:77
+#: templates/adminsortable2/tabular-1.6.html:76
+#, python-format
+msgid "Add another %(verbose_name)s"
+msgstr "Добавить еще %(verbose_name)s"
+
+#: templates/adminsortable2/tabular-1.5.html:17
+#: templates/adminsortable2/tabular-1.6.html:17
+msgid "Delete?"
+msgstr "Удалить?"
+
+#~ msgid "Move selected to previous page"
+#~ msgstr "Переместить выделенные на предыдущую страницу"

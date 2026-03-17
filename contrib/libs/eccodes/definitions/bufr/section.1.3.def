@@ -1,0 +1,42 @@
+# (C) Copyright 2005- ECMWF.
+
+position offsetSection1;
+section_length[3] section1Length ;
+
+unsigned[1]  masterTableNumber :dump;
+
+unsigned[1]  bufrHeaderSubCentre : dump;
+codetable[1] bufrHeaderCentre    'common/c-1.table' : dump;
+
+unsigned[1]  updateSequenceNumber :dump;
+
+flags[1] section1Flags 'bufr/section1_flags.table' = 128 : hidden ; # = section 2 present
+
+unsigned[1] dataCategory : dump;
+unsigned[1] dataSubCategory : dump;
+unsigned[1] masterTablesVersionNumber : dump;
+unsigned[1] localTablesVersionNumber : dump;
+
+transient typicalCentury=21;
+
+unsigned[1] typicalYearOfCentury : dump;
+# ECC-1840: Use the 'evaluate' accessor so typicalYear is updated if user changes typicalCentury
+meta typicalYear evaluate( (typicalCentury - 1) * 100 + typicalYearOfCentury ) : no_copy;
+
+unsigned[1] typicalMonth : dump;
+unsigned[1] typicalDay : dump;
+unsigned[1] typicalHour : dump;
+unsigned[1] typicalMinute : dump;
+# unsigned[1] spare; # See ECC-978
+transient typicalSecond=0;
+
+meta ls.typicalDate sprintf("%.4d%.2d%.2d",typicalYear,typicalMonth,typicalDay) : dump,no_copy;
+meta ls.typicalTime sprintf("%.2d%.2d%.2d",typicalHour,typicalMinute,typicalSecond) :dump,no_copy;
+
+meta typicalDateTime julian_date(typicalYear,typicalMonth,typicalDay,typicalHour,typicalMinute,typicalSecond) ;
+
+alias ls.centre=bufrHeaderCentre;
+alias ls.masterTablesVersionNumber=masterTablesVersionNumber;
+alias ls.localTablesVersionNumber=localTablesVersionNumber;
+
+section_padding section1Padding;

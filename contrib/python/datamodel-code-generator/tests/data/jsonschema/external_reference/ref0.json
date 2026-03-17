@@ -1,0 +1,11 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+        "ref1": {
+            "$ref": "ref1.json#/"
+        },
+        "other_ref1": {
+            "$ref": "other/ref1.json#/"
+        }
+    }
+}

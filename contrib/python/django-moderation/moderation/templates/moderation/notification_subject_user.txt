@@ -1,0 +1,1 @@
+{{ content_type }} entry has been {% ifequal moderated_object.status 0 %}rejected{% endifequal %}{% ifequal moderated_object.status 1 %}accepted{% endifequal %}

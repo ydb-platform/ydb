@@ -1,0 +1,126 @@
+# vim: set syntax=annrulebook:
+# В этом файле определяется порядок команд, в котором их следует подавать на устройство.
+# - Если порядок команды не важен - ее можно не писать сюда совсем.
+# - Если команда начинается с undo и прописан параметр %order_reverse - команда считается
+#   обратной, но занимает место между прямыми там, где указано (т.е. undo vlan batch
+#   будет стоять после блоков interface).
+
+
+alias tmate-arista bash tmate-arista
+service
+switch
+hardware
+transceiver
+
+
+logging trap
+logging monitor
+logging
+
+
+platform
+
+
+hostname
+ip name-server
+ip domain-name
+
+
+ntp
+
+
+qos profile *
+    ~
+
+
+snmp-server
+
+
+spanning-tree
+
+
+service
+
+
+username *
+username * ssh-key
+
+
+tacacs-server
+
+
+aaa group
+    ~
+
+
+aaa
+
+
+username
+
+
+role
+    ~
+
+
+vlan
+
+
+vrf instance
+
+mpls label range dynamic *
+mpls label range isis-sr *
+mpls ip
+mpls ldp
+
+router isis
+    ~
+
+interface
+    ~
+
+
+(?:ip|ipv6) access-list
+    ~
+
+
+(?:ip|ipv6) route
+
+
+(?:ip|ipv6) routing
+
+ip prefix-list
+
+ip community-list
+
+
+ip ftp
+
+
+qos rewrite
+qos map
+
+
+route-map * (?:permit|deny) *
+    ~
+
+
+router bfd
+    ~
+
+
+router bgp
+    ~
+
+
+router multicast
+
+
+ip tacacs
+
+
+management
+    ~
+
+
+~

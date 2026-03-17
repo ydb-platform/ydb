@@ -1,0 +1,137 @@
+Metadata-Version: 2.1
+Name: textparser
+Version: 0.24.0
+Summary: Text parser.
+Home-page: https://github.com/eerimoq/textparser
+Author: Erik Moqvist
+Author-email: erik.moqvist@gmail.com
+License: MIT
+Keywords: parser,parsing
+Platform: UNKNOWN
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 3
+License-File: LICENSE
+
+About
+=====
+
+A text parser written in the Python language.
+
+The project has one goal, speed! See the benchmark below more details.
+
+Project homepage: https://github.com/eerimoq/textparser
+
+Documentation: http://textparser.readthedocs.org/en/latest
+
+Credits
+=======
+
+- Thanks `PyParsing`_ for a user friendly interface. Many of
+  ``textparser``'s class names are taken from this project.
+
+Installation
+============
+
+.. code-block:: python
+
+    pip install textparser
+
+Example usage
+=============
+
+The `Hello World`_ example parses the string ``Hello, World!`` and
+outputs its parse tree ``['Hello', ',', 'World', '!']``.
+
+The script:
+
+.. code-block:: python
+
+   import textparser
+   from textparser import Sequence
+
+
+   class Parser(textparser.Parser):
+
+       def token_specs(self):
+           return [
+               ('SKIP',          r'[ \r\n\t]+'),
+               ('WORD',          r'\w+'),
+               ('EMARK',    '!', r'!'),
+               ('COMMA',    ',', r','),
+               ('MISMATCH',      r'.')
+           ]
+
+       def grammar(self):
+           return Sequence('WORD', ',', 'WORD', '!')
+
+
+   tree = Parser().parse('Hello, World!')
+
+   print('Tree:', tree)
+
+Script execution:
+
+.. code-block:: text
+
+   $ env PYTHONPATH=. python3 examples/hello_world.py
+   Tree: ['Hello', ',', 'World', '!']
+
+Benchmark
+=========
+
+A `benchmark`_ comparing the speed of 10 JSON parsers, parsing a `276
+kb file`_.
+
+.. code-block:: text
+
+   $ env PYTHONPATH=. python3 examples/benchmarks/json/speed.py
+
+   Parsed 'examples/benchmarks/json/data.json' 1 time(s) in:
+
+   PACKAGE         SECONDS   RATIO  VERSION
+   textparser         0.10    100%  0.21.1
+   parsimonious       0.17    169%  unknown
+   lark (LALR)        0.27    267%  0.7.0
+   funcparserlib      0.34    340%  unknown
+   textx              0.54    546%  1.8.0
+   pyparsing          0.68    684%  2.4.0
+   pyleri             0.88    886%  1.2.2
+   parsy              0.92    925%  1.2.0
+   parsita            2.28   2286%  unknown
+   lark (Earley)      2.34   2348%  0.7.0
+
+*NOTE 1: The parsers are not necessarily optimized for
+speed. Optimizing them will likely affect the measurements.*
+
+*NOTE 2: The structure of the resulting parse trees varies and
+additional processing may be required to make them fit the user
+application.*
+
+*NOTE 3: Only JSON parsers are compared. Parsing other languages may
+give vastly different results.*
+
+Contributing
+============
+
+#. Fork the repository.
+
+#. Implement the new feature or bug fix.
+
+#. Implement test case(s) to ensure that future changes do not break
+   legacy.
+
+#. Run the tests.
+
+   .. code-block:: text
+
+      python3 -m unittest
+
+#. Create a pull request.
+
+.. _PyParsing: https://github.com/pyparsing/pyparsing
+.. _Hello World: https://github.com/eerimoq/textparser/blob/master/examples/hello_world.py
+.. _benchmark: https://github.com/eerimoq/textparser/blob/master/examples/benchmarks/json/speed.py
+.. _276 kb file: https://github.com/eerimoq/textparser/blob/master/examples/benchmarks/json/data.json
+
+

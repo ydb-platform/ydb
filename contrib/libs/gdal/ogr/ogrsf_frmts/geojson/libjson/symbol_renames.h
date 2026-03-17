@@ -1,0 +1,64 @@
+/* This is a generated file by dump_symbols.h. *DO NOT EDIT MANUALLY !* */
+#ifndef symbol_renames
+#define symbol_renames
+
+#define array_list_expand_internal gdal_array_list_expand_internal
+#define lh_get_hash gdal_lh_get_hash
+#define JC_OBJECT gdal_JC_OBJECT
+#define JC_OBJECT_C gdal_JC_OBJECT_C
+#define JC_ARRAY gdal_JC_ARRAY
+#define JC_ARRAY_C gdal_JC_ARRAY_C
+#define JC_BOOL gdal_JC_BOOL
+#define JC_BOOL_C gdal_JC_BOOL_C
+#define JC_DOUBLE gdal_JC_DOUBLE
+#define JC_DOUBLE_C gdal_JC_DOUBLE_C
+#define JC_INT gdal_JC_INT
+#define JC_INT_C gdal_JC_INT_C
+#define JC_STRING gdal_JC_STRING
+#define JC_STRING_C gdal_JC_STRING_C
+#define get_string_component_mutable gdal_get_string_component_mutable
+#define get_string_component gdal_get_string_component
+#define json_escape_str gdal_json_escape_str
+#define json_object_object_delete gdal_json_object_object_delete
+#define json_object_array_delete gdal_json_object_array_delete
+#define json_object_string_delete gdal_json_object_string_delete
+#define json_object_generic_delete gdal_json_object_generic_delete
+#define json_object_new gdal_json_object_new
+#define json_object_boolean_to_json_string gdal_json_object_boolean_to_json_string
+#define json_object_double_to_json_string_default gdal_json_object_double_to_json_string_default
+#define json_object_int_to_json_string gdal_json_object_int_to_json_string
+#define json_object_object_to_json_string gdal_json_object_object_to_json_string
+#define json_object_array_to_json_string gdal_json_object_array_to_json_string
+#define json_object_string_to_json_string gdal_json_object_string_to_json_string
+#define indent gdal_indent
+#define json_object_lh_entry_free gdal_json_object_lh_entry_free
+#define json_abort gdal_json_abort
+#define json_object_double_to_json_string_format gdal_json_object_double_to_json_string_format
+#define _json_object_userdata_to_json_string gdal__json_object_userdata_to_json_string
+#define _json_object_new_string gdal__json_object_new_string
+#define _json_object_set_string_len gdal__json_object_set_string_len
+#define json_object_array_entry_free gdal_json_object_array_entry_free
+#define json_array_equal gdal_json_array_equal
+#define json_object_all_values_equal gdal_json_object_all_values_equal
+#define json_object_copy_serializer_data gdal_json_object_copy_serializer_data
+#define json_object_deep_copy_recursive gdal_json_object_deep_copy_recursive
+#define json_tokener_reset_level gdal_json_tokener_reset_level
+#define json_tokener_validate_utf8 gdal_json_tokener_validate_utf8
+#define json_tokener_parse_double gdal_json_tokener_parse_double
+#define json_tokener_errors gdal_json_tokener_errors
+#define _json_object_to_fd gdal__json_object_to_fd
+#define json_type_name gdal_json_type_name
+#define lh_get_hash gdal_lh_get_hash
+#define lh_char_hash gdal_lh_char_hash
+#define lh_perllike_str_hash gdal_lh_perllike_str_hash
+#define lh_ptr_hash gdal_lh_ptr_hash
+#define hashlittle gdal_hashlittle
+#define char_hash_fn gdal_char_hash_fn
+#define printbuf_extend gdal_printbuf_extend
+#define errno_list gdal_errno_list
+#define has_dev_urandom gdal_has_dev_urandom
+#define get_dev_random_seed gdal_get_dev_random_seed
+#define get_time_seed gdal_get_time_seed
+#define dev_random_file gdal_dev_random_file
+
+#endif /*  symbol_renames */

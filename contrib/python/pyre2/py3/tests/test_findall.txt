@@ -1,0 +1,42 @@
+findall tests
+=============
+
+    >>> import re2
+    >>> re2.set_fallback_notification(re2.FALLBACK_EXCEPTION)
+
+This one is from http://docs.python.org/library/re.html?#finding-all-adverbs:
+
+    >>> re2.findall(r"\w+ly", "He was carefully disguised but captured quickly by police.")
+    ['carefully', 'quickly']
+
+This one makes sure all groups are found:
+
+    >>> re2.findall(r"(\w+)=(\d+)", "foo=1,foo=2")
+    [('foo', '1'), ('foo', '2')]
+
+When there's only one matched group, it should not be returned in a tuple:
+
+    >>> re2.findall(r"(\w)\w", "fx")
+    ['f']
+
+Zero matches is an empty list:
+
+    >>> re2.findall("(f)", "gggg")
+    []
+
+If pattern matches an empty string, do it only once at the end:
+
+    >>> re2.findall(".*", "foo")
+    ['foo', '']
+
+    >>> re2.findall("", "foo")
+    ['', '', '', '']
+
+
+    >>> import re
+    >>> re.findall(r'\b', 'The quick brown fox jumped over the lazy dog')
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']
+    >>> re2.findall(r'\b', 'The quick brown fox jumped over the lazy dog')
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']
+
+    >>> re2.set_fallback_notification(re2.FALLBACK_QUIETLY)

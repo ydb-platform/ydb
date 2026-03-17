@@ -1,0 +1,415 @@
+#  Copyright 2025 Collate
+#  Licensed under the Collate Community License, Version 1.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#  https://github.com/open-metadata/OpenMetadata/blob/main/ingestion/LICENSE
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+"""
+Helper that implements table and filter pattern logic.
+Most of these methods are applying the same logic,
+but assigning specific names helps better follow the
+code.
+"""
+import re
+from typing import List, Optional
+
+from metadata.generated.schema.type.filterPattern import FilterPattern
+
+
+class InvalidPatternException(Exception):
+    """
+    Raised when an invalid pattern is configured in the workflow
+    """
+
+
+def validate_regex(regex_list: Optional[List[str]]) -> None:
+    """
+    Check that the given include/exclude regexes
+    are well formatted
+    """
+    for regex in regex_list or []:
+        try:
+            re.compile(regex)
+        except re.error as err:
+            msg = f"Invalid regex [{regex}]: {err}"
+            raise InvalidPatternException(msg) from err
+
+
+def _filter(filter_pattern: Optional[FilterPattern], name: Optional[str]) -> bool:
+    """
+    Return True if the name needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param filter_pattern: Model defining filtering logic
+    :param name: table or schema name
+    :return: True for filtering, False otherwise
+    """
+    if not filter_pattern:
+        # No filter pattern, nothing to filter
+        return False
+
+    if filter_pattern and not name:
+        # Filter pattern is present but not the name so we'll filter it out
+        return True
+
+    validate_regex(filter_pattern.includes)
+    validate_regex(filter_pattern.excludes)
+
+    if filter_pattern.includes and filter_pattern.excludes:
+        return not any(
+            name
+            for regex in filter_pattern.includes
+            if (re.match(regex, name, re.IGNORECASE))
+        ) or any(
+            name
+            for regex in filter_pattern.excludes
+            if (re.match(regex, name, re.IGNORECASE))
+        )
+
+    if filter_pattern.includes:
+        return not any(
+            name
+            for regex in filter_pattern.includes
+            if (re.match(regex, name, re.IGNORECASE))
+        )
+
+    if filter_pattern.excludes:
+        return any(
+            name
+            for regex in filter_pattern.excludes
+            if (re.match(regex, name, re.IGNORECASE))
+        )
+
+    return False
+
+
+def filter_by_schema(
+    schema_filter_pattern: Optional[FilterPattern], schema_name: str
+) -> bool:
+    """
+    Return True if the schema needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param schema_filter_pattern: Model defining schema filtering logic
+    :param schema fqn: table schema fqn
+    :return: True for filtering, False otherwise
+    """
+    return _filter(schema_filter_pattern, schema_name)
+
+
+def filter_by_table(
+    table_filter_pattern: Optional[FilterPattern], table_name: str
+) -> bool:
+    """
+    Return True if the table needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param table_filter_pattern: Model defining schema filtering logic
+    :param table_fqn: table fqn
+    :return: True for filtering, False otherwise
+    """
+    return _filter(table_filter_pattern, table_name)
+
+
+def filter_by_chart(
+    chart_filter_pattern: Optional[FilterPattern], chart_name: str
+) -> bool:
+    """
+    Return True if the chart needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param chart_filter_pattern: Model defining chart filtering logic
+    :param chart_name: chart name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(chart_filter_pattern, chart_name)
+
+
+def filter_by_topic(
+    topic_filter_pattern: Optional[FilterPattern], topic_name: str
+) -> bool:
+    """
+    Return True if the topic needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param topic_filter_pattern: Model defining chart filtering logic
+    :param topic_name: topic name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(topic_filter_pattern, topic_name)
+
+
+def filter_by_dashboard(
+    dashboard_filter_pattern: Optional[FilterPattern], dashboard_name: str
+) -> bool:
+    """
+    Return True if the dashboard needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param dashboard_filter_pattern: Model defining dashboard filtering logic
+    :param dashboard_name: dashboard name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(dashboard_filter_pattern, dashboard_name)
+
+
+def filter_by_stored_procedure(
+    stored_procedure_filter_pattern: Optional[FilterPattern], stored_procedure_name: str
+) -> bool:
+    """
+    Return True if the stored procedure needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param stored_procedure_filter_pattern: Model defining stored procedure filtering logic
+    :param stored_procedure_name: stored procedure name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(stored_procedure_filter_pattern, stored_procedure_name)
+
+
+def filter_by_fqn(fqn_filter_pattern: Optional[FilterPattern], fqn: str) -> bool:
+    """
+    Return True if the FQN needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param fqn_filter_pattern: Model defining FQN filtering logic
+    :param fqn: table FQN name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(fqn_filter_pattern, fqn)
+
+
+def filter_by_database(
+    database_filter_pattern: Optional[FilterPattern], database_name: str
+) -> bool:
+    """
+    Return True if the schema needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param database_filter_pattern: Model defining database filtering logic
+    :param database_name: database name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(database_filter_pattern, database_name)
+
+
+def filter_by_pipeline(
+    pipeline_filter_pattern: Optional[FilterPattern], pipeline_name: str
+) -> bool:
+    """
+    Return True if the schema needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param pipeline_filter_pattern: Model defining the pipeline filtering logic
+    :param pipeline_name: pipeline name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(pipeline_filter_pattern, pipeline_name)
+
+
+def filter_by_mlmodel(
+    mlmodel_filter_pattern: Optional[FilterPattern], mlmodel_name: str
+) -> bool:
+    """
+    Return True if the mlmodel needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param mlmodel_filter_pattern: Model defining the mlmodel filtering logic
+    :param mlmodel_name: mlmodel name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(mlmodel_filter_pattern, mlmodel_name)
+
+
+def filter_by_container(
+    container_filter_pattern: Optional[FilterPattern], container_name: str
+) -> bool:
+    """
+    Return True if the container needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param container_filter_pattern: Container defining the container filtering logic
+    :param container_name: container name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(container_filter_pattern, container_name)
+
+
+def filter_by_datamodel(
+    datamodel_filter_pattern: Optional[FilterPattern], datamodel_name: str
+) -> bool:
+    """
+    Return True if the models needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param datamodel_filter_pattern: Model defining data model filtering logic
+    :param datamodel_name: data model name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(datamodel_filter_pattern, datamodel_name)
+
+
+def filter_by_project(
+    project_filter_pattern: Optional[FilterPattern], project_name: str
+) -> bool:
+    """
+    Return True if the project needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param project_filter_pattern: Model defining project filtering logic
+    :param project_name: project name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(project_filter_pattern, project_name)
+
+
+def filter_by_search_index(
+    search_index_filter_pattern: Optional[FilterPattern], search_index_name: str
+) -> bool:
+    """
+    Return True if the models needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param search_index_filter_pattern: Model defining search index filtering logic
+    :param search_index_name: search index name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(search_index_filter_pattern, search_index_name)
+
+
+def filter_by_classification(
+    classification_pattern: Optional[FilterPattern], classification_name: str
+) -> bool:
+    """
+    Return True if the models needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param search_index_filter_pattern: Model defining search index filtering logic
+    :param search_index_name: search index name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(classification_pattern, classification_name)
+
+
+def filter_by_collection(
+    collection_pattern: Optional[FilterPattern], collection_name: str
+) -> bool:
+    """
+    Return True if the models needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param collection_pattern: Model defining collection filtering logic
+    :param collection_name: collection name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(collection_pattern, collection_name)
+
+
+def filter_by_endpoint(
+    endpoint_pattern: Optional[FilterPattern], endpoint_name: str
+) -> bool:
+    """
+    Return True if the endpoint needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param endpoint_pattern: Model defining endpoint filtering logic
+    :param endpoint_name: endpoint name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(endpoint_pattern, endpoint_name)
+
+
+def filter_by_tag(tag_pattern: Optional[FilterPattern], tag_name: str) -> bool:
+    """
+    Return True if the models needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param tag_pattern: Model defining tag filtering logic
+    :param tag_name: tag name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(tag_pattern, tag_name)
+
+
+def filter_by_spreadsheet(
+    spreadsheet_filter_pattern: Optional[FilterPattern], spreadsheet_name: str
+) -> bool:
+    """
+    Return True if the spreadsheet needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param spreadsheet_filter_pattern: Model defining spreadsheet filtering logic
+    :param spreadsheet_name: spreadsheet name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(spreadsheet_filter_pattern, spreadsheet_name)
+
+
+def filter_by_directory(
+    directory_filter_pattern: Optional[FilterPattern], directory_name: str
+) -> bool:
+    """
+    Return True if the directory needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param directory_filter_pattern: Model defining directory filtering logic
+    :param directory_name: directory name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(directory_filter_pattern, directory_name)
+
+
+def filter_by_file(
+    file_filter_pattern: Optional[FilterPattern], file_name: str
+) -> bool:
+    """
+    Return True if the file needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param file_filter_pattern: Model defining file filtering logic
+    :param file_name: file name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(file_filter_pattern, file_name)
+
+
+def filter_by_worksheet(
+    worksheet_filter_pattern: Optional[FilterPattern], worksheet_name: str
+) -> bool:
+    """
+    Return True if the worksheet needs to be filtered, False otherwise
+
+    Include takes precedence over exclude
+
+    :param worksheet_filter_pattern: Model defining worksheet filtering logic
+    :param worksheet_name: worksheet name
+    :return: True for filtering, False otherwise
+    """
+    return _filter(worksheet_filter_pattern, worksheet_name)

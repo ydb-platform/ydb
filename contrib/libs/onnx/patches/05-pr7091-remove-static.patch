@@ -1,0 +1,110 @@
+From 6769c41ad64ebca0358da8c7211d2c6d0e627b2b Mon Sep 17 00:00:00 2001
+From: Ti-Tai Wang <titaiwang@microsoft.com>
+Date: Thu, 17 Jul 2025 12:50:56 -0700
+Subject: [PATCH] Make some op-level shape inference functions public (#7091)
+
+### Description
+<!-- - Describe your changes. -->
+
+This PR is making 4 op-level shape inference function to be public.
+
+```cpp
+ONNX_API void RNNShapeInference(InferenceContext& ctx);
+ONNX_API void convPoolShapeInference(
+    InferenceContext& ctx,
+    bool use_dilation,
+    bool require_kernel_shape,
+    int input1Idx,
+    int input2Idx);
+ONNX_API void convTransposeShapeInference(InferenceContext& ctx);
+ONNX_API void globalPoolTypeShapeInference(InferenceContext& ctx);
+```
+
+### Motivation and Context
+<!-- - Why is this change required? What problem does it solve? -->
+<!-- - If it fixes an open issue, please link to the issue here. -->
+
+When I was working on onnxruntime integration with ONNX==1.18. I found
+these functions were changed to static, but they are used to help custom
+operators complete the shape type inference.
+
+Publishing op-level shape inference functions can enable users
+developing custom contrib ops to leverage existing shape inference
+implementations when their operators have similar semantics to standard
+ONNX ops, promoting code reuse and model consistency.
+
+---------
+
+Signed-off-by: Ti-Tai Wang <titaiwang@microsoft.com>
+---
+ onnx/defs/nn/defs.cc        |  6 +++---
+ onnx/defs/rnn/defs.cc       |  2 +-
+ onnx/defs/shape_inference.h | 13 +++++++++++++
+ 3 files changed, 17 insertions(+), 4 deletions(-)
+
+diff --git a/onnx/defs/nn/defs.cc b/onnx/defs/nn/defs.cc
+index 71688f0009c..5254f853e78 100644
+--- a/onnx/defs/nn/defs.cc
++++ b/onnx/defs/nn/defs.cc
+@@ -36,7 +36,7 @@ static const char* conv_transpose_auto_pad_doc =
+     "on whether it is even or odd). In case the padding is an odd number, the extra "
+     "padding is added at the end for SAME_UPPER and at the beginning for SAME_LOWER.";
+ 
+-static void convPoolShapeInference(
++ONNX_API void convPoolShapeInference(
+     InferenceContext& ctx,
+     bool use_dilation,
+     bool require_kernel_shape,
+@@ -1105,7 +1105,7 @@ ONNX_OPERATOR_SET_SCHEMA(
+           convPoolShapeInference(ctx, true, false, 0, 1);
+         }));
+ 
+-static void convTransposeShapeInference(InferenceContext& ctx) {
++ONNX_API void convTransposeShapeInference(InferenceContext& ctx) {
+   propagateElemTypeFromInputToOutput(ctx, 0, 0);
+ 
+   // we need at least two inputs to have a shape for this inference.
+@@ -1466,7 +1466,7 @@ ONNX_OPERATOR_SET_SCHEMA(
+         }));
+ 
+ // For GlobalPool operations.
+-static void globalPoolTypeShapeInference(InferenceContext& ctx) {
++ONNX_API void globalPoolTypeShapeInference(InferenceContext& ctx) {
+   propagateElemTypeFromInputToOutput(ctx, 0, 0);
+ 
+   // needs at least one input with shape.
+diff --git a/onnx/defs/rnn/defs.cc b/onnx/defs/rnn/defs.cc
+index c0ed3a39381..9aa38672392 100644
+--- a/onnx/defs/rnn/defs.cc
++++ b/onnx/defs/rnn/defs.cc
+@@ -5,7 +5,7 @@
+ #include "onnx/defs/schema.h"
+ 
+ namespace ONNX_NAMESPACE {
+-static void RNNShapeInference(InferenceContext& ctx) {
++ONNX_API void RNNShapeInference(InferenceContext& ctx) {
+   TensorShapeProto::Dimension num_directions, seq_length, batch_size, hidden_size;
+ 
+   auto direction = getAttribute(ctx, "direction", "forward");
+diff --git a/onnx/defs/shape_inference.h b/onnx/defs/shape_inference.h
+index 54a94f21725..8ecc5fd7dff 100644
+--- a/onnx/defs/shape_inference.h
++++ b/onnx/defs/shape_inference.h
+@@ -931,4 +931,17 @@ void checkDuplicateAxes(Axes& axes, int rank) {
+   }
+ }
+ 
++// Shape inference functions for various ONNX operators.
++// Users can use these functions to implement shape inference for custom operators
++// by calling them in their own inference functions.
++ONNX_API void RNNShapeInference(InferenceContext& ctx);
++ONNX_API void convPoolShapeInference(
++    InferenceContext& ctx,
++    bool use_dilation,
++    bool require_kernel_shape,
++    int input1Idx,
++    int input2Idx);
++ONNX_API void convTransposeShapeInference(InferenceContext& ctx);
++ONNX_API void globalPoolTypeShapeInference(InferenceContext& ctx);
++
+ } // namespace ONNX_NAMESPACE

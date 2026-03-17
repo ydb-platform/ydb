@@ -1,0 +1,69 @@
+<?xml version="1.0"?>
+<yandex>
+    <logger>
+        <level>trace</level>
+        <log from_env="RECIPE_CLICKHOUSE_LOG"/>
+        <size>1000M</size>
+        <count>10</count>
+    </logger>
+
+    <http_port from_env="RECIPE_CLICKHOUSE_HTTP_PORT"/>
+    <tcp_port from_env="RECIPE_CLICKHOUSE_NATIVE_PORT"/>
+
+    <interserver_http_port from_env="RECIPE_CLICKHOUSE_INTERSERVER_PORT"/>
+
+    <max_connections>4096</max_connections>
+    <keep_alive_timeout>3</keep_alive_timeout>
+    <max_concurrent_queries>100</max_concurrent_queries>
+    <uncompressed_cache_size>8589934592</uncompressed_cache_size>
+    <mark_cache_size>5368709120</mark_cache_size>
+    <path from_env="RECIPE_CLICKHOUSE_DIR"/>
+    <tmp_path from_env="RECIPE_CLICKHOUSE_TMP_DIR"/>
+    <user_files_path from_env="RECIPE_CLICKHOUSE_USER_FILES_DIR"/>
+    <format_schema_path from_env="RECIPE_CLICKHOUSE_FORMAT_SCHEMA_DIR"/>
+    <users_config>users.xml</users_config>
+    <default_profile>default</default_profile>
+    <default_database>default</default_database>
+
+    <builtin_dictionaries_reload_interval>3600</builtin_dictionaries_reload_interval>
+
+    <max_session_timeout>3600</max_session_timeout>
+    <default_session_timeout>60</default_session_timeout>
+
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+
+    <dictionaries_config>*_dictionary.xml</dictionaries_config>
+
+    <distributed_ddl>
+        <path>/clickhouse/task_queue/ddl</path>
+    </distributed_ddl>
+
+    <zookeeper>
+        <node index="1">
+            <host from_env="RECIPE_ZOOKEEPER_HOST"/>
+            <port from_env="RECIPE_ZOOKEEPER_PORT"/>
+        </node>
+    </zookeeper>
+
+    <remote_servers>
+        <default>
+            <shard>
+                <replica>
+                    <host>localhost</host>
+                    <port from_env="RECIPE_CLICKHOUSE_NATIVE_PORT"/>
+                </replica>
+            </shard>
+        </default>
+    </remote_servers>
+
+    <macros>
+        <cluster>default</cluster>
+        <shard>01</shard>
+        <replica>01</replica>
+    </macros>
+</yandex>

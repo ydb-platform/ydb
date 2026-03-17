@@ -1,0 +1,11 @@
+--- contrib/libs/opencv/modules/core/include/opencv2/core/base.hpp	(index)
++++ contrib/libs/opencv/modules/core/include/opencv2/core/base.hpp	(working tree)
+@@ -450,7 +450,7 @@ It does not throw exception, but terminates the application.
+ 
+ //! @endcond
+ 
+-#if !defined(NDEBUG) || defined(CV_STATIC_ANALYSIS)
++#if 0
+ #  define CV_DbgAssert(expr) CV_Assert(expr)
+ #else
+ /** replaced with CV_Assert(expr) in Debug configuration */

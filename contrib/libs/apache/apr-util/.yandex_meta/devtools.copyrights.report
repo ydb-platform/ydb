@@ -1,0 +1,193 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0ee2060abdced03abfbee01925ad2ccd
+BELONGS ya.make
+    License text:
+        Copyright (c) 2000-2023 The Apache Software Foundation.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        NOTICE [2:2]
+        include/apu_version.h [41:42]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2301791f4fba91bc88f539e55c65ff93
+BELONGS ya.make
+    License text:
+         * This is derived from material copyright RSA Data Security, Inc.
+         * Their notice is reproduced below in its entirety.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [290:291]
+        LICENSE [334:335]
+        LICENSE [362:363]
+        crypto/apr_md4.c [16:17]
+        include/apr_md4.h [16:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3ab9289705bfdf05ab0d355febdfb33f
+BELONGS ya.make
+    License text:
+         * This is work is derived from material Copyright RSA Data Security, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [214:214]
+        LICENSE [246:246]
+        crypto/apr_md5.c [2:2]
+        include/apr_md5.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3cffda785b01d771662f565b9dfd9487
+BELONGS ya.make
+    License text:
+        Copyright (c) 1998, 1999, 2000 Thai Open Source Software Center Ltd
+                                       and Clark Cooper
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [398:399]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6ef01a6950f17b7dfac025321bc6c70c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [317:322]
+        crypto/crypt_blowfish.c [10:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8bba2ec449ad45b163bc48b141763131
+BELONGS ya.make
+    License text:
+        \# Copyright 1991 by the Massachusetts Institute of Technology
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [383:383]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8fc7393e77ddeb567e21c625c0484077
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/crypt_blowfish.h [2:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9161e97d5add9083712294701e6b1211
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 1991-2, RSA Data Security, Inc. Created 1991. All
+           rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [221:222]
+        LICENSE [256:257]
+        LICENSE [293:294]
+        LICENSE [337:338]
+        crypto/apr_md4.c [19:20]
+        crypto/apr_md5.c [12:13]
+        include/apr_md4.h [19:20]
+        include/apr_md5.h [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ac97a855e04341c47f586c6d92ebbe9a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/apr_siphash.h [18:24]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce70cb8061e272fb1173ee878709fe63
+BELONGS ya.make
+    License text:
+         * Portions Copyright (c) 1992-1996 Regents of the University of Michigan.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [449:450]
+        ldap/apr_ldap_url.c [42:43]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d2f0a4c4e162956e7f15a52a671a5b93
+BELONGS ya.make
+    License text:
+        /* Portions Copyright 1998-2002 The OpenLDAP Foundation
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [424:425]
+        ldap/apr_ldap_url.c [17:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f2ec8b0a40ab9119cfcd0313d19588d3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/apr_siphash.h [18:24]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f8e497c9c4bb151f6e28dd82094b24c5
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1990-2, RSA Data Security, Inc. Created 1990. All
+         * rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [365:366]

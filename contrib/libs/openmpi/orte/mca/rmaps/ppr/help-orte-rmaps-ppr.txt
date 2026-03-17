@@ -1,0 +1,66 @@
+# -*- text -*-
+#
+# Copyright (c) 2011      Cisco Systems, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+#
+[invalid-ppr]
+An invalid value was given for the number of processes
+per resource (ppr) to be mapped on each node:
+
+  PPR:  %s
+
+The specification must be a comma-separated list containing
+combinations of number, followed by a colon, followed
+by the resource type. For example, a value of "1:socket" indicates that
+one process is to be mapped onto each socket. Values are supported
+for hwthread, core, L1-3 caches, socket, numa, and node. Note that
+enough characters must be provided to clearly specify the desired
+resource (e.g., "nu" for "numa").
+#
+[unrecognized-ppr-option]
+An unrecognized value was given for the number of processes
+per resource (ppr) to be mapped on each node:
+
+  Value:  %s
+  PPR:  %s
+
+The specification must be a number, followed by a colon, followed
+by the resource type. For example, a value of "1:slot" indicates that
+anything over one process per slot is to be considered oversubscribed.
+Only values for "hwthread", "core", "socket",
+"l1cache", "l2cache", "l3cache", "numa", and "node" are allowed. Note that
+enough characters must be provided to clearly specify the desired
+resource (e.g., "nu" for "numa").
+#
+[ppr-violation]
+The provided mapping directives resulted in too many processes
+being placed on a node:
+
+  Node:  %s
+  Num procs:  %d
+  Limiting resource:  %s
+  Num resources:  %d
+  Specified constraint:  %s
+
+Please adjust and try again.
+#
+[ppr-too-many-procs]
+Your job has requested more processes than the ppr for
+this topology can support:
+
+  App: %s
+  Number of procs:  %d
+  PPR: %s
+
+Please revise the conflict and try again.
+#
+[ppr-topo-missing]
+A ppr pattern was specified, but the topology information
+for the following node is missing:
+
+  Node:  %s

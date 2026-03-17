@@ -1,0 +1,31 @@
+# (C) Copyright 2005- ECMWF.
+
+# GRIB-530: This template is to be used by template.4.44.def ONLY
+
+# Hours of observational data cut-off after reference time
+unsigned[2] hoursAfterDataCutoff = missing() : edition_specific,can_be_missing;
+alias hoursAfterReferenceTimeOfDataCutoff=hoursAfterDataCutoff;
+
+# Minutes of observational data cut-off after reference time
+unsigned[1]  minutesAfterDataCutoff = missing() : edition_specific,can_be_missing;
+alias minutesAfterReferenceTimeOfDataCutoff=minutesAfterDataCutoff;
+
+# Indicator of unit for forecastTime (ECC-1709)
+codetable[1] indicatorOfUnitForForecastTime ('4.4.table',masterDir,localDir) : dump;
+alias indicatorOfUnitOfTimeRange = indicatorOfUnitForForecastTime;
+
+include "grib2/stepUnits.def"
+
+# Forecast time in units defined by previous octet
+# See GRIB-530: We have to make a special case for the error in WMO spec
+if ( new() || (section4Length - 4*NV == 45) ) {
+   # Use the WMO standard 2 octets for the following cases:
+   #   Newly created messages
+   #   Existing GRIBs which have 45 bytes before the pv array
+   # The 45 bytes = length of product def template 4.44
+   unsigned[2] forecastTime : dump;
+}
+else {
+   # This is for existing gribs which were written with 4 octets (GRIB-29: supports negative forecast time)
+   signed[4] forecastTime : dump;
+}

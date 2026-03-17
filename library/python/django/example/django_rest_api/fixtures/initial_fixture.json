@@ -1,0 +1,9 @@
+[
+{
+    "model": "polls.poll",
+    "pk": 2,
+    "fields": {
+        "question": "Фхтаgn!?"
+    }
+}
+]

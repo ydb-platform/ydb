@@ -1,0 +1,13 @@
+#!/bin/sh
+DIR="$(cd -P "$(dirname "$0")" && pwd)"
+if   [ "$1" = '--cflags' ]; then
+    echo "-I$DIR/include -fno-strict-aliasing -pipe"
+elif [ "$1" = '--embedded' ]; then
+    # dummy for DBD-Mysql
+    echo "-lempty -lstdc++"
+elif [ "$1" = '--libs' ]; then
+    echo "-L$DIR -lcontrib-libs-libmysql_r -L$DIR/dbug -llibs-libmysql_r-dbug -L$DIR/mysys -llibs-libmysql_r-mysys -L$DIR/mysys/mytime -llibmysql_r-mysys-mytime -L$DIR/strings -llibs-libmysql_r-strings -L$DIR/vio -llibs-libmysql_r-vio -lz -lcrypt -lm -lssl -lstdc++"
+else
+    # required for DBD-Mysql Makefile.PL for properly work
+    echo "Options: "
+fi

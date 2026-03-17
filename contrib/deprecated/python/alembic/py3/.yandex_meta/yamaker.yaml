@@ -1,0 +1,10 @@
+requirements:
+  - setuptools
+  - library/python/resource
+mark_as_resources:
+ - alembic/templates/*/env.py
+exclude:
+  - README.unittests.rst
+keep:
+  - alembic/arcadia/*
+  - alembic/settings.py

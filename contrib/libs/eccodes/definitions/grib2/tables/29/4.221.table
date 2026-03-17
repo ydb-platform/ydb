@@ -1,0 +1,4 @@
+# Code table 4.221 - Treatment of missing data
+0 0 Not included
+1 1 Extrapolated
+255 255 Missing

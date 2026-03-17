@@ -1,0 +1,14 @@
+#local section ECMWF
+
+alias localDefinitionNumber=grib2LocalSectionNumber;
+template  localSection  "grib2/local.[centreForLocal:l].[grib2LocalSectionNumber:l].def";
+
+### MARS LABELING ###
+template mars_labeling "grib2/mars_labeling.82.def";
+template_nofail marsKeywords "mars/eswi/grib2.[stream:s].[type:s].def";
+
+### LS LABELING ###
+template ls_labeling "grib2/ls_labeling.82.def";
+
+position offsetAfterLocalSection;
+

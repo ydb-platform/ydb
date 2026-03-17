@@ -1,0 +1,1 @@
+var L;(function(G){G[G.GLSL=0]="GLSL",G[G.WGSL=1]="WGSL"})(L||(L={}));export{L as ShaderLanguage};

@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package yandex.cloud.video.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/video/v1;video";
+option java_package = "yandex.cloud.api.video.v1";
+
+// Entity representing a live video stream.
+// A stream is a real-time video broadcast linked to a specific stream line.
+message Stream {
+  // Reserved for future use.
+  reserved 7, 13 to 99, 102 to 199, 201 to 999;
+
+  // Unique identifier of the stream.
+  string id = 1;
+
+  // Identifier of the channel where the stream is created and managed.
+  string channel_id = 2;
+
+  // Identifier of the stream line to which this stream is linked.
+  string line_id = 3;
+
+  // Title of the stream displayed in interfaces and players.
+  string title = 4;
+
+  // Detailed description of the stream content and context.
+  string description = 5;
+
+  // Identifier of the thumbnail image used to represent the stream visually.
+  string thumbnail_id = 6;
+
+  // Current status of the stream.
+  StreamStatus status = 8;
+
+  // Timestamp when the stream was initiated.
+  google.protobuf.Timestamp start_time = 9;
+
+  // Timestamp when the stream was published (switched to ONAIR status).
+  google.protobuf.Timestamp publish_time = 10;
+
+  // Timestamp when the stream was completed.
+  google.protobuf.Timestamp finish_time = 11;
+
+  // Controls automatic publishing of the stream when it's ready.
+  // When set to true, automatically switches status from READY to ONAIR.
+  google.protobuf.BoolValue auto_publish = 12;
+
+  // Specifies the stream scheduling type.
+  oneof stream_type {
+    // On-demand stream starts immediately when a video signal appears.
+    OnDemand on_demand = 1000;
+
+    // Scheduled stream starts and finishes at specified time.
+    Schedule schedule = 1001;
+  }
+
+  // Timestamp when the stream was initially created in the system.
+  google.protobuf.Timestamp created_at = 100;
+
+  // Timestamp of the last modification to the stream or its metadata.
+  google.protobuf.Timestamp updated_at = 101;
+
+  // Custom user-defined labels as `key:value` pairs.
+  // Maximum 64 labels per stream.
+  // Used for organization, filtering, and metadata purposes.
+  // Labels can be used for organization, filtering, and metadata purposes.
+  map<string, string> labels = 200;
+
+  // Current status of the stream.
+  enum StreamStatus {
+    // The stream status is not specified.
+    STREAM_STATUS_UNSPECIFIED = 0;
+
+    // The stream is offline and not broadcasting.
+    OFFLINE = 1;
+
+    // The system is preparing the infrastructure for receiving the video signal.
+    PREPARING = 2;
+
+    // The infrastructure is ready to launch the stream.
+    READY = 3;
+
+    // The stream is currently broadcasting live.
+    ONAIR = 4;
+
+    // The stream has completed and is no longer broadcasting.
+    FINISHED = 5;
+  }
+}
+
+// Represents an on-demand stream type.
+// This type of stream must be started and finished explicitly by the user.
+// It begins broadcasting immediately when a video signal is detected.
+message OnDemand {}
+
+// Represents a scheduled stream type.
+// This type of stream starts and finishes automatically at specified time.
+message Schedule {
+  // Scheduled time when the stream should automatically start.
+  google.protobuf.Timestamp start_time = 1;
+
+  // Scheduled time when the stream should automatically finish.
+  google.protobuf.Timestamp finish_time = 2;
+}

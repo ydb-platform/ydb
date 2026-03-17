@@ -1,0 +1,34 @@
+--- contrib/python/xlrd/py2/tests/base.py	(index)
++++ contrib/python/xlrd/py2/tests/base.py	(working tree)
+@@ -2,4 +2,8 @@ import os
+ 
+ 
+ def from_this_dir(filename):
+-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
++    try:
++        import yatest.common
++        return yatest.common.test_source_path(os.path.join(filename))
++    except ImportError:
++        return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+--- contrib/python/xlrd/py2/tests/test_open_workbook.py	(index)
++++ contrib/python/xlrd/py2/tests/test_open_workbook.py	(working tree)
+@@ -1,6 +1,7 @@
+ import os
+ import shutil
+ import tempfile
++import unittest
+ from unittest import TestCase
+ 
+ from xlrd import open_workbook
+@@ -14,9 +15,10 @@ class TestOpen(TestCase):
+     def test_names_demo(self):
+         # For now, we just check this doesn't raise an error.
+         open_workbook(
+-            from_this_dir(os.path.join('..','examples','namesdemo.xls')),
++            from_this_dir('namesdemo.xls'),
+         )
+ 
++    @unittest.skip("No access to write in user's home dir in TestEnv")
+     def test_tilde_path_expansion(self):
+         with tempfile.NamedTemporaryFile(suffix='.xlsx', dir=os.path.expanduser('~')) as fp:
+             shutil.copyfile(from_this_dir('text_bar.xlsx'), fp.name)

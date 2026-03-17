@@ -1,0 +1,6 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 1.2, Calendar Definition and Paleontological Offset
+
+include "grib2/templates/template.1.calendar.def"
+include "grib2/templates/template.1.offset.def"

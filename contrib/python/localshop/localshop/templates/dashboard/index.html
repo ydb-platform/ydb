@@ -1,0 +1,67 @@
+{% extends "layout.main.html" %}
+
+{% block content %}
+    <div class="row">
+        <div class="col-md-10">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    Repositories
+                </div>
+
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>&nbsp;</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for repository in repositories %}
+                        <tr>
+                            <td><a href="{% url 'dashboard:repository_detail' slug=repository.slug %}">{{ repository.name }}</a></td>
+                            <td>{{ repository.description }}</td>
+                            <td>
+                                {% if repository.enable_auto_mirroring %}
+                                <a href="{% url 'dashboard:repository_refresh' slug=repository.slug %}" class="btn btn-success btn-xs">
+                                    Refresh
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    Teams
+                    {% if user.is_superuser %}
+                    <a href="{% url 'accounts:team_list' %}" class="pull-right">
+                        <i class="glyphicon glyphicon-cog"></i>
+                    </a>
+                    {% endif %}
+                </div>
+                <ul class="list-group">
+                    {% for member in user.team_memberships.all %}
+                    <li class="list-group-item">
+                        {% if member.is_owner %}
+                        <a href="{{ member.team.get_absolute_url }}">
+                            <i class="glyphicon glyphicon-tent"></i>
+                            {{ member.team }}
+                        </a>
+                        {% else %}
+                        <i class="glyphicon glyphicon-tent"></i>
+                        {{ member.team }}
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}

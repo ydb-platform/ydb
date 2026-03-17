@@ -1,0 +1,48 @@
+<ul style="padding: 0; margin: 0;">
+  <li style="list-style-type: none">
+    {{ last_event.type | title }}
+    <strong title="{{ last_event.at|date:"Y-m-d H:i:s.u (e)" }}">{{ last_event.at|timesince }} ago</strong>
+  </li>
+  {% if job.queue_name %}
+    <li style="list-style-type: none">
+      <strong>Queue:</strong>
+      {{ job.queue_name }}
+    </li>
+  {% endif %}
+  {% if job.lock %}
+    <li style="list-style-type: none">
+      <strong>Lock:</strong>
+      {{ job.lock }}
+    </li>
+  {% endif %}
+  {% if job.queueing_lock %}
+    <li style="list-style-type: none">
+      <strong>Queueing lock:</strong>
+      {{ job.queueing_lock }}
+    </li>
+  {% endif %}
+  {% if job.priority != 0 %}
+    <li style="list-style-type: none">
+      <strong>Priority:</strong>
+      {{ job.priority }}
+    </li>
+  {% endif %}
+  {% if job.scheduled_at %}
+    <li style="list-style-type: none">
+      <strong>Scheduled:</strong>
+      <span title="{{ job.scheduled_at|date:"Y-m-d H:i:s.u (e)" }}">
+        {% if job.scheduled_at > now %}
+          in {{ job.scheduled_at|timeuntil }}
+        {% else %}
+          {{ job.scheduled_at|timesince }} ago
+        {% endif %}
+      </span>
+    </li>
+  {% endif %}
+  {% if job.attempts > 1 %}
+    <li style="list-style-type: none">
+      <strong>Attempts:</strong>
+      {{ job.attempts }}
+    </li>
+  {% endif %}
+</ul>

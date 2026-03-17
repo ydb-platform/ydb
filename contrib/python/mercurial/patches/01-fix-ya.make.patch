@@ -1,0 +1,63 @@
+--- contrib/python/mercurial/ya.make	(index)
++++ contrib/python/mercurial/ya.make	(working tree)
+@@ -17,6 +17,7 @@ NO_COMPILER_WARNINGS()
+ NO_LINT()
+ 
+ CFLAGS(
++    # Rename xdiff symbols to resolve symbol conflict with libgit2.
+     -Dxdl_bogosqrt=_mercurial_xdl_bogosqrt
+     -Dxdl_build_script=_mercurial_xdl_build_script
+     -Dxdl_cha_alloc=_mercurial_xdl_cha_alloc
+@@ -38,6 +39,10 @@ CFLAGS(
+     -Dxdl_recs_cmp=_mercurial_xdl_recs_cmp
+ )
+ 
++IF (OS_DARWIN)
++    LDFLAGS(-framework CoreFoundation -framework CoreGraphics)
++ENDIF()
++
+ SRCS(
+     hgext/fsmonitor/pywatchman/bser.c
+     mercurial/bdiff.c
+@@ -72,7 +76,12 @@ PY_REGISTER(
+     mercurial.thirdparty.sha1dc
+ )
+ 
++COPY_FILE(hg __main__.py)
++
+ PY_SRCS(
++    __main__.py
++    main.py
++
+     TOP_LEVEL
+     hgdemandimport/__init__.py
+     hgdemandimport/demandimportpy2.py
+@@ -382,7 +390,6 @@ PY_SRCS(
+     mercurial/rewriteutil.py
+     mercurial/scmposix.py
+     mercurial/scmutil.py
+-    mercurial/scmwindows.py
+     mercurial/server.py
+     mercurial/setdiscovery.py
+     mercurial/shelve.py
+@@ -484,8 +491,6 @@ PY_SRCS(
+     mercurial/utils/urlutil.py
+     mercurial/verify.py
+     mercurial/vfs.py
+-    mercurial/win32.py
+-    mercurial/windows.py
+     mercurial/wireprotoframing.py
+     mercurial/wireprotoserver.py
+     mercurial/wireprototypes.py
+@@ -496,2 +501,11 @@ IF (PYTHON2)
+ 
++IF (OS_WINDOWS)
++    PY_SRCS(
++        TOP_LEVEL
++        mercurial/scmwindows.py
++        mercurial/win32.py
++        mercurial/windows.py
++    )
++ENDIF()
++
+ RESOURCE_FILES(

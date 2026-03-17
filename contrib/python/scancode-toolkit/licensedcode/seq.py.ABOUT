@@ -1,0 +1,24 @@
+about_resource: seq.py
+version: 3.5
+download_url: https://hg.python.org/cpython/raw-file/0a69b1e8b7fe/Lib/difflib.py
+
+name: Python difflib
+
+description: Patched  difflib to support pickling and other optimizations.
+
+notes: |
+ Based on Python's difflib.py from the 3.X tip
+ Module difflib -- helpers for computing deltas between objects.
+ and heavily modified for ScanCode
+
+homepage_url: http://python.org/
+
+owner: nexB
+
+license_expression: python
+licenses:
+-   file: seq.py.LICENSE
+    key: python
+    name: Python Software Foundation License v2
+
+copyright: Copyright (c) Python Software Foundation and others

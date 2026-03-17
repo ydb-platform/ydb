@@ -1,0 +1,15 @@
+--- contrib/python/django-closuretree/closuretree/models.py	(index)
++++ contrib/python/django-closuretree/closuretree/models.py	(working tree)
+@@ -49,10 +49,12 @@ def create_closure_model(cls):
+     model = type('%sClosure' % cls.__name__, (models.Model,), {
+         'parent': models.ForeignKey(
+             cls.__name__,
++            on_delete=models.CASCADE,
+             related_name=cls.closure_parentref()
+         ),
+         'child': models.ForeignKey(
+             cls.__name__,
++            on_delete=models.CASCADE,
+             related_name=cls.closure_childref()
+         ),
+         'depth': models.IntegerField(),

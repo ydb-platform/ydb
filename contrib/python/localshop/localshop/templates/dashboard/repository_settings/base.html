@@ -1,0 +1,41 @@
+{% extends "layout.main.html" %}
+{% load permission_tags %}
+{% load i18n %}
+
+
+{% block content %}
+<div class="row">
+    <div class="col-md-offset-2 col-md-10">
+        <h1>{% block title %}{{ view.repository.simple_index_url }}<small> ({{ view.repository.name }})</small>{% endblock %}</h1>
+        <p>
+            {% block description %}{{ view.repository.description }}{% endblock %}
+        </p>
+    </div>
+</div>
+<div class="row">
+    <div class="col-md-2">
+
+        <div class="panel panel-default">
+            <div class="panel-heading">Overview</div>
+            <ul class="list-group">
+                <li class="list-group-item"><a href="{% url 'dashboard:repository_detail' slug=view.repository.slug %}">{% trans "Packages" %}</a></li>
+            </ul>
+            {% if user|is_owner_of:view.repository %}
+            <div class="panel-heading">Settings</div>
+            <ul class="list-group">
+                <li class="list-group-item"><a href="{% url 'dashboard:repository_edit' slug=view.repository.slug %}">{% trans "Edit information" %}</a></li>
+                <li class="list-group-item"><a href="{% url 'dashboard:cidr_index' repo=view.repository.slug %}">{% trans "Access control list" %}</a></li>
+                <li class="list-group-item"><a href="{% url 'dashboard:credential_index' repo=view.repository.slug %}">{% trans "System credentials" %}</a></li>
+                <li class="list-group-item"><a href="{% url 'dashboard:team_access' repo=view.repository.slug %}">{% trans "Team access" %}</a></li>
+            </ul>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-md-10">
+        {% block content_panel %}
+        {% endblock %}
+    </div>
+</div>
+{% endblock %}
+
+

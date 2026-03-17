@@ -1,0 +1,4 @@
+keep:
+  - tiktoken_ext/__init__.py
+mark_as_sources:
+  - tiktoken_ext/__init__.py

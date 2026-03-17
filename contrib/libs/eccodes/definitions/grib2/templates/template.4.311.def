@@ -1,0 +1,24 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.311, Satellite Product Auxiliary Information
+
+include "grib2/templates/template.4.parameter.def"
+
+codetable[1] typeOfGeneratingProcess ('4.3.table',masterDir,localDir) : dump;
+
+#  Observation generating process identifier (defined by originating centre)
+unsigned[1] observationGeneratingProcessIdentifier  : dump;
+alias generatingProcessIdentifier=observationGeneratingProcessIdentifier;
+
+unsigned[1] NB  : dump;
+alias numberOfContributingSpectralBands=NB;
+
+codetable[1] typeOfAuxiliaryInformation ('4.15.table',masterDir,localDir) : dump;
+
+listOfContributingSpectralBands list(numberOfContributingSpectralBands){
+      unsigned[2] satelliteSeries : dump;
+      unsigned[2] satelliteNumber : dump;
+      unsigned[2] instrumentType : dump;
+      unsigned[1] scaleFactorOfCentralWaveNumber = missing() : dump,can_be_missing ;
+      unsigned[4] scaledValueOfCentralWaveNumber = missing() : dump,can_be_missing ;
+}

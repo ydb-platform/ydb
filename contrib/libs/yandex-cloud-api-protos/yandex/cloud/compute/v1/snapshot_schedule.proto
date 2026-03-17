@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+// A snapshot schedule. For details about the concept, see [documentation](/docs/compute/concepts/snapshot-schedule).
+message SnapshotSchedule {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+
+        // The snapshot schedule is being created.
+        CREATING = 1;
+
+        // The snapshot schedule is on: new disk snapshots will be created, old ones deleted
+        // (if [SnapshotSchedule.retention_policy] is specified).
+        ACTIVE = 2;
+
+        // The schedule is interrupted, snapshots won't be created or deleted.
+        INACTIVE = 3;
+
+        // The schedule is being deleted.
+        DELETING = 4;
+
+        // Changes are being made to snapshot schedule settings or a list of attached disks.
+        UPDATING = 5;
+    }
+
+    // ID of the snapshot schedule.
+    string id = 1;
+
+    // ID of the folder that the snapshot schedule belongs to.
+    string folder_id = 2;
+
+    // Creation timestamp.
+    google.protobuf.Timestamp created_at = 3;
+
+    // Name of the snapshot schedule.
+    //
+    // The name is unique within the folder.
+    string name = 4;
+
+    // Description of the snapshot schedule.
+    string description = 5;
+
+    // Snapshot schedule labels as `key:value` pairs.
+    map<string, string> labels = 6;
+
+    // Status of the snapshot schedule.
+    Status status = 7;
+  
+    // Frequency settings of the snapshot schedule.
+    SchedulePolicy schedule_policy = 8;
+
+    // Retention policy of the snapshot schedule.
+    oneof retention_policy {
+        // Retention period of the snapshot schedule. Once a snapshot created by the schedule reaches this age, it is
+        // automatically deleted.
+        google.protobuf.Duration retention_period = 9;
+
+        // Retention count of the snapshot schedule. Once the number of snapshots created by the schedule exceeds this
+        // number, the oldest ones are automatically deleted. E.g. if the number is 5, the first snapshot is deleted
+        // after the sixth one is created, the second is deleted after the seventh one is created, and so on.
+        int64 snapshot_count = 10;
+    }
+
+    // Attributes of snapshots created by the snapshot schedule.
+    SnapshotSpec snapshot_spec = 11;
+}
+
+// A resource for frequency settings of a snapshot schedule.
+message SchedulePolicy {
+    // Timestamp for creating the first snapshot.
+    google.protobuf.Timestamp start_at = 1;
+
+    // Cron expression for the snapshot schedule (UTC+0).
+    //
+    // The expression must consist of five fields (`Minutes Hours Day-of-month Month Day-of-week`) or be one of
+    // nonstandard predefined expressions (e.g. `@hourly`). For details about the format,
+    // see [documentation](/docs/compute/concepts/snapshot-schedule#cron)
+    string expression = 2;
+}
+
+// A resource for attributes of snapshots created by the snapshot schedule.
+message SnapshotSpec {
+    // Description of the created snapshot.
+    string description = 1;
+
+    // Snapshot labels as `key:value` pairs.
+    map<string, string> labels = 2;
+}

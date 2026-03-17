@@ -1,0 +1,5 @@
+if (levtype is "o2d" || levtype is "o3d") {
+   alias mars.step = stepRange;
+} else {
+   alias mars.step = endStep;
+}

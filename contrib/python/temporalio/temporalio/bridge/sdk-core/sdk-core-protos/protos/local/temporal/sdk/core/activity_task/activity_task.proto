@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+/**
+ * Definitions of the different activity tasks returned from [crate::Core::poll_task].
+ */
+package coresdk.activity_task;
+option ruby_package = "Temporalio::Internal::Bridge::Api::ActivityTask";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/sdk/core/common/common.proto";
+
+message ActivityTask {
+    // A unique identifier for this task
+    bytes task_token = 1;
+    oneof variant {
+        // Start activity execution.
+        Start start = 3;
+        // Attempt to cancel activity execution.
+        Cancel cancel = 4;
+    }
+}
+
+// Begin executing an activity
+message Start {
+    // The namespace the workflow lives in
+    string workflow_namespace = 1;
+    // The workflow's type name or function identifier
+    string workflow_type = 2;
+    // The workflow execution which requested this activity
+    temporal.api.common.v1.WorkflowExecution workflow_execution = 3;
+    // The activity's ID
+    string activity_id = 4;
+    // The activity's type name or function identifier
+    string activity_type = 5;
+    map<string, temporal.api.common.v1.Payload> header_fields = 6;
+    // Arguments to the activity
+    repeated temporal.api.common.v1.Payload input = 7;
+    // The last details that were recorded by a heartbeat when this task was generated
+    repeated temporal.api.common.v1.Payload heartbeat_details = 8;
+    // When the task was *first* scheduled
+    google.protobuf.Timestamp scheduled_time = 9;
+    // When this current attempt at the task was scheduled
+    google.protobuf.Timestamp current_attempt_scheduled_time = 10;
+    // When this attempt was started, which is to say when core received it by polling.
+    google.protobuf.Timestamp started_time = 11;
+    uint32 attempt = 12;
+
+    // Timeout from the first schedule time to completion
+    google.protobuf.Duration schedule_to_close_timeout = 13;
+    // Timeout from starting an attempt to reporting its result
+    google.protobuf.Duration start_to_close_timeout = 14;
+    // If set a heartbeat must be reported within this interval
+    google.protobuf.Duration heartbeat_timeout = 15;
+    // This is an actual retry policy the service uses. It can be different from the one provided
+    // (or not) during activity scheduling as the service can override the provided one in case its
+    // values are not specified or exceed configured system limits.
+    temporal.api.common.v1.RetryPolicy retry_policy = 16;
+    // Priority of this activity. Local activities will always have this field set to the default.
+    temporal.api.common.v1.Priority priority = 18;
+
+    // Set to true if this is a local activity. Note that heartbeating does not apply to local
+    // activities.
+    bool is_local = 17;
+}
+
+// Attempt to cancel a running activity
+message Cancel {
+    // Primary cancellation reason
+    ActivityCancelReason reason = 1;
+    // Activity cancellation details, surfaces all cancellation reasons.
+    ActivityCancellationDetails details = 2;
+}
+
+message ActivityCancellationDetails {
+    bool is_not_found = 1;
+    bool is_cancelled = 2;
+    bool is_paused = 3;
+    bool is_timed_out = 4;
+    bool is_worker_shutdown = 5;
+    bool is_reset = 6;
+}
+
+enum ActivityCancelReason {
+    // The activity no longer exists according to server (may be already completed)
+    NOT_FOUND = 0;
+    // Activity was explicitly cancelled
+    CANCELLED = 1;
+    // Activity timed out
+    TIMED_OUT = 2;
+    // Core is shutting down and the graceful timeout has elapsed
+    WORKER_SHUTDOWN = 3;
+    // Activity was paused
+    PAUSED = 4;
+    // Activity was reset
+    RESET = 5;
+}
+
+

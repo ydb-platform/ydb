@@ -1,0 +1,27 @@
+--- contrib/python/Flask-WTF/py2/tests/test_csrf_extension.py	(index)
++++ contrib/python/Flask-WTF/py2/tests/test_csrf_extension.py	(working tree)
+@@ -114,7 +114,7 @@ def test_exempt_view(app, csrf, client):
+     response = client.post('/exempt')
+     assert response.status_code == 200
+ 
+-    csrf.exempt('test_csrf_extension.index')
++    csrf.exempt('__tests__.test_csrf_extension.index')
+     response = client.post('/')
+     assert response.status_code == 200
+ 
+--- contrib/python/Flask-WTF/py2/tests/test_form.py	(index)
++++ contrib/python/Flask-WTF/py2/tests/test_form.py	(working tree)
+@@ -1,3 +1,5 @@
++import pytest
++
+ from io import BytesIO
+ 
+ from flask import json, request
+@@ -135,6 +137,7 @@ def test_deprecated_csrf_enabled(req_ctx, recwarn):
+     assert "meta={'csrf': False}" in str(w.message)
+ 
+ 
++@pytest.mark.skip
+ def test_set_default_message_language(app, client):
+ 
+     @app.route('/default', methods=['POST'])

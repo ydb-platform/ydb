@@ -1,0 +1,74 @@
+1 pres PRES Pressure Pa
+11 t T Temperature K
+51 q Q Specific humidity kg/kg
+54 pwat PWAT Precipitable water kg/m2
+66 sd SD Snow depth m
+71 tcc TCC Total cloud cover fraction
+73 lcc LCC Low cloud cover fraction
+77 prob_scb PROB_SCB Probability for significant cloud base fraction
+78 scb SCB Significant cloud base m
+79 sct SCT Significant cloud top m
+84 al AL Albedo (lev 0=global radiation  lev 1=UV radiation) fraction
+91 icec ICEC Ice concentration fraction
+116 uv_irr UV_IRR CIE-weighted UV irradiance mW/m2
+117 gl_irr GL_IRR Global irradiance W/m2
+118 bn_irr BN_IRR Beam normal irradiance W/m2
+119 sun_d SUN_D Sunshine duration min
+120 par PAR PAR W/m2
+128 evapt EVAPT Evapotranspiration 1/kg2/s
+129 mterh MTERH Model terrain height m
+130 landu LANDU Land use Code
+131 soilw SOILW Volumetric soil moisture content Proportion
+132 mstav MSTAV Moisture availability %
+133 sfexc SFEXC Exchange coefficient kg/m2/s
+134 w_i W_I Plant canopy surface water kg/m2
+135 bmixl BMIXL Blackadar mixing length scale m
+136 ccond CCOND Canopy conductance m/s
+137 prs_min PRS_MIN Minimal stomatal resistance s/m
+138 rcs RCS Solar parameter in canopy conductance Proportion
+139 rct RCT Temperature parameter in canopy conductance Proportion
+140 rcq RCQ Humidity parameter in canopy conductance Proportion
+141 rcsol RCSOL Soil moisture parameter in canopy conductance Proportion
+142 sm SM Soil moisture kg/m3
+143 w_cl W_CL Column-integrated soil water kg/m2
+144 hflux HFLUX Heat flux W/m2
+145 vsw VSW Volumetric soil moisture m3/m3
+146 wilt WILT Wilting point kg/m3
+147 vwiltm VWILTM Volumetric wilting point m3/m3
+148 rlyrs RLYRS Number of soil layers in root zone Numeric
+149 liqvsm LIQVSM Liquid volumetric soil moisture (non-frozen) m3/m3
+150 voltso VOLTSO Volumetric transpiration stress-onset (soil moisture) m3/m3
+151 transo TRANSO Transpiration stress-onset (soil moisture) kg/m3
+152 voldec VOLDEC Volumetric direct evaporation cease (soil moisture) m3/m3
+153 direc DIREC Direct evaporation cease (soil moisture) kg/m3
+154 soilp SOILP Soil porosity m3/m3
+155 vsosm VSOSM Volumetric saturation of soil moisture kg/m3
+156 satosm SATOSM Saturation of soil moisture kg/m3
+165 prec_1h PREC_1H Accumulated precipitation, 1 hours mm
+175 snacc_1h SNACC_1H Accumulated fresh snow, 1 hours cm
+180 rad_sc RAD_SC Scaled radiance Numeric
+181 al_sc AL_SC Scaled albedo Numeric
+182 btmp_sc BTMP_SC Scaled brightness temperature Numeric
+183 pwat_sc PWAT_SC Scaled precipitable water Numeric
+184 li_sc LI_SC Scaled lifted index Numeric
+185 pctp_sc PCTP_SC Scaled cloud top pressure Numeric
+186 skt_sc SKT_SC Scaled skin temperature Numeric
+187 cmsk CMSK Cloud mask Code
+188 pst PST Pixel scene type Code
+189 fde FDE Fire detection indicator Code
+190 estp ESTP Estimated precipitation kg/m2
+191 irrate IRRATE Instananeous rain rate kg/m2/s
+192 ctoph CTOPH Cloud top height m
+193 ctophqi CTOPHQI Cloud top height quality indicator Code
+194 estu ESTU Estimated u component of wind m/s
+195 estv ESTV Estimated v component of wind m/s
+196 npixu NPIXU Number of pixel used Numeric
+197 solza SOLZA Solar zenith angle Degree
+198 raza RAZA Relative azimuth angle Degree
+199 rfl06 RFL06 Reflectance in 0.6 micron channel %
+200 rfl08 RFL08 Reflectance in 0.8 micron channel %
+201 rfl16 RFL16 Reflectance in 1.6 micron channel %
+202 rfl39 RFL39 Reflectance in 3.9 micron channel %
+206 toto3 TOTO3 Total ozone Atm cm
+210 atmdiv ATMDIV Atmospheric divergence 1/s
+211 wssp WSSP Wind speed (space) m/s

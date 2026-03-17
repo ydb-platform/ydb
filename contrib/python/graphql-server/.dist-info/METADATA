@@ -1,0 +1,127 @@
+Metadata-Version: 2.1
+Name: graphql-server
+Version: 3.0.0b7
+Summary: GraphQL Server tools for powering your server
+Home-page: https://github.com/graphql-python/graphql-server
+Download-URL: https://github.com/graphql-python/graphql-server/releases
+Author: Syrus Akbary
+Author-email: me@syrusakbary.com
+License: MIT
+Keywords: api graphql protocol rest
+Platform: any
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: License :: OSI Approved :: MIT License
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: graphql-core<3.3,>=3.2
+Requires-Dist: typing-extensions<5,>=4
+Provides-Extra: aiohttp
+Requires-Dist: aiohttp<4,>=3.8; extra == "aiohttp"
+Provides-Extra: all
+Requires-Dist: graphql-core<3.3,>=3.2; extra == "all"
+Requires-Dist: typing-extensions<5,>=4; extra == "all"
+Requires-Dist: flask<4,>=1; extra == "all"
+Requires-Dist: sanic<24,>=21.12; extra == "all"
+Requires-Dist: webob<2,>=1.8.7; extra == "all"
+Requires-Dist: aiohttp<4,>=3.8; extra == "all"
+Requires-Dist: quart<1,>=0.15; extra == "all"
+Provides-Extra: dev
+Requires-Dist: graphql-core<3.3,>=3.2; extra == "dev"
+Requires-Dist: typing-extensions<5,>=4; extra == "dev"
+Requires-Dist: flask<4,>=1; extra == "dev"
+Requires-Dist: sanic<24,>=21.12; extra == "dev"
+Requires-Dist: webob<2,>=1.8.7; extra == "dev"
+Requires-Dist: aiohttp<4,>=3.8; extra == "dev"
+Requires-Dist: quart<1,>=0.15; extra == "dev"
+Requires-Dist: flake8<7,>=6; extra == "dev"
+Requires-Dist: isort<6,>=5; extra == "dev"
+Requires-Dist: black<23.10,>=23.9; extra == "dev"
+Requires-Dist: mypy<1.7,>=1.6; extra == "dev"
+Requires-Dist: check-manifest<1,>=0.47; extra == "dev"
+Requires-Dist: pytest<8,>=7.2; extra == "dev"
+Requires-Dist: pytest-asyncio<1,>=0.20; extra == "dev"
+Requires-Dist: pytest-cov<5,>=4; extra == "dev"
+Requires-Dist: Jinja2<4,>=3.1; extra == "dev"
+Requires-Dist: sanic-testing<24,>=22.3; extra == "dev"
+Provides-Extra: flask
+Requires-Dist: flask<4,>=1; extra == "flask"
+Provides-Extra: quart
+Requires-Dist: quart<1,>=0.15; extra == "quart"
+Provides-Extra: sanic
+Requires-Dist: sanic<24,>=21.12; extra == "sanic"
+Provides-Extra: test
+Requires-Dist: graphql-core<3.3,>=3.2; extra == "test"
+Requires-Dist: typing-extensions<5,>=4; extra == "test"
+Requires-Dist: flask<4,>=1; extra == "test"
+Requires-Dist: sanic<24,>=21.12; extra == "test"
+Requires-Dist: webob<2,>=1.8.7; extra == "test"
+Requires-Dist: aiohttp<4,>=3.8; extra == "test"
+Requires-Dist: quart<1,>=0.15; extra == "test"
+Requires-Dist: pytest<8,>=7.2; extra == "test"
+Requires-Dist: pytest-asyncio<1,>=0.20; extra == "test"
+Requires-Dist: pytest-cov<5,>=4; extra == "test"
+Requires-Dist: Jinja2<4,>=3.1; extra == "test"
+Requires-Dist: sanic-testing<24,>=22.3; extra == "test"
+Provides-Extra: webob
+Requires-Dist: webob<2,>=1.8.7; extra == "webob"
+
+<img src="https://raw.githubusercontent.com/graphql-python/graphql-server/master/docs/_static/graphql-server-logo.svg" height="128px">
+
+[![PyPI version](https://badge.fury.io/py/graphql-server.svg)](https://badge.fury.io/py/graphql-server)
+[![Coverage Status](https://codecov.io/gh/graphql-python/graphql-server/branch/master/graph/badge.svg)](https://codecov.io/gh/graphql-python/graphql-server)
+
+GraphQL-Server is a base library that serves as a helper
+for building GraphQL servers or integrations into existing web frameworks using
+[GraphQL-Core](https://github.com/graphql-python/graphql-core).
+
+## Integrations built with GraphQL-Server
+
+| Server integration          | Docs                                                                                    |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| Flask                       | [flask](https://github.com/graphql-python/graphql-server/blob/master/docs/flask.md)     |
+| Sanic                       | [sanic](https://github.com/graphql-python/graphql-server/blob/master/docs/sanic.md)     |
+| AIOHTTP                     | [aiohttp](https://github.com/graphql-python/graphql-server/blob/master/docs/aiohttp.md) |
+| WebOb (Pyramid, TurboGears) | [webob](https://github.com/graphql-python/graphql-server/blob/master/docs/webob.md)     |
+
+## Other integrations built with GraphQL-Server
+
+| Server integration | Package                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------- |
+| WSGI               | [wsgi-graphql](https://github.com/moritzmhmk/wsgi-graphql)                                              |
+| Responder          | [responder.ext.graphql](https://github.com/kennethreitz/responder/blob/master/responder/ext/graphql.py) |
+
+## Other integrations using GraphQL-Core or Graphene
+
+| Server integration | Package                                                               |
+| ------------------ | --------------------------------------------------------------------- |
+| Django             | [graphene-django](https://github.com/graphql-python/graphene-django/) |
+
+## Documentation
+
+The `graphql_server` package provides these public helper functions:
+
+- `run_http_query`
+- `encode_execution_results`
+- `load_json_body`
+- `json_encode`
+- `json_encode_pretty`
+
+**NOTE:** the `json_encode_pretty` is kept as backward compatibility change as it uses `json_encode` with `pretty` parameter set to `True`.
+
+All functions in the package are annotated with type hints and docstrings,
+and you can build HTML documentation from these using `bin/build_docs`.
+
+You can also use one of the existing integrations listed above as
+blueprint to build your own integration or GraphQL server implementations.
+
+Please let us know when you have built something new, so we can list it here.
+
+## Contributing
+
+See [CONTRIBUTING.md](https://github.com/graphql-python/graphql-server/blob/master/CONTRIBUTING.md)

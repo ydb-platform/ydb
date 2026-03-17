@@ -1,0 +1,19 @@
+{# -*- engine: jinja -*- #}
+{% extends "base.html" %}
+
+{% block html_title %}{%if relative_path %}{{relative_path}} - {% endif %}{{info.head}}{% endblock %}
+
+{% block summary %}
+{% include "directory_page.summary.html" %}
+
+{% endblock %}
+
+{% block navigation %}
+{% include "directory_page.navigation.html" %}
+
+{% endblock %}
+
+{% block content %}
+{% include "directory_page.content.html" %}
+
+{% endblock %}

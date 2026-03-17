@@ -1,0 +1,12 @@
+# assert(local=1)
+meta verificationDate        g1verificationdate(dataDate, dataTime, endStep) : read_only;
+meta monthlyVerificationDate g1monthlydate(verificationDate) : dump,no_copy;
+alias mars.date            = monthlyVerificationDate;
+
+meta verificationYear          evaluate(verificationDate/10000);
+meta monthlyVerificationYear   evaluate(monthlyVerificationDate/10000);
+meta verificationMonth         evaluate( (verificationDate/100)%100 );
+meta monthlyVerificationMonth  evaluate( (monthlyVerificationDate/100)%100 );
+
+unalias mars.time;
+unalias mars.step;

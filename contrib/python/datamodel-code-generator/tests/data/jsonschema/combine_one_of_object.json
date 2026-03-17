@@ -1,0 +1,42 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type": "object",
+    "title": "My schema",
+    "additionalProperties": true,
+    "properties": {
+        "AddressLine1": { "type": "string" },
+        "AddressLine2": { "type": "string" },
+        "City":         { "type": "string" }
+    },
+    "required": [ "AddressLine1" ],
+    "oneOf": [
+        {
+            "type": "object",
+            "properties": {
+                "State":   { "type": "string" },
+                "ZipCode": { "type": "string" }
+            },
+            "required": [ "ZipCode" ]
+        },
+        {
+            "type": "object",
+            "properties": {
+                "County":   { "type": "string" },
+                "PostCode": { "type": "string" }
+            },
+            "required": [ "PostCode" ]
+        },
+        { "$ref": "#/definitions/US" }
+    ],
+    "definitions": {
+        "US":  {
+            "type": "object",
+            "properties": {
+                "County":   { "type": "string" },
+                "PostCode": { "type": "string" }
+            },
+            "required": [ "PostCode" ]
+        }
+    }
+}
+

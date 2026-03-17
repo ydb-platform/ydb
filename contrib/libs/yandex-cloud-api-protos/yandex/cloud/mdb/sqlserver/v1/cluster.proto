@@ -1,0 +1,308 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.sqlserver.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/type/timeofday.proto";
+import "yandex/cloud/mdb/sqlserver/v1/config/sqlserver2016sp2.proto";
+import "yandex/cloud/mdb/sqlserver/v1/config/sqlserver2017.proto";
+import "yandex/cloud/mdb/sqlserver/v1/config/sqlserver2019.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/sqlserver/v1;sqlserver";
+option java_outer_classname = "PSC";
+option java_package = "yandex.cloud.api.mdb.sqlserver.v1";
+
+// An SQL Server cluster.
+//
+// For more information, see the [Concepts](/docs/managed-sqlserver/concepts) section of the documentation.
+message Cluster {
+  enum Environment {
+    ENVIRONMENT_UNSPECIFIED = 0;
+
+    // Stable environment with a conservative update policy: only hotfixes are applied during regular maintenance.
+    PRODUCTION = 1;
+
+    // Environment with more aggressive update policy: new versions are rolled out irrespective of backward compatibility.
+    PRESTABLE = 2;
+  }
+
+  enum Health {
+
+    // State of the cluster is unknown ([Host.health] of all hosts in the cluster is `UNKNOWN`).
+    HEALTH_UNKNOWN = 0;
+
+    // Cluster is alive and works well ([Host.health] of all hosts in the cluster is `ALIVE`).
+    ALIVE = 1;
+
+    // Cluster is inoperable ([Host.health] of all hosts in the cluster is `DEAD`).
+    DEAD = 2;
+
+    // Cluster is in degraded state ([Host.health] of at least one of the hosts in the cluster is not `ALIVE`).
+    DEGRADED = 3;
+  }
+
+  enum Status {
+
+    // Cluster state is unknown.
+    STATUS_UNKNOWN = 0;
+
+    // Cluster is being created.
+    CREATING = 1;
+
+    // Cluster is running normally.
+    RUNNING = 2;
+
+    // Cluster encountered a problem and cannot operate.
+    ERROR = 3;
+
+    // Cluster is being updated.
+    UPDATING = 4;
+
+    // Cluster is stopping.
+    STOPPING = 5;
+
+    // Cluster stopped.
+    STOPPED = 6;
+
+    // Cluster is starting.
+    STARTING = 7;
+  }
+
+  // ID of the SQL Server cluster.
+  //
+  // This ID is assigned by Managed Service for SQL Server at the moment of creation.
+  string id = 1;
+
+  // ID of the folder the SQL Server cluster belongs to.
+  string folder_id = 2;
+
+  // Time when SQL Server cluster was created.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the SQL Server cluster.
+  //
+  // The name must be unique within the folder, comply with [RFC 1035](https://www.ietf.org/rfc/rfc1035.txt) and be 1-63 characters long.
+  //
+  string name = 4;
+
+  // Description of the SQL Server cluster.
+  //
+  // Must be 0-256 characters long.
+  string description = 5;
+
+  // Custom labels for the SQL Server cluster as `key:value` pairs.
+  //
+  // Maximum 64 per resource.
+  map<string, string> labels = 6;
+
+  // Deployment environment of the SQL Server cluster.
+  Environment environment = 7;
+
+  // Description of monitoring systems relevant to the SQL Server cluster.
+  repeated Monitoring monitoring = 8;
+
+  // Configuration of the SQL Server cluster.
+  ClusterConfig config = 9;
+
+  // ID of the network that the cluster belongs to.
+  string network_id = 10;
+
+  // Aggregated cluster health.
+  Health health = 11;
+
+  // Current state of the cluster.
+  Status status = 12;
+
+  // User security groups.
+  repeated string security_group_ids = 13;
+
+  // Determines whether the cluster is protected from being deleted.
+  bool deletion_protection = 14;
+
+  //SQL Server Collation.
+  string sqlcollation = 15;
+
+  // Host groups hosting VMs of the cluster.
+  repeated string host_group_ids = 16;
+
+  // ID of the service account which is used for access to Object Storage.
+  string service_account_id = 17;
+}
+
+message Monitoring {
+  // Name of the monitoring system.
+  string name = 1;
+
+  // Description of the monitoring system.
+  string description = 2;
+
+  // Link to the monitoring system charts for the SQL Server cluster.
+  string link = 3;
+}
+
+message ClusterConfig {
+  // Version of the SQL Server.
+  string version = 1;
+
+  // Configuration of the SQL Server instances in the cluster.
+  oneof sqlserver_config {
+    // Configuration of the SQL Server 2016sp2 standard edition instance.
+    config.SQLServerConfigSet2016sp2std sqlserver_config_2016sp2std = 2 [json_name="sqlserverConfig_2016sp2std"];
+
+    // Configuration of the SQL Server 2016sp2 enterprise edition instance.
+    config.SQLServerConfigSet2016sp2ent sqlserver_config_2016sp2ent = 5 [json_name="sqlserverConfig_2016sp2ent"];
+
+    // Configuration of the SQL Server 2017 standard edition instance.
+    config.SQLServerConfigSet2017std sqlserver_config_2017std = 8 [json_name="sqlserverConfig_2017std"];
+
+    // Configuration of the SQL Server 2017 enterprise edition instance.
+    config.SQLServerConfigSet2017ent sqlserver_config_2017ent = 9 [json_name="sqlserverConfig_2017ent"];
+
+    // Configuration of the SQL Server 2019 standard edition instance.
+    config.SQLServerConfigSet2019std sqlserver_config_2019std = 10 [json_name="sqlserverConfig_2019std"];
+
+    // Configuration of the SQL Server 2019 enterprise edition instance.
+    config.SQLServerConfigSet2019ent sqlserver_config_2019ent = 11 [json_name="sqlserverConfig_2019ent"];
+  }
+
+  // Resources allocated to SQL Server hosts.
+  Resources resources = 3;
+
+  // Start time for the daily backup in UTC timezone.
+  //
+  google.type.TimeOfDay backup_window_start = 4;
+
+  // Database access policy.
+  Access access = 6;
+
+  enum SecondaryConnections {
+    SECONDARY_CONNECTIONS_UNSPECIFIED = 0;
+
+    // Connections to secondary replicas are prohibited
+    SECONDARY_CONNECTIONS_OFF = 1;
+
+    // Secondary replicas are read-only
+    SECONDARY_CONNECTIONS_READ_ONLY = 2;
+  }
+
+  // Secondary replicas connection mode
+  SecondaryConnections secondary_connections = 7;
+}
+
+message Host {
+
+  enum Role {
+
+    // Role of the host in the cluster is unknown.
+    ROLE_UNKNOWN = 0;
+
+    // Host is the master SQL Server instance in the cluster.
+    MASTER = 1;
+
+    // Host is a replica SQL Server instance in the cluster.
+    REPLICA = 2;
+  }
+
+  enum Health {
+
+    // Health of the host is unknown.
+    HEALTH_UNKNOWN = 0;
+
+    // The host is performing all its functions normally.
+    ALIVE = 1;
+
+    // The host is inoperable and cannot perform any of its essential functions.
+    DEAD = 2;
+
+    // The host is degraded and can perform only some of its essential functions.
+    DEGRADED = 3;
+  }
+
+  // Name of the SQL Server host.
+  //
+  // The host name is assigned by Managed Service for SQL Server at the moment of creation and cannot be changed. 1-63 characters long.
+  //
+  // The name is unique across all database hosts that exist on the platform as it defines the FQDN of the host.
+  string name = 1;
+
+  // ID of the SQL Server host.
+  //
+  // The ID is assigned by Managed Service for SQL Server at the moment of creation.
+  string cluster_id = 2;
+
+  // ID of the availability zone where the SQL Server host resides.
+  string zone_id = 3;
+
+  // Resources allocated to the host.
+  Resources resources = 4;
+
+  // Role of the host in the cluster.
+  Role role = 5;
+
+  // Status code of the aggregated health of the host.
+  Health health = 6;
+
+  // Services provided by the host.
+  repeated Service services = 7;
+
+  // ID of the subnet that the host belongs to.
+  string subnet_id = 8;
+
+  // Flag showing public IP assignment status to this host.
+  bool assign_public_ip = 9;
+}
+
+message Service {
+
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    
+    // SQL Server service.
+    SQLSERVER = 1; 
+  }
+
+  enum Health {
+
+    // Health of the server is unknown.
+    HEALTH_UNKNOWN = 0;
+
+    // The server is working normally.
+    ALIVE = 1;
+
+    // The server is dead or unresponsive.
+    DEAD = 2;
+  }
+
+  // Type of the service provided by the host.
+  Type type = 1;
+
+  // Status code of server availability.
+  Health health = 2;
+}
+
+message Resources {
+
+  // ID of the preset for computational resources available to a host (CPU, memory, etc.).
+  //
+  // All available presets are listed in the [documentation](/docs/managed-sqlserver/concepts/instance-types).
+  string resource_preset_id = 1;
+
+  // Volume of the storage available to a host.
+  int64 disk_size = 2;
+
+  // Type of the storage environment for the host.
+  //
+  // Possible values:
+  // * `network-hdd` - network HDD drive;
+  // * `network-ssd` - network SSD drive;
+  // * `local-ssd` - local SSD storage.
+  string disk_type_id = 3;
+}
+
+message Access {
+  // Allows access for DataLens.
+  bool data_lens = 1;
+
+  // Allows access for Web SQL.
+  bool web_sql = 2;
+}

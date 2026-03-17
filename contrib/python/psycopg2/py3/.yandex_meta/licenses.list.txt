@@ -1,0 +1,308 @@
+====================COPYRIGHT====================
+ * Copyright (C) 2001-2019 Federico Di Gregorio <fog@debian.org>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2004-2019 Federico Di Gregorio <fog@debian.org>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2005-2019 Federico Di Gregorio <fog@debian.org>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2006-2019 Federico Di Gregorio <fog@debian.org>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2008  Canonical Ltd.
+ * Copyright (C) 2010-2019  Daniele Varrazzo <daniele.varrazzo@gmail.com>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2008-2019  James Henstridge <james@jamesh.id.au>
+ * Copyright (C) 2010-2019  Daniele Varrazzo <daniele.varrazzo@gmail.com>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2008-2019 Federico Di Gregorio <fog@debian.org>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2010-2019 Daniele Varrazzo <daniele.varrazzo@gmail.com>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2011-2019 Daniele Varrazzo <daniele.varrazzo@gmail.com>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2013-2019  Daniele Varrazzo <daniele.varrazzo@gmail.com>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2013-2019 Matthew Woodcraft <matthew@woodcraft.me.uk>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2015-2019 Daniele Varrazzo <daniele.varrazzo@gmail.com>
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2017 My Karlsson <mk@acc.umu.se>
+ * Copyright (c) 2018, Joyent, Inc.
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2017 My Karlsson <mk@acc.umu.se>
+ * Copyright (c) 2018-2019, Joyent, Inc.
+ * Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+ * provided, however, that PSF's License Agreement and PSF's notice of copyright,
+ * i.e., "Copyright (c) 2001-2019, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+ * Python Software Foundation; All Rights Reserved" are retained in Python alone or
+ * in any derivative version prepared by Licensee.
+
+
+====================COPYRIGHT====================
+# Copyright (C) 2003-2019 Federico Di Gregorio  <fog@debian.org>
+# Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+# Copyright (C) 2006-2019 Johan Dahlin  <jdahlin@async.com.br>
+# Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+# Copyright (C) 2012-2019 Daniele Varrazzo  <daniele.varrazzo@gmail.com>
+# Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+# Copyright (C) 2016-2019 Daniele Varrazzo  <daniele.varrazzo@gmail.com>
+# Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================COPYRIGHT====================
+# Copyright (C) 2018-2019 Daniele Varrazzo  <daniele.varrazzo@gmail.com>
+# Copyright (C) 2020-2021 The Psycopg Team
+
+
+====================File: LICENSE====================
+psycopg2 and the LGPL
+---------------------
+
+psycopg2 is free software: you can redistribute it and/or modify it
+under the terms of the GNU Lesser General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+psycopg2 is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
+License for more details.
+
+In addition, as a special exception, the copyright holders give
+permission to link this program with the OpenSSL library (or with
+modified versions of OpenSSL that use the same license as OpenSSL),
+and distribute linked combinations including the two.
+
+You must obey the GNU Lesser General Public License in all respects for
+all of the code used other than OpenSSL. If you modify file(s) with this
+exception, you may extend this exception to your version of the file(s),
+but you are not obligated to do so. If you do not wish to do so, delete
+this exception statement from your version. If you delete this exception
+statement from all source files in the program, then also delete it here.
+
+You should have received a copy of the GNU Lesser General Public License
+along with psycopg2 (see the doc/ directory.)
+If not, see <https://www.gnu.org/licenses/>.
+
+
+Alternative licenses
+--------------------
+
+The following BSD-like license applies (at your option) to the files following
+the pattern ``psycopg/adapter*.{h,c}`` and ``psycopg/microprotocol*.{h,c}``:
+
+ Permission is granted to anyone to use this software for any purpose,
+ including commercial applications, and to alter it and redistribute it
+ freely, subject to the following restrictions:
+
+ 1. The origin of this software must not be misrepresented; you must not
+    claim that you wrote the original software. If you use this
+    software in a product, an acknowledgment in the product documentation
+    would be appreciated but is not required.
+
+ 2. Altered source versions must be plainly marked as such, and must not
+    be misrepresented as being the original software.
+
+ 3. This notice may not be removed or altered from any source distribution.
+
+
+====================LGPL-2.0-or-later====================
+Classifier: License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)
+
+
+====================LGPL-3.0-or-later AND LicenseRef-scancode-openssl-exception-lgpl-3.0-plus====================
+ * psycopg2 is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * In addition, as a special exception, the copyright holders give
+ * permission to link this program with the OpenSSL library (or with
+ * modified versions of OpenSSL that use the same license as OpenSSL),
+ * and distribute linked combinations including the two.
+ *
+ * You must obey the GNU Lesser General Public License in all respects for
+ * all of the code used other than OpenSSL.
+ *
+ * psycopg2 is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
+ * License for more details.
+
+
+====================LGPL-3.0-or-later AND LicenseRef-scancode-openssl-exception-lgpl-3.0-plus====================
+# psycopg2 is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# In addition, as a special exception, the copyright holders give
+# permission to link this program with the OpenSSL library (or with
+# modified versions of OpenSSL that use the same license as OpenSSL),
+# and distribute linked combinations including the two.
+#
+# You must obey the GNU Lesser General Public License in all respects for
+# all of the code used other than OpenSSL.
+#
+# psycopg2 is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
+# License for more details.
+
+
+====================LGPL-3.0-or-later AND LicenseRef-scancode-openssl-exception-lgpl-3.0-plus====================
+License: LGPL with exceptions
+
+
+====================LGPL-3.0-or-later AND LicenseRef-scancode-openssl-exception-lgpl-3.0-plus====================
+psycopg2 and the LGPL
+---------------------
+
+psycopg2 is free software: you can redistribute it and/or modify it
+under the terms of the GNU Lesser General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+psycopg2 is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
+License for more details.
+
+In addition, as a special exception, the copyright holders give
+permission to link this program with the OpenSSL library (or with
+modified versions of OpenSSL that use the same license as OpenSSL),
+and distribute linked combinations including the two.
+
+You must obey the GNU Lesser General Public License in all respects for
+all of the code used other than OpenSSL. If you modify file(s) with this
+exception, you may extend this exception to your version of the file(s),
+but you are not obligated to do so. If you do not wish to do so, delete
+this exception statement from your version. If you delete this exception
+statement from all source files in the program, then also delete it here.
+
+You should have received a copy of the GNU Lesser General Public License
+along with psycopg2 (see the doc/ directory.)
+If not, see <https://www.gnu.org/licenses/>.
+
+
+====================LicenseRef-scancode-unknown-license-reference====================
+we'll now not dislike us. *g* (See LICENSE file for the details.)
+
+
+====================PSF-2.0====================
+ * PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2
+ * --------------------------------------------
+ *
+ * 1. This LICENSE AGREEMENT is between the Python Software Foundation
+ * ("PSF"), and the Individual or Organization ("Licensee") accessing and
+ * otherwise using this software ("Python") in source or binary form and
+ * its associated documentation.
+ *
+ * 2. Subject to the terms and conditions of this License Agreement, PSF hereby
+ * grants Licensee a nonexclusive, royalty-free, world-wide license to reproduce,
+ * analyze, test, perform and/or display publicly, prepare derivative works,
+ * distribute, and otherwise use Python alone or in any derivative version,
+ * provided, however, that PSF's License Agreement and PSF's notice of copyright,
+ * i.e., "Copyright (c) 2001-2019, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+ * Python Software Foundation; All Rights Reserved" are retained in Python alone or
+ * in any derivative version prepared by Licensee.
+ *
+ * 3. In the event Licensee prepares a derivative work that is based on
+ * or incorporates Python or any part thereof, and wants to make
+ * the derivative work available to others as provided herein, then
+ * Licensee hereby agrees to include in any such work a brief summary of
+ * the changes made to Python.
+ *
+ * 4. PSF is making Python available to Licensee on an "AS IS"
+ * basis.  PSF MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR
+ * IMPLIED.  BY WAY OF EXAMPLE, BUT NOT LIMITATION, PSF MAKES NO AND
+ * DISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS
+ * FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF PYTHON WILL NOT
+ * INFRINGE ANY THIRD PARTY RIGHTS.
+ *
+ * 5. PSF SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF PYTHON
+ * FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS
+ * A RESULT OF MODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON,
+ * OR ANY DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.
+ *
+ * 6. This License Agreement will automatically terminate upon a material
+ * breach of its terms and conditions.
+ *
+ * 7. Nothing in this License Agreement shall be deemed to create any
+ * relationship of agency, partnership, or joint venture between PSF and
+ * Licensee.  This License Agreement does not grant permission to use PSF
+ * trademarks or trade name in a trademark sense to endorse or promote
+ * products or services of Licensee, or any third party.
+ *
+ * 8. By copying, installing or otherwise using Python, Licensee
+ * agrees to be bound by the terms and conditions of this License
+ * Agreement.
+
+
+====================Zlib====================
+The following BSD-like license applies (at your option) to the files following
+the pattern ``psycopg/adapter*.{h,c}`` and ``psycopg/microprotocol*.{h,c}``:
+
+ Permission is granted to anyone to use this software for any purpose,
+ including commercial applications, and to alter it and redistribute it
+ freely, subject to the following restrictions:
+
+ 1. The origin of this software must not be misrepresented; you must not
+    claim that you wrote the original software. If you use this
+    software in a product, an acknowledgment in the product documentation
+    would be appreciated but is not required.
+
+ 2. Altered source versions must be plainly marked as such, and must not
+    be misrepresented as being the original software.
+
+ 3. This notice may not be removed or altered from any source distribution.

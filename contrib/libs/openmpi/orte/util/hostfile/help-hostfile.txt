@@ -1,0 +1,146 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2006 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2012      Los Alamos National Security, LLC
+#                         All rights reserved.
+# Copyright (c) 2016      Research Organization for Information Science
+#                         and Technology (RIST). All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for hostfile utilities.
+#
+[no-hostfile]
+Open RTE was unable to open the hostfile:
+    %s
+Check to make sure the path and filename are correct.
+[port]
+Open RTE detected a bad parameter in the hostfile:
+    %s
+The port parameter is less than 0:
+    port=%d
+[slots]
+Open RTE detected a bad parameter in the hostfile:
+    %s
+The slots parameter is less than 0:
+    slots=%d
+[max_slots]
+Open RTE detected a bad parameter in the hostfile:
+    %s
+The max_slots parameter is less than 0:
+    max_slots=%d
+[max_slots_lt]
+Open RTE detected a bad parameter in the hostfile:
+    %s
+The max_slots parameter is less than the slots parameter:
+    slots=%d
+    max_slots=%d
+[parse_error_string]
+Open RTE detected a parse error in the hostfile:
+    %s
+It occured on line number %d on token %d:
+    %s
+[parse_error_int]
+Open RTE detected a parse error in the hostfile:
+    %s
+It occured on line number %d on token %d:
+    %d
+[parse_error]
+Open RTE detected a parse error in the hostfile:
+    %s
+It occured on line number %d on token %d.
+[not-all-mapped-alloc]
+Some of the requested hosts are not included in the current allocation.
+
+The requested hosts were in this hostfile:
+  %s
+
+Please verify that you have specified the allocated resources properly in
+the provided hostfile.
+#
+[hostfile:relative-syntax]
+A relative host was specified, but no prior allocation has been made.
+Thus, there is no way to determine the proper host to be used.
+
+hostfile entry: %s
+
+Please see the orte_hosts man page for further information.
+#
+[hostfile:relative-node-not-found]
+A relative host was specified, but was not found. The requested host was
+specified as:
+
+Index: %d
+Syntax given: %s
+
+This is most likely due to the relative index being out of bounds. You
+could obtain a larger allocation or reduce the relative host index.
+Please see the orte_hosts man page for further information.
+#
+[hostfile:invalid-relative-node-syntax]
+A relative host was improperly specified - the value provided was.
+
+hostfile entry: %s
+
+You may have forgotten to preface a node with 'N' or 'n', or used the 'e' or 'E' to indicate
+empty nodes. Please see the orte_hosts man page for further information.
+#
+[hostfile:not-enough-empty]
+The requested number of empty hosts was not available - the system was short by %d hosts.
+
+Please recheck your allocation - further information is available on the
+orte_hosts man page.
+[boards]
+Open RTE detected a bad parameter in the hostfile:
+    %s
+The boards parameter is less than 0:
+    boards=%d
+[sockets]
+Open RTE detected a bad parameter in the hostfile:
+    %s
+The sockets parameter is less than 0:
+    sockets=%d
+[cores]
+Open RTE detected a bad parameter in the hostfile:
+    %s
+The cores parameter is less than 0:
+    cores=%d
+
+#
+[hostfile:extra-node-not-found]
+A hostfile was provided that contains at least one node not
+present in the allocation:
+
+  hostfile:  %s
+  node:      %s
+
+If you are operating in a resource-managed environment, then only
+nodes that are in the allocation can be used in the hostfile. You
+may find relative node syntax to be a useful alternative to
+specifying absolute node names see the orte_hosts man page for
+further information.
+#
+[slots-given]
+A hostfile was provided that contains multiple definitions
+of the slot count for at least one node:
+
+  hostfile:  %s
+  node:      %s
+
+You can either list a node multiple times, once for each slot,
+or you can provide a single line that contains "slot=N". Mixing
+the two methods is not supported.
+
+Please correct the hostfile and try again.

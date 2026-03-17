@@ -1,0 +1,14 @@
+<div class="d-flex align-items-center p-2">
+    <input id="_{{ field.id }}-delete"
+           name="_{{ field.id }}-delete"
+           class="form-check-input m-0"
+           type="checkbox"
+           data-for="{{ field.id }}"
+           data-role="file-field-delete">
+    <span class="mx-2">{{ _("Delete") }}</span>
+    <span class="form-help"
+          data-bs-toggle="popover"
+          data-bs-placement="top"
+          data-bs-html="true"
+          data-bs-content="{{ _('Check this to delete the current content of this field') }}">?</span>
+</div>

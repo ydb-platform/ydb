@@ -1,0 +1,4 @@
+requirements:
+  - pycryptodomex: null
+mark_as_tests:
+  - blobfile/*_test.py

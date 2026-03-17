@@ -1,0 +1,2 @@
+[console_scripts]
+panel = panel.command:main

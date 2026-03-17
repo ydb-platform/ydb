@@ -1,0 +1,13 @@
+# (C) Copyright 2005- ECMWF.
+
+section_length[3] section2Length;
+unsigned[1] reservedSection2 = 0;
+if(bufrHeaderCentre == 98) {
+  if (section2Length==52 or new() ) {
+    template rdb_key "bufr/rdb_key.def";
+  }
+  if (section2Length==28) {
+    template rdb_key "bufr/rdb_key_28.def";
+  }
+}
+section_padding section2Padding;

@@ -1,0 +1,11 @@
+HTTP/1.1 200 ok
+Content-Type: text/plain
+Transfer-Encoding: chunked
+
+4
+foo
+
+7
+foobar
+
+0

@@ -1,0 +1,100 @@
+Metadata-Version: 2.1
+Name: cobble
+Version: 0.1.4
+Summary: Create data objects
+Home-page: http://github.com/mwilliamson/python-cobble
+Author: Michael Williamson
+Author-email: mike@zwobble.org
+Keywords: data object case class
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.5
+
+Cobble
+======
+
+Cobble is a Python library that allows easy creation of data objects,
+including implementations of common methods such as ``__eq__`` and ``__repr__``.
+
+Examples
+--------
+
+.. code-block:: python
+
+    import cobble
+
+    @cobble.data
+    class Song(object):
+        name = cobble.field()
+        artist = cobble.field()
+        album = cobble.field(default=None)
+
+
+    song = Song("MFEO", artist="Jack's Mannequin")
+
+    print(song) # Prints "Song(name='MFEO', artist="Jack's Mannequin", album=None)"
+
+.. code-block:: python
+
+    class Expression(object):
+        pass
+
+    @cobble.data
+    class Literal(Expression):
+        value = cobble.field()
+
+    @cobble.data
+    class Add(Expression):
+        left = cobble.field()
+        right = cobble.field()
+    
+    class Evaluator(cobble.visitor(Expression)):
+        def visit_literal(self, literal):
+            return literal.value
+        
+        def visit_add(self, add):
+            return self.visit(add.left) + self.visit(add.right)
+
+    Evaluator().visit(Add(Literal(2), Literal(4))) # 6
+
+.. code-block:: python
+
+    class Expression(object):
+        pass
+
+    @cobble.visitable
+    class Literal(Expression):
+        def __init__(self, value):
+            self.value = value
+
+    @cobble.visitable
+    class Add(Expression):
+        def __init__(self, left, right):
+            self.left = left
+            self.right = right
+    
+    class Evaluator(cobble.visitor(Expression)):
+        def visit_literal(self, literal):
+            return literal.value
+        
+        def visit_add(self, add):
+            return self.visit(add.left) + self.visit(add.right)
+
+    Evaluator().visit(Add(Literal(2), Literal(4))) # 6
+
+License
+-------
+
+`2-Clause BSD <http://opensource.org/licenses/BSD-2-Clause>`_

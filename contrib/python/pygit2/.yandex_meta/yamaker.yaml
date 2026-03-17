@@ -1,0 +1,6 @@
+requirements:
+  - contrib/libs/libgit2
+copy:
+  - src/*
+exclude_from_macros:
+  - pygit2/_run.py

@@ -1,0 +1,39 @@
+--- contrib/python/Parsley/py3/ometa/test/test_builder.py	(index)
++++ contrib/python/Parsley/py3/ometa/test/test_builder.py	(working tree)
+@@ -328 +328 @@ class PythonWriterTests(unittest.TestCase):
+-        self.assert_("\n        tree = True\n" in writePython(g, ""))
++        self.assertTrue("\n        tree = True\n" in writePython(g, ""))
+--- contrib/python/Parsley/py3/ometa/test/test_protocol.py	(index)
++++ contrib/python/Parsley/py3/ometa/test/test_protocol.py	(working tree)
+@@ -93 +93 @@ class ParserProtocolTestCase(unittest.TestCase):
+-        self.assert_(self.protocol.receiver.connected)
++        self.assertTrue(self.protocol.receiver.connected)
+@@ -164 +164 @@ class ParserProtocolTestCase(unittest.TestCase):
+-        self.failIfEqual(self.protocol.receiver.lossReason, None)
++        self.assertNotEqual(self.protocol.receiver.lossReason, None)
+@@ -167 +167 @@ class ParserProtocolTestCase(unittest.TestCase):
+-        self.assert_(transport.aborted)
++        self.assertTrue(transport.aborted)
+@@ -177 +177 @@ class ParserProtocolTestCase(unittest.TestCase):
+-        self.failIfEqual(self.protocol.receiver.lossReason, None)
++        self.assertNotEqual(self.protocol.receiver.lossReason, None)
+@@ -180 +180 @@ class ParserProtocolTestCase(unittest.TestCase):
+-        self.assert_(transport.aborted)
++        self.assertTrue(transport.aborted)
+@@ -190 +190 @@ class ParserProtocolTestCase(unittest.TestCase):
+-        self.assert_(not transport.aborted)
++        self.assertTrue(not transport.aborted)
+--- contrib/python/Parsley/py3/ometa/test/test_pymeta.py	(index)
++++ contrib/python/Parsley/py3/ometa/test/test_pymeta.py	(working tree)
+@@ -1141,2 +1141,2 @@ class MakeGrammarTest(TestCase):
+-        self.assertEquals(e.position, 57)
+-        self.assertEquals(e.error, [("message", "end of input")])
++        self.assertEqual(e.position, 57)
++        self.assertEqual(e.error, [("message", "end of input")])
+--- contrib/python/Parsley/py3/ometa/test/test_runtime.py	(index)
++++ contrib/python/Parsley/py3/ometa/test/test_runtime.py	(working tree)
+@@ -57,2 +57,2 @@ class RuntimeTests(TestCase):
+-        self.assertEquals(exc.args[1], expected(None, "g"))
+-        self.assertEquals(exc.args[0], 0)
++        self.assertEqual(exc.args[1], expected(None, "g"))
++        self.assertEqual(exc.args[0], 0)

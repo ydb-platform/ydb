@@ -1,0 +1,127 @@
+--- contrib/python/chdb/cpp/src/Server/HTTP/HTTPServerResponse.cpp   (index)
++++ contrib/python/chdb/cpp/src/Server/HTTP/HTTPServerResponse.cpp   (working tree)
+@@ -29,7 +29,7 @@ void HTTPServerResponse::sendContinue()
+ 
+ std::shared_ptr<WriteBufferFromPocoSocket> HTTPServerResponse::send()
+ {
+-    poco_assert(!stream);
++    CHDB_poco_assert(!stream);
+ 
+     if ((request && request->getMethod() == HTTPRequest::HTTP_HEAD) || getStatus() < 200 || getStatus() == HTTPResponse::HTTP_NO_CONTENT
+         || getStatus() == HTTPResponse::HTTP_NOT_MODIFIED)
+@@ -68,8 +68,8 @@ std::shared_ptr<WriteBufferFromPocoSocket> HTTPServerResponse::send()
+ 
+ std::pair<std::shared_ptr<WriteBufferFromPocoSocket>, std::shared_ptr<WriteBufferFromPocoSocket>> HTTPServerResponse::beginSend()
+ {
+-    poco_assert(!stream);
+-    poco_assert(!header_stream);
++    CHDB_poco_assert(!stream);
++    CHDB_poco_assert(!header_stream);
+ 
+     /// NOTE: Code is not exception safe.
+ 
+@@ -122,7 +122,7 @@ void HTTPServerResponse::sendBuffer(const void * buffer, std::size_t length)
+ 
+ void HTTPServerResponse::requireAuthentication(const std::string & realm)
+ {
+-    poco_assert(!stream);
++    CHDB_poco_assert(!stream);
+ 
+     setStatusAndReason(HTTPResponse::HTTP_UNAUTHORIZED);
+     std::string auth("Basic realm=\"");
+@@ -133,7 +133,7 @@ void HTTPServerResponse::requireAuthentication(const std::string & realm)
+ 
+ void HTTPServerResponse::redirect(const std::string & uri, HTTPStatus status)
+ {
+-    poco_assert(!stream);
++    CHDB_poco_assert(!stream);
+ 
+     setContentLength(0);
+     setChunkedTransferEncoding(false);
+buyval01@buyval01-dev:~/arcadia/contrib/python/chdb/cpp$ arc diff src/Server/HTTP/HTTPServerRequest.h
+--- contrib/python/chdb/cpp/src/Server/HTTP/HTTPServerRequest.h      (index)
++++ contrib/python/chdb/cpp/src/Server/HTTP/HTTPServerRequest.h      (working tree)
+@@ -29,7 +29,7 @@ public:
+     /// Returns the input stream for reading the request body.
+     ReadBuffer & getStream()
+     {
+-        poco_check_ptr(stream);
++        CHDB_poco_check_ptr(stream);
+         return *stream;
+     }
+ 
+--- contrib/python/chdb/cpp/src/Server/HTTP/HTTPServerConnectionFactory.cpp  (index)
++++ contrib/python/chdb/cpp/src/Server/HTTP/HTTPServerConnectionFactory.cpp  (working tree)
+@@ -8,7 +8,7 @@ HTTPServerConnectionFactory::HTTPServerConnectionFactory(
+     HTTPContextPtr context_, Poco::Net::HTTPServerParams::Ptr params_, HTTPRequestHandlerFactoryPtr factory_, const ProfileEvents::Event & read_event_, const ProfileEvents::Event & write_event_)
+     : context(std::move(context_)), params(params_), factory(factory_), read_event(read_event_), write_event(write_event_)
+ {
+-    poco_check_ptr(factory);
++    CHDB_poco_check_ptr(factory);
+ }
+ 
+ Poco::Net::TCPServerConnection * HTTPServerConnectionFactory::createConnection(const Poco::Net::StreamSocket & socket, TCPServer & tcp_server)
+--- contrib/python/chdb/cpp/src/Server/HTTP/HTTPServerConnection.cpp (index)
++++ contrib/python/chdb/cpp/src/Server/HTTP/HTTPServerConnection.cpp (working tree)
+@@ -17,7 +17,7 @@ HTTPServerConnection::HTTPServerConnection(
+     const ProfileEvents::Event & write_event_)
+     : TCPServerConnection(socket), context(std::move(context_)), tcp_server(tcp_server_), params(params_), factory(factory_), read_event(read_event_), write_event(write_event_), stopped(false)
+ {
+-    poco_check_ptr(factory);
++    CHDB_poco_check_ptr(factory);
+ }
+ 
+ void HTTPServerConnection::run()
+@@ -101,7 +101,7 @@ void HTTPServerConnection::run()
+         catch (const Poco::Net::NetException & e)
+         {
+             /// Do not spam logs with messages related to connection reset by peer.
+-            if (e.code() == POCO_ENOTCONN)
++            if (e.code() == CHDB_POCO_ENOTCONN)
+             {
+                 LOG_DEBUG(LogFrequencyLimiter(getLogger("HTTPServerConnection"), 10), "Connection reset by peer while processing HTTP request: {}", e.message());
+                 break;
+--- contrib/python/chdb/cpp/base/base/JSON.cpp	(index)
++++ contrib/python/chdb/cpp/base/base/JSON.cpp	(working tree)
+@@ -12,7 +12,7 @@
+ 
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wdeprecated-dynamic-exception-spec"
+-POCO_IMPLEMENT_EXCEPTION(JSONException, Poco::Exception, "JSONException") // NOLINT(cert-err60-cpp, modernize-use-noexcept, hicpp-use-noexcept)
++CHDB_POCO_IMPLEMENT_EXCEPTION(JSONException, Poco::Exception, "JSONException") // NOLINT(cert-err60-cpp, modernize-use-noexcept, hicpp-use-noexcept)
+ #pragma clang diagnostic pop
+ 
+ 
+--- contrib/python/chdb/cpp/base/base/JSON.h	(index)
++++ contrib/python/chdb/cpp/base/base/JSON.h	(working tree)
+@@ -41,7 +41,7 @@
+ // NOLINTBEGIN(google-explicit-constructor)
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wdeprecated-dynamic-exception-spec"
+-POCO_DECLARE_EXCEPTION(Foundation_API, JSONException, Poco::Exception)
++CHDB_POCO_DECLARE_EXCEPTION(Foundation_API, JSONException, Poco::Exception)
+ #pragma clang diagnostic pop
+ // NOLINTEND(google-explicit-constructor)
+ 
+--- contrib/python/chdb/cpp/src/Core/SettingsQuirks.cpp	(index)
++++ contrib/python/chdb/cpp/src/Core/SettingsQuirks.cpp	(working tree)
+@@ -20,7 +20,7 @@ namespace
+ ///   [2]: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=0c54a6a44bf3
+ bool nestedEpollWorks(LoggerPtr log)
+ {
+-    if (Poco::Environment::os() != POCO_OS_LINUX)
++    if (Poco::Environment::os() != CHDB_POCO_OS_LINUX)
+         return true;
+ 
+     DB::VersionNumber linux_version(Poco::Environment::osVersion());
+--- contrib/python/chdb/cpp/src/IO/ReadWriteBufferFromHTTP.cpp	(index)
++++ contrib/python/chdb/cpp/src/IO/ReadWriteBufferFromHTTP.cpp	(working tree)
+@@ -350,7 +350,7 @@ void ReadWriteBufferFromHTTP::doWithRetries(std::function<void()> && callable,
+         }
+         catch (Poco::Exception & e)
+         {
+-            if (e.code() == POCO_EMFILE)
++            if (e.code() == CHDB_POCO_EMFILE)
+                 is_retriable = false;
+ 
+             error_message = e.displayText();

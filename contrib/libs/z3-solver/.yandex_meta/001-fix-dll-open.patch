@@ -1,0 +1,33 @@
+--- a/scripts/update_api.py
++++ b/scripts/update_api.py
+@@ -1828,6 +1828,17 @@
+ def write_core_py_preamble(core_py):
+   core_py.write(
+ """
++import os, pathlib, tempfile
++import library.python.resource as rs_lib
++
++def _extract_lib_from_resfs(temp_dir):
++    lib_dir = pathlib.Path(temp_dir)
++    so = lib_dir / 'libz3.so'
++    data = rs_lib.find('resfs/file/lib/z3/libz3.so')
++    with open(so, 'wb') as f:
++        f.write(data)
++    os.environ['Z3_LIBRARY_PATH'] = str(lib_dir)
++
+ # Automatically generated file
+ import atexit
+ import sys, os
+@@ -1844,10 +1855,8 @@
+ atexit.register(_file_manager.close)
+ _ext = 'dll' if sys.platform in ('win32', 'cygwin') else 'dylib' if sys.platform == 'darwin' else 'so'
+ _lib = None
+-_z3_lib_resource = importlib_resources.files('z3').joinpath('lib')
+-_z3_lib_resource_path = _file_manager.enter_context(
+-    importlib_resources.as_file(_z3_lib_resource)
+-)
++_z3_lib_resource_path = _file_manager.enter_context(tempfile.TemporaryDirectory())
++_extract_lib_from_resfs(_z3_lib_resource_path)
+ _default_dirs = ['.',
+                  os.path.dirname(os.path.abspath(__file__)),
+                  _z3_lib_resource_path,

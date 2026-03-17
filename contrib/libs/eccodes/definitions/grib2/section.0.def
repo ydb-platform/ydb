@@ -1,0 +1,14 @@
+# (C) Copyright 2005- ECMWF.
+
+position offsetSection0;
+constant section0Length=16;
+ascii[4]     identifier    = "GRIB" : read_only;
+unsigned[2]  reserved      = missing() : can_be_missing,hidden,read_only,edition_specific;
+codetable[1] discipline    ('0.0.table',masterDir,localDir) : dump;
+unsigned[1]  editionNumber = 2 : edition_specific,dump;
+
+alias ls.edition = editionNumber;
+section_length[8] totalLength;
+position startOfHeaders;
+
+meta section0Pointer section_pointer(offsetSection0,section0Length,0);

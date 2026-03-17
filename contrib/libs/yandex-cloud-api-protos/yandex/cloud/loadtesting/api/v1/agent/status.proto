@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.agent ;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/agent;agent";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.agent";
+
+// Agent status.
+enum Status {
+  // Status is not specified.
+  STATUS_UNSPECIFIED = 0;
+
+  // Agent is preparing a test to be executed.
+  PREPARING_TEST = 1;
+
+  // Agent is ready to take a test.
+  READY_FOR_TEST = 2;
+
+  // Agent is executing a test.
+  TESTING = 3;
+
+  // Agent application encountered an error and cannot operate normally.
+  TANK_FAILED = 4;
+
+  // Agent is waiting for resources to be allocated.
+  PROVISIONING = 5;
+
+  // Agent is being stopped.
+  STOPPING = 6;
+
+  // Agent is stopped.
+  STOPPED = 7;
+
+  // Agent is being started.
+  STARTING = 8;
+
+  // Agent is being restarted.
+  RESTARTING = 9;
+
+  // Agent is being updated.
+  UPDATING = 10;
+
+  // Agent encountered an error and cannot operate.
+  ERROR = 11;
+
+  // Agent is crashed and will be restarted automatically.
+  CRASHED = 12;
+
+  // Agent is being deleted.
+  DELETING = 13;
+
+  // Service is waiting for connection with agent to be established.
+  INITIALIZING_CONNECTION = 15;
+
+  // Service has lost connection with agent.
+  LOST_CONNECTION_WITH_AGENT = 16;
+
+  // Agent is uploading test artifacts.
+  UPLOADING_ARTIFACTS = 17;
+}

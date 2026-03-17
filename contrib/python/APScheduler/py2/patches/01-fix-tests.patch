@@ -1,0 +1,174 @@
+--- contrib/python/APScheduler/py2/tests/test_executors.py	(index)
++++ contrib/python/APScheduler/py2/tests/test_executors.py	(working tree)
+@@ -15,7 +15,7 @@ from apscheduler.executors.pool import ProcessPoolExecutor
+ from apscheduler.job import Job
+ from apscheduler.schedulers.background import BackgroundScheduler
+ from apscheduler.schedulers.base import BaseScheduler
+-from tests.conftest import minpython
++from __tests__.conftest import minpython
+ 
+ try:
+     from unittest.mock import Mock, MagicMock, patch
+--- contrib/python/APScheduler/py2/tests/test_job.py	(index)
++++ contrib/python/APScheduler/py2/tests/test_job.py	(working tree)
+@@ -124,9 +124,9 @@ def test_private_modify_bad_func(job):
+ 
+ def test_private_modify_func_ref(job):
+     """Tests that the target callable can be given as a textual reference."""
+-    job._modify(func='tests.test_job:dummyfunc')
++    job._modify(func='__tests__.test_job:dummyfunc')
+     assert job.func is dummyfunc
+-    assert job.func_ref == 'tests.test_job:dummyfunc'
++    assert job.func_ref == '__tests__.test_job:dummyfunc'
+ 
+ 
+ def test_private_modify_unreachable_func(job):
+@@ -207,7 +207,7 @@ def test_private_modify_bad_argument(job):
+ def test_getstate(job):
+     state = job.__getstate__()
+     assert state == dict(
+-        version=1, trigger=job.trigger, executor='default', func='tests.test_job:dummyfunc',
++        version=1, trigger=job.trigger, executor='default', func='__tests__.test_job:dummyfunc',
+         name=b'n\xc3\xa4m\xc3\xa9'.decode('utf-8'), args=(), kwargs={},
+         id=b't\xc3\xa9st\xc3\xafd'.decode('utf-8'), misfire_grace_time=1, coalesce=False,
+         max_instances=1, next_run_time=None)
+@@ -217,13 +217,13 @@ def test_setstate(job, timezone):
+     trigger = DateTrigger('2010-12-14 13:05:00', timezone)
+     state = dict(
+         version=1, scheduler=MagicMock(), jobstore=MagicMock(), trigger=trigger,
+-        executor='dummyexecutor', func='tests.test_job:dummyfunc', name='testjob.dummyfunc',
++        executor='dummyexecutor', func='__tests__.test_job:dummyfunc', name='testjob.dummyfunc',
+         args=[], kwargs={}, id='other_id', misfire_grace_time=2, coalesce=True, max_instances=2,
+         next_run_time=None)
+     job.__setstate__(state)
+     assert job.id == 'other_id'
+     assert job.func == dummyfunc
+-    assert job.func_ref == 'tests.test_job:dummyfunc'
++    assert job.func_ref == '__tests__.test_job:dummyfunc'
+     assert job.trigger == trigger
+     assert job.executor == 'dummyexecutor'
+     assert job.args == []
+--- contrib/python/APScheduler/py2/tests/test_jobstores.py	(index)
++++ contrib/python/APScheduler/py2/tests/test_jobstores.py	(working tree)
+@@ -58,6 +58,9 @@ def rethinkdbjobstore():
+ 
+ @pytest.fixture
+ def mongodbjobstore():
++    # Yandex specific
++    pytest.skip('Using mongo skipped in arcadia tests')
++    # End yandex specific
+     mongodb = pytest.importorskip('apscheduler.jobstores.mongodb')
+     store = mongodb.MongoDBJobStore(database='apscheduler_unittest')
+     store.start(None, 'mongodb')
+@@ -68,6 +71,9 @@ def mongodbjobstore():
+ 
+ @pytest.fixture
+ def redisjobstore():
++    # Yandex specific
++    pytest.skip('Using redis skipped in arcadia tests')
++    # End yandex specific
+     redis = pytest.importorskip('apscheduler.jobstores.redis')
+     store = redis.RedisJobStore()
+     store.start(None, 'redis')
+@@ -78,6 +78,9 @@ def redisjobstore():
+
+ @pytest.fixture
+ def zookeeperjobstore():
++    # Yandex specific
++    pytest.skip('Using zookeeper skipped in arcadia tests')
++    # End yandex specific
+     zookeeper = pytest.importorskip('apscheduler.jobstores.zookeeper')
+     store = zookeeper.ZooKeeperJobStore(path='/apscheduler_unittest')
+     store.start(None, 'zookeeper')
+@@ -129,14 +132,14 @@ def test_add_callable_class_method_job(jobstore, create_add_job):
+ 
+ 
+ def test_add_textual_instance_method_job(jobstore, create_add_job):
+-    initial_job = create_add_job(jobstore, 'tests.test_jobstores:dummy_instance.dummy_method',
++    initial_job = create_add_job(jobstore, '__tests__.test_jobstores:dummy_instance.dummy_method',
+                                  kwargs={'a': 1, 'b': 2})
+     job = jobstore.lookup_job(initial_job.id)
+     assert job.func(*job.args, **job.kwargs) == 3
+ 
+ 
+ def test_add_textual_class_method_job(jobstore, create_add_job):
+-    initial_job = create_add_job(jobstore, 'tests.test_jobstores:DummyClass.dummy_classmethod',
++    initial_job = create_add_job(jobstore, '__tests__.test_jobstores:DummyClass.dummy_classmethod',
+                                  kwargs={'a': 1, 'b': 2})
+     job = jobstore.lookup_job(initial_job.id)
+     assert job.func(*job.args, **job.kwargs) == 3
+@@ -359,6 +362,7 @@ def test_mongodb_client_ref():
+
+ def test_zookeeper_client_ref():
+     global zookeeper_client
++    pytest.skip('Using zookeeper skipped in arcadia tests')
+     zookeeper = pytest.importorskip('apscheduler.jobstores.zookeeper')
+     zookeeper_client = zookeeper.KazooClient()
+     try:
+@@ -374,6 +378,7 @@ def test_zookeeper_client_ref():
+
+ def test_zookeeper_client_keep_open():
+     global zookeeper_client
++    pytest.skip('Using zookeeper skipped in arcadia tests')
+     zookeeper = pytest.importorskip('apscheduler.jobstores.zookeeper')
+     zookeeper_client = zookeeper.KazooClient()
+     try:
+--- contrib/python/APScheduler/py2/tests/test_schedulers.py	(index)
++++ contrib/python/APScheduler/py2/tests/test_schedulers.py	(working tree)
+@@ -811,6 +811,7 @@ class TestProcessJobs(object):
+ 
+         """
+         caplog.set_level(logging.ERROR)
++        caplog.clear()
+         scheduler.remove_executor('default')
+         assert scheduler._process_jobs() is None
+         jobstore.remove_job.assert_called_once_with(999)
+@@ -822,6 +823,7 @@ class TestProcessJobs(object):
+     def test_max_instances_reached(self, scheduler, job, jobstore, executor, caplog):
+         """Tests that a warning is logged when the maximum instances of a job is reached."""
+         caplog.set_level(logging.WARNING)
++        caplog.clear()
+         executor.submit_job = MagicMock(side_effect=MaxInstancesReachedError(job))
+ 
+         assert scheduler._process_jobs() is None
+@@ -832,6 +834,7 @@ class TestProcessJobs(object):
+     def test_executor_error(self, scheduler, jobstore, executor, caplog):
+         """Tests that if any exception is raised in executor.submit(), it is logged."""
+         caplog.set_level(logging.ERROR)
++        caplog.clear()
+         executor.submit_job = MagicMock(side_effect=Exception('test message'))
+ 
+         assert scheduler._process_jobs() is None
+--- contrib/python/APScheduler/py2/tests/test_util.py	(index)
++++ contrib/python/APScheduler/py2/tests/test_util.py	(working tree)
+@@ -16,7 +16,7 @@ from apscheduler.util import (asbool, asint, astimezone, check_callable_args,
+                               get_callable_name, maybe_ref, obj_to_ref,
+                               ref_to_obj, repr_escape, timedelta_seconds,
+                               utc_timestamp_to_datetime)
+-from tests.conftest import maxpython, minpython
++from __tests__.conftest import maxpython, minpython
+ 
+ try:
+     from unittest.mock import Mock
+@@ -222,17 +222,17 @@ class TestObjToRef(object):
+         assert str(exc.value) == 'Cannot create a reference to a nested function'
+ 
+     @pytest.mark.parametrize('input,expected', [
+-        (DummyClass.meth, 'tests.test_util:DummyClass.meth'),
+-        (DummyClass.classmeth, 'tests.test_util:DummyClass.classmeth'),
++        (DummyClass.meth, '__tests__.test_util:DummyClass.meth'),
++        (DummyClass.classmeth, '__tests__.test_util:DummyClass.classmeth'),
+         pytest.param(
+             DummyClass.InnerDummyClass.innerclassmeth,
+-            'tests.test_util:DummyClass.InnerDummyClass.innerclassmeth',
++            '__tests__.test_util:DummyClass.InnerDummyClass.innerclassmeth',
+             marks=[pytest.mark.skipif(sys.version_info < (3, 3),
+                                       reason="Requires __qualname__ (Python 3.3+)")]
+         ),
+         pytest.param(
+             DummyClass.staticmeth,
+-            'tests.test_util:DummyClass.staticmeth',
++            '__tests__.test_util:DummyClass.staticmeth',
+             marks=[pytest.mark.skipif(sys.version_info < (3, 3),
+                                       reason="Requires __qualname__ (Python 3.3+)")]
+         ),

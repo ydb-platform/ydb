@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1;iam";
+option java_package = "yandex.cloud.api.iam.v1";
+
+// A Key resource. For more information, see [Authorized keys](/docs/iam/concepts/authorization/key).
+message Key {
+  enum Algorithm {
+    ALGORITHM_UNSPECIFIED = 0;
+
+    // RSA with a 2048-bit key size. Default value.
+    RSA_2048 = 1;
+
+    // RSA with a 4096-bit key size.
+    RSA_4096 = 2;
+  }
+
+  // ID of the Key resource.
+  string id = 1;
+
+  oneof subject {
+    // ID of the user account that the Key resource belongs to.
+    string user_account_id = 2;
+
+    // ID of the service account that the Key resource belongs to.
+    string service_account_id = 3;
+  }
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 4;
+
+  // Description of the Key resource. 0-256 characters long.
+  string description = 5;
+
+  // An algorithm used to generate a key pair of the Key resource.
+  Algorithm key_algorithm = 6;
+
+  // A public key of the Key resource.
+  string public_key = 7;
+
+  reserved 8;
+
+  // Timestamp for the last use of this key.
+  google.protobuf.Timestamp last_used_at = 9;
+}

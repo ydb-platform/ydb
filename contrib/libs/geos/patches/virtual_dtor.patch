@@ -1,0 +1,10 @@
+--- contrib/libs/geos/include/geos/index/strtree/ItemDistance.h	(rev 12162762)
++++ contrib/libs/geos/include/geos/index/strtree/ItemDistance.h	(working copy)
+@@ -43,6 +43,7 @@ public:
+      * @throws IllegalArgumentException if the metric is not applicable to the arguments
+      */
+     virtual double distance(const ItemBoundable* item1, const ItemBoundable* item2) = 0;
++    virtual ~ItemDistance() = default;
+ };
+ }
+ }

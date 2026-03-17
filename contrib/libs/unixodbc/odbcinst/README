@@ -1,0 +1,32 @@
+***************************************************************
+* This code is LGPL. You CAN make commercial solutions using  *
+* LGPL software.                                              *
+*                                                             *
+* Peter Harvey 21.FEB.99 pharvey@codebydesign.com             *
+***************************************************************
+
++-------------------------------------------------------------+
+| unixODBC                                                    |
+| ODBCINST lib (libodbcinst.so)                               |
++-------------------------------------------------------------+
+
+This share library supports ODBC Install/Setup and Config
+options. It is modelled after MS'isms and should, therefore,
+allow for an easy transition from MS'isms to other platforms
+(ie Linux).
+
+A complicating factor for unixODBC is that the GUI may not be
+present - or if it is - it may be any number of types (X, KDE, 
+GNOME etc). So the GUI bits of odbcinst must be plugable. This 
+library handles this. See SQLManageDataSources() and the 
+unixODBC-GUI-Qt project.
+
+This lib also has a command line tool called odbcinst.
+
++-------------------------------------------------------------+
+| Peter Harvey                                                |
+| pharvey@codebydesign.com                                    |
+| http://www.unixodbc.org                                     |
+| 10.APR.99                                                   |
++-------------------------------------------------------------+
+

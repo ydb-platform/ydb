@@ -1,0 +1,2 @@
+[console_scripts]
+extruct = extruct.tool:main

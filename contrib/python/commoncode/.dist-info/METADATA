@@ -1,0 +1,73 @@
+Metadata-Version: 2.1
+Name: commoncode
+Version: 30.2.0
+Summary: Set of common utilities, originally split from ScanCode
+Home-page: https://github.com/nexB/commoncode
+Author: nexB. Inc. and others
+Author-email: info@aboutcode.org
+License: Apache-2.0
+Keywords: utilities,scancode-toolkit
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Topic :: Software Development
+Classifier: Topic :: Utilities
+Requires-Python: <4,>=3.6.*
+License-File: apache-2.0.LICENSE
+License-File: NOTICE
+License-File: AUTHORS.rst
+License-File: CHANGELOG.rst
+License-File: commoncode.ABOUT
+License-File: README.rst
+Requires-Dist: attrs (!=20.1.0,>=18.1)
+Requires-Dist: Beautifulsoup4 (>=4.0.0)
+Requires-Dist: click (!=7.0,>=6.7)
+Requires-Dist: intbitset (>=2.3.0)
+Requires-Dist: requests (>=2.7.0)
+Requires-Dist: saneyaml (>=0.5.2)
+Requires-Dist: text-unidecode (>=1.0)
+Requires-Dist: typing (<3.7,>=3.6) ; python_version < "3.7"
+Provides-Extra: docs
+Requires-Dist: Sphinx (>=3.3.1) ; extra == 'docs'
+Requires-Dist: sphinx-rtd-theme (>=0.5.0) ; extra == 'docs'
+Requires-Dist: doc8 (>=0.8.1) ; extra == 'docs'
+Provides-Extra: testing
+Requires-Dist: pytest (!=7.0.0,>=6) ; extra == 'testing'
+Requires-Dist: pytest-xdist (>=2) ; extra == 'testing'
+Requires-Dist: aboutcode-toolkit (>=6.0.0) ; extra == 'testing'
+Requires-Dist: black ; extra == 'testing'
+
+CommonCode
+==========
+
+- license: Apache-2.0
+- copyright: copyright (c) nexB. Inc. and others
+- homepage_url: https://github.com/nexB/commoncode
+- keywords: utilities, scancode-toolkit, commoncode
+
+Commoncode provides a set of common functions and utilities for handling various things like paths,
+dates, files and hashes. It started as library in scancode-toolkit.
+Visit https://aboutcode.org and https://github.com/nexB/ for support and download.
+
+
+To install this package use::
+
+    pip install commoncode
+
+
+Alternatively, to set up a development environment::
+
+    source configure --dev
+
+To run unit tests::
+
+    pytest -vvs -n 2
+
+To clean up development environment::
+
+    ./configure --clean
+
+
+

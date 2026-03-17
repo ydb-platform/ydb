@@ -1,0 +1,2 @@
+exclude:
+  - modernize.py

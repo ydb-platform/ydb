@@ -1,0 +1,60 @@
+syntax = "proto3";
+package yandex.cloud.billing.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/billing/v1;billing";
+option java_package = "yandex.cloud.api.billing.v1";
+
+
+// A Customer resource.
+message Customer {
+
+    // ID of the customer.
+    string id = 1;
+
+    // ID of the [yandex.cloud.billing.v1.BillingAccount] assigned to the customer.
+    string billing_account_id = 2;
+}
+
+// Person of the customer. Contains legal information.
+message CustomerPerson {
+
+    // Optional. Name of the person.
+    //
+    // String length is not limited.
+    string name = 1;
+
+    // Optional. Long name of the person.
+    //
+    // String length is not limited.
+    string longname = 2;
+
+    // Optional. Phone of the person.
+    //
+    // Must be a valid telephone number or a valid [phoneword](https://en.m.wikipedia.org/wiki/Phoneword). 
+    string phone = 3;
+
+    // Optional. Email of the person.
+    //
+    // Must be a valid [email address](https://en.wikipedia.org/wiki/Email_address).
+    string email = 4;
+
+    // Optional. Post code of the person.
+    //
+    // String length is not limited.
+    string post_code = 5;
+
+    // Optional. Post address of the person.
+    //
+    // String length is not limited.
+    string post_address = 6;
+
+    // Optional. Legal address of the person.
+    //
+    // String length is not limited.
+    string legal_address = 7;
+
+    // Optional. Tax identification number of the person.
+    //
+    // String length is not limited.
+    string tin = 8;
+}

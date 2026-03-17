@@ -1,0 +1,7 @@
+requirements:
+  - graphql-core: contrib/python/graphql-server
+  - graphql-server-core: null
+exclude:
+  - flask_graphql/blueprint.py
+  - flask_graphql/graphqlview.py
+  - flask_graphql/render_graphiql.py

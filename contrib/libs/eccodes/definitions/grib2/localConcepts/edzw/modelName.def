@@ -1,0 +1,107 @@
+# modelName: Contribution from Daniel Lee @ DWD
+
+# definitions for Offenbach
+'cosmo_eu' = {
+    generatingProcessIdentifier=131;
+}
+'cosmo_eu' = {
+    generatingProcessIdentifier=132;
+}
+'cosmo_eu' = {
+    generatingProcessIdentifier=134;
+}
+'cosmo_eu' = {
+    generatingProcessIdentifier=135;
+}
+'cosmo_de' = {
+    generatingProcessIdentifier=137;
+}
+'cosmo_de' = {
+    generatingProcessIdentifier=138;
+}
+'cosmo_de-eps' = {
+    generatingProcessIdentifier=137;
+    typeOfEnsembleForecast=192;
+}
+'cosmo_de-eps' = {
+    generatingProcessIdentifier=138;
+    typeOfEnsembleForecast=192;
+}
+
+#DWD model names for ICON
+'icogl' = {
+    gridDefinitionTemplateNumber=101;
+    generatingProcessIdentifier=1;
+}
+'icogl130' = {
+    numberOfGridUsed=26;
+    generatingProcessIdentifier=1;
+}
+'icogl130l90' = {
+    numberOfGridUsed=26;
+    nlev=91;
+    generatingProcessIdentifier=1;
+}
+'icogl130p' = {
+    numberOfGridUsed=26;
+    typeOfFirstFixedSurface=100;
+    generatingProcessIdentifier=1;
+}
+'icoeu'= {
+    gridDefinitionTemplateNumber=101;
+    generatingProcessIdentifier=2;
+}
+'icoeu065' = {
+    numberOfGridUsed=27;
+    generatingProcessIdentifier=2;
+}
+'icoeu065l60' = {
+    numberOfGridUsed=27;
+    nlev=61;
+    generatingProcessIdentifier=2;
+}
+'icreu' = {
+    gridDefinitionTemplateNumber=0;
+    generatingProcessIdentifier=2;
+}
+'icreu_0.625' = {
+    gridDefinitionTemplateNumber=0;
+    Dx=62500;
+    Dy=62500;
+    generatingProcessIdentifier=2;
+}
+'icreu_0.625l60' = {
+    gridDefinitionTemplateNumber=0;
+    Dx=62500;
+    Dy=62500;
+    nlev=61;
+    generatingProcessIdentifier=2;
+}
+'icreu_0.625p' = {
+    gridDefinitionTemplateNumber=0;
+    Dx=62500;
+    Dy=62500;
+    typeOfFirstFixedSurface=100;
+    generatingProcessIdentifier=2;
+}
+'icreu_0.625z' = {
+    gridDefinitionTemplateNumber=0;
+    Dx=62500;
+    Dy=62500;
+    typeOfFirstFixedSurface=102;
+    generatingProcessIdentifier=2;
+}
+'icrde' = {
+    gridDefinitionTemplateNumber=0;
+    generatingProcessIdentifier=3;
+}
+'icrgl' = {
+    gridDefinitionTemplateNumber=0;
+    generatingProcessIdentifier=1;
+}
+'icrgl_0.25' = {
+    gridDefinitionTemplateNumber=0;
+    Dx=250000;
+    Dy=250000;
+    generatingProcessIdentifier=1;
+}

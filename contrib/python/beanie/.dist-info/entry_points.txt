@@ -1,0 +1,3 @@
+[console_scripts]
+beanie=beanie.executors.migrate:migrations
+

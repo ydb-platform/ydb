@@ -1,0 +1,14 @@
+# Product discipline 20 - Health and socioeconomic impacts, parameter category 1: epidemiology
+0 0 Malaria cases (Fraction)
+1 1 Malaria circumsporozoite protein rate (Fraction)
+2 2 Plasmodium falciparum entomological inoculation rate (Bites per day per person)
+3 3 Human bite rate by anopheles vectors (Bites per day per person)
+4 4 Malaria immunity (Fraction)
+5 5 Falciparum parasite rates (Fraction)
+6 6 Detectable falciparum parasite ratio (after day 10) (Fraction)
+7 7 Anopheles vector to host ratio (Fraction)
+8 8 Anopheles vector number (Number m-2)
+9 9 Fraction of malarial vector reproductive habitat (Fraction)
+# 10-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

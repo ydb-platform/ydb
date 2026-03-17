@@ -1,0 +1,53 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <shahmohammadiemes@gmail.com>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2022-09-25 09:48+0300\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Mahdi Shahmohammadi <shahmohammadiemes@gmail.com>\n"
+"Language-Team: Iran \n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: apps.py:16
+msgid "Range Filter"
+msgstr "محدوده فیلتر"
+
+#: filters.py:210 filters.py:246
+msgid "From date"
+msgstr "از روز"
+
+#: filters.py:220 filters.py:256
+msgid "To date"
+msgstr "تا روز"
+
+#: filters.py:351
+msgid "From"
+msgstr ""
+
+#: filters.py:361
+msgid "To"
+msgstr ""
+
+#: templates/rangefilter/date_filter.html:139
+#: templates/rangefilter/date_filter_1_8.html:90
+#: templates/rangefilter/date_filter_csp.html:138
+#: templates/rangefilter/numeric_filter.html:55
+msgid "Search"
+msgstr "جست و جو"
+
+#: templates/rangefilter/date_filter.html:140
+#: templates/rangefilter/date_filter_1_8.html:91
+#: templates/rangefilter/date_filter_csp.html:139
+#: templates/rangefilter/numeric_filter.html:56
+msgid "Reset"
+msgstr "بازنشانی"

@@ -1,0 +1,146 @@
+# Concept stepType for DWD
+# set uses the FIRST one
+# get returns the LAST match
+
+#  "accum" = {timeRangeIndicator=0;centre=98;indicatorOfParameter=61;table2Version=1;}
+#  "accum" = {timeRangeIndicator=0;centre=98;indicatorOfParameter=61;table2Version=2;}
+#  "accum" = {timeRangeIndicator=0;centre=98;indicatorOfParameter=61;table2Version=3;}
+#  "accum" = {timeRangeIndicator=0;centre=98;indicatorOfParameter=228;table2Version=128;}
+#  "accum" = {timeRangeIndicator=0;centre=98;indicatorOfParameter=228;table2Version=128;}
+  "accum" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=57;table2Version=2;}
+  "accum" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=61;table2Version=2;}
+  "accum" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=78;table2Version=2;}
+  "accum" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=79;table2Version=2;}
+  "accum" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=90;table2Version=2;}
+  "accum" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=42;table2Version=201;}
+#ASOB_S/T;ATHB_S/T
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=111;table2Version=2;}
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=112;table2Version=2;}
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=113;table2Version=2;}
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=114;table2Version=2;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=111;table2Version=2;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=112;table2Version=2;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=113;table2Version=2;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=114;table2Version=2;}
+#
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=121;table2Version=2;}
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=122;table2Version=2;}
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=124;table2Version=2;}
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=125;table2Version=2;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=124;table2Version=2;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=125;table2Version=2;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=121;table2Version=2;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=122;table2Version=2;}
+#APAB_S
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=5;table2Version=201;}
+#
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=22;table2Version=201;}
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=23;table2Version=201;}
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=24;table2Version=201;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=5;table2Version=201;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=22;table2Version=201;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=23;table2Version=201;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=24;table2Version=201;}
+#AUSTR_SSO,AVSTR_SSO,AVDIS_SSO
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=231;table2Version=202;}
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=232;table2Version=202;}
+  "avg" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=233;table2Version=202;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=231;table2Version=202;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=232;table2Version=202;}
+  "avg" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=233;table2Version=202;}
+#
+  "accum" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=102;table2Version=201;}
+  "accum" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=132;table2Version=201;}
+  "accum" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=132;table2Version=201;}
+  "accum" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=113;table2Version=201;}
+  "accum" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=102;table2Version=201;}
+  "accum" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=102;table2Version=201;}
+  "accum" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=61;table2Version=2;}
+  "accum" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=61;table2Version=2;}
+  "accum" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=78;table2Version=2;}
+  "accum" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=90;table2Version=2;}
+  "accum" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=113;table2Version=201;}
+  "accum" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=79;table2Version=2;}
+  "accum" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=90;table2Version=2;}
+  "accum" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=42;table2Version=201;}
+  "accum" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=57;table2Version=2;}
+  "accum" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=79;table2Version=2;}
+  "accum" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=113;table2Version=201;}
+  "accum" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=78;table2Version=2;}
+  "max" = {timeRangeIndicator=2;centre=78;indicatorOfParameter=67;table2Version=202;}
+  "max" = {timeRangeIndicator=2;centre=78;indicatorOfParameter=69;table2Version=202;}
+  "max" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=248;table2Version=202;}
+  "max" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=243;table2Version=202;}
+  "max" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=187;table2Version=201;}
+  "max" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=187;table2Version=201;}
+  "max" = {timeRangeIndicator=2;centre=78;indicatorOfParameter=15;table2Version=2;}
+  "max" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=15;table2Version=2;}
+  "min" = {timeRangeIndicator=2;centre=78;indicatorOfParameter=16;table2Version=2;}
+  "min" = {timeRangeIndicator=13;centre=78;indicatorOfParameter=16;table2Version=2;}
+  "max" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=15;table2Version=2;}
+  "max" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=78;table2Version=202;}
+  "min" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=16;table2Version=2;}
+  "max" = {timeRangeIndicator=2;centre=78;indicatorOfParameter=187;table2Version=201;}
+  "max" = {timeRangeIndicator=2;centre=78;indicatorOfParameter=55;table2Version=203;}
+  "min" = {timeRangeIndicator=2;centre=78;indicatorOfParameter=56;table2Version=203;}
+  "max" = {timeRangeIndicator=2;centre=78;indicatorOfParameter=15;table2Version=206;}
+  "min" = {timeRangeIndicator=2;centre=78;indicatorOfParameter=16;table2Version=206;}
+  "max" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=67;table2Version=202;}
+  "min" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=68;table2Version=202;}
+  "max" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=69;table2Version=202;}
+  "min" = {timeRangeIndicator=0;centre=78;indicatorOfParameter=70;table2Version=202;}
+  "max" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=15;table2Version=2;}
+  "min" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=16;table2Version=2;}
+  "max" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=187;table2Version=201;}
+  "max" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=42;table2Version=201;}
+  "max" = {timeRangeIndicator=1;centre=78;indicatorOfParameter=57;table2Version=2;}
+  "instant" = {timeRangeIndicator=14;} # Fields from DWD in MARS
+  "instant" = {timeRangeIndicator=1;}
+  "instant" = {timeRangeIndicator=10;}
+#orig  "instant" = {timeRangeIndicator=0;}
+  "instant" = {timeRangeIndicator=13;centre=78;}
+  "instant" = {timeRangeIndicator=11;centre=78;}
+  "instant" = {timeRangeIndicator=14;centre=78;}
+
+#orig  "avg"     = {timeRangeIndicator=3;}
+  "avgfc"    = {timeRangeIndicator=113;}
+  "avgd"    = {timeRangeIndicator=113;}
+  "accum"   = {timeRangeIndicator=2;}
+#dwd+1
+  "accum"   = {timeRangeIndicator=4;}
+  "max"     = {timeRangeIndicator=118;}
+  "max"     = {timeRangeIndicator=2;centre=98;}
+  "min"     = {timeRangeIndicator=119;}
+  "min"     = {timeRangeIndicator=2;centre=98;}
+#dwd+1
+  "diff"    = {timeRangeIndicator=5;}
+  "rms"     = {timeRangeIndicator=120;}
+  "sd"      = {timeRangeIndicator=121;}
+  "cov"     = {timeRangeIndicator=122;}
+  "avgua"   = {timeRangeIndicator=123;}
+  "avgia"   = {timeRangeIndicator=124;}
+#tab204 monthly mean rms
+  "rms"     = {centre=78;indicatorOfParameter=1;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=2;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=3;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=4;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=5;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=6;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=7;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=8;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=9;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=10;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=11;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=12;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=13;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=14;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=15;table2Version=204;}
+  "rms"     = {centre=78;indicatorOfParameter=16;table2Version=204;}
+#tab208 still TODO
+  "max"   = {centre=78;table2Version=208;}
+  "instant" = {timeRangeIndicator=0;}
+  "max"     = {timeRangeIndicator=2;}
+  "min"     = {timeRangeIndicator=2;}
+  "avg"     = {timeRangeIndicator=3;}
+  "accum"   = {timeRangeIndicator=4;}
+  "diff"    = {timeRangeIndicator=5;}

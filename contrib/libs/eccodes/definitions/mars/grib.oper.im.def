@@ -1,0 +1,20 @@
+unalias mars.levtype;
+
+if(localDefinitionNumber == 3) { 
+	constant marsType   = "oldim"; 
+	alias mars.type     = marsType; 
+	alias mars.ident    = indicatorOfTypeOfLevel; 
+
+	# Just a guess 
+	if(marsStream < 1024) {
+		alias mars.ident    = marsStream;
+	}
+
+	#unalias mars.param; 
+	unalias mars.step; 
+}
+
+if(localDefinitionNumber == 24) { 
+	unalias mars.param;
+	unalias mars.step;
+}

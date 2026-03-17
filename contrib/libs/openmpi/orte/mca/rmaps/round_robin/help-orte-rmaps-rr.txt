@@ -1,0 +1,56 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2005 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2017      Intel, Inc. All rights reserved.
+# Copyright (c) 2018      Cisco Systems, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for Open RTE's orterun.
+#
+[orte-rmaps-rr:multi-apps-and-zero-np]
+RMAPS found multiple applications to be launched, with
+at least one that failed to specify the number of processes to execute.
+When specifying multiple applications, you must specify how many processes
+of each to launch via the -np argument.
+
+[orte-rmaps-rr:per-node-and-too-many-procs]
+There are not enough nodes in your allocation to satisfy your request to launch
+%d processes on a per-node basis - only %d nodes were available.
+
+Either request fewer processes, or obtain a larger allocation.
+[orte-rmaps-rr:n-per-node-and-too-many-procs]
+There are not enough nodes in your allocation to satisfy your request to launch
+%d processes on a %d per-node basis - only %d nodes with a total of %d slots were available.
+
+Either request fewer processes, or obtain a larger allocation.
+[orte-rmaps-rr:n-per-node-and-not-enough-slots]
+There are not enough slots on the nodes in your allocation to satisfy your request to launch on a %d process-per-node basis - only %d slots/node were available.
+
+Either request fewer processes/node, or obtain a larger allocation.
+
+[orte-rmaps-rr:no-np-and-user-map]
+You have specified a rank-to-node/slot mapping, but failed to provide
+the number of processes to be executed. For some reason, this information
+could not be obtained from the mapping you provided, so we cannot continue
+with executing the specified application.
+#
+[orte-rmaps-rr:not-enough-objs]
+There are not enough resources on the available nodes
+to meet the requested mapping.
+
+  Application: %s
+  Number of procs:  %d
+  Number of resources: %d

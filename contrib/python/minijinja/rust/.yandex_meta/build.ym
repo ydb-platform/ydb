@@ -1,0 +1,56 @@
+{% extends '//builtin/pycargo.ym' %}
+
+{% block mod_name %}
+minijinja_py
+{% endblock %}
+
+{% block py_register %}
+minijinja._lowlevel
+{% endblock %}
+
+{% block rust_version %}1.93.0{% endblock %}
+
+{% block platforms %}
+aarch64-apple-darwin
+x86_64-apple-darwin
+x86_64-unknown-linux-gnu
+{% endblock %}
+
+{% block current_version %}2.13.0{% endblock %}
+{% block current_url %}https://github.com/mitsuhiko/minijinja/archive/refs/tags/{{self.version().strip()}}.tar.gz{% endblock %}
+
+{% block patch_source %}
+{{super()}}
+sed -e 's|cdylib|staticlib|' -i Cargo.toml
+{% endblock %}
+
+{% block build_source %}
+export PYO3_CROSS_PYTHON_VERSION=3.12
+cd minijinja-py
+{{super()}}
+
+# Rename PyInit symbol to match the registered module name minijinja._lowlevel
+(find ${BUILD} -type f -name '*.a'; find ${BUILD} -type f -name '*.lib') | grep -v "/deps/" | while read l; do
+    llvm-objcopy --redefine-sym "_PyInit__lowlevel=_PyInit_9minijinja9_lowlevel" ${l}
+    llvm-objcopy --redefine-sym "PyInit__lowlevel=PyInit_9minijinja9_lowlevel" ${l}
+done
+{% endblock %}
+
+{% block prepare_yamake %}
+{{super()}}
+
+# Override LICENSE
+sed -i 's/LICENSE(will be scanned)/LICENSE(Apache-2.0)/' ya.make
+{% endblock %}
+
+{% block move_to_output %}
+{{super()}}
+
+# Remove unnecessary MD files
+cd ${OUTPUT}
+rm -f AGENTS.md CHANGELOG.md CLAUDE.md COMPATIBILITY.md CONTRIBUTING.md HUMAN_VS_MACHINE.md UPDATING.md
+{% endblock %}
+
+{% block run_license_analyzer %}
+echo skip
+{% endblock %}

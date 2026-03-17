@@ -1,0 +1,27 @@
+--- contrib/libs/ceres-solver/include/ceres/manifold.h	(index)
++++ contrib/libs/ceres-solver/include/ceres/manifold.h	(working tree)
+@@ -275,13 +275,13 @@ class EuclideanManifold final : public Manifold {
+     return true;
+   }
+ 
+-  bool PlusJacobian(const double* x_ptr, double* jacobian_ptr) const override {
++  bool PlusJacobian(const double* /* x_ptr */, double* jacobian_ptr) const override {
+     Eigen::Map<MatrixJacobian> jacobian(jacobian_ptr, size_, size_);
+     jacobian.setIdentity();
+     return true;
+   }
+ 
+-  bool RightMultiplyByPlusJacobian(const double* x,
++  bool RightMultiplyByPlusJacobian(const double* /* x */,
+                                    const int num_rows,
+                                    const double* ambient_matrix,
+                                    double* tangent_matrix) const override {
+@@ -299,7 +299,7 @@ class EuclideanManifold final : public Manifold {
+     return true;
+   }
+ 
+-  bool MinusJacobian(const double* x_ptr, double* jacobian_ptr) const override {
++  bool MinusJacobian(const double* /* x_ptr */, double* jacobian_ptr) const override {
+     Eigen::Map<MatrixJacobian> jacobian(jacobian_ptr, size_, size_);
+     jacobian.setIdentity();
+     return true;

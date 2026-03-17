@@ -1,0 +1,66 @@
+{% extends "admin/base_site.html" %}
+
+<!-- LOADING -->
+{% load i18n l10n admin_urls %}
+
+<!-- COLTYPE/BODYCLASS-- >
+{% block bodyclass %}grp-delete-confirmation{% endblock %}
+{% block content-class %}{% endblock %}
+
+<!-- BREADCRUMBS -->
+{% block breadcrumbs %}
+    <ul class="grp-horizontal-list">
+        <li><a href="{% url 'admin:index' %}">{% trans "Home" %}</a></li>
+        <li><a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a></li>
+        <li><a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a></li>
+        <li>{% trans 'Delete multiple objects' %}</li>
+    </ul>
+{% endblock %}
+
+<!-- CONTENT -->
+{% block content %}
+    <div class="g-d-c">
+        {% if perms_lacking or protected %}
+            <div class="grp-group">
+                {% if perms_lacking %}
+                    <h2>{% blocktrans %}Deleting the selected {{ objects_name }} would result in deleting related objects, but your account doesn't have permission to delete the following types of objects:{% endblocktrans %}</h2>
+                    <ul class="grp-nested-list">
+                        {% for obj in perms_lacking %}
+                            <li>{{ obj }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+                {% if protected %}
+                    <h2>{% blocktrans %}Deleting the selected {{ objects_name }} would require deleting the following protected related objects:{% endblocktrans %}</h2>
+                    <ul class="grp-nested-list">
+                        {% for obj in protected %}
+                            <li>{{ obj }}</li>
+                        {% endfor %}
+                     </ul>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="grp-group">
+                <h2>{% blocktrans %}Are you sure you want to delete the selected {{ objects_name }}? All of the following objects and their related items will be deleted:{% endblocktrans %}</h2>
+                {% include "admin/includes/object_delete_summary.html" %}
+                {% for deleteable_object in deletable_objects %}
+                    <ul class="grp-nested-list">{{ deleteable_object|unordered_list }}</ul>
+                {% endfor %}
+            </div>
+            <form action="" method="post" novalidate>{% csrf_token %}
+                <div id="submit" class="grp-module grp-submit-row grp-fixed-footer">
+                    {% for obj in queryset %}
+                        <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk|unlocalize }}" />
+                    {% endfor %}
+                    <input type="hidden" name="action" value="delete_selected" />
+                    <input type="hidden" name="post" value="yes" />
+                    <ul>
+                        <li class="grp-float-left"><a href="." class="grp-button grp-cancel-link">{% trans "Cancel" %}</a></li>
+                        <li><input type="submit" value="{% trans "Yes, I’m sure" %}" class="grp-button grp-default" /></li>
+                    </ul>
+                    <input type="hidden" name="post" value="yes" />
+                </div>
+            </form>
+        {% endif %}
+    </div>
+{% endblock %}

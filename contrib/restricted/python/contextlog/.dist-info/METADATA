@@ -1,0 +1,23 @@
+Metadata-Version: 2.4
+Name: contextlog
+Version: 1.1
+Summary: Context-based logger and formatters collection
+Home-page: https://github.com/mdevaev/contextlog
+Author: Maxim Devaev
+Author-email: mdevaev@gmail.com
+License: LGPLv3
+Platform: any
+Classifier: Development Status :: 4 - Beta
+Classifier: License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Logging
+Requires-Dist: colorlog
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: home-page
+Dynamic: license
+Dynamic: platform
+Dynamic: requires-dist
+Dynamic: summary

@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package yandex.cloud.clouddesktop.v1.api;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/clouddesktop/v1/disk.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/clouddesktop/v1;clouddesktop";
+option java_package = "yandex.cloud.api.clouddesktop.v1";
+
+// A desktop group resource.
+message DesktopGroup {
+  reserved 13 to 20;
+  reserved 5 to 10;
+
+  // Desktop group ID.
+  string id = 1;
+
+  // ID of the folder that the desktop group belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp created_at = 3;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Desktop group is being created.
+    CREATING = 1;
+
+    // Desktop group is ready to use.
+    ACTIVE = 2;
+
+    // Desktop group is being deleted.
+    DELETING = 3;
+
+    // Desktop group is updating.
+    UPDATING = 4;
+  }
+
+  // Status of the desktop group.
+  Status status = 4;
+
+  // Name of the desktop group.
+  string name = 11;
+
+  // Description of the desktop group.
+  string description = 12;
+
+  // Resource specification of the desktop group.
+  ResourcesSpec resources_spec = 21;
+
+  // Network interface specification of the desktop group.
+  NetworkInterfaceSpec network_interface_spec = 22;
+
+  // Labels of the desktop group.
+  map<string, string> labels = 23;
+  
+  // Boot disk specification of the desktop group.
+  DiskSpec boot_disk_spec = 24;
+  
+  // Data disk specification of the desktop group.
+  DiskSpec data_disk_spec = 25;
+
+  // Desktop group configuration.
+  DesktopGroupConfiguration group_config = 26;
+
+  // Desktop group update policy.
+  oneof update_policy {
+    option (exactly_one) = true;
+    AutoUpdatePolicy auto_update_policy = 27;
+    ManualUpdatePolicy manual_update_policy = 28;
+  }
+}
+
+message DesktopGroupConfiguration {
+  // Minimum number of ready desktops.
+  int64 min_ready_desktops = 1 [(value) = "1-512"];
+
+  // Maximum number of desktops.
+  int64 max_desktops_amount = 2 [(value) = "0-512"];
+
+  enum DesktopType {
+      DESKTOP_TYPE_UNSPECIFIED = 0;
+      PERSISTENT = 1;
+      NON_PERSISTENT = 2;
+  }
+
+  // Type of the desktop.
+  DesktopType desktop_type = 3;
+
+  // List of members of the desktop group.
+  repeated access.Subject members = 4 [(size) = "0-10"];
+}
+
+message ResourcesSpec {
+  // RAM volume, in bytes.
+  int64 memory = 1 [(value) = ">=1"];
+
+  // Number of CPU cores.
+  int64 cores = 2 [(value) = ">=1"];
+
+  // Baseline level of CPU performance with the ability to burst performance above that baseline level.
+  // This field sets baseline performance for each core.
+  int64 core_fraction = 3 [(value) = "0-100"];
+}
+
+message NetworkInterfaceSpec {
+  // ID of the network interface specification.
+  string network_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // List of subnet IDs.
+  repeated string subnet_ids = 2 [
+    (size) = ">0",
+    (length) = "<=50",
+    (unique) = true
+  ];
+}
+
+message ManualUpdatePolicy {
+}
+
+message AutoUpdatePolicy {
+}

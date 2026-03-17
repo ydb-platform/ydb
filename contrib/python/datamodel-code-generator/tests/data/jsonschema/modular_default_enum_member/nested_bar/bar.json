@@ -1,0 +1,14 @@
+{
+  "$id": "nested_bar/bar.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NestedBar",
+  "type": "object",
+  "definitions": {
+    "logLevels": {
+      "description": "Supported logging levels Nested Model",
+      "type": "string",
+      "enum": ["DEBUG", "INFO", "ERROR"],
+      "default": "ERROR"
+    }
+  }
+}

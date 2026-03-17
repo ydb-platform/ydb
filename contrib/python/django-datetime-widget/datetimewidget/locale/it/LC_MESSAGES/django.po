@@ -1,0 +1,223 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2013-03-06 18:38-0500\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+
+#: widgets.py:113
+msgid "Sunday"
+msgstr "Domenica"
+
+#: widgets.py:113
+msgid "Monday"
+msgstr "Lunedì"
+
+#: widgets.py:113
+msgid "Tuesday"
+msgstr "Martedì"
+
+#: widgets.py:113
+msgid "Wednesday"
+msgstr "Mercoledì"
+
+#: widgets.py:113
+msgid "Thursday"
+msgstr "Giovedì"
+
+#: widgets.py:113
+msgid "Friday"
+msgstr "Venerdì"
+
+#: widgets.py:113
+msgid "Saturday"
+msgstr "Sabato"
+
+#: widgets.py:114
+msgid "Sun"
+msgstr "Dom"
+
+#: widgets.py:114
+msgid "Mon"
+msgstr "Lun"
+
+#: widgets.py:114
+msgid "Tue"
+msgstr "Mar"
+
+#: widgets.py:114
+msgid "Wed"
+msgstr "Mer"
+
+#: widgets.py:114
+msgid "Thu"
+msgstr "Gio"
+
+#: widgets.py:114
+msgid "Fri"
+msgstr "Ven"
+
+#: widgets.py:114
+msgid "Sat"
+msgstr "Sab"
+
+#: widgets.py:115
+msgid "Su"
+msgstr "Do"
+
+#: widgets.py:115
+msgid "Mo"
+msgstr "Lu"
+
+#: widgets.py:115
+msgid "Tu"
+msgstr "Ma"
+
+#: widgets.py:115
+msgid "We"
+msgstr "Me"
+
+#: widgets.py:115
+msgid "Th"
+msgstr "Gi"
+
+#: widgets.py:115
+msgid "Fr"
+msgstr "Ve"
+
+#: widgets.py:115
+msgid "Sa"
+msgstr "Sa"
+
+#: widgets.py:116
+msgid "January"
+msgstr "Gennaio"
+
+#: widgets.py:116
+msgid "February"
+msgstr "Febbraio"
+
+#: widgets.py:116
+msgid "March"
+msgstr "Marzo"
+
+#: widgets.py:116
+msgid "April"
+msgstr "Aprile"
+
+#: widgets.py:116 widgets.py:117
+msgid "May"
+msgstr "Maggio"
+
+#: widgets.py:116
+msgid "June"
+msgstr "Giugno"
+
+#: widgets.py:116
+msgid "July"
+msgstr "Luglio"
+
+#: widgets.py:116
+msgid "August"
+msgstr "Agosto"
+
+#: widgets.py:116
+msgid "September"
+msgstr "Settembre"
+
+#: widgets.py:116
+msgid "October"
+msgstr "Ottobre"
+
+#: widgets.py:116
+msgid "November"
+msgstr "Novembre"
+
+#: widgets.py:116
+msgid "December"
+msgstr "Dicembre"
+
+#: widgets.py:117
+msgid "Jan"
+msgstr "Gen"
+
+#: widgets.py:117
+msgid "Feb"
+msgstr "Feb"
+
+#: widgets.py:117
+msgid "Mar"
+msgstr "Mar"
+
+#: widgets.py:117
+msgid "Apr"
+msgstr "Apr"
+
+#: widgets.py:117
+msgid "Jun"
+msgstr "Giu"
+
+#: widgets.py:117
+msgid "Jul"
+msgstr "Lug"
+
+#: widgets.py:117
+msgid "Aug"
+msgstr "Ago"
+
+#: widgets.py:117
+msgid "Sep"
+msgstr "Set"
+
+#: widgets.py:117
+msgid "Oct"
+msgstr "Ott"
+
+#: widgets.py:117
+msgid "Nov"
+msgstr "Nov"
+
+#: widgets.py:117
+msgid "Dec"
+msgstr "Dic"
+
+#: widgets.py:118
+msgid "am"
+msgstr "am"
+
+#: widgets.py:118
+msgid "pm"
+msgstr "pm"
+
+#: widgets.py:119
+msgid "st"
+msgstr ""
+
+#: widgets.py:119
+msgid "nd"
+msgstr ""
+
+#: widgets.py:119
+msgid "rd"
+msgstr ""
+
+#: widgets.py:119
+msgid "th"
+msgstr ""
+
+#: widgets.py:120
+msgid "Today"
+msgstr "Oggi"

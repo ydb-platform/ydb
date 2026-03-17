@@ -1,0 +1,255 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.triggers.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/serverless/triggers/v1/trigger.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/triggers/v1;triggers";
+option java_package = "yandex.cloud.api.serverless.triggers.v1";
+
+// A set of methods for managing triggers for serverless functions.
+service TriggerService {
+  // Returns the specified trigger.
+  //
+  // To get the list of all available triggers, make a [List] request.
+  rpc Get (GetTriggerRequest) returns (Trigger) {
+    option (google.api.http) = { get: "/triggers/v1/triggers/{trigger_id}" };
+  }
+
+  // Retrieves the list of triggers in the specified folder.
+  rpc List (ListTriggersRequest) returns (ListTriggersResponse) {
+    option (google.api.http) = { get: "/triggers/v1/triggers" };
+  }
+
+  // Creates a trigger in the specified folder.
+  rpc Create (CreateTriggerRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/triggers/v1/triggers" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateTriggerMetadata"
+      response: "Trigger"
+    };
+  };
+
+  // Updates the specified trigger.
+  rpc Update (UpdateTriggerRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/triggers/v1/triggers/{trigger_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateTriggerMetadata"
+      response: "Trigger"
+    };
+  };
+
+  // Deletes the specified trigger.
+  rpc Delete (DeleteTriggerRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/triggers/v1/triggers/{trigger_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteTriggerMetadata"
+      response: "google.protobuf.Empty"
+    };
+  };
+
+  // Pauses the specified trigger.
+  rpc Pause (PauseTriggerRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/triggers/v1/triggers/{trigger_id}:pause" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "PauseTriggerMetadata"
+      response: "Trigger"
+    };
+  };
+
+  // Restarts the specified trigger.
+  rpc Resume (ResumeTriggerRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/triggers/v1/triggers/{trigger_id}:resume" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "ResumeTriggerMetadata"
+      response: "Trigger"
+    };
+  };
+
+  // Lists operations for the specified trigger.
+  rpc ListOperations (ListTriggerOperationsRequest) returns (ListTriggerOperationsResponse) {
+    option (google.api.http) = { get: "/triggers/v1/triggers/{trigger_id}/operations" };
+  }
+
+}
+
+message GetTriggerRequest {
+  // ID of the trigger to return.
+  //
+  // To get a trigger ID make a [TriggerService.List] request.
+  string trigger_id = 1 [(required) = true];
+}
+
+message ListTriggersRequest {
+  // ID of the folder to list triggers in.
+  //
+  // To get a folder ID use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `pageSize`, the service returns a [ListTriggersResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2;
+
+  // Page token. To get the next page of results, set `pageToken` to the
+  // [ListTriggersResponse.next_page_token] returned by a previous list request.
+  string page_token = 3;
+
+  // A filter expression that filters triggers listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can only be applied to the [Trigger.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name=my-trigger`.
+  string filter = 4;
+}
+
+message ListTriggersResponse {
+  // List of triggers in the specified folder.
+  repeated Trigger triggers = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListTriggersRequest.page_size], use `nextPageToken` as the value
+  // for the [ListTriggersRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `nextPageToken` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateTriggerRequest {
+  // ID of the folder to create a trigger in.
+  //
+  // To get a folder ID make a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // Name of the trigger.
+  // The name must be unique within the folder.
+  string name = 2 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // Description of the trigger.
+  string description = 3 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 4 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+
+  // Trigger type.
+  Trigger.Rule rule = 5 [(required) = true];
+}
+
+message CreateTriggerMetadata {
+  // ID of the trigger that is being created.
+  string trigger_id = 1;
+}
+
+message UpdateTriggerRequest {
+  // ID of the trigger to update.
+  //
+  // To get a trigger ID make a [TriggerService.List] request.
+  string trigger_id = 1 [(required) = true];
+
+  // Field mask that specifies which attributes of the trigger should be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // New name for the trigger.
+  // The name must be unique within the folder.
+  string name = 3 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // New description of the trigger.
+  string description = 4 [(length) = "<=256"];
+
+  // Trigger labels as `key:value` pairs.
+  //
+  // Existing set of labels is completely replaced by the provided set, so if you just want
+  // to add or remove a label, request the current set of labels with a [TriggerService.Get] request.
+  map<string, string> labels = 5 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+
+  // New parameters for trigger.
+  Trigger.Rule rule = 6;
+}
+
+message UpdateTriggerMetadata {
+  // ID of the trigger that is being updated.
+  string trigger_id = 1 [(required) = true];
+}
+
+message DeleteTriggerRequest {
+  // ID of the trigger to delete.
+  //
+  // To get a trigger ID make a [TriggerService.List] request.
+  string trigger_id = 1 [(required) = true];
+}
+
+message DeleteTriggerMetadata {
+  // ID of the trigger that is being deleted.
+  string trigger_id = 1 [(required) = true];
+}
+
+message PauseTriggerRequest {
+  // ID of the trigger to pause
+  //
+  // To get a trigger ID make a [TriggerService.List] request.
+  string trigger_id = 1 [(required) = true];
+}
+
+message PauseTriggerMetadata {
+  // ID of the trigger that is being paused.
+  string trigger_id = 1 [(required) = true];
+}
+
+message ResumeTriggerRequest {
+  // ID of the trigger to pause
+  //
+  // To get a trigger ID make a [TriggerService.List] request.
+  string trigger_id = 1 [(required) = true];
+}
+
+message ResumeTriggerMetadata {
+  // ID of the trigger that is being paused.
+  string trigger_id = 1 [(required) = true];
+}
+
+message ListTriggerOperationsRequest {
+  // ID of the trigger to list operations for.
+  string trigger_id = 1 [(required) = true];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `pageSize`, the service returns a [ListTriggerOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `pageToken` to the
+  // [ListTriggerOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+
+  // A filter expression that filters resources listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can only be applied to the [Trigger.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Example of a filter: `name=my-function`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListTriggerOperationsResponse {
+  // List of operations for the specified trigger.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListTriggerOperationsRequest.page_size], use `nextPageToken` as the value
+  // for the [ListTriggerOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `nextPageToken` to continue paging through the results.
+  string next_page_token = 2;
+}

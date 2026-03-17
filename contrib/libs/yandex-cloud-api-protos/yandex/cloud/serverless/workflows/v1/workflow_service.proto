@@ -1,0 +1,241 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.workflows.v1;
+
+import "google/protobuf/field_mask.proto";
+import "google/api/annotations.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/serverless/workflows/v1/workflow.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/workflows/v1;workflows";
+option java_package = "yandex.cloud.api.serverless.workflows.v1";
+
+// Set of methods for managing Workflows.
+service WorkflowService {
+  // Creates Workflow in specified folder.
+  rpc Create (CreateWorkflowRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/workflows/v1/workflow" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateWorkflowMetadata"
+      response: "Workflow"
+    };
+  };
+
+  // Updates specified Workflow.
+  rpc Update (UpdateWorkflowRequest) returns (operation.Operation) {
+    option (google.api.http) = {patch: "/workflows/v1/workflow/{workflow_id}" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateWorkflowMetadata"
+      response: "Workflow"
+    };
+  };
+
+  // Retrieves specified Workflow.
+  rpc Get (GetWorkflowRequest) returns (GetWorkflowResponse) {
+    option (google.api.http) = {get: "/workflows/v1/workflow/{workflow_id}"};
+  };
+
+  // Deletes specified Workflow.
+  rpc Delete (DeleteWorkflowRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/workflows/v1/workflow/{workflow_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteWorkflowMetadata"
+      response: "google.protobuf.Empty"
+    };
+  };
+
+  // Retrieves list of Workflows in specified folder.
+  rpc List (ListWorkflowsRequest) returns (ListWorkflowsResponse) {
+    option (google.api.http) = {get: "/workflows/v1/workflow"};
+  };
+
+  // Lists operations for specified Workflow.
+  rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse) {
+    option (google.api.http) = {get: "/workflows/v1/workflow/{workflow_id}/operations"};
+  }
+
+  // Lists existing access bindings for the specified Workflow.
+  rpc ListAccessBindings(access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = {get: "/workflows/v1/workflow/{resource_id}:listAccessBindings"};
+  }
+
+  // Sets access bindings for the Workflow.
+  rpc SetAccessBindings(access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/workflows/v1/workflow/{resource_id}:setAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Updates access bindings for the specified Workflow.
+  rpc UpdateAccessBindings(access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/workflows/v1/workflow/{resource_id}:updateAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message CreateWorkflowRequest {
+  // ID of the folder to create Workflow in.
+  string folder_id = 1 [(required) = true];
+  // Name of Workflow.
+  // The name must be unique within the folder.
+  string name = 2 [(required) = true, (pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  // Description of Workflow.
+  string description = 3 [(length) = "<=256"];
+  // Workflow labels as `key:value` pairs.
+  map<string, string> labels = 4 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  // Specification of Workflow
+  WorkflowSpecification specification = 5 [(required) = true];
+  // Options for logging from Workflow.
+  LogOptions log_options = 6;
+  // ID of the VPC network Workflow will be executed in, in order to access private resources.
+  string network_id = 7;
+  // ID of the Service Account which will be used for resources access in Workflow execution.
+  string service_account_id = 8;
+  // Express execution mode.
+  bool express = 9;
+  // Workflow schedule settings.
+  WorkflowSchedule schedule = 10;
+  // Ability of the Workflow to be executed without authentication.
+  bool is_public = 11;
+}
+
+message CreateWorkflowMetadata {
+  // ID of the Workflow.
+  string workflow_id = 1 [(required) = true];
+}
+
+message UpdateWorkflowRequest {
+  // ID of the Workflow.
+  string workflow_id = 1 [(required) = true];
+  // Name of the Workflow. The name is unique within the folder.
+  string name = 2 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  // Description of the Workflow.
+  string description = 3 [(length) = "<=256"];
+  // Workflow labels as `key:value` pairs.
+  map<string, string> labels = 4 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  // Specification of the Workflow.
+  WorkflowSpecification specification = 5;
+  // Options for logging from the Workflow.
+  LogOptions log_options = 6;
+  // ID of the VPC network Workflow will be executed in, in order to access private resources.
+  string network_id = 7;
+  // ID of the Service Account which will be used for resources access in Workflow execution.
+  string service_account_id = 8;
+  // Field mask that specifies which fields of the Workflow should be updated.
+  google.protobuf.FieldMask update_mask = 9;
+  // Express execution mode.
+  bool express = 10;
+  // Workflow schedule settings.
+  WorkflowSchedule schedule = 11;
+  // Ability of the Workflow to be executed without authentication.
+  bool is_public = 12;
+}
+
+message UpdateWorkflowMetadata {
+  // ID of the Workflow.
+  string workflow_id = 1 [(required) = true];
+}
+
+message GetWorkflowRequest {
+  // ID of the Workflow.
+  string workflow_id = 1 [(required) = true];
+}
+
+message GetWorkflowResponse {
+  // Workflow properties.
+  Workflow workflow = 1;
+}
+
+message DeleteWorkflowRequest {
+  // ID of the Workflow.
+  string workflow_id = 1 [(required) = true];
+}
+
+message DeleteWorkflowMetadata {
+  // ID of the Workflow.
+  string workflow_id = 1;
+}
+
+message ListWorkflowsRequest {
+  // ID of the folder to list Workflows in.
+  string folder_id = 1 [(required) = true];
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `pageSize`, the service returns a [ListWorkflowsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2;
+  // Page token. To get the next page of results, set `pageToken` to the
+  // [ListWorkflowsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3;
+  // A filter expression that filters functions listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can only be applied to following fields: name, created_at.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z]([-a-z0-9]{0,61}[a-z0-9])?`.
+  // Example of a filter: `name=my-workflow`.
+  string filter = 4;
+}
+
+message ListWorkflowsResponse {
+  // List of Workflows.
+  repeated WorkflowPreview workflows = 1;
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListWorkflowsRequest.page_size], use `next_page_token` as the value
+  // for the [ListWorkflowsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListOperationsRequest {
+  // ID of the Workflow to list operations for.
+  string workflow_id = 1 [(required) = true];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `pageSize`, the service returns a [ListOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `pageToken` to the
+  // [ListOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can be applied to the [operation.Operation.done], [operation.Operation.created_by] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Examples of a filter: `done=false`, `created_by='John.Doe'`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListOperationsResponse {
+  // List of operations for the specified Workflow.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListOperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

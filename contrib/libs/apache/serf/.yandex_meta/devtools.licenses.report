@@ -1,0 +1,99 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: LICENSE at line 106, LICENSE at line 109, LICENSE at line 111, LICENSE at line 116, LICENSE at line 119, LICENSE at line 141
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [1:201]
+
+KEEP     Apache-2.0           f64691a4e9ecf1067d26137f5fff07e2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 85.62
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NOTICE [4:7]
+
+KEEP     Apache-2.0           f65acb267e52ca5107068a1f379de196
+BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: auth/auth.c at line 3, auth/auth.h at line 3, auth/auth_basic.c at line 3, auth/auth_digest.c at line 3, auth/auth_spnego.c at line 3, auth/auth_spnego.h at line 3, auth/auth_spnego_gss.c at line 3, auth/auth_spnego_sspi.c at line 3, buckets/aggregate_buckets.c at line 3, buckets/allocator.c at line 3, buckets/barrier_buckets.c at line 3, buckets/buckets.c at line 3, buckets/bwtp_buckets.c at line 3, buckets/chunk_buckets.c at line 3, buckets/dechunk_buckets.c at line 3, buckets/deflate_buckets.c at line 3, buckets/file_buckets.c at line 3, buckets/headers_buckets.c at line 3, buckets/iovec_buckets.c at line 3, buckets/limit_buckets.c at line 3, buckets/mmap_buckets.c at line 3, buckets/request_buckets.c at line 3, buckets/response_body_buckets.c at line 3, buckets/response_buckets.c at line 3, buckets/simple_buckets.c at line 3, buckets/socket_buckets.c at line 3, buckets/ssl_buckets.c at line 3, context.c at line 3, incoming.c at line 3, outgoing.c at line 3, serf.h at line 3, serf_bucket_types.h at line 3, serf_bucket_util.h at line 3, serf_private.h at line 3, ssltunnel.c at line 3
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        auth/auth.c [2:17]
+        auth/auth.h [2:17]
+        auth/auth_basic.c [2:17]
+        auth/auth_digest.c [2:17]
+        auth/auth_spnego.c [2:17]
+        auth/auth_spnego.h [2:17]
+        auth/auth_spnego_gss.c [2:17]
+        auth/auth_spnego_sspi.c [2:17]
+        buckets/aggregate_buckets.c [2:17]
+        buckets/allocator.c [2:17]
+        buckets/barrier_buckets.c [2:17]
+        buckets/buckets.c [2:17]
+        buckets/bwtp_buckets.c [2:17]
+        buckets/chunk_buckets.c [2:17]
+        buckets/dechunk_buckets.c [2:17]
+        buckets/deflate_buckets.c [2:17]
+        buckets/file_buckets.c [2:17]
+        buckets/headers_buckets.c [2:17]
+        buckets/iovec_buckets.c [2:17]
+        buckets/limit_buckets.c [2:17]
+        buckets/mmap_buckets.c [2:17]
+        buckets/request_buckets.c [2:17]
+        buckets/response_body_buckets.c [2:17]
+        buckets/response_buckets.c [2:17]
+        buckets/simple_buckets.c [2:17]
+        buckets/socket_buckets.c [2:17]
+        buckets/ssl_buckets.c [2:17]
+        context.c [2:17]
+        incoming.c [2:17]
+        outgoing.c [2:17]
+        serf.h [2:17]
+        serf_bucket_types.h [2:17]
+        serf_bucket_util.h [2:17]
+        serf_private.h [2:17]
+        ssltunnel.c [2:17]

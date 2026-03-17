@@ -1,0 +1,29 @@
+{
+    "type": [
+        "h-resume"
+    ], 
+    "properties": {
+        "experience": [
+            "h-event", 
+            "p-experience"
+        ], 
+        "summary": [
+            "p-summary"
+        ], 
+        "affiliation": [
+            "p-affiliation", 
+            "h-card"
+        ], 
+        "contact": [
+            "h-card", 
+            "p-contact"
+        ], 
+        "skill": [
+            "p-skill"
+        ], 
+        "education": [
+            "h-event", 
+            "p-education"
+        ]
+    }
+}

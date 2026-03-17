@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.agent.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/agent/v1;agent";
+option java_package = "yandex.cloud.api.loadtesting.agent.v1";
+
+import "google/api/annotations.proto";
+
+
+service JobService {
+
+  // Claims status for the specified job.
+  rpc ClaimStatus (ClaimJobStatusRequest) returns (ClaimJobStatusResponse) {
+    option (google.api.http) = { post: "/loadtesting/agent/v1/jobs/{job_id}/claimStatus" body: "*" };
+  };
+
+  // Returns the job for the specified agent.
+  rpc Get (GetJobRequest) returns (Job) {
+    option (google.api.http) = {
+      get: "/loadtesting/agent/v1/agents/{agent_instance_id}/getJob"
+      additional_bindings {
+        get: "/loadtesting/agent/v1/jobs/{job_id}"
+      }
+    };
+  };
+
+  // Returns the signal for the specified job.
+  rpc GetSignal (JobSignalRequest) returns (JobSignalResponse) {
+    option (google.api.http) = { get: "/loadtesting/agent/v1/jobs/{job_id}/getSignal" };
+  };
+
+  rpc GetTransientFile (GetJobTransientFile) returns (File) {
+    option (google.api.http) = { get: "/loadtesting/agent/v1/jobs/{job_id}/getTransientFile"};
+  }
+}
+
+message Job {
+  string id = 1;
+  string config = 2;
+  File ammo = 3;
+  string logging_log_group_id = 4;
+  StorageObject test_data = 5;
+  repeated TestDataEntry data_payload = 6;
+  TestArtifactUploadSettings artifact_upload_settings = 7;
+}
+
+message File {
+  string name = 1;
+  bytes content = 2;
+}
+
+message StorageObject {
+  string object_storage_bucket = 1;
+  string object_storage_filename = 2;
+}
+
+message TestDataEntry {
+  string name = 1;
+  bool is_transient = 2;
+  StorageObject storage_object = 3;
+}
+
+message TestArtifactUploadSettings {
+  string output_bucket = 1;
+  string output_name = 2;
+  bool is_archive = 3;
+  repeated string filter_include = 4;
+  repeated string filter_exclude = 5;
+}
+
+message GetJobTransientFile {
+  string job_id = 1;
+  string name = 2;
+}
+
+message GetJobRequest {
+  string compute_instance_id = 1;
+  string agent_instance_id = 2;
+  string job_id = 3;
+}
+
+message ClaimJobStatusRequest {
+  string job_id = 1;
+  enum JobStatus {
+    JOB_STATUS_UNSPECIFIED = 0;
+    POST_PROCESS = 1;
+    INITIATED = 2;
+    PREPARING = 3;
+    NOT_FOUND = 4 [deprecated = true];
+    RUNNING = 5;
+    FINISHING = 6;
+    FINISHED = 7;
+    STOPPED = 8;
+    FAILED = 9;
+    AUTOSTOPPED = 10;
+    WAITING_FOR_A_COMMAND_TO_RUN = 11;
+  }
+  JobStatus status = 2;
+  string error = 3;
+}
+
+message ClaimJobStatusResponse {
+  int64 code = 1;
+}
+
+message JobSignalRequest {
+  string job_id = 1;
+}
+
+message JobSignalResponse {
+  enum Signal {
+    SIGNAL_UNSPECIFIED = 0;
+    STOP = 1;
+    WAIT = 2;
+    RUN_IN = 3;
+  }
+  Signal signal = 1;
+  double wait_duration = 2; // seconds
+  double run_in = 3; // seconds
+}

@@ -1,0 +1,63 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Test API",
+        "version": "1.0"
+    },
+    "paths": {},
+    "components": {
+        "schemas": {
+          "Result1": {
+                "type": "object",
+                "description": "description for Result1",
+                "properties": {
+                    "state": {
+                        "$ref": "#/components/schemas/NestedState1"
+                    }
+                },
+                "required": [
+                    "state"
+                ]
+            },
+            "Result2": {
+                "type": "object",
+                "description": "description for Result2",
+                "properties": {
+                    "state": {
+                        "$ref": "#/components/schemas/NestedState2"
+                    }
+                },
+                "required": [
+                    "state"
+                ]
+            },
+            "NestedState1": {
+                "allOf": [
+                    {
+                        "description": "description for NestedState1"
+                    },
+                    {
+                        "$ref": "#/components/schemas/State"
+                    }
+                ]
+            },
+            "NestedState2": {
+                "allOf": [
+                    {
+                        "description": "description for NestedState2"
+                    },
+                    {
+                        "$ref": "#/components/schemas/State"
+                    }
+                ]
+            },
+            "State": {
+                "type": "string",
+                "enum": [
+                    "1",
+                    "2"
+                ]
+            }
+        }
+    }
+}

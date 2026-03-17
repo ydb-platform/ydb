@@ -1,0 +1,1801 @@
+{
+   "domain": "nbjs",
+   "locale_data": {
+      "nbjs": {
+         "": {
+            "domain": "nbjs",
+            "plural_forms": "nplurals=2; plural=(n > 1);",
+            "lang": "fr_FR"
+         },
+         "Manually edit the JSON below to manipulate the metadata for this cell.": [
+            null,
+            "Éditer manuellement le JSON ci-dessous pour manipuler les méta-données de cette cellule"
+         ],
+         "Manually edit the JSON below to manipulate the metadata for this notebook.": [
+            null,
+            "Éditer manuellement le JSON ci-dessous pour manipuler les méta-données de ce notebook."
+         ],
+         " We recommend putting custom metadata attributes in an appropriately named substructure, so they don't conflict with those of others.": [
+            null,
+            " Il est recommandé de placer les attributs personnalisés de méta-données dans une sous-structure nommée de manière appropriée, afin qu'ils n'interfèrent pas avec ceux des autres."
+         ],
+         "Edit the metadata": [
+            null,
+            "Éditer les méta-données"
+         ],
+         "Edit Notebook Metadata": [
+            null,
+            "Éditer les méta-données du Notebook"
+         ],
+         "Edit Cell Metadata": [
+            null,
+            "Éditer les méta-données de la cellule"
+         ],
+         "Cancel": [
+            null,
+            "Annuler"
+         ],
+         "Edit": [
+            null,
+            "Éditer"
+         ],
+         "OK": [
+            null,
+            "OK"
+         ],
+         "Apply": [
+            null,
+            "Appliquer"
+         ],
+         "WARNING: Could not save invalid JSON.": [
+            null,
+            "ATTENTION: Impossible de sauvegarder du JSON invalide."
+         ],
+         "There are no attachments for this cell.": [
+            null,
+            "Il n'y a pas de pièce-jointe à cette cellule."
+         ],
+         "Current cell attachments": [
+            null,
+            "Pièce-jointes actuelles de la cellule"
+         ],
+         "Attachments": [
+            null,
+            "Pièces jointes"
+         ],
+         "Restore": [
+            null,
+            "Restaurer"
+         ],
+         "Delete": [
+            null,
+            "Supprimer"
+         ],
+         "Edit attachments": [
+            null,
+            "Modifier les pièces jointes"
+         ],
+         "Edit Notebook Attachments": [
+            null,
+            "Modifier les pièces jointes du Notebook"
+         ],
+         "Edit Cell Attachments": [
+            null,
+            "Modifier les pièces jointes de la cellule"
+         ],
+         "Select a file to insert.": [
+            null,
+            "Sélectionner un fichier à insérer."
+         ],
+         "Select a file": [
+            null,
+            "Sélectionner un fichier"
+         ],
+         "You are using Jupyter NbClassic.": [
+            null,
+            "Vous utilisez un notebook Jupyter."
+         ],
+         "The version of the Jupyter server is: ": [
+            null,
+            "La version du serveur de notebook est : "
+         ],
+         "The server is running on this version of Python:": [
+            null,
+            "Le serveur utilise la version de Python :"
+         ],
+         "Waiting for kernel to be available...": [
+            null,
+            "En attente de disponibilité du noyau..."
+         ],
+         "Server Information:": [
+            null,
+            "Information du serveur :"
+         ],
+         "Current Kernel Information:": [
+            null,
+            "Information du Noyau courant :"
+         ],
+         "Could not access sys_info variable for version information.": [
+            null,
+            "Impossible d'accéder à la variable sys_info pour l'information relative aux versions."
+         ],
+         "Cannot find sys_info!": [
+            null,
+            "Impossible de trouver sys_info !"
+         ],
+         "About Jupyter NbClassic": [
+            null,
+            "À propos de Jupyter Notebook"
+         ],
+         "unable to contact kernel": [
+            null,
+            "impossible de joindre le noyau"
+         ],
+         "toggle rtl layout": [
+            null,
+            "Changer le sens d'organisation de l'interface"
+         ],
+         "Toggle the screen directionality between left-to-right and right-to-left": [
+            null,
+            "Changer le sens d'organisation des éléments d'interface entre gauche-à-droite et droite-à-gauche"
+         ],
+         "edit command mode keyboard shortcuts": [
+            null,
+            "modifier les raccourcis clavier du mode commande"
+         ],
+         "Open a dialog to edit the command mode keyboard shortcuts": [
+            null,
+            "Ouvrir un dialogue pour éditer les racourcis clavier du mode commande"
+         ],
+         "restart kernel": [
+            null,
+            "redémarrer le noyau"
+         ],
+         "restart the kernel (no confirmation dialog)": [
+            null,
+            "redémarrer le noyau (sans confirmation)"
+         ],
+         "confirm restart kernel": [
+            null,
+            "confirmer le redémarrage du noyau"
+         ],
+         "restart the kernel (with dialog)": [
+            null,
+            "redémarrer le noyau (avec confirmation)"
+         ],
+         "restart kernel and run all cells": [
+            null,
+            "redémarrer le noyau et exécuter toutes les cellules"
+         ],
+         "restart the kernel, then re-run the whole notebook (no confirmation dialog)": [
+            null,
+            "redémarrer le noyau, et ré-exécuter tout le notebook (sans confirmation)"
+         ],
+         "confirm restart kernel and run all cells": [
+            null,
+            "confirmer le redémarrage du noyau et l'exécution des cellules"
+         ],
+         "restart the kernel, then re-run the whole notebook (with dialog)": [
+            null,
+            "redémarrer le noyau, et ré-exécuter tout le notebook (sans confirmation)"
+         ],
+         "restart kernel and clear output": [
+            null,
+            "redémarrer le noyau, et effacer les sorties"
+         ],
+         "restart the kernel and clear all output (no confirmation dialog)": [
+            null,
+            "redémarrer le noyau et effacer les sorties (sans confirmation)"
+         ],
+         "confirm restart kernel and clear output": [
+            null,
+            "confirmer le redémarrage du noyau et l'effacement des sorties"
+         ],
+         "restart the kernel and clear all output (with dialog)": [
+            null,
+            "redémarrer le noyau et effacer les sorties (avec confirmation)"
+         ],
+         "interrupt the kernel": [
+            null,
+            "interrompre le noyau"
+         ],
+         "run cell and select next": [
+            null,
+            "exécuter la cellule et sélectionner la suivante"
+         ],
+         "run cell, select below": [
+            null,
+            "exécuter la cellule, sélectionner la suivante"
+         ],
+         "run selected cells": [
+            null,
+            "exécuter les cellules sélectionnées"
+         ],
+         "run cell and insert below": [
+            null,
+            "exécuter la cellule et insérer après"
+         ],
+         "run all cells": [
+            null,
+            "exécuter toutes les cellules"
+         ],
+         "run all cells above": [
+            null,
+            "exécuter toutes les cellules précédentes"
+         ],
+         "run all cells below": [
+            null,
+            "Exécuter toutes les cellules suivantes"
+         ],
+         "enter command mode": [
+            null,
+            "ouvrir le mode commande"
+         ],
+         "insert image": [
+            null,
+            "insérer une image"
+         ],
+         "cut cell attachments": [
+            null,
+            "couper les pièces-jointes de la cellule"
+         ],
+         "copy cell attachments": [
+            null,
+            "copier les pièces-jointes de la cellule"
+         ],
+         "paste cell attachments": [
+            null,
+            "coller les pièces-jointes de la cellule"
+         ],
+         "split cell at cursor": [
+            null,
+            "séparer la cellule au niveau du curseur"
+         ],
+         "enter edit mode": [
+            null,
+            "activer le mode d'édition"
+         ],
+         "select previous cell": [
+            null,
+            "sélectionner la cellule précédente"
+         ],
+         "select cell above": [
+            null,
+            "sélectionner la cellule précédente"
+         ],
+         "select next cell": [
+            null,
+            "sélectionner la cellule suivante"
+         ],
+         "select cell below": [
+            null,
+            "sélectionner la cellule suivante"
+         ],
+         "extend selection above": [
+            null,
+            "étendre la sélection vers le haut"
+         ],
+         "extend selected cells above": [
+            null,
+            "étendre les cellules sélectionnées vers le haut"
+         ],
+         "extend selection below": [
+            null,
+            "étendre la sélection vers le bas"
+         ],
+         "extend selected cells below": [
+            null,
+            "étendre les cellules sélectionnées vers le bas"
+         ],
+         "cut selected cells": [
+            null,
+            "couper les cellules sélectionnées"
+         ],
+         "copy selected cells": [
+            null,
+            "copier les cellules sélectionnées"
+         ],
+         "paste cells above": [
+            null,
+            "coller les cellules avant"
+         ],
+         "paste cells below": [
+            null,
+            "coller les cellules après"
+         ],
+         "insert cell above": [
+            null,
+            "insérer une cellule avant"
+         ],
+         "insert cell below": [
+            null,
+            "insérer une cellule après"
+         ],
+         "change cell to code": [
+            null,
+            "transformer en cellule de code"
+         ],
+         "change cell to markdown": [
+            null,
+            "transformer celllule en markdown"
+         ],
+         "change cell to raw": [
+            null,
+            "transformer en texte brut (pour NBConvert)"
+         ],
+         "change cell to heading 1": [
+            null,
+            "transformer en titre de niveau 1"
+         ],
+         "change cell to heading 2": [
+            null,
+            "transformer en titre de niveau 2"
+         ],
+         "change cell to heading 3": [
+            null,
+            "transformer en titre de niveau 3"
+         ],
+         "change cell to heading 4": [
+            null,
+            "transformer en titre de niveau 4"
+         ],
+         "change cell to heading 5": [
+            null,
+            "transformer en titre de niveau 5"
+         ],
+         "change cell to heading 6": [
+            null,
+            "transformer en titre de niveau 6"
+         ],
+         "toggle cell output": [
+            null,
+            "afficher/masquer la sortie de cellule"
+         ],
+         "toggle output of selected cells": [
+            null,
+            "afficher/masquer la sortie des cellules sélectionnées"
+         ],
+         "toggle cell scrolling": [
+            null,
+            "afficher/masquer la barre de défilement de la sortie de la cellule"
+         ],
+         "toggle output scrolling of selected cells": [
+            null,
+            "afficher/masquer la barre de défilement des la sortie des cellules sélectionnées"
+         ],
+         "clear cell output": [
+            null,
+            "effacer la sortie de la cellule"
+         ],
+         "clear output of selected cells": [
+            null,
+            "effacer la sortie des cellules sélectionnées"
+         ],
+         "move cells down": [
+            null,
+            "déplacer les cellules vers le bas"
+         ],
+         "move selected cells down": [
+            null,
+            "déplacer les cellules sélectionnées vers le bas"
+         ],
+         "move cells up": [
+            null,
+            "déplacer les cellules vers le haut"
+         ],
+         "move selected cells up": [
+            null,
+            "déplacer les cellules sélectionnées vers le haut"
+         ],
+         "toggle line numbers": [
+            null,
+            "afficher/masquer les numéros de ligne"
+         ],
+         "show keyboard shortcuts": [
+            null,
+            "afficher les raccourcis clavier"
+         ],
+         "delete cells": [
+            null,
+            "supprimer les cellules"
+         ],
+         "delete selected cells": [
+            null,
+            "supprimer les cellules sélectionnées"
+         ],
+         "undo cell deletion": [
+            null,
+            "annuler la suppression de cellule"
+         ],
+         "merge cell with previous cell": [
+            null,
+            "fusionner la cellule avec la précédente"
+         ],
+         "merge cell above": [
+            null,
+            "fusionner la cellule avec les précédentes"
+         ],
+         "merge cell with next cell": [
+            null,
+            "fusionner la cellule avec la suivante"
+         ],
+         "merge cell below": [
+            null,
+            "fusionner la cellule avec les suivantes"
+         ],
+         "merge selected cells": [
+            null,
+            "fusionnnner les cellules sélectionnées"
+         ],
+         "merge cells": [
+            null,
+            "fusionnnner les cellules"
+         ],
+         "merge selected cells, or current cell with cell below if only one cell is selected": [
+            null,
+            "fusionner les cellules sélectionnées, ou la cellule courante avec la suivante si une unique cellule est sélectionnée"
+         ],
+         "show command pallette": [
+            null,
+            "afficher la palette de commandes"
+         ],
+         "open the command palette": [
+            null,
+            "ouvrir la palette de commandes"
+         ],
+         "toggle all line numbers": [
+            null,
+            "afficher/masquer tous les numéros de ligne"
+         ],
+         "toggles line numbers in all cells, and persist the setting": [
+            null,
+            "afficher/masquer les numéros de ligne dans toutes ces cellules, et s'en souvenir dans les paramètres"
+         ],
+         "show all line numbers": [
+            null,
+            "afficher/masquer tous les numéros de ligne"
+         ],
+         "show line numbers in all cells, and persist the setting": [
+            null,
+            "afficher les numéros de ligne dans toutes les cellules, et s'en souvenir dans les paramètres"
+         ],
+         "hide all line numbers": [
+            null,
+            "masquer tous les numéros de ligne"
+         ],
+         "hide line numbers in all cells, and persist the setting": [
+            null,
+            "masquer les numéros de ligne dans toutes les cellules, et s'en souvenir dans les paramètres"
+         ],
+         "toggle header": [
+            null,
+            "afficher/masquer l'en-tête"
+         ],
+         "switch between showing and hiding the header": [
+            null,
+            "afficher/masquer l'en-tête"
+         ],
+         "show the header": [
+            null,
+            "afficher l'en-tête"
+         ],
+         "hide the header": [
+            null,
+            "masquer l'en-tête"
+         ],
+         "toggle toolbar": [
+            null,
+            "afficher/masquer la barre d'outils"
+         ],
+         "switch between showing and hiding the toolbar": [
+            null,
+            "afficher/masquer la barre d'outils"
+         ],
+         "show the toolbar": [
+            null,
+            "afficher la barre d'outils"
+         ],
+         "hide the toolbar": [
+            null,
+            "masquer la barre d'outils"
+         ],
+         "close the pager": [
+            null,
+            "fermer le paginateur"
+         ],
+         "ignore": [
+            null,
+            "ignorer"
+         ],
+         "move cursor up": [
+            null,
+            "déplacer le curseur vers le haut"
+         ],
+         "move cursor down": [
+            null,
+            "déplacer le curseur vers le bas"
+         ],
+         "scroll notebook down": [
+            null,
+            "faire défiler le notebook vers le bas"
+         ],
+         "scroll notebook up": [
+            null,
+            "faire défiler le notebook vers le haut"
+         ],
+         "scroll cell center": [
+            null,
+            "faire défiler la cellule courante au centre"
+         ],
+         "Scroll the current cell to the center": [
+            null,
+            "Faire défiler la cellule courante au centre"
+         ],
+         "scroll cell top": [
+            null,
+            "faire défiler la cellule en haut"
+         ],
+         "Scroll the current cell to the top": [
+            null,
+            "Faire défiler la cellule courante en haut"
+         ],
+         "duplicate notebook": [
+            null,
+            "dupliquer le notebook"
+         ],
+         "Create and open a copy of the current notebook": [
+            null,
+            "Créer et ouvrir une copie du notebook courant"
+         ],
+         "trust notebook": [
+            null,
+            "faire confiance à ce notebook"
+         ],
+         "Trust the current notebook": [
+            null,
+            "Faire confiance au notebook courant"
+         ],
+         "rename notebook": [
+            null,
+            "renommer le notebook"
+         ],
+         "Rename the current notebook": [
+            null,
+            "Renommer le notebook courant"
+         ],
+         "toggle all cells output collapsed": [
+            null,
+            "afficher/masquer toutes les sorties en mode compact"
+         ],
+         "Toggle the hidden state of all output areas": [
+            null,
+            "Afficher/masquer toutes les sorties"
+         ],
+         "toggle all cells output scrolled": [
+            null,
+            "afficher/masquer toutes les sorties en mode défilement"
+         ],
+         "Toggle the scrolling state of all output areas": [
+            null,
+            "Activer/désactiver le défilement de toutes les sorties"
+         ],
+         "clear all cells output": [
+            null,
+            "effacer le contenu de toutes les sorties de cellules"
+         ],
+         "Clear the content of all the outputs": [
+            null,
+            "Effacer le contenu de toutes les sorties"
+         ],
+         "save notebook": [
+            null,
+            "enregistrer le notebook"
+         ],
+         "Save and Checkpoint": [
+            null,
+            "Créer une nouvelle sauvegarde"
+         ],
+         "Warning: accessing Cell.cm_config directly is deprecated.": [
+            null,
+            "Attention : accéder à Cell.cm_config directement est déprécié."
+         ],
+         "Unrecognized cell type: %s": [
+            null,
+            "Type de cellule non reconnu : %s"
+         ],
+         "Unrecognized cell type": [
+            null,
+            "Type de cellule non reconnu"
+         ],
+         "Error in cell toolbar callback %s": [
+            null,
+            "Erreur dans le callback %s de la barre d'outil de cellule"
+         ],
+         "Clipboard types: %s": [
+            null,
+            "Types de données dans le presse-papier : %s"
+         ],
+         "Dialog for paste from system clipboard": [
+            null,
+            "Boîte de dialogue pour coller depuis le presse-papier du système"
+         ],
+         "Ctrl-V": [
+            null,
+            "Ctrl-V"
+         ],
+         "Cmd-V": [
+            null,
+            "Cmd-V"
+         ],
+         "Press %s again to paste": [
+            null,
+            "Appuyer sur %s à nouveau pour coller"
+         ],
+         "Why is this needed? ": [
+            null,
+            "Pourquoi ce comportement ?"
+         ],
+         "We can't get paste events in this browser without a text box. ": [
+            null,
+            "Il n'est pas possible de capturer les évènements « coller » dans le navigateur sans champ de texte"
+         ],
+         "There's an invisible text box focused in this dialog.": [
+            null,
+            "Cette boîte de dialogue contient un champ de texte invisible."
+         ],
+         "%s to paste": [
+            null,
+            "%s pour coller"
+         ],
+         "Can't execute cell since kernel is not set.": [
+            null,
+            "Impossible d'exécuter cette cellule car aucun noyau n'est choisi."
+         ],
+         "In": [
+            null,
+            "Entrée"
+         ],
+         "Could not find a kernel matching %s. Please select a kernel:": [
+            null,
+            "Impossible de trouver un noyau correspondant à %s. Merci de sélectionner un noyau :"
+         ],
+         "Continue Without Kernel": [
+            null,
+            "Poursuivre sans noyau"
+         ],
+         "Set Kernel": [
+            null,
+            "Choisir le noyau"
+         ],
+         "Kernel not found": [
+            null,
+            "Noyau introuvable"
+         ],
+         "Creating Notebook Failed": [
+            null,
+            "La création du notebook a échoué"
+         ],
+         "The error was: %s": [
+            null,
+            "L'erreur est : %s"
+         ],
+         "Run": [
+            null,
+            "Exécuter"
+         ],
+         "Code": [
+            null,
+            "Code"
+         ],
+         "Markdown": [
+            null,
+            "Markdown"
+         ],
+         "Raw NBConvert": [
+            null,
+            "Texte Brut (pour NBConvert)"
+         ],
+         "Heading": [
+            null,
+            "Titre"
+         ],
+         "unrecognized cell type:": [
+            null,
+            "type de cellule non reconnu :"
+         ],
+         "Failed to retrieve MathJax from '%s'": [
+            null,
+            "Impossible de récupérer MathJax depuis '%s'"
+         ],
+         "Math/LaTeX rendering will be disabled.": [
+            null,
+            "Le rendu Math/LaTex sera désactivé."
+         ],
+         "Trusted Notebook": [
+            null,
+            "Notebook de confiance"
+         ],
+         "Trust Notebook": [
+            null,
+            "Faire confiance à ce Notebook"
+         ],
+         "None": [
+            null,
+            "Aucun(e)"
+         ],
+         "No checkpoints": [
+            null,
+            "Pas de point de sauvegarde"
+         ],
+         "Opens in a new window": [
+            null,
+            "Ouvrir dans une nouvelle fenêtre"
+         ],
+         "Autosave in progress, latest changes may be lost.": [
+            null,
+            "Auto-sauvegarde en cours, les dernières modifications pourraient être perdues."
+         ],
+         "Unsaved changes will be lost.": [
+            null,
+            "Les modifications non sauvegardées seront perdues."
+         ],
+         "The Kernel is busy, outputs may be lost.": [
+            null,
+            "Le noyau est occupé, les sorties pourraient être perdues."
+         ],
+         "This notebook is version %1$s, but we only fully support up to %2$s.": [
+            null,
+            "Ce notebook est prévu pour la version %1$s du logiciel, mais nous supportons au maximum la version %2$s."
+         ],
+         "You can still work with this notebook, but cell and output types introduced in later notebook versions will not be available.": [
+            null,
+            "Vous pouvez continuer à travailler avec ce notebook, mais les types de cellules et de sorties introduits dans les versions ultérieures du logiciel ne seront pas disponibles."
+         ],
+         "Restart and Run All Cells": [
+            null,
+            "Relancer et exécuter toutes les cellules"
+         ],
+         "Restart and Clear All Outputs": [
+            null,
+            "Relancer et effacer toutes les sorties"
+         ],
+         "Restart": [
+            null,
+            "Relancer"
+         ],
+         "Continue Running": [
+            null,
+            "Poursuivre l'exécution"
+         ],
+         "Reload": [
+            null,
+            "Recharger"
+         ],
+         "Overwrite": [
+            null,
+            "Écraser"
+         ],
+         "Trust": [
+            null,
+            "Faire confiance"
+         ],
+         "Revert": [
+            null,
+            "Rétablir"
+         ],
+         "Newer Notebook": [
+            null,
+            "Notebook plus récent"
+         ],
+         "Use markdown headings": [
+            null,
+            "Utiliser les titres markdown"
+         ],
+         "Jupyter no longer uses special heading cells. Instead, write your headings in Markdown cells using # characters:": [
+            null,
+            "Jupyter n'utilise plus de cellules spéciales pour les titres. À la place, utiliser la syntaxe de titre dans des cellules Markdown avec les caractères # :"
+         ],
+         "## This is a level 2 heading": [
+            null,
+            "## Ceci est un titre de niveau 2"
+         ],
+         "Restart kernel and re-run the whole notebook?": [
+            null,
+            "Redémarrer le noyau et ré-exécuter l'ensemble du noteboook ?"
+         ],
+         "Are you sure you want to restart the current kernel and re-execute the whole notebook?  All variables and outputs will be lost.": [
+            null,
+            "Êtes-vous certain de vouloir redémarrer le noyau actuel et ré-exécuter l'ensemble du notebook ? Toutes les variables et sorties seront perdues."
+         ],
+         "Restart kernel and clear all output?": [
+            null,
+            "Redémarrer le noyau et effacer toutes les sorties ?"
+         ],
+         "Do you want to restart the current kernel and clear all output?  All variables and outputs will be lost.": [
+            null,
+            "Souhaitez-vous redémarrer le noyau actuel et effacer toutes les sorties ? Toutes les variables et les sorties seront perdues."
+         ],
+         "Restart kernel?": [
+            null,
+            "Redémarrer le noyau ?"
+         ],
+         "Do you want to restart the current kernel?  All variables will be lost.": [
+            null,
+            "Souhaitez-vous redémarrer le noyau actuel ? Toutes les variables seront perdues."
+         ],
+         "Shutdown kernel?": [
+            null,
+            "Arrêter le noyau ?"
+         ],
+         "Do you want to shutdown the current kernel?  All variables will be lost.": [
+            null,
+            "Souhaitez-vous redémarrer le noyau actuel ? Toutes les variables seront perdues."
+         ],
+         "Notebook changed": [
+            null,
+            "Notebook modifié"
+         ],
+         "The notebook file has changed on disk since the last time we opened or saved it. Do you want to overwrite the file on disk with the version open here, or load the version on disk (reload the page) ?": [
+            null,
+            "Le fichier du notebook a changé sur le disque depuis que vous l'avez ouvert ou sauvegardé. Souhaitez-vous écraser le fichier sur le disque avec la version ouverte ici ou charger la version présente sur le disque (recharge la page) ?"
+         ],
+         "Notebook validation failed": [
+            null,
+            "La validation du notebook a échoué"
+         ],
+         "The save operation succeeded, but the notebook does not appear to be valid. The validation error was:": [
+            null,
+            "La sauvegarde a réussi, mais le notebook semble invalide. L'erreur de validation est :"
+         ],
+         "A trusted Jupyter notebook may execute hidden malicious code when you open it. Selecting trust will immediately reload this notebook in a trusted state. For more information, see the Jupyter security documentation: ": [
+            null,
+            "Un notebook Jupyter auquel vous faites confiance peut exécuter du code malicieux quand vous l'ouvrez. Choisir de faire confiance à ce notebook va le recharger immédiatement en mode confiance. Pour davantage d'information, voir la section sécurité dans la documentation de Jupyter."
+         ],
+         "here": [
+            null,
+            "ici"
+         ],
+         "Trust this notebook?": [
+            null,
+            "Faire confiance à ce notebook ?"
+         ],
+         "Notebook failed to load": [
+            null,
+            "Le chargement du notebook a échoué"
+         ],
+         "The error was: ": [
+            null,
+            "L'erreur est : "
+         ],
+         "See the error console for details.": [
+            null,
+            "Voir la console d'erreur pour davantage de détails."
+         ],
+         "The notebook also failed validation:": [
+            null,
+            "La validation du notebook a échoué :"
+         ],
+         "An invalid notebook may not function properly. The validation error was:": [
+            null,
+            "Un notebook non valide peut dysfonctionner. L'erreur de validation est :"
+         ],
+         "This notebook has been converted from an older notebook format to the current notebook format v(%s).": [
+            null,
+            "Ce notebook a été converti depuis un format plus ancien de notebook vers le format actuel v(%s)."
+         ],
+         "This notebook has been converted from a newer notebook format to the current notebook format v(%s).": [
+            null,
+            "Ce notebook a été converti depuis un format plus récent de notebook vers le format actuel v(%s)."
+         ],
+         "The next time you save this notebook, the current notebook format will be used.": [
+            null,
+            "Au prochain enregistrement de ce notebook, le format actuel de notebook sera utilisé"
+         ],
+         "Older versions of Jupyter may not be able to read the new format.": [
+            null,
+            "D'anciennes version de Jupyter peuvent ne pas être en mesure de lire le nouveau format."
+         ],
+         "Some features of the original notebook may not be available.": [
+            null,
+            "Certaines fonctionalités du notebook d'origine peuvent ne pas être disponibles."
+         ],
+         "To preserve the original version, close the notebook without saving it.": [
+            null,
+            "Pour préserver la version originale, fermer le notebook sans l'enregistrer."
+         ],
+         "Notebook converted": [
+            null,
+            "Notebook converti"
+         ],
+         "(No name)": [
+            null,
+            "(Sans nom)"
+         ],
+         "An unknown error occurred while loading this notebook. This version can load notebook formats %s or earlier. See the server log for details.": [
+            null,
+            "Une erreur inconnue s'est produite pendant le chargement de ce notebook. Cette version peut charger des formats de notebooks %s ou plus ancien. Voir les journaux du serveur pour davantage d'information."
+         ],
+         "Error loading notebook": [
+            null,
+            "Erreur pendant le chargement du notebook"
+         ],
+         "Are you sure you want to revert the notebook to the latest checkpoint?": [
+            null,
+            "Êtes-vous certain de vouloir restaurer la dernière sauvegarde ?"
+         ],
+         "This cannot be undone.": [
+            null,
+            "Impossible d'annuler."
+         ],
+         "The checkpoint was last updated at:": [
+            null,
+            "Dernière sauvegarde à : "
+         ],
+         "Revert notebook to checkpoint": [
+            null,
+            "Restaurer le notebook à une sauvegarde antérieure"
+         ],
+         "Edit Mode": [
+            null,
+            "Mode Édition"
+         ],
+         "Command Mode": [
+            null,
+            "Mode Commande"
+         ],
+         "Kernel Created": [
+            null,
+            "Noyau créé"
+         ],
+         "Connecting to kernel": [
+            null,
+            "Connexion au noyau"
+         ],
+         "Not Connected": [
+            null,
+            "Non connecté"
+         ],
+         "click to reconnect": [
+            null,
+            "cliquer pour reconnecter"
+         ],
+         "Restarting kernel": [
+            null,
+            "Noyau en cours de redémarrage"
+         ],
+         "Kernel Restarting": [
+            null,
+            "Noyau en cours de redémarrage"
+         ],
+         "The kernel appears to have died. It will restart automatically.": [
+            null,
+            "Le noyau semble planté. Il va redémarrer automatiquement."
+         ],
+         "Dead kernel": [
+            null,
+            "Noyau planté"
+         ],
+         "Kernel Dead": [
+            null,
+            "Noyau planté"
+         ],
+         "Interrupting kernel": [
+            null,
+            "Noyau en cours d'interruption"
+         ],
+         "No Connection to Kernel": [
+            null,
+            "Pas de connexion au noyau"
+         ],
+         "A connection to the notebook server could not be established. The notebook will continue trying to reconnect. Check your network connection or notebook server configuration.": [
+            null,
+            "La connexion au serveur de notebook ne peut pas être établie. Le notebook va continuer ses tentatives. Vérifiez votre connexion réseau ou les paramètres du serveur de notebook."
+         ],
+         "Connection failed": [
+            null,
+            "Échec de la connexion"
+         ],
+         "No kernel": [
+            null,
+            "Pas de noyau"
+         ],
+         "Kernel is not running": [
+            null,
+            "Le noyau n'est pas actif"
+         ],
+         "Don't Restart": [
+            null,
+            "Ne pas redémarrer"
+         ],
+         "Try Restarting Now": [
+            null,
+            "Essayer de redémarrer maintenant"
+         ],
+         "The kernel has died, and the automatic restart has failed. It is possible the kernel cannot be restarted. If you are not able to restart the kernel, you will still be able to save the notebook, but running code will no longer work until the notebook is reopened.": [
+            null,
+            "Le noyau a planté, et le redémarrage automatique a échoué. Il est possible que le noyau ne puisse pas être relancé. Si c'est le cas, vous pourrez toujours sauvegarder le notebook, mais l'exécution de code ne fonctionnera pas jusqu'à la ré-ouverture du notebook."
+         ],
+         "No Kernel": [
+            null,
+            "Pas de Noyau"
+         ],
+         "Failed to start the kernel": [
+            null,
+            "Échec du démarrage du noyau"
+         ],
+         "Kernel Busy": [
+            null,
+            "Noyau occupé"
+         ],
+         "Kernel starting, please wait...": [
+            null,
+            "Noyau en cours de démarrage, patientez…"
+         ],
+         "Kernel Idle": [
+            null,
+            "Noyau inactif"
+         ],
+         "Kernel ready": [
+            null,
+            "Noyau prêt"
+         ],
+         "Using kernel: ": [
+            null,
+            "Noyau utilisé : "
+         ],
+         "Only candidate for language: %1$s was %2$s.": [
+            null,
+            "Unique candidat pour le langage : %1$s était %2$s."
+         ],
+         "Loading notebook": [
+            null,
+            "Chargement du notebook en cours"
+         ],
+         "Notebook loaded": [
+            null,
+            "Notebook chargé"
+         ],
+         "Saving notebook": [
+            null,
+            "Enregistrement du notebook en cours"
+         ],
+         "Notebook saved": [
+            null,
+            "Notebook enregistré"
+         ],
+         "Notebook save failed": [
+            null,
+            "L'enregistrement du notebook a échoué"
+         ],
+         "Notebook copy failed": [
+            null,
+            "La copie du notebook a échoué"
+         ],
+         "Checkpoint created": [
+            null,
+            "Sauvegarde créée"
+         ],
+         "Checkpoint failed": [
+            null,
+            "Échec de la sauvegarde"
+         ],
+         "Checkpoint deleted": [
+            null,
+            "Sauvegarde supprimée"
+         ],
+         "Checkpoint delete failed": [
+            null,
+            "Échec de la suppression de la sauvegarde"
+         ],
+         "Restoring to checkpoint...": [
+            null,
+            "Restauration de la sauvegarde..."
+         ],
+         "Checkpoint restore failed": [
+            null,
+            "La restauration de la sauvegarde a échoué"
+         ],
+         "Autosave disabled": [
+            null,
+            "Sauvegarde automatique désactivée"
+         ],
+         "Saving every %d sec.": [
+            null,
+            "Sauvegarde toutes les %d sec."
+         ],
+         "Trusted": [
+            null,
+            "Fiable"
+         ],
+         "Not Trusted": [
+            null,
+            "Non fiable"
+         ],
+         "click to expand output": [
+            null,
+            "cliquer pour afficher toute la sortie"
+         ],
+         "click to expand output; double click to hide output": [
+            null,
+            "cliquer pour afficher toute la sortie ; double-cliquer pour masquer la sortie"
+         ],
+         "click to unscroll output; double click to hide": [
+            null,
+            "cliquer pour faire défiler la sortie vers le haut ; double-cliquer pour masquer"
+         ],
+         "click to scroll output; double click to hide": [
+            null,
+            "cliquer pour faire défiler la sortie ; double-cliquer pour masquer"
+         ],
+         "Javascript error adding output!": [
+            null,
+            "Erreur JavaScript pendant l'écriture de la sortie !"
+         ],
+         "See your browser Javascript console for more details.": [
+            null,
+            "Voir la console JavaScript de votre navigateur pour plus d'informations."
+         ],
+         "Out[%d]:": [
+            null,
+            "Sortie[%d] :"
+         ],
+         "Unrecognized output: %s": [
+            null,
+            "Sortie non reconnue : %s"
+         ],
+         "Open the pager in an external window": [
+            null,
+            "Ouvrir le paginateur dans une fenêtre externe"
+         ],
+         "Close the pager": [
+            null,
+            "Fermer le paginateur"
+         ],
+         "Jupyter Pager": [
+            null,
+            "Paginateur de Jupyter"
+         ],
+         "go to cell start": [
+            null,
+            "aller au début de la cellule"
+         ],
+         "go to cell end": [
+            null,
+            "aller à la fin de la cellule"
+         ],
+         "go one word left": [
+            null,
+            "se déplacer d'un mot vers la gauche"
+         ],
+         "go one word right": [
+            null,
+            "Se déplacer d'un mot vers la droite"
+         ],
+         "delete word before": [
+            null,
+            "supprimer le mot précédent"
+         ],
+         "delete word after": [
+            null,
+            "supprimer le mot suivant"
+         ],
+         "code completion or indent": [
+            null,
+            "complétion de code ou indentation"
+         ],
+         "tooltip": [
+            null,
+            "info-bulle"
+         ],
+         "indent": [
+            null,
+            "indenter"
+         ],
+         "dedent": [
+            null,
+            "dé-indenter"
+         ],
+         "select all": [
+            null,
+            "tout sélectionner"
+         ],
+         "undo": [
+            null,
+            "annuler"
+         ],
+         "redo": [
+            null,
+            "refaire"
+         ],
+         "Shift": [
+            null,
+            "Maj"
+         ],
+         "Alt": [
+            null,
+            "Alt"
+         ],
+         "Up": [
+            null,
+            "Haut"
+         ],
+         "Down": [
+            null,
+            "Bas"
+         ],
+         "Left": [
+            null,
+            "Gauche"
+         ],
+         "Right": [
+            null,
+            "Droite"
+         ],
+         "Tab": [
+            null,
+            "Tab"
+         ],
+         "Caps Lock": [
+            null,
+            "Verr. Maj."
+         ],
+         "Esc": [
+            null,
+            "Esc"
+         ],
+         "Ctrl": [
+            null,
+            "Ctrl"
+         ],
+         "Enter": [
+            null,
+            "Entrée"
+         ],
+         "Page Up": [
+            null,
+            "Page Préc."
+         ],
+         "Page Down": [
+            null,
+            "Page Suiv."
+         ],
+         "Home": [
+            null,
+            "Accueil"
+         ],
+         "End": [
+            null,
+            "Fin"
+         ],
+         "Space": [
+            null,
+            "Espace"
+         ],
+         "Backspace": [
+            null,
+            "Retour arrière"
+         ],
+         "Minus": [
+            null,
+            "Moins"
+         ],
+         "PageUp": [
+            null,
+            "PagePréc."
+         ],
+         "The Jupyter Notebook has two different keyboard input modes.": [
+            null,
+            "Le Notebook Jupyter offre deux modes de saisie claivier."
+         ],
+         "<b>Edit mode</b> allows you to type code or text into a cell and is indicated by a green cell border.": [
+            null,
+            "<b>Mode Édition</b> permet de saisir du code ou du texte dans une cellule et se reconnaît à la bordure verte de la cellule."
+         ],
+         "<b>Command mode</b> binds the keyboard to notebook level commands and is indicated by a grey cell border with a blue left margin.": [
+            null,
+            "<b>Mode Commande</b> déclenche au clavier des actions au niveau du notebook et se reconnaît à la bordure grise de la cellule, avec une marge bleue sur la droite."
+         ],
+         "Close": [
+            null,
+            "Fermer"
+         ],
+         "Keyboard shortcuts": [
+            null,
+            "Raccourcis clavier"
+         ],
+         "Command": [
+            null,
+            "Commande"
+         ],
+         "Control": [
+            null,
+            "Contrôles"
+         ],
+         "Option": [
+            null,
+            "Option"
+         ],
+         "Return": [
+            null,
+            "Retour"
+         ],
+         "Command Mode (press %s to enable)": [
+            null,
+            "Mode Commande (presser %s pour l'activer)"
+         ],
+         "Edit Shortcuts": [
+            null,
+            "Modifier les Raccourcis Clavier"
+         ],
+         "edit command-mode keyboard shortcuts": [
+            null,
+            "modifier les raccourcis clavier du mode commande"
+         ],
+         "Edit Mode (press %s to enable)": [
+            null,
+            "Mode Édition (presser %s pour l'activer)"
+         ],
+         "Autosave Failed!": [
+            null,
+            "Échec de la sauvegarde automatique !"
+         ],
+         "Rename": [
+            null,
+            "Renommer"
+         ],
+         "Enter a new notebook name:": [
+            null,
+            "Saisir le nouveau nom du notebook"
+         ],
+         "Rename Notebook": [
+            null,
+            "Renommer le Notebook"
+         ],
+         "Invalid notebook name. Notebook names must have 1 or more characters and can contain any characters except :/\\. Please enter a new notebook name:": [
+            null,
+            "Nom de notebook invalide. Les noms de notebooks doivent posséder au moins un caractère et peuvent contenir tous les caractères sauf « /\\ ». Merci de saisir un nouveau nom de notebook :"
+         ],
+         "Renaming...": [
+            null,
+            "Renommage en cours..."
+         ],
+         "Unknown error": [
+            null,
+            "Erreur inconnue"
+         ],
+         "no checkpoint": [
+            null,
+            "aucune sauvegarde"
+         ],
+         "Last Checkpoint: %s": [
+            null,
+            "Dernière Sauvegarde : %s"
+         ],
+         "(unsaved changes)": [
+            null,
+            "(modifié)"
+         ],
+         "(autosaved)": [
+            null,
+            "(auto-sauvegardé)"
+         ],
+         "Warning: too many matches (%d). Some changes might not be shown or applied.": [
+            null,
+            "Attention : trop de correspondances (%d). Certains changements peuvent ne pas être affichés ou appliqués."
+         ],
+         "%d match": [
+            "%d matches",
+            "%d correspondance",
+            "%d correspondances"
+         ],
+         "More than 100 matches, aborting": [
+            null,
+            "Plus de 100 correspondances, annulation"
+         ],
+         "Use regex (JavaScript regex syntax)": [
+            null,
+            "Utiliser des regex (syntaxe des regex JavaScript)"
+         ],
+         "Replace in selected cells": [
+            null,
+            "Remplacer dans les cellules sélectionnées"
+         ],
+         "Match case": [
+            null,
+            "Sensible à la casse"
+         ],
+         "Find": [
+            null,
+            "Rechercher"
+         ],
+         "Replace": [
+            null,
+            "Remplacer"
+         ],
+         "No matches, invalid or empty regular expression": [
+            null,
+            "Aucune correspondance trouvée, expression régulière vide ou invalide."
+         ],
+         "Replace All": [
+            null,
+            "Tout Remplacer"
+         ],
+         "Find and Replace": [
+            null,
+            "Rechercher et Remplacer"
+         ],
+         "find and replace": [
+            null,
+            "rechercher et remplacer"
+         ],
+         "Write raw LaTeX or other formats here, for use with nbconvert. It will not be rendered in the notebook. When passing through nbconvert, a Raw Cell's content is added to the output unmodified.": [
+            null,
+            "Écrivez ici du code Latex brut ou d'autres formats, pour usage avec nbconvert. Il ne sera pas rendu dans le notebook. En utilisant nbconvert, le contenu d'une cellule brute est ajouté tel-quel à la sortie."
+         ],
+         "Grow the tooltip vertically (press shift-tab twice)": [
+            null,
+            "Agrandir l'info-bulle verticallement (presser Maj-Tab deux fois)"
+         ],
+         "show the current docstring in pager (press shift-tab 4 times)": [
+            null,
+            "montrer la chaîne de documentation courante dans le paginateur (presser shift-tab 4 fois)"
+         ],
+         "Open in Pager": [
+            null,
+            "Ouvrir dans le Paginateur"
+         ],
+         "Tooltip will linger for 10 seconds while you type": [
+            null,
+            "L'info-bulle restera affichée 10 secondes pendant votre saisie"
+         ],
+         "Welcome to the Notebook Tour": [
+            null,
+            "Bienvenue dans la visite du Notebook"
+         ],
+         "You can use the left and right arrow keys to go backwards and forwards.": [
+            null,
+            "Vous pouvez utiliser les touches gauche et droite pour continuer ou revenir en arrière."
+         ],
+         "Filename": [
+            null,
+            "Nom du fichier"
+         ],
+         "Click here to change the filename for this notebook.": [
+            null,
+            "Cliquer ici pour changer le nom du fichier de ce notebook."
+         ],
+         "Notebook Menubar": [
+            null,
+            "Barre de Menu du Notebook"
+         ],
+         "The menubar has menus for actions on the notebook, its cells, and the kernel it communicates with.": [
+            null,
+            "La barre de menu a des menus pour les actions concernant le notebook, ses cellules, et le noyau avec lequel il communique."
+         ],
+         "Notebook Toolbar": [
+            null,
+            "Barre d'outils du Notebook"
+         ],
+         "The toolbar has buttons for the most common actions. Hover your mouse over each button for more information.": [
+            null,
+            "La barre d'outils a des boutons pour les actions les plus fréquentes. Survoler les boutons à la souris pour plus d'information."
+         ],
+         "Mode Indicator": [
+            null,
+            "Indicateur de mode"
+         ],
+         "The Notebook has two modes: Edit Mode and Command Mode. In this area, an indicator can appear to tell you which mode you are in.": [
+            null,
+            "Le Notebook offre deux modes : Édition et Commande. Dans cette zone, un indicateur peut vous indiquer dans quel mode vous êtes."
+         ],
+         "Right now you are in Command Mode, and many keyboard shortcuts are available. In this mode, no icon is displayed in the indicator area.": [
+            null,
+            "Actuellement, vous êtes en mode Commande, et de nombreux raccourcis clavier sont disponibles. Dans ce mode, aucune icône n'est affichée dans la zone d'indication."
+         ],
+         "Pressing <code>Enter</code> or clicking in the input text area of the cell switches to Edit Mode.": [
+            null,
+            "Presser <code>Entrée</code> ou cliquer dans la zone de saisie de la cellule bascule vers le Mode Édition."
+         ],
+         "Notice that the border around the currently active cell changed color. Typing will insert text into the currently active cell.": [
+            null,
+            "Notez que la bordure autour de la cellule active a changé de couleur. Saisir du texte au clavier l'insérera dans la cellule active."
+         ],
+         "Back to Command Mode": [
+            null,
+            "Retourner au Mode Commande"
+         ],
+         "Pressing <code>Esc</code> or clicking outside of the input text area takes you back to Command Mode.": [
+            null,
+            "Presser <code>Esc</code> ou cliquer en dehors de la zone de saisie de la cellule vous ramène au Mode Commande."
+         ],
+         "Keyboard Shortcuts": [
+            null,
+            "Raccourcis Clavier"
+         ],
+         "You can click here to get a list of all of the keyboard shortcuts.": [
+            null,
+            "Vous pouvez cliquer ici pour afficher une liste de tous les raccourcis clavier."
+         ],
+         "Kernel Indicator": [
+            null,
+            "Indicateur de Noyau"
+         ],
+         "This is the Kernel indicator. It looks like this when the Kernel is idle.": [
+            null,
+            "Ceci est l'indicateur de Noyau. Il a cet aspect quand le Noyau est inactif."
+         ],
+         "The Kernel indicator looks like this when the Kernel is busy.": [
+            null,
+            "L'indicateur de Noyau a cet aspect quand le Noyau est actif."
+         ],
+         "Interrupting the Kernel": [
+            null,
+            "Interrompre le Noyau"
+         ],
+         "To cancel a computation in progress, you can click here.": [
+            null,
+            "Pour annuler une exécution en cours, vous pouvez cliquer ici."
+         ],
+         "Notification Area": [
+            null,
+            "Zone de notification"
+         ],
+         "Messages in response to user actions (Save, Interrupt, etc.) appear here.": [
+            null,
+            "Les messages en retour d'actions utilisateur (Enregistrement, Interruption, etc.) s'affichent ici."
+         ],
+         "End of Tour": [
+            null,
+            "Fin de la visite"
+         ],
+         "This concludes the Jupyter Notebook User Interface Tour.": [
+            null,
+            "C'est la fin de cette visite guidée de l'Interface utilisateur du Notebook Jupyter."
+         ],
+         "Edit Attachments": [
+            null,
+            "Modifier les Pièces-Jointes"
+         ],
+         "Cell": [
+            null,
+            "Cellule"
+         ],
+         "Edit Metadata": [
+            null,
+            "Éditer les Méta-Données"
+         ],
+         "Custom": [
+            null,
+            "Personnalisé"
+         ],
+         "Set the MIME type of the raw cell:": [
+            null,
+            "Définir le type MIME de la cellule en texte brut :"
+         ],
+         "Raw Cell MIME Type": [
+            null,
+            "Type MIME de la Cellule en Texte Brut"
+         ],
+         "Raw NBConvert Format": [
+            null,
+            "Format du Texte Brut"
+         ],
+         "Raw Cell Format": [
+            null,
+            "Format de la Cellule Texte Brut"
+         ],
+         "Slide": [
+            null,
+            "Diapo"
+         ],
+         "Sub-Slide": [
+            null,
+            "Sous-Diapo"
+         ],
+         "Fragment": [
+            null,
+            "Extrait"
+         ],
+         "Skip": [
+            null,
+            "Sauter"
+         ],
+         "Notes": [
+            null,
+            "Notes"
+         ],
+         "Slide Type": [
+            null,
+            "Type de diapo"
+         ],
+         "Slideshow": [
+            null,
+            "Diaporama"
+         ],
+         "Add tag": [
+            null,
+            "Ajouter un mot-clé"
+         ],
+         "Edit the list of tags below. All whitespace is treated as tag separators.": [
+            null,
+            "Modifier la liste de mots-clés ci-dessous. Les espaces sont considérés comme des séparateurs."
+         ],
+         "Edit the tags": [
+            null,
+            "Modifier les mots-clés"
+         ],
+         "Edit Tags": [
+            null,
+            "Modifier Mots-Clés"
+         ],
+         "Shutdown": [
+            null,
+            "Arrêter"
+         ],
+         "Create a new notebook with %s": [
+            null,
+            "Créer un nouveau notebook avec %s"
+         ],
+         "An error occurred while creating a new notebook.": [
+            null,
+            "Une erreur s'est produite à la création du notebook"
+         ],
+         "Creating File Failed": [
+            null,
+            "La création du fichier a échoué"
+         ],
+         "An error occurred while creating a new file.": [
+            null,
+            "Une erreur est survenue à la création du nouveau fichier."
+         ],
+         "Creating Folder Failed": [
+            null,
+            "La création du répertoire a échoué"
+         ],
+         "An error occurred while creating a new folder.": [
+            null,
+            "Une erreur est survenue à la création du nouveau répertoire."
+         ],
+         "Failed to read file": [
+            null,
+            "Échec de lecture du fichier"
+         ],
+         "Failed to read file %s": [
+            null,
+            "Échec de lecture du fichier %s"
+         ],
+         "The file size is %d MB. Do you still want to upload it?": [
+            null,
+            "Le fichier pèse %d MB. Êtes-vous certain de vouloir le téléverser ?"
+         ],
+         "Large file size warning": [
+            null,
+            "Avertissement de taille de fichier élevée"
+         ],
+         "Server error: ": [
+            null,
+            "Erreur serveur :"
+         ],
+         "The notebook list is empty.": [
+            null,
+            "La liste des notebooks est vide."
+         ],
+         "Click here to rename, delete, etc.": [
+            null,
+            "Cliquer ici pour renommer, supprimer, etc."
+         ],
+         "Running": [
+            null,
+            "Actif"
+         ],
+         "Enter a new file name:": [
+            null,
+            "Saisir le nom du nouveau fichier :"
+         ],
+         "Enter a new directory name:": [
+            null,
+            "Saisir le nom du nouveau répertoire :"
+         ],
+         "Enter a new name:": [
+            null,
+            "Saisir un nouveau nom :"
+         ],
+         "Rename file": [
+            null,
+            "Renommer le fichier"
+         ],
+         "Rename directory": [
+            null,
+            "Renommer le répertoire"
+         ],
+         "Rename notebook": [
+            null,
+            "Renommer le notebook"
+         ],
+         "Move": [
+            null,
+            "Déplacer"
+         ],
+         "An error occurred while renaming \"%1$s\" to \"%2$s\".": [
+            null,
+            "Une erreur s'est produite pendant le renommage de « %1$s » vers « %2$s »."
+         ],
+         "Rename Failed": [
+            null,
+            "Échec du Renommage"
+         ],
+         "Enter a new destination directory path for this item:": [
+            "Enter a new destination directory path for these %d items:",
+            "Saisir un nouveau chemin de destination pour cet élément :",
+            "Saisir un nouveau chemin de destination pour ces %d éléments :"
+         ],
+         "Move an Item": [
+            "Move %d Items",
+            "Déplacer un élément",
+            "Déplacer %d éléments"
+         ],
+         "An error occurred while moving \"%1$s\" from \"%2$s\" to \"%3$s\".": [
+            null,
+            "Une erreur s'est produite lors du déplacement de « %1$s » de « %2$s » vers « %3$s »."
+         ],
+         "Move Failed": [
+            null,
+            "Échec du déplacement"
+         ],
+         "Are you sure you want to permanently delete: \"%s\"?": [
+            "Are you sure you want to permanently delete the %d files or folders selected?",
+            "Êtes-vous certain de vouloir supprimer définitivement « %s  » ?",
+            "Êtes-vous certain de vouloir supprimer définitivement les « %d  » fichiers ou répertoires sélectionnés ?"
+         ],
+         "An error occurred while deleting \"%s\".": [
+            null,
+            "Une erreur s'est produite pendant la suppression de « %s »."
+         ],
+         "Delete Failed": [
+            null,
+            "Échec de la suppression"
+         ],
+         "Are you sure you want to duplicate: \"%s\"?": [
+            "Are you sure you want to duplicate the %d files selected?",
+            "Êtes-vous certain de vouloir dupliquer « %s » ?",
+            "Êtes-vous certain de vouloir dupliquer les « %d » fichiers sélectionnés ?"
+         ],
+         "Duplicate": [
+            null,
+            "Dupliquer"
+         ],
+         "An error occurred while duplicating \"%s\".": [
+            null,
+            "Une erreur s'est produite pendant la duplication de « %s »."
+         ],
+         "Duplicate Failed": [
+            null,
+            "Échec de la duplication"
+         ],
+         "Upload": [
+            null,
+            "Téléverser"
+         ],
+         "Invalid file name": [
+            null,
+            "Nom de fichier invalide"
+         ],
+         "File names must be at least one character and not start with a period": [
+            null,
+            "Les noms des fichier doivent compter au moins un caractère et ne doivent pas commencer avec un point."
+         ],
+         "Cannot upload invalid Notebook": [
+            null,
+            "Impossible de téléverser un Notebook invalide"
+         ],
+         "There is already a file named \"%s\". Do you want to replace it?": [
+            null,
+            "Il y a déjà un fichier nommé « %s ». Souhaitez-vous le remplacer ?"
+         ],
+         "Replace file": [
+            null,
+            "Remplacer le fichier"
+         ]
+      }
+   }
+}

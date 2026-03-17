@@ -1,0 +1,37 @@
+# (C) Copyright 2005- ECMWF.
+
+# SECTION 7, DATA SECTION
+
+position offsetSection7;
+
+section_length[4] section7Length ;
+meta section7 section_pointer(offsetSection7,section7Length,7);
+
+unsigned[1] numberOfSection = 7:read_only;
+
+# Octets 6-nn : Data in a format described by Data Template 7.x, where x is the Data Representation
+# Template number given in octets 10-11 of Section 5
+position offsetBeforeData;
+#if (changed(dataRepresentationTemplateNumber)) {
+  template dataValues "grib2/templates/template.7.[dataRepresentationTemplateNumber:l].def";
+#}
+
+meta changeDecimalPrecision decimal_precision(bitsPerValue,decimalScaleFactor,changingPrecision,values) : edition_specific;
+meta decimalPrecision decimal_precision(bitsPerValue,decimalScaleFactor,changingPrecision) : edition_specific;
+alias setDecimalPrecision=changeDecimalPrecision;
+
+meta setBitsPerValue bits_per_value(values,bitsPerValue) : edition_specific;
+meta setPackingType packing_type(values, packingType) : edition_specific;
+
+meta getNumberOfValues size(values) : edition_specific,dump ;
+
+meta scaleValuesBy scale_values(values,missingValue) : edition_specific;
+meta offsetValuesBy offset_values(values,missingValue) : edition_specific;
+
+concept productType(unknown) {
+   "obstat" = {grib2LocalSectionPresent=1; centre=98; grib2LocalSectionNumber=500;productDefinitionTemplateNumber=2000;}
+}
+
+position offsetAfterData;
+meta md5Section7 md5(offsetSection7,section7Length);
+alias md5DataSection = md5Section7;

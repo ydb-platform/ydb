@@ -1,0 +1,52 @@
+#########################
+##
+## author: Sebastien Villaume
+## created: 6 Oct 2011
+## modified: 13 May 2013
+##
+#
+# Model 50 (MATCH) SMHI local definitions timerep
+#
+#  Time representation parameter in local extension
+#
+0 0 No representation specified
+1 1 3 Hour mean value (hours)
+2 2 Diurnal or Daily mean (hours)
+3 3 1 Hour mean value (hours)
+5 5 Monthly mean (month)
+6 6 Mean from start (hours)
+7 7 Annual mean (year)
+10 10 Max value
+11 11 Min value
+12 12 Diurnal max
+14 14 Monthly max
+16 16 Annual max
+17 17 Mean of daily-max
+18 18 Mean of daily-max
+19 19 Mean of daily-max
+20 20 Acc. since start (hours)
+21 21 Acc. over one day (hours)
+22 22 Acc. over one month (months)
+23 23 Acc. over one day (hours)
+24 24 Acc. over three months (months)
+25 25 Acc. over six months (months)
+26 26 Acc. over one year (year)
+30 30 Running 8-hour mean (hours)
+31 31 Daily maximum of 8-hour mean
+32 32 Mean of daily maximum of 8-hour mean
+33 33 Max of daily maximum of 8-hour mean
+40 40 98 percentil (hours)
+41 41 98 percentil (day)
+42 42 90 percentil (day)
+43 43 Median
+44 44 Likelihood
+45 45 Joint probability
+46 46 Percentile
+50 50 Boundary value
+51 51 First guess
+52 52 Standard deviation
+60 ANAINCR Analysis increment
+61 ANAERR Analysis error
+62 BGERR Background error
+70 QUALITY Quality flag
+255 255 missing value

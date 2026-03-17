@@ -1,0 +1,6 @@
+--- contrib/python/munch/tests/test_readme.py	(index)
++++ contrib/python/munch/tests/test_readme.py	(working tree)
+@@ -5 +5,2 @@ import pytest
+-_HERE = os.path.abspath(os.path.dirname(__file__))
++import yatest.common as yc
++_HERE = os.path.abspath(os.path.dirname(yc.source_path(__file__)))

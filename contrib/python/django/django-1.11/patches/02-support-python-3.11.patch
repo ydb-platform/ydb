@@ -1,0 +1,38 @@
+--- contrib/python/django/django-1.11/django/utils/translation/trans_real.py	(index)
++++ contrib/python/django/django-1.11/django/utils/translation/trans_real.py	(working tree)
+@@ -121,7 +121,8 @@ class DjangoTranslation(gettext_module.GNUTranslations):
+         gettext_module.GNUTranslations.__init__(self)
+         if domain is not None:
+             self.domain = domain
+-        self.set_output_charset('utf-8')  # For Python 2 gettext() (#25720)
++        if sys.version_info < (3, 11):
++            self.set_output_charset('utf-8')  # For Python 2 gettext() (#25720)
+ 
+         self.__language = language
+         self.__to_language = to_language(language)
+@@ -165,12 +166,19 @@ class DjangoTranslation(gettext_module.GNUTranslations):
+         Using param `use_null_fallback` to avoid confusion with any other
+         references to 'fallback'.
+         """
+-        return gettext_module.translation(
+-            domain=self.domain,
+-            localedir=localedir,
+-            languages=[self.__locale],
+-            codeset='utf-8',
+-            fallback=use_null_fallback)
++        if sys.version_info < (3, 11):
++            return gettext_module.translation(
++                domain=self.domain,
++                localedir=localedir,
++                languages=[self.__locale],
++                codeset='utf-8',
++                fallback=use_null_fallback)
++        else:
++            return gettext_module.translation(
++                domain=self.domain,
++                localedir=localedir,
++                languages=[self.__locale],
++                fallback=use_null_fallback)
+ 
+     def _init_translation_catalog(self):
+         """Creates a base catalog using global django translations."""

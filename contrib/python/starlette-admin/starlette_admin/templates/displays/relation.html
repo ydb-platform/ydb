@@ -1,0 +1,7 @@
+<div class="d-flex flex-wrap">
+    {% for v in (data if field.multiple else [data]) %}
+        {% set foreign_model = (field.identity | to_model) %}
+        <a class="m-1 py-1 px-2 badge bg-blue-lt lead"
+           href="{{ url_for(__name__ ~ ':detail', identity=foreign_model.identity,pk=v[foreign_model.pk_attr]) }}">{{ v["_meta"]["repr"] }}</a>
+    {% endfor %}
+</div>

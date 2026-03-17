@@ -1,0 +1,62 @@
+# (C) Copyright 2005- ECMWF.
+# Forecast probability data
+
+constant GRIBEXSection1Problem = 58 - section1Length ;
+
+constant probPoint=5 : hidden;
+constant probContinous=9 : hidden;
+
+# 1 to 2 conversion
+_if (timeRangeIndicator==3 || timeRangeIndicator==4
+    || timeRangeIndicator==5) {
+  alias productDefinitionTemplateNumber=probContinous;
+} else {
+  alias productDefinitionTemplateNumber=probPoint;
+}
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] forecastProbabilityNumber : dump;
+
+unsigned[1] totalNumberOfForecastProbabilities : dump;
+
+signed[1] localDecimalScaleFactor : dump;
+
+unsigned[1] thresholdIndicator : dump;
+
+signed[2] lowerThreshold : can_be_missing,dump;
+
+signed[2] upperThreshold : can_be_missing,dump;
+
+# 1 to 2 conversion
+_if (thresholdIndicator == 1) {
+#  Probability of event above lower limit
+  transient probabilityType=3;
+  transient scaleFactorOfLowerLimit=localDecimalScaleFactor;
+  transient scaledValueOfLowerLimit=lowerThreshold;
+  transient scaleFactorOfUpperLimit=missing();
+  transient scaledValueOfUpperLimit=missing();
+
+}
+_if (thresholdIndicator == 2) {
+#  Probability of event below upper limit
+  transient probabilityType=4;
+  transient scaleFactorOfLowerLimit= missing();
+  transient scaledValueOfLowerLimit=missing();
+  transient scaleFactorOfUpperLimit=localDecimalScaleFactor;
+  transient scaledValueOfUpperLimit=upperThreshold;
+}
+_if (thresholdIndicator == 3) {
+# Probability of event between lower and upper limits.
+# The range includes the lower limit but not the upper limit
+  transient probabilityType=2;
+  transient scaleFactorOfLowerLimit=localDecimalScaleFactor;
+  transient scaledValueOfLowerLimit=lowerThreshold;
+  transient scaleFactorOfUpperLimit=localDecimalScaleFactor;
+  transient scaledValueOfUpperLimit=upperThreshold;
+}
+
+# spareSetToZero
+pad padding_loc5_1(1);
+alias number = forecastProbabilityNumber;
+alias totalNumber=totalNumberOfForecastProbabilities;

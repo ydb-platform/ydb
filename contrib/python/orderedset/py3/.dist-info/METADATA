@@ -1,0 +1,137 @@
+Metadata-Version: 2.1
+Name: orderedset
+Version: 2.0.3
+Summary: An Ordered Set implementation in Cython.
+Home-page: https://github.com/simonpercivall/orderedset
+Author: Simon Percivall
+Author-email: percivall@gmail.com
+License: BSD
+Keywords: orderedset
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+
+===========
+Ordered Set
+===========
+
+.. image:: https://badge.fury.io/py/orderedset.png
+    :target: http://badge.fury.io/py/orderedset
+
+.. image:: https://travis-ci.org/simonpercivall/orderedset.png?branch=master
+    :target: https://travis-ci.org/simonpercivall/orderedset
+
+.. image:: https://pypip.in/d/orderedset/badge.png
+    :target: https://crate.io/packages/orderedset?version=latest
+
+
+An Ordered Set implementation in Cython. Based on `Raymond Hettinger's OrderedSet recipe`_.
+
+Example:
+
+.. code-block:: python
+
+    >>> from orderedset import OrderedSet
+    >>> oset = OrderedSet([1, 2, 3])
+    >>> oset
+    OrderedSet([1, 2, 3])
+    >>> oset | [5, 4, 3, 2, 1]
+    OrderedSet([1, 2, 3, 5, 4])
+
+* Free software: BSD license
+* Documentation: http://orderedset.rtfd.org.
+
+Features
+--------
+
+* Works like a regular set, but remembers insertion order;
+* Is approximately 5 times faster than the pure Python implementation overall
+  (and 5 times slower than `set`);
+* Compatible with Python 2.7 through 3.8;
+* Supports the full set interface;
+* Supports some list methods, like `index` and `__getitem__`.
+* Supports set methods against iterables.
+
+.. _`Raymond Hettinger's OrderedSet recipe`: http://code.activestate.com/recipes/576694/
+
+
+Changelog
+=========
+
+2.0.3 - 2020-02-26
+~~~~~~~~~~~~~~~~~~
+
+* bugfix: Generate new C file to fix compile issues
+
+2.0.2 - 2020-02-25
+~~~~~~~~~~~~~~~~~~
+
+* bugfix: Fix deprecation warning for collections.abc in Python 3.8+
+
+2.0.1 - 2018-03-20
+~~~~~~~~~~~~~~~~~~
+
+* bugfix: Fix `isdisjoint` to return True when the sets are disjoint
+* build: Include 3.6 when testing
+* dist: Include test files in sdist
+* docs: Make the Readme a bit prettier
+
+2.0 - 2016-02-02
+~~~~~~~~~~~~~~~~
+
+* breaking change: All comparisons, other than `eq`, against other ordered sets
+  are now performed unordered; i.e., they are treated as regular sets.
+* `isorderedsubset` and `isorderedsuperset` have been added to perform ordered
+  comparisons against other sequences. Using these methods with unordered
+  collections wield yield arbitrary (and depending on Python implementation,
+  unstable) results.
+
+1.2 - 2015-09-29
+~~~~~~~~~~~~~~~~
+
+* bugfix: Set operations only worked with iterables if the OrderedSet was on the
+  left-hand side. They now work both ways.
+* bugfix: The order of an intersection was the right-hand side's order. It is now
+  fixed to be the left-hand side's order.
+
+1.1.2 - 2014-10-02
+~~~~~~~~~~~~~~~~~~
+
+* Make comparisons work with sets and lists, and not crash when compared with None.
+
+1.1.1 - 2014-08-24
+~~~~~~~~~~~~~~~~~~
+
+* Add pickle/copy support to OrderedSet
+
+1.1 - 2014-06-04
+~~~~~~~~~~~~~~~~
+
+* Make OrderedSets handle slicing in __getitem__().
+
+1.0.2 - 2014-05-14
+~~~~~~~~~~~~~~~~~~
+
+* Add proper attribution and licenses.
+
+1.0.1 - 2014-05-13
+~~~~~~~~~~~~~~~~~~
+
+* Don't require Cython to build an sdist.
+
+1.0 - 2014-05-11
+~~~~~~~~~~~~~~~~
+
+* First implementation.
+
+

@@ -1,0 +1,4 @@
+requirements:
+  - psycopg2
+keep:
+  - tests/*

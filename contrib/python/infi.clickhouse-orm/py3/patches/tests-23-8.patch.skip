@@ -1,0 +1,65 @@
+--- contrib/python/infi.clickhouse-orm/py3/tests/test_database.py	(index)
++++ contrib/python/infi.clickhouse-orm/py3/tests/test_database.py	(working tree)
+@@ -197,7 +197,7 @@ class DatabaseTestCase(TestCaseWithData):
+             db.create_table(Person)
+         exc = cm.exception
+         self.assertEqual(exc.code, 81)
+-        self.assertTrue(exc.message.startswith("Database db_not_here doesn't exist"))
++        self.assertTrue(exc.message.startswith("Database db_not_here does not exist"))
+         # Create and delete the db twice, to ensure db_exists gets updated
+         for i in range(2):
+             # Now create the database - should succeed
+@@ -278,7 +278,7 @@ class DatabaseTestCase(TestCaseWithData):
+         query = "SELECT name FROM system.tables WHERE database='system'"
+         for row in self.database.select(query):
+             print(row.name)
+-            if row.name in ('distributed_ddl_queue',):
++            if row.name in ('distributed_ddl_queue', 'disks', 'models',):
+                 continue  # Not supported
+             try:
+                 model = self.database.get_model_for_table(row.name, system_table=True)
+--- contrib/python/infi.clickhouse-orm/py3/tests/test_engines.py	(index)
++++ contrib/python/infi.clickhouse-orm/py3/tests/test_engines.py	(working tree)
+@@ -237,7 +237,7 @@ class DistributedTestCase(_EnginesHelperTestCase):
+             self.database.count(d_model)
+ 
+         exc = cm.exception
+-        self.assertEqual(exc.code, 170)
++        self.assertEqual(exc.code, 701)
+         self.assertTrue(exc.message.startswith("Requested cluster 'cluster_name' not found"))
+ 
+     @unittest.skip("Need to work on the ClickHouse recipe to make this pass")
+--- contrib/python/infi.clickhouse-orm/py3/tests/test_funcs.py	(index)
++++ contrib/python/infi.clickhouse-orm/py3/tests/test_funcs.py	(working tree)
+@@ -50,7 +50,7 @@ class FuncsTestCase(TestCaseWithData):
+             result = list(qs)
+             logging.info('\t==> %s', result[0].value if result else '<empty>')
+             if expected_value != NO_VALUE:
+-                self.assertEqual(result[0].value, expected_value)
++                self.assertAlmostEqual(result[0].value, expected_value, places=5)
+             return result[0].value if result else None
+         except ServerError as e:
+             if 'Unknown function' in e.message:
+--- contrib/python/infi.clickhouse-orm/py3/tests/test_querysets.py	(index)
++++ contrib/python/infi.clickhouse-orm/py3/tests/test_querysets.py	(working tree)
+@@ -145,9 +145,9 @@ class QuerySetTestCase(TestCaseWithData):
+         person = list(qs.order_by('-first_name', '-last_name'))[0]
+         self.assertEqual(person.first_name, 'Yolanda')
+         person = list(qs.order_by('height'))[0]
+-        self.assertEqual(person.height, 1.59)
++        self.assertAlmostEqual(person.height, 1.59, places=5)
+         person = list(qs.order_by('-height'))[0]
+-        self.assertEqual(person.height, 1.8)
++        self.assertAlmostEqual(person.height, 1.8, places=5)
+ 
+     def test_in_subquery(self):
+         qs = Person.objects_in(self.database)
+@@ -497,7 +497,7 @@ class AggregateTestCase(TestCaseWithData):
+         self.assertEqual(qs.count(), 94)
+         self.assertEqual(list(qs)[89].last_name, 'Bowen')
+         # Test with limit and offset, also mixing LIMIT with LIMIT BY
+-        qs = Person.objects_in(self.database).filter(height__gt=1.67).order_by('height', 'first_name')
++        qs = Person.objects_in(self.database).filter(height__gt=1.67 + 0.0001).order_by('height', 'first_name')
+         limited_qs = qs.limit_by((0, 3), 'height')
+         self.assertEqual([p.first_name for p in limited_qs[:3]], ['Amanda', 'Buffy', 'Dora'])
+         limited_qs = qs.limit_by((3, 3), 'height')

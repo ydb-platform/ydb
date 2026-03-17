@@ -1,0 +1,6 @@
+[sqlalchemy.dialects]
+ydb = ydb_sqlalchemy.sqlalchemy:YqlDialect
+ydb_async = ydb_sqlalchemy.sqlalchemy:AsyncYqlDialect
+yql = ydb_sqlalchemy.sqlalchemy:YqlDialect
+yql.ydb = ydb_sqlalchemy.sqlalchemy:YqlDialect
+yql.ydb_async = ydb_sqlalchemy.sqlalchemy:AsyncYqlDialect

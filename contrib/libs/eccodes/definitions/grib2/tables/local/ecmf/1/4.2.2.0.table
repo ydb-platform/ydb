@@ -1,0 +1,16 @@
+# Code table 4.2 - discipline=2 category=0 for ECMWF
+192 192 Carbon Dioxide Net Ecosystem Exchange
+193 193 Carbon Dioxide Gross Primary Production
+194 194 Carbon Dioxide Ecosystem Respiration
+195 195 Flux of Carbon Dioxide Net Ecosystem Exchange
+196 196 Flux of Carbon Dioxide Ecosystem Respiration
+197 197 Flux of Carbon Dioxide Gross Primary Production
+198 198 GPP coefficient from Biogenic Flux Adjustment System
+199 199 Rec coefficient from Biogenic Flux Adjustment System
+200 200 Surface roughness length for heat (m)
+201 201 Water runoff and drainage rate (m s-1)
+202 202 Surface runoff rate (m s-1)
+203 203 Snow melt rate (m of water equivalent s-1)
+204 204 Sub-surface runoff rate (m s-1)
+205 205 Skin reservoir content (m of water equivalent)
+255 255 Missing

@@ -1,0 +1,21 @@
+# (C) Copyright 2005- ECMWF.
+
+codetable[1] groupSplitting ('5.4.table',masterDir,localDir) = 1 ; #default general
+
+codetable[1] missingValueManagement ('5.5.table',masterDir,localDir) = 0; #default as grib1
+
+unsigned[4] primaryMissingValue ;
+
+unsigned[4] secondaryMissingValue ;
+
+unsigned[4] numberOfGroups ;
+alias NG = numberOfGroups;
+
+unsigned[1] referenceOfWidths ;
+unsigned[1] widthOfWidths ;
+
+unsigned[4] referenceOfLengths ;
+unsigned[1] incrementOfLengths ;
+
+unsigned[4] trueLengthOfLastGroup ;
+unsigned[1] widthOfLengths ;

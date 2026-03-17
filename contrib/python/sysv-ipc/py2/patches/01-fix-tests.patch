@@ -1,0 +1,44 @@
+--- contrib/python/sysv-ipc/py2/tests/test_memory.py	(index)
++++ contrib/python/sysv-ipc/py2/tests/test_memory.py	(working tree)
+@@ -9,7 +9,7 @@ import os
+ # Hack -- add tests directory to sys.path so Python 3 can find base.py.
+ import sys
+ sys.path.insert(0, os.path.join(os.getcwd(), 'tests'))  # noqa - tell flake8 to chill
+-import base as tests_base
++import __tests__.base as tests_base
+ import sysv_ipc
+ 
+ # Not tested --
+--- contrib/python/sysv-ipc/py2/tests/test_message_queues.py	(index)
++++ contrib/python/sysv-ipc/py2/tests/test_message_queues.py	(working tree)
+@@ -11,7 +11,7 @@ import sysv_ipc
+ # Hack -- add tests directory to sys.path so Python 3 can find base.py.
+ import sys
+ sys.path.insert(0, os.path.join(os.getcwd(), 'tests'))  # noqa - tell flake8 to chill
+-import base as tests_base
++import __tests__.base as tests_base
+ 
+ # Not tested --
+ # - mode seems to be settable and readable, but ignored by the OS
+--- contrib/python/sysv-ipc/py2/tests/test_module.py	(index)
++++ contrib/python/sysv-ipc/py2/tests/test_module.py	(working tree)
+@@ -12,7 +12,7 @@ import sysv_ipc
+ # Hack -- add tests directory to sys.path so Python 3 can find base.py.
+ import sys
+ sys.path.insert(0, os.path.join(os.getcwd(), 'tests'))  # noqa - tell flake8 to chill
+-import base as tests_base
++import __tests__.base as tests_base
+ 
+ ONE_MILLION = 1000000
+ 
+--- contrib/python/sysv-ipc/py2/tests/test_semaphores.py	(index)
++++ contrib/python/sysv-ipc/py2/tests/test_semaphores.py	(working tree)
+@@ -11,7 +11,7 @@ import sysv_ipc
+ # Hack -- add tests directory to sys.path so Python 3 can find base.py.
+ import sys
+ sys.path.insert(0, os.path.join(os.getcwd(), 'tests'))  # noqa - tell flake8 to chill
+-import base as tests_base
++import __tests__.base as tests_base
+ 
+ # Not tested --
+ # - mode seems to be settable and readable, but ignored by the OS

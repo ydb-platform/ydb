@@ -1,0 +1,58 @@
+Metadata-Version: 2.4
+Name: geopandas
+Version: 1.1.2
+Summary: Geographic pandas extensions
+Author-email: Kelsey Jordahl <kjordahl@alum.mit.edu>
+Maintainer: GeoPandas contributors
+License: BSD 3-Clause
+Project-URL: Home, https://geopandas.org
+Project-URL: Repository, https://github.com/geopandas/geopandas
+Keywords: GIS,cartography,pandas,shapely
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Topic :: Scientific/Engineering :: GIS
+Requires-Python: >=3.10
+Description-Content-Type: text/x-rst
+License-File: LICENSE.txt
+Requires-Dist: numpy>=1.24
+Requires-Dist: pyogrio>=0.7.2
+Requires-Dist: packaging
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: pyproj>=3.5.0
+Requires-Dist: shapely>=2.0.0
+Provides-Extra: all
+Requires-Dist: psycopg[binary]>=3.1.0; extra == "all"
+Requires-Dist: SQLAlchemy>=2.0; extra == "all"
+Requires-Dist: geopy; extra == "all"
+Requires-Dist: matplotlib>=3.7; extra == "all"
+Requires-Dist: mapclassify>=2.5; extra == "all"
+Requires-Dist: xyzservices; extra == "all"
+Requires-Dist: folium; extra == "all"
+Requires-Dist: GeoAlchemy2; extra == "all"
+Requires-Dist: pyarrow>=10.0.0; extra == "all"
+Requires-Dist: scipy; extra == "all"
+Provides-Extra: dev
+Requires-Dist: pytest>=3.1.0; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: pytest-xdist; extra == "dev"
+Requires-Dist: codecov; extra == "dev"
+Requires-Dist: pre-commit; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Dynamic: license-file
+
+GeoPandas is a project to add support for geographic data to
+`pandas`_ objects.
+
+The goal of GeoPandas is to make working with geospatial data in
+python easier. It combines the capabilities of `pandas`_ and `shapely`_,
+providing geospatial operations in pandas and a high-level interface
+to multiple geometries to shapely. GeoPandas enables you to easily do
+operations in python that would otherwise require a spatial database
+such as PostGIS.
+
+.. _pandas: https://pandas.pydata.org
+.. _shapely: https://shapely.readthedocs.io/en/latest/

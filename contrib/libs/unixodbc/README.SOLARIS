@@ -1,0 +1,53 @@
+Building unixODBC on Solaris
+----------------------------
+
+This should just work, however I have had the following helpful
+hints sent to me by David Brown of Starquest. The suggested change
+has been made to the code in __info.c
+
+"Last fall, I had problems running on Solaris 7, because my system did have
+an iconv conversion between ISO8859-1 and UCS-2.
+
+I discovered two things:
+
+* the missing iconv tables are available by a patch for Solaris 7 (there is
+also a corresponding patch for Solaris 8, that fixes a lot in this area -
+seems recommended to use that as well)
+
+* Solaris uses the name 8859-1 in its tables rather than ISO8859-1 or
+ISO-8859-1.
+
+
+So what I've done is:
+
+1) make the following change to DriverManager/__info.c:
+
+diff __info.c __info.c.orig
+385c385
+<     char *asc[] = { "char", "ISO8859-1", "ISO-8859-1", "8859-1", "ASCII", NULL
+ };
+ ---
+
+ >>     char *asc[] = { "char", "ISO8859-1", "ISO-8859-1", "ASCII", NULL };
+
+ 2) tell customers to apply the following Solaris patches:
+
+ Solaris 7:
+ Patch-ID# 112689-02
+ Keywords: UTF-8 ICONV
+ Synopsis: SunOS 5.7: UTF-8 locale ICONV patch
+ Date: Aug/28/2002
+
+ Solaris 8:
+ Patch-ID# 113261-01
+ Keywords: UTF-8 ICONV
+ Synopsis: SunOS 5.8: UTF-8 locale ICONV patch
+ Date: Oct/11/2002
+
+ this has since been superseded by 11326-02, but I think unixODBC should
+ function fine with 113261-01
+
+ Patch-ID# 113261-02
+ Keywords: UTF-8 ICONV
+ Synopsis: SunOS 5.8: UTF-8 locale ICONV patch
+ Date: Feb/21/2003"

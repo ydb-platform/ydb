@@ -1,0 +1,152 @@
+{% extends "layout.html" %}
+{% set pk = model.pk_attr %}
+{% block header %}
+    <div class="d-flex justify-content-between align-items-center">
+        <h1>{{ model.label }}</h1>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+                <a href="{{ url_for(__name__ ~ ':index') }}">{{ _("Admin") }}</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for(__name__ ~ ':list', identity=model.identity) }}">{{ model.label }}</a>
+            </li>
+            <li class="breadcrumb-item active">{{ _("Detail") }}</li>
+        </ol>
+    </div>
+{% endblock %}
+{% block modal %}
+    {{ super() }}
+    {% include "modals/loading.html" %}
+    {% include "modals/error.html" %}
+    {% include "modals/delete.html" %}
+    {% include "modals/actions.html" %}
+
+{% endblock %}
+{% block content %}
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div id="alertContainer"></div>
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <strong>#{{ obj[pk] }}</strong>
+                        </h3>
+                        <div class="card-actions">
+                            {% with pk=obj[pk] %}
+                                {% include "row-actions.html" %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="ms-auto text-muted">
+                            <div class="ms-2 d-inline-block">
+                                <div class="input-icon">
+                                    <span class="input-icon-addon">
+                                        <!-- Download SVG icon from http://tabler-icons.io/i/search -->
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                            <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                            <circle cx="10" cy="10" r="7"></circle>
+                                            <line x1="21" y1="21" x2="15" y2="15"></line>
+                                        </svg>
+                                    </span>
+                                    <input type="search" id="searchInput" value="" class="form-control" placeholder="{{ _('Search') }}..." aria-label="Search in table">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        {% block details_table %}
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-vcenter table-mobile-md">
+                                    <thead>
+                                    <tr>
+                                        <th>{{ _("Attribute") }}</th>
+                                        <th>{{ _("Value") }}</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody id="tableContent">
+                                    {% for field in model.get_fields_list(request, 'DETAIL' | ra) %}
+                                        <tr>
+                                            <td data-label="Attribute">
+                                                <div>
+                                                    <strong>{{ field.label }}</strong>
+                                                </div>
+                                            </td>
+                                            <td data-label="Value">
+                                                {% with data=obj[field.name] %}
+                                                    {% if data == None %}
+                                                        {% include "displays/_null.html" %}
+                                                    {% elif (data | is_iter) and (data |length) ==0 %}
+                                                        {% include "displays/_empty.html" %}
+                                                    {% else %}
+                                                        {% include field.display_template %}
+                                                    {% endif %}
+                                                {% endwith %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% endblock %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block head_css %}
+    {{ super() }}
+    {% for link in model._additional_css_links(request, "DETAIL" | ra) %}
+        <link rel="stylesheet" href="{{ link }}">
+    {% endfor %}
+{% endblock %}
+{% block script %}
+    {{ super() }}
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/alerts.js').include_query_params(v=1) }}"></script>
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/actions.js').include_query_params(v=1) }}"></script>
+    <script type="text/javascript"
+            src="{{ url_for(__name__ ~ ':statics', path='js/utils.js').include_query_params(v=1) }}"></script>
+    {% for link in model._additional_js_links(request, "DETAIL" | ra) %}
+        <script type="text/javascript" src="{{ link }}"></script>
+    {% endfor %}
+    <script>
+        var actionManager = new ActionManager(
+            "", // not necessary
+            "{{ url_for(__name__ ~ ':row-action', identity=model.identity)  | safe }}",
+            function (query, element) {
+                // appendQueryParams
+                query.append(
+                    "pk",
+                    "{{ obj[pk] }}"
+                );
+            },
+            function (actionName, element, msg) {
+                // onSuccess
+                localStorage.successAlert = msg;
+                if (actionName === 'delete') // special case for delete row action
+                    window.location.replace("{{ url_for(__name__ ~ ':list', identity=model.identity)  | safe }}")
+                else
+                    window.location.reload()
+            },
+            function (actionName, element, error) {
+                //onError
+                dangerAlert(error);
+            }
+        );
+
+        actionManager.initNoConfirmationActions();
+        actionManager.initActionModal();
+        $(document).ready(function(){
+            $("#searchInput").on("keyup", function() {
+              var value = $(this).val().toLowerCase();
+              $("#tableContent tr").filter(function() {
+                $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
+              });
+            });
+          });
+    </script>
+{% endblock %}

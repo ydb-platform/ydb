@@ -1,0 +1,8 @@
+# Code table 4.1 - Parameter category by product discipline
+0 0 Waves
+1 1 Currents
+2 2 Ice
+3 3 Surface properties
+4 4 Subsurface properties
+191 191 Miscellaneous
+255 255 Missing

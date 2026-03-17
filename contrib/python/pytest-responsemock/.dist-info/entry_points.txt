@@ -1,0 +1,3 @@
+[pytest11]
+responsemock = responsemock.entry
+

@@ -1,0 +1,2 @@
+[console_scripts]
+js-beautify = jsbeautifier:main

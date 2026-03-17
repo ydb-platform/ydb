@@ -1,0 +1,31 @@
+# (C) Copyright 2005- ECMWF.
+# Member State data
+
+constant GRIBEXSection1Problem = 300 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] perturbationNumber : dump ;
+alias number=perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble : dump ;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+unsigned[1] modelIdentifier : dump ;
+
+signed[4] latitudeOfNorthWestCornerOfArea  : dump;
+
+signed[4] longitudeOfNorthWestCornerOfArea : dump ;
+
+signed[4] latitudeOfSouthEastCornerOfArea  : dump;
+
+signed[4] longitudeOfSouthEastCornerOfArea  : dump;
+
+# reservedForECMWFAdditions
+unsigned[1] originalParameterNumber : dump ;
+
+unsigned[1] originalParameterTableNumber : dump ;
+
+pad padding_loc50_1(46);
+
+ascii[184] optionalData : dump ;

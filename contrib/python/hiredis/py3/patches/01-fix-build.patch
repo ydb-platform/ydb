@@ -1,0 +1,19 @@
+--- contrib/python/hiredis/py3/src/hiredis.h	(index)
++++ contrib/python/hiredis/py3/src/hiredis.h	(working tree)
+@@ -2,7 +2,7 @@
+ #define __HIREDIS_PY_H
+ 
+ #include <Python.h>
+-#include <hiredis/read.h>
++#include <read.h>
+ 
+ #ifndef PyMODINIT_FUNC	/* declarations for DLL import/export */
+ #define PyMODINIT_FUNC void
+--- contrib/python/hiredis/py3/src/pack.c	(index)
++++ contrib/python/hiredis/py3/src/pack.c	(working tree)
+@@ -4 +4 @@
+-#include <hiredis/hiredis.h>
++#include <hiredis.h>
+@@ -19 +19 @@ extern sds sdsnewlen(const void *init, size_t initlen);
+-#include <hiredis/sdsalloc.h>
++#include <sdsalloc.h>

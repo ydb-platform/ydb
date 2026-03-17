@@ -1,0 +1,10 @@
+--- contrib/python/adbc-driver-manager/adbc_driver_manager/_version.py	(index)
++++ contrib/python/adbc-driver-manager/adbc_driver_manager/_version.py	(working tree)
+@@ -43,3 +43,4 @@ def get_static_version_info(version_file=STATIC_VERSION_FILE):
+-    version_info = {}
+-    with open(os.path.join(package_root, version_file), "rb") as f:
+-        exec(f.read(), {}, version_info)
++    from . import _static_version
++    version_info = {
++        "version": _static_version.version,
++    }

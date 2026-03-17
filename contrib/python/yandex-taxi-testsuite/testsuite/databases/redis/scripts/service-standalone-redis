@@ -1,0 +1,29 @@
+#!/bin/sh
+
+. "$TESTSUITE_LIB_UTILS"
+
+if [ "x$REDIS_CONFIGS_DIR" = "x" ]; then
+    die "REDIS_CONFIGS_DIR must be set"
+fi
+
+REDIS_SERVER=$(choose_binaries_or_die valkey-server redis-server)
+REDIS_ROLE="standalone"
+if [ "x$REDIS_SERVER" = "x" ]; then
+    die "No redis-server binary found"
+fi
+
+start() {
+
+    echo "Starting redis ($REDIS_ROLE) with config '$REDIS_CONFIGS_DIR/test_standalone_master0.conf'..."
+    pidfile="$(get_pidfile $REDIS_ROLE)"
+    $REDIS_SERVER $REDIS_CONFIGS_DIR/test_standalone_master0.conf --pidfile $pidfile || {
+        die "Failed to start redis ($REDIS_ROLE) server"
+    }
+}
+
+stop() {
+    pidfile="$(get_pidfile $REDIS_ROLE)"
+    stop_daemon $REDIS_SERVER $pidfile
+}
+
+script_main "$@"

@@ -1,0 +1,15 @@
+[target.x86_64-apple-darwin]
+linker = "clang"
+rustflags = [
+  "-C", "link-arg=-undefined",
+  "-C", "link-arg=dynamic_lookup",
+  "-C", "target-cpu=x86-64-v2",
+]
+
+[target.aarch64-apple-darwin]
+linker = "clang"
+rustflags = [
+  "-C", "link-arg=-undefined",
+  "-C", "link-arg=dynamic_lookup",
+  "-C", "target-cpu=apple-m1",
+]

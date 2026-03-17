@@ -1,0 +1,27 @@
+Metadata-Version: 2.1
+Name: jsonpickle
+Version: 0.9.2
+Summary: Python library for serializing any arbitrary object graph into JSON
+Home-page: http://jsonpickle.github.io/
+Author: David Aguilar
+Author-email: davvid -at- gmail.com
+License: BSD
+Keywords: json pickle,json,pickle,marshal,serialization,JavaScript Object Notation
+Platform: POSIX
+Platform: Windows
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.2
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: JavaScript
+
+jsonpickle converts complex Python objects to and from JSON.
+
+

@@ -1,0 +1,21 @@
+Index: uwsgi/plugins/transformation_gzip/gzip.c
+===================================================================
+--- uwsgi/plugins/transformation_gzip/gzip.c	(revision 3410141)
++++ uwsgi/plugins/transformation_gzip/gzip.c	(working copy)
+@@ -33,10 +33,12 @@
+ 		return 0;
+ 	}
+ 
+-	if (ub->pos == 0) {
+-		// Don't try to compress empty responses.
+-		return 0;
+-	}
++	// TODO: Temporary fix for a memory leak, replace with a proper one after it's available:
++	// https://github.com/unbit/uwsgi/issues/1749
++	// if (ub->pos == 0) {
++	// 	// Don't try to compress empty responses.
++	// 	return 0;
++	// }
+ 
+ 	size_t dlen = 0;
+ 	char *gzipped = uwsgi_gzip_chunk(&utgz->z, &utgz->crc32, ub->buf, ub->pos, &dlen);

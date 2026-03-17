@@ -1,0 +1,101 @@
+# (C) Copyright 2005- ECMWF.
+#
+# This software is licensed under the terms of the Apache Licence Version 2.0
+# which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+# 
+# In applying this licence, ECMWF does not waive the privileges and immunities granted to it by
+# virtue of its status as an intergovernmental organisation nor does it submit to any jurisdiction.
+#
+
+lookup[1] ed       (7,editionNumber);
+transient missingValue=999999 : hidden;
+transient setToMissingIfOutOfRange=0 : hidden;
+
+# This gets updated twice a year by WMO.
+# See https://community.wmo.int/en/wis/latest-version
+constant masterTablesVersionNumberLatest = 43;
+
+#negative value=not used
+transient inputDelayedDescriptorReplicationFactor={-1} : hidden;
+#negative value=not used
+transient inputExtendedDelayedDescriptorReplicationFactor={-1} : hidden;
+#negative value=not used
+transient inputShortDelayedDescriptorReplicationFactor={-1} : hidden;
+
+transient inputDataPresentIndicator={-1} : hidden;
+
+# For operator 203YYY: Table B override
+transient inputOverriddenReferenceValues={0} : hidden;
+
+transient extractSubset=-1 : hidden;
+transient extractSubsetList={-1} : hidden;
+transient extractSubsetIntervalStart=-1 : hidden;
+transient extractSubsetIntervalEnd=-1 : hidden;
+
+meta doExtractSubsets bufr_extract_subsets(
+    numericValues,pack,numberOfSubsets,extractSubset,extractSubsetIntervalStart,extractSubsetIntervalEnd,
+    extractSubsetList)=0 : hidden;
+
+transient extractAreaWestLongitude=1.1 : hidden;
+transient extractAreaEastLongitude=1.1 : hidden;
+transient extractAreaNorthLatitude=1.1 : hidden;
+transient extractAreaSouthLatitude=1.1 : hidden;
+transient extractAreaLatitudeRank=1 : hidden;
+transient extractAreaLongitudeRank=1 : hidden;
+transient extractedAreaNumberOfSubsets=0 : hidden;
+
+meta doExtractArea bufr_extract_area_subsets(
+    doExtractSubsets,numberOfSubsets,extractSubsetList,extractAreaWestLongitude,extractAreaEastLongitude,
+    extractAreaNorthLatitude,extractAreaSouthLatitude,extractAreaLongitudeRank,extractAreaLatitudeRank,
+    extractedAreaNumberOfSubsets)=0 : hidden;
+
+transient extractDateTimeYearStart=2016 : hidden;
+transient extractDateTimeMonthStart=1 : hidden;
+transient extractDateTimeDayStart=1 : hidden;
+transient extractDateTimeHourStart=1 : hidden;
+transient extractDateTimeMinuteStart=1 : hidden;
+transient extractDateTimeSecondStart=1 : hidden;
+meta extractDateTimeStart julian_date(
+    extractDateTimeYearStart,extractDateTimeMonthStart,extractDateTimeDayStart,
+    extractDateTimeHourStart,extractDateTimeMinuteStart,extractDateTimeSecondStart) : hidden;
+
+transient extractDateTimeYearEnd=2016 : hidden;
+transient extractDateTimeMonthEnd=1 : hidden;
+transient extractDateTimeDayEnd=1 : hidden;
+transient extractDateTimeHourEnd=1 : hidden;
+transient extractDateTimeMinuteEnd=1 : hidden;
+transient extractDateTimeSecondEnd=1 : hidden;
+meta extractDateTimeEnd julian_date(
+    extractDateTimeYearEnd,extractDateTimeMonthEnd,extractDateTimeDayEnd,
+    extractDateTimeHourEnd,extractDateTimeMinuteEnd,extractDateTimeSecondEnd) : hidden;
+
+transient extractDateTimeYearRank=1 : hidden;
+transient extractDateTimeMonthRank=1 : hidden;
+transient extractDateTimeDayRank=1 : hidden;
+transient extractDateTimeHourRank=1 : hidden;
+transient extractDateTimeMinuteRank=1 : hidden;
+transient extractDateTimeSecondRank=1 : hidden;
+transient extractedDateTimeNumberOfSubsets=0 : hidden;
+
+meta doExtractDateTime bufr_extract_datetime_subsets(doExtractSubsets,numberOfSubsets,extractSubsetList)=0 : hidden;
+
+transient simpleThinningStart=1 : hidden;
+transient simpleThinningMissingRadius=0 : hidden;
+transient simpleThinningSkip=1 : hidden;
+meta doSimpleThinning bufr_simple_thinning(
+    doExtractSubsets,numberOfSubsets,extractSubsetList,simpleThinningStart,simpleThinningMissingRadius,
+    simpleThinningSkip)=0 : hidden;
+
+transient userDateStart = 0 : hidden;
+transient userTimeStart = 0 : hidden;
+meta userDateTimeStart julian_date(userDateStart,userTimeStart) : hidden;
+
+transient userDateEnd = 0 : hidden;
+transient userTimeEnd = 0 : hidden;
+meta userDateTimeEnd julian_date(userDateEnd,userTimeEnd) : hidden;
+
+# See ECC-741
+transient skipExtraKeyAttributes=0 : hidden;
+
+template boot_edition "bufr/boot_edition_[ed:l].def";
+

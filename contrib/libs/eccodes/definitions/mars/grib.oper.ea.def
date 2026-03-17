@@ -1,0 +1,4 @@
+if(class == 8) # ELDAS 
+{
+	alias mars.origin = centre;
+}

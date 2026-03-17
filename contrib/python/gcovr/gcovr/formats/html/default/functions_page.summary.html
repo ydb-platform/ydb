@@ -1,0 +1,70 @@
+{# -*- engine: jinja -*- #}
+<div class="summary">
+  <div>
+    <table class="legend">
+      <tr>
+        <th scope="row">Directory:</th>
+        <td>{{info.get_directory()}}</td>
+      </tr>
+    </table>
+  </div>
+  <div>
+    <table class="coverage">
+      <tr>
+        <th></th>
+        <th scope="col">Coverage</th>
+        <th scope="col">Exec</th>
+        <th scope="col">Excl</th>
+        <th scope="col">Total</th>
+      </tr>
+      <tr>
+        <th scope="row">Lines:</th>
+        <td class="{{info.lines.class}}">{{info.lines.coverage}}%</td>
+        <td class="{{info.lines.class}}">{{info.lines.exec}}</td>
+        <td class="{{info.lines.class}}">{{info.lines.excluded}}</td>
+        <td class="{{info.lines.class}}">{{info.lines.total}}</td>
+      </tr>
+      <tr>
+        <th scope="row">Functions:</th>
+        <td class="{{info.functions.class}}">{{info.functions.coverage}}%</td>
+        <td class="{{info.functions.class}}">{{info.functions.exec}}</td>
+        <td class="{{info.functions.class}}">{{info.functions.excluded}}</td>
+        <td class="{{info.functions.class}}">{{info.functions.total}}</td>
+      </tr>
+      <tr>
+        <th scope="row">Branches:</th>
+        <td class="{{info.branches.class}}">{{info.branches.coverage}}%</td>
+        <td class="{{info.branches.class}}">{{info.branches.exec}}</td>
+        <td class="{{info.branches.class}}">{{info.branches.excluded}}</td>
+        <td class="{{info.branches.class}}">{{info.branches.total}}</td>
+      </tr>
+      {% if SHOW_CONDITION_COVERAGE %}
+      <tr>
+        <th scope="row">Conditions:</th>
+        <td class="{{info.conditions.class}}">{{info.conditions.coverage}}%</td>
+        <td class="{{info.conditions.class}}">{{info.conditions.exec}}</td>
+        <td class="{{info.conditions.class}}">{{info.conditions.excluded}}</td>
+        <td class="{{info.conditions.class}}">{{info.conditions.total}}</td>
+      </tr>
+      {% endif %}
+      {% if SHOW_DECISION %}
+      <tr>
+        <th scope="row">Decisions:</th>
+        <td class="{{info.decisions.class}}">{{info.decisions.coverage}}%</td>
+        <td class="{{info.decisions.class}}">{{info.decisions.exec}}</td>
+        <td class="{{info.decisions.class}}">-</td>
+        <td class="{{info.decisions.class}}">{{info.decisions.total}}</td>
+      </tr>
+      {% endif %}
+      {% if SHOW_CALLS %}
+      <tr>
+        <th scope="row">Calls:</th>
+        <td class="{{info.calls.class}}">{{info.calls.coverage}}%</td>
+        <td class="{{info.calls.class}}">{{info.calls.exec}}</td>
+        <td class="{{info.calls.class}}">{{info.calls.excluded}}</td>
+        <td class="{{info.calls.class}}">{{info.calls.total}}</td>
+      </tr>
+      {% endif %}
+    </table>
+  </div>
+</div>

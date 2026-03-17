@@ -1,0 +1,28 @@
+# (C) Copyright 2005- ECMWF.
+
+label "CMC local definition (Canada)";
+#
+# CMC localDefinitionTemplate, based on KWBC
+# --------------------------------
+#
+# Description                 Octet    Code    Ksec1    Count
+# -----------                 -----    ----    -----    -----
+# applicationIdentifier       41
+# type                        42
+# identificationNumber        43
+# productIdentifier           44
+# spatialSmoothingOfProduct   45
+# isotopeIdentificationNumber 46-47                    2
+
+unsigned[1] applicationIdentifier : dump;
+
+unsigned[1] type : dump;
+
+unsigned[1] identificationNumber : dump;
+
+unsigned[1] productIdentifier : dump;
+
+unsigned[1] spatialSmoothingOfProduct : dump;
+
+# See GRIB-557
+unsigned[2] isotopeIdentificationNumber : dump;

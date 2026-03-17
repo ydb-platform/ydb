@@ -1,0 +1,8 @@
+# Code table 4.228 - Icing severity
+0 0 None
+1 1 Trace
+2 2 Light
+3 3 Moderate
+4 4 Severe
+# 5-254 Reserved
+255 255 Missing value

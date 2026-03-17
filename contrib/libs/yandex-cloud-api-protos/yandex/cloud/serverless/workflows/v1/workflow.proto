@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.workflows.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/logging/v1/log_entry.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/workflows/v1;workflows";
+option java_package = "yandex.cloud.api.serverless.workflows.v1";
+
+message Workflow {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    // Workflow is being created.
+    CREATING = 1;
+    // Workflow is ready for use.
+    ACTIVE = 2;
+    // Workflow is being updated.
+    UPDATING = 3;
+    // Workflow is being deleted.
+    DELETING = 4;
+    // Workflow failed. The only allowed action is delete.
+    ERROR = 5;
+  }
+  // ID of the Workflow. Generated at creation time.
+  string id = 1;
+  // ID of the folder that the Workflow belongs to.
+  string folder_id = 2;
+  // Specification of the Workflow
+  WorkflowSpecification specification = 3;
+  // Creation timestamp for the Workflow.
+  google.protobuf.Timestamp created_at = 4;
+  // Name of the Workflow. The name is unique within the folder.
+  string name = 5;
+  // Description of the Workflow.
+  string description = 6;
+  // Workflow labels as `key:value` pairs.
+  map<string, string> labels = 7;
+  // Status of the Workflow.
+  Status status = 8;
+  // Options for logging from the Workflow.
+  LogOptions log_options = 9;
+  // ID of the VPC network Workflow will be executed in, in order to access private resources.
+  string network_id = 10;
+  // ID of the Service Account which will be used for resource access in Workflow execution.
+  string service_account_id = 11;
+  // Express execution mode.
+  bool express = 12;
+  // Workflow schedule settings.
+  WorkflowSchedule schedule = 13;
+  // Ability of the Workflow to be executed without authentication.
+  bool is_public = 14;
+  // Execution URL of the Workflow.
+  string execution_url = 15;
+}
+
+message WorkflowPreview {
+  // ID of the Workflow. Generated at creation time.
+  string id = 1;
+  // ID of the folder that the Workflow belongs to.
+  string folder_id = 2;
+  // Creation timestamp for the Workflow.
+  google.protobuf.Timestamp created_at = 3;
+  // Name of the Workflow. The name is unique within the folder.
+  string name = 4;
+  // Description of the Workflow.
+  string description = 5;
+  // Workflow labels as `key:value` pairs.
+  map<string, string> labels = 6;
+  // Status of the Workflow.
+  Workflow.Status status = 7;
+  // Options for logging from the Workflow.
+  LogOptions log_options = 8;
+  // ID of the VPC network Workflow will be executed in, in order to access private resources.
+  string network_id = 9;
+  // ID of the Service Account which will be used for resources access in Workflow execution.
+  string service_account_id = 10;
+  // Express execution mode.
+  bool express = 11;
+  // Ability of the Workflow to be executed without authentication.
+  bool is_public = 12;
+  // Execution URL of the Workflow.
+  string execution_url = 13;
+}
+
+message WorkflowSpecification {
+  oneof spec {
+    option (exactly_one) = true;
+    // Workflow specification in YAML format.
+    string spec_yaml = 1;
+  }
+}
+
+message LogOptions {
+  // Is logging from Workflow disabled.
+  bool disabled = 1;
+  oneof destination {
+    // ID of the logging group which should be used for Workflows logs.
+    string log_group_id = 2;
+    // ID of the folder which default logging group should be used for Workflows.
+    string folder_id = 3;
+  }
+  // Minimum logs level.
+  //
+  // See [LogLevel.Level] for details.
+  yandex.cloud.logging.v1.LogLevel.Level min_level = 4;
+}
+
+message WorkflowSchedule {
+  // Cron expression for the Workflow schedule.
+  string cron_expression = 1 [(required) = true, (length) = "<=100"];
+  // Timezone for the Workflow schedule.
+  string timezone = 2 [(required) = true];
+}

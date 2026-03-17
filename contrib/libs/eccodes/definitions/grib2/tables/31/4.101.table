@@ -1,0 +1,7 @@
+# Code table 4.101 - Type of relationship to reference dataset
+0 0 Anomaly
+1 1 Standardized anomaly
+2 2 Significance (Wilcoxon-Mann-Whitney)
+20 20 Extreme Forecast Index (EFI)
+21 21 Shift of Tails (SOT)
+255 255 Missing

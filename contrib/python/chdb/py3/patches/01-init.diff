@@ -1,0 +1,27 @@
+--- a/chdb/__init__.py    (index)
++++ b/chdb/__init__.py    (working tree)
+@@ -19,22 +19,8 @@ _process_result_format_funs = {
+ # UDF script path will be f"{g_udf_path}/{func_name}.py"
+ g_udf_path = ""
+ 
+-chdb_version = ('0', '6', '0')
+-if sys.version_info[:2] >= (3, 7):
+-    # get the path of the current file
+-    current_path = os.path.dirname(os.path.abspath(__file__))
+-    # change the current working directory to the path of the current file
+-    # and import _chdb then change the working directory back
+-    cwd = os.getcwd()
+-    os.chdir(current_path)
+-    from . import _chdb  # noqa
+-
+-    os.chdir(cwd)
+-    conn = _chdb.connect()
+-    engine_version = str(conn.query("SELECT version();", "CSV").bytes())[3:-4]
+-    conn.close()
+-else:
+-    raise NotImplementedError("Python 3.6 or lower version is not supported")
++chdb_version = ('3', '3', '0')
++import _chdb
+ 
+ try:
+     # Change here if project is renamed and does not equal the package name

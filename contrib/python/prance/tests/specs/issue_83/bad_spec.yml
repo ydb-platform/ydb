@@ -1,0 +1,12 @@
+openapi: 3.0.3
+
+info:
+  title: OpenAPI spec to demonstrate stringify reference issue
+  description: |
+    This file is references one GET operation.
+    and should validate fine with prance using `strict=False` but currently breaks.
+  version: '1.0'
+
+paths:
+  /bad:
+    $ref: 'bad_get.yml'

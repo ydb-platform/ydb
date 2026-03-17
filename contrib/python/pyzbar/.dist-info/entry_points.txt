@@ -1,0 +1,3 @@
+[console_scripts]
+read_zbar = pyzbar.scripts.read_zbar:main
+

@@ -1,0 +1,92 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; Date-Hierarchy{% endblock %}
+
+{% block extrahead %}
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(django.jQuery);
+    </script>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Date-Hierarchy</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Date-Hierarchy</h1>
+    <div class="g-d-c">
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Basics</h1>
+                    <p>The date-hierarchy is meant to appear in a <span class="grp-doc-class">.grp-row</span> within a <span class="grp-doc-class">.grp-module</span>. It is a <span class="grp-doc-dom"><span>nav.grp-date-hierarchy</span></span> containing a hidden header (to appear in the document outlines) and <span class="grp-doc-dom"><span>ul</span></span> with <span class="grp-doc-dom"><span>li</span></span> representing the dates. Everything within a <span class="grp-doc-dom"><span>li</span></span> has to be either a <span class="grp-doc-dom"><span>span</span></span> or an <span class="grp-doc-dom"><span>a</span></span>. For a back-link, use <span class="grp-doc-dom"><span>a.grp-date-hierarchy-back</span></span>.</p>
+                    <p><small>Note: Make sure to wrap the pagination with spaceless-tags to avoid whitespaces.</small></p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code-source">
+                    <div class="grp-module">
+                        <div class="grp-row">
+                            <nav class="grp-date-hierarchy">
+                                <header style="display:none"><h1>Date Hierarchy</h1></header>
+                                <ul>
+                                    <li><a href="#" class="grp-date-hierarchy-back">Back</a></li>
+                                    <li><a href="#">Month</a></li>
+                                    <li><span>Day</span></li>
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<div class="grp-module">
+    <div class="grp-row">
+        {% templatetag openblock %} spaceless {% templatetag closeblock %}
+            <nav class="grp-date-hierarchy">
+                <header style="display:none"><h1>Date Hierarchy</h1></header>
+                <ul>
+                    <li><a href="#" class="grp-date-hierarchy-back">Back</a></li>
+                    <li><a href="#">Month</a></li>
+                    <li><span>Day</span></li>
+                </ul>
+            </nav>
+        {% templatetag openblock %} endspaceless {% templatetag closeblock %}
+    </div>
+</div>
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Full Code of a Date-Hierarchy</h1>
+                    <p>Take a look at Grappellis date_hierarchy.html to get the full code of a date-hierarchy (e.g. like it is used in a <a href="{% url 'grp_doc_change_list' %}">change-list</a>).</p>
+                </div>
+            </div>
+        </section>
+    </div>
+{% endblock %}
+

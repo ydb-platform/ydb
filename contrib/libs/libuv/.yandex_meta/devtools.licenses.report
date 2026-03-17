@@ -1,0 +1,259 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  0775f17ed13c3609fd7c31449f8749d3
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: include/uv.h at line 16, include/uv/darwin.h at line 16, include/uv/errno.h at line 16, include/uv/linux.h at line 16, include/uv/threadpool.h at line 16, include/uv/unix.h at line 16, include/uv/version.h at line 16, include/uv/win.h at line 16, src/fs-poll.c at line 16, src/random.c at line 16, src/strscpy.c at line 16, src/strscpy.h at line 16, src/strtok.c at line 16, src/strtok.h at line 16, src/thread-common.c at line 16, src/threadpool.c at line 16, src/timer.c at line 15, src/unix/async.c at line 15, src/unix/bsd-ifaddrs.c at line 16, src/unix/core.c at line 15, src/unix/darwin-proctitle.c at line 15, src/unix/darwin-stub.h at line 16, src/unix/darwin.c at line 15, src/unix/dl.c at line 16, src/unix/fs.c at line 16, src/unix/fsevents.c at line 15, src/unix/getaddrinfo.c at line 15, src/unix/internal.h at line 16, src/unix/kqueue.c at line 15, src/unix/linux.c at line 15, src/unix/loop-watcher.c at line 16, src/unix/loop.c at line 16, src/unix/pipe.c at line 16, src/unix/poll.c at line 16, src/unix/process.c at line 16, src/unix/procfs-exepath.c at line 16, src/unix/proctitle.c at line 15, src/unix/random-devurandom.c at line 16, src/unix/random-getentropy.c at line 16, src/unix/random-getrandom.c at line 16, src/unix/random-sysctl-linux.c at line 16, src/unix/signal.c at line 15, src/unix/stream.c at line 16, src/unix/tcp.c at line 16, src/unix/thread.c at line 16, src/unix/tty.c at line 16, src/unix/udp.c at line 16, src/uv-common.c at line 16, src/uv-common.h at line 16, src/uv-data-getter-setters.c at line 16, src/version.c at line 16, src/win/async.c at line 16, src/win/core.c at line 16, src/win/detect-wakeup.c at line 16, src/win/dl.c at line 16, src/win/error.c at line 16, src/win/fs-event.c at line 16, src/win/fs-fd-hash-inl.h at line 16, src/win/fs.c at line 16, src/win/getaddrinfo.c at line 16, src/win/handle-inl.h at line 16, src/win/handle.c at line 16, src/win/internal.h at line 16, src/win/loop-watcher.c at line 16, src/win/pipe.c at line 16, src/win/poll.c at line 16, src/win/process-stdio.c at line 16, src/win/process.c at line 16, src/win/req-inl.h at line 16, src/win/signal.c at line 15, src/win/snprintf.c at line 16, src/win/stream-inl.h at line 16, src/win/stream.c at line 16, src/win/tcp.c at line 16, src/win/thread.c at line 16, src/win/tty.c at line 16, src/win/udp.c at line 16, src/win/util.c at line 16, src/win/winapi.c at line 16, src/win/winapi.h at line 16, src/win/winsock.c at line 16, src/win/winsock.h at line 16
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/uv.h [3:19]
+        include/uv/darwin.h [3:19]
+        include/uv/errno.h [3:19]
+        include/uv/linux.h [3:19]
+        include/uv/threadpool.h [3:19]
+        include/uv/unix.h [3:19]
+        include/uv/version.h [3:19]
+        include/uv/win.h [3:19]
+        src/fs-poll.c [3:19]
+        src/random.c [3:19]
+        src/strscpy.c [3:19]
+        src/strscpy.h [3:19]
+        src/strtok.c [3:19]
+        src/strtok.h [3:19]
+        src/thread-common.c [3:19]
+        src/threadpool.c [3:19]
+        src/timer.c [2:18]
+        src/unix/async.c [2:18]
+        src/unix/bsd-ifaddrs.c [3:19]
+        src/unix/core.c [2:18]
+        src/unix/darwin-proctitle.c [2:18]
+        src/unix/darwin-stub.h [3:19]
+        src/unix/darwin.c [2:18]
+        src/unix/dl.c [3:19]
+        src/unix/fs.c [3:19]
+        src/unix/fsevents.c [2:18]
+        src/unix/getaddrinfo.c [2:18]
+        src/unix/internal.h [3:19]
+        src/unix/kqueue.c [2:18]
+        src/unix/linux.c [2:18]
+        src/unix/loop-watcher.c [3:19]
+        src/unix/loop.c [3:19]
+        src/unix/pipe.c [3:19]
+        src/unix/poll.c [3:19]
+        src/unix/process.c [3:19]
+        src/unix/procfs-exepath.c [3:19]
+        src/unix/proctitle.c [2:18]
+        src/unix/random-devurandom.c [3:19]
+        src/unix/random-getentropy.c [3:19]
+        src/unix/random-getrandom.c [3:19]
+        src/unix/random-sysctl-linux.c [3:19]
+        src/unix/signal.c [2:18]
+        src/unix/stream.c [3:19]
+        src/unix/tcp.c [3:19]
+        src/unix/thread.c [3:19]
+        src/unix/tty.c [3:19]
+        src/unix/udp.c [3:19]
+        src/uv-common.c [3:19]
+        src/uv-common.h [3:19]
+        src/uv-data-getter-setters.c [3:19]
+        src/version.c [3:19]
+        src/win/async.c [3:19]
+        src/win/core.c [3:19]
+        src/win/detect-wakeup.c [3:19]
+        src/win/dl.c [3:19]
+        src/win/error.c [3:19]
+        src/win/fs-event.c [3:19]
+        src/win/fs-fd-hash-inl.h [3:19]
+        src/win/fs.c [3:19]
+        src/win/getaddrinfo.c [3:19]
+        src/win/handle-inl.h [3:19]
+        src/win/handle.c [3:19]
+        src/win/internal.h [3:19]
+        src/win/loop-watcher.c [3:19]
+        src/win/pipe.c [3:19]
+        src/win/poll.c [3:19]
+        src/win/process-stdio.c [3:19]
+        src/win/process.c [3:19]
+        src/win/req-inl.h [3:19]
+        src/win/signal.c [2:18]
+        src/win/snprintf.c [3:19]
+        src/win/stream-inl.h [3:19]
+        src/win/stream.c [3:19]
+        src/win/tcp.c [3:19]
+        src/win/thread.c [3:19]
+        src/win/tty.c [3:19]
+        src/win/udp.c [3:19]
+        src/win/util.c [3:19]
+        src/win/winapi.c [3:19]
+        src/win/winapi.h [3:19]
+        src/win/winsock.c [3:19]
+        src/win/winsock.h [3:19]
+
+KEEP     BSD-2-Clause         10ff882f46a69d240bf0825aa388b36e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        include/uv/tree.h [5:23]
+
+KEEP     MIT                  1a304aad3f250f90925141a8fca0f602
+BELONGS ya.make
+    License text:
+        libuv is licensed under the MIT license. Check the [LICENSE](LICENSE) and
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 50.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [46:46]
+
+KEEP     ISC                  496ba8557c8105b63a14ddbb272cca56
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        src/inet.c [5:15]
+
+KEEP     ISC                  56907e2ae1c24aa1ea6c6e49d6f73b01
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        src/heap-inl.h [3:13]
+        src/idna.c [3:13]
+        src/idna.h [3:13]
+        src/queue.h [3:13]
+
+KEEP     CC-BY-4.0            6a59c2b7d62254e93bd510e567608b79
+BELONGS ya.make
+    License text:
+        The documentation is licensed under the CC BY 4.0 license. Check the
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 77.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        README.md [49:49]
+
+KEEP     CC-BY-4.0            806c89cfdcace6acee834fd6737bfcb4
+BELONGS ya.make
+    License text:
+        * doc: change license to CC BY 4.0 (Saúl Ibarra Corretgé)
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        ChangeLog [3781:3781]
+
+KEEP     CC-BY-4.0            a1683405773ac7bbf58b3749b4adf732
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: LICENSE-docs at line 301
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        LICENSE-docs [1:395]
+
+KEEP     MIT                  c1ae65a6c5a56a096cf05b85f3067dc8
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: LICENSE at line 16, LICENSE-extra at line 20
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [3:19]
+        LICENSE-extra [7:23]
+
+KEEP     BSD-2-Clause         c69670edf5e02824a2c4749b5b38e012
+BELONGS ya.make
+FILE_IGNORE include/uv/tree.h found in files: LICENSE-extra at line 32
+    License text:
+          - tree.h (from FreeBSD), copyright Niels Provos. Two clause BSD license.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE-extra [32:32]
+
+KEEP     ISC                  d31218261b9274965d1562e310faaacc
+BELONGS ya.make
+    License text:
+            copyright the Internet Systems Consortium, Inc., and licensed under the ISC
+            license.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE-extra [35:36]
+
+KEEP     MIT                  e7f1b8530bf056f03ec79e6033d53d3a
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: src/unix/getnameinfo.c at line 16, src/win/getnameinfo.c at line 16
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/unix/getnameinfo.c [3:19]
+        src/win/getnameinfo.c [3:19]

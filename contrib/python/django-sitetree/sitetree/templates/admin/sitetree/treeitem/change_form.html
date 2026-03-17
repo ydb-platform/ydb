@@ -1,0 +1,54 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_modify %}
+{% block content_title %}<h1>{{ title }} {% if not add %}"{{ original.title }}"{% endif %}</h1>{% endblock %}
+{% block extrahead %}{{ block.super }}
+    <style type="text/css">
+        #sitetree-urlnames {
+            margin-top: 1em;
+            padding: 1em;
+            line-height: 20px;
+            max-width: 600px;
+            color: #444;
+            border: 2px dashed #CC3434;
+        }
+        #sitetree-urlnames ul {
+            margin-left: 1em;
+        }
+        #sitetree-urlnames p {
+            margin-left: 0;
+        }
+    </style>
+    <script type="text/javascript">
+        (function($) {
+            var known_url_names = ["{{ adminform.form.known_url_names|join:'", "' }}"];
+            function check_url_pattern() {
+                var urlnames = $('#sitetree-urlnames');
+                urlnames.hide();
+                if ($('#id_urlaspattern').is(':checked')) {
+                    var val = $('#id_url').val().split(' ', 1);
+                    val = val[0].replace(/'/g, '').replace(/"/g, '');
+                    if ($.inArray(val, known_url_names) == -1) {
+                        urlnames.show();
+                    }
+                }
+            }
+            $(function() {
+                $('.field-url div').append($('#sitetree-urlnames'));
+                $('#id_url').bind({'keyup': function(){check_url_pattern()}});
+                $('#id_urlaspattern').bind({'click': function(){check_url_pattern()}});
+                check_url_pattern();
+            });
+        })(django.jQuery);
+    </script>
+{% endblock %}
+{% block content %}{{ block.super }}
+<div id="sitetree-urlnames" class="help" style="display:none;">
+    <p>{{ adminform.form.known_url_names_hint|safe }}</p>
+    <ul>
+        {% for url_rule in adminform.form.known_url_rules %}
+            <li>{{ url_rule|safe }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}
+{% block breadcrumbs %}{% include "admin/sitetree/treeitem/breadcrumbs.html" %}{% endblock %}

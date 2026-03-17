@@ -1,0 +1,218 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7ddb2995f48012001146c0eb94d23367
+BELONGS ya.make
+    License text:
+        Copyright 2008 Google Inc.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d61877503bd46b5ac8873843ac293ee7
+BELONGS ya.make
+    License text:
+        // Copyright 2023 Google LLC.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        upb/base/descriptor_constants.h [2:2]
+        upb/base/internal/endian.h [2:2]
+        upb/base/internal/log2.h [2:2]
+        upb/base/status.c [2:2]
+        upb/base/status.h [2:2]
+        upb/base/string_view.h [2:2]
+        upb/base/upcast.h [2:2]
+        upb/generated_code_support.h [2:2]
+        upb/hash/common.c [2:2]
+        upb/hash/common.h [2:2]
+        upb/hash/int_table.h [2:2]
+        upb/hash/str_table.h [2:2]
+        upb/json/decode.c [2:2]
+        upb/json/decode.h [2:2]
+        upb/json/encode.c [2:2]
+        upb/json/encode.h [2:2]
+        upb/lex/atoi.c [2:2]
+        upb/lex/atoi.h [2:2]
+        upb/lex/round_trip.c [2:2]
+        upb/lex/round_trip.h [2:2]
+        upb/lex/strtod.c [2:2]
+        upb/lex/strtod.h [2:2]
+        upb/lex/unicode.c [2:2]
+        upb/lex/unicode.h [2:2]
+        upb/mem/alloc.c [2:2]
+        upb/mem/alloc.h [2:2]
+        upb/mem/arena.c [2:2]
+        upb/mem/arena.h [2:2]
+        upb/mem/internal/arena.h [2:2]
+        upb/message/accessors.c [2:2]
+        upb/message/accessors.h [2:2]
+        upb/message/array.c [2:2]
+        upb/message/array.h [2:2]
+        upb/message/compare.c [2:2]
+        upb/message/compare.h [2:2]
+        upb/message/compat.c [2:2]
+        upb/message/compat.h [2:2]
+        upb/message/copy.c [2:2]
+        upb/message/copy.h [2:2]
+        upb/message/internal/accessors.h [2:2]
+        upb/message/internal/array.h [2:2]
+        upb/message/internal/compare_unknown.c [2:2]
+        upb/message/internal/compare_unknown.h [2:2]
+        upb/message/internal/extension.c [2:2]
+        upb/message/internal/extension.h [2:2]
+        upb/message/internal/map.h [2:2]
+        upb/message/internal/map_entry.h [2:2]
+        upb/message/internal/map_sorter.h [2:2]
+        upb/message/internal/message.c [2:2]
+        upb/message/internal/message.h [2:2]
+        upb/message/internal/tagged_ptr.h [2:2]
+        upb/message/internal/types.h [2:2]
+        upb/message/map.c [2:2]
+        upb/message/map.h [2:2]
+        upb/message/map_gencode_util.h [2:2]
+        upb/message/map_sorter.c [2:2]
+        upb/message/message.c [2:2]
+        upb/message/message.h [2:2]
+        upb/message/tagged_ptr.h [2:2]
+        upb/message/value.h [2:2]
+        upb/mini_descriptor/build_enum.c [2:2]
+        upb/mini_descriptor/build_enum.h [2:2]
+        upb/mini_descriptor/decode.c [2:2]
+        upb/mini_descriptor/decode.h [2:2]
+        upb/mini_descriptor/internal/base92.c [2:2]
+        upb/mini_descriptor/internal/base92.h [2:2]
+        upb/mini_descriptor/internal/decoder.h [2:2]
+        upb/mini_descriptor/internal/encode.c [2:2]
+        upb/mini_descriptor/internal/encode.h [2:2]
+        upb/mini_descriptor/internal/modifiers.h [2:2]
+        upb/mini_descriptor/internal/wire_constants.h [2:2]
+        upb/mini_descriptor/link.c [2:2]
+        upb/mini_descriptor/link.h [2:2]
+        upb/mini_table/enum.h [2:2]
+        upb/mini_table/extension.h [2:2]
+        upb/mini_table/extension_registry.c [2:2]
+        upb/mini_table/extension_registry.h [2:2]
+        upb/mini_table/field.h [2:2]
+        upb/mini_table/file.h [2:2]
+        upb/mini_table/internal/enum.h [2:2]
+        upb/mini_table/internal/extension.h [2:2]
+        upb/mini_table/internal/field.h [2:2]
+        upb/mini_table/internal/file.h [2:2]
+        upb/mini_table/internal/message.c [2:2]
+        upb/mini_table/internal/message.h [2:2]
+        upb/mini_table/internal/size_log2.h [2:2]
+        upb/mini_table/internal/sub.h [2:2]
+        upb/mini_table/message.c [2:2]
+        upb/mini_table/message.h [2:2]
+        upb/mini_table/sub.h [2:2]
+        upb/port/atomic.h [2:2]
+        upb/port/def.inc [2:2]
+        upb/port/undef.inc [2:2]
+        upb/port/vsnprintf_compat.h [2:2]
+        upb/reflection/common.h [2:2]
+        upb/reflection/def.h [2:2]
+        upb/reflection/def_pool.c [2:2]
+        upb/reflection/def_pool.h [2:2]
+        upb/reflection/def_type.c [2:2]
+        upb/reflection/def_type.h [2:2]
+        upb/reflection/desc_state.c [2:2]
+        upb/reflection/enum_def.c [2:2]
+        upb/reflection/enum_def.h [2:2]
+        upb/reflection/enum_reserved_range.c [2:2]
+        upb/reflection/enum_reserved_range.h [2:2]
+        upb/reflection/enum_value_def.c [2:2]
+        upb/reflection/enum_value_def.h [2:2]
+        upb/reflection/extension_range.c [2:2]
+        upb/reflection/extension_range.h [2:2]
+        upb/reflection/field_def.c [2:2]
+        upb/reflection/field_def.h [2:2]
+        upb/reflection/file_def.c [2:2]
+        upb/reflection/file_def.h [2:2]
+        upb/reflection/internal/def_builder.c [2:2]
+        upb/reflection/internal/def_builder.h [2:2]
+        upb/reflection/internal/def_pool.h [2:2]
+        upb/reflection/internal/desc_state.h [2:2]
+        upb/reflection/internal/enum_def.h [2:2]
+        upb/reflection/internal/enum_reserved_range.h [2:2]
+        upb/reflection/internal/enum_value_def.h [2:2]
+        upb/reflection/internal/extension_range.h [2:2]
+        upb/reflection/internal/field_def.h [2:2]
+        upb/reflection/internal/file_def.h [2:2]
+        upb/reflection/internal/message_def.h [2:2]
+        upb/reflection/internal/message_reserved_range.h [2:2]
+        upb/reflection/internal/method_def.h [2:2]
+        upb/reflection/internal/oneof_def.h [2:2]
+        upb/reflection/internal/service_def.h [2:2]
+        upb/reflection/internal/strdup2.c [2:2]
+        upb/reflection/internal/strdup2.h [2:2]
+        upb/reflection/internal/upb_edition_defaults.h [2:2]
+        upb/reflection/message.c [2:2]
+        upb/reflection/message.h [2:2]
+        upb/reflection/message_def.c [2:2]
+        upb/reflection/message_def.h [2:2]
+        upb/reflection/message_reserved_range.c [2:2]
+        upb/reflection/message_reserved_range.h [2:2]
+        upb/reflection/method_def.c [2:2]
+        upb/reflection/method_def.h [2:2]
+        upb/reflection/oneof_def.c [2:2]
+        upb/reflection/oneof_def.h [2:2]
+        upb/reflection/service_def.c [2:2]
+        upb/reflection/service_def.h [2:2]
+        upb/text/encode.c [2:2]
+        upb/text/encode.h [2:2]
+        upb/util/def_to_proto.c [2:2]
+        upb/util/def_to_proto.h [2:2]
+        upb/util/required_fields.c [2:2]
+        upb/util/required_fields.h [2:2]
+        upb/wire/decode.c [2:2]
+        upb/wire/decode.h [2:2]
+        upb/wire/encode.c [2:2]
+        upb/wire/encode.h [2:2]
+        upb/wire/eps_copy_input_stream.c [2:2]
+        upb/wire/eps_copy_input_stream.h [2:2]
+        upb/wire/internal/constants.h [2:2]
+        upb/wire/internal/decode_fast.c [2:2]
+        upb/wire/internal/decode_fast.h [2:2]
+        upb/wire/internal/decoder.h [2:2]
+        upb/wire/internal/reader.h [2:2]
+        upb/wire/reader.c [2:2]
+        upb/wire/reader.h [2:2]
+        upb/wire/types.h [2:2]

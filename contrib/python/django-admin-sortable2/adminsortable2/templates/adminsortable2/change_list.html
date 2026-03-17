@@ -1,0 +1,12 @@
+{% extends base_change_list_template|default:'admin/change_list.html' %}
+
+{% block extrahead %}
+	{{ block.super }}
+	<script type="application/json" id="admin_sortable2_config">
+		{
+			"update_url": "{{ sortable_update_url }}",
+			"current_page": {{ cl.page_num }},
+			"total_pages": {{ cl.paginator.num_pages }}
+		}
+	</script>
+{% endblock %}

@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LongDescription",
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "summary for object"
+    },
+    "description": {
+      "type": "string",
+      "description": "datamodel-code-generator. This code generator creates pydantic model from an openapi file and others."
+    },
+    "multi_line": {
+      "description": "datamodel-code-generator\nThis code generator creates pydantic model from an openapi file and others.\n\n\nSupported source types\nOpenAPI 3 (YAML/JSON, OpenAPI Data Type)\nJSON Schema (JSON Schema Core/JSON Schema Validation)\nJSON/YAML/CSV Data (it will be converted to JSON Schema)\nPython dictionary (it will be converted to JSON Schema)",
+      "type": "string"
+    }
+  }
+}

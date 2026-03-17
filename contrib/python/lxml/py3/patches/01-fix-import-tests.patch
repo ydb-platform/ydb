@@ -1,0 +1,15 @@
+--- contrib/python/lxml/py3/lxml/html/diff.py	(index)
++++ contrib/python/lxml/py3/lxml/html/diff.py	(working tree)
+@@ -946,7 +946,6 @@ def _merge_element_contents(el):
+     parent[index:index+1] = el.getchildren()
+ 
+ 
+-@cython.final
+ @cython.cclass
+ class InsensitiveSequenceMatcher(SequenceMatcher):
+     """
+--- contrib/python/lxml/py3/lxml/html/diff.py	(index)
++++ contrib/python/lxml/py3/lxml/html/diff.py	(working tree)
+@@ -21 +21 @@ try:
+-    from cython.cimports.lxml.html._difflib import SequenceMatcher
++    from lxml.html._difflib import SequenceMatcher

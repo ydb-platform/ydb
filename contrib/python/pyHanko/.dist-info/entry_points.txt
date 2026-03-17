@@ -1,0 +1,2 @@
+[console_scripts]
+pyhanko = pyhanko.__main__:launch

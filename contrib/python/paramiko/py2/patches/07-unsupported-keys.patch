@@ -1,0 +1,24 @@
+--- contrib/python/paramiko/py2/paramiko/auth_handler.py	(index)
++++ contrib/python/paramiko/py2/paramiko/auth_handler.py	(working tree)
+@@ -518,13 +518,15 @@ Error Message: {}
+                 )  # noqa
+                 self._log(INFO, msg.format(e.__class__.__name__, e))
+                 key = None
++
+             if key is None:
+-                self._disconnect_no_more_auth()
+-                return
+-            # first check if this key is okay... if not, we can skip the verify
+-            result = self.transport.server_object.check_auth_publickey(
+-                username, key
+-            )
++                result = AUTH_FAILED
++            else:
++                # first check if this key is okay... if not, we can skip the verify
++                result = self.transport.server_object.check_auth_publickey(
++                    username, key
++                )
++
+             if result != AUTH_FAILED:
+                 # key is okay, verify it
+                 if not sig_attached:

@@ -1,0 +1,139 @@
+1 so2 SO2 SO2/SO2 -
+2 so4_2- SO4_2- SO4(2-)/SO4(2-) (sulphate) -
+3 dms DMS DMS/DMS -
+4 msa MSA MSA/MSA -
+5 h2s H2S H2S/H2S -
+6 nh4so4 NH4SO4 NH4SO4/(NH4)1.5H0.5SO4 -
+7 nh4hso4 NH4HSO4 NH4HSO4/NH4HSO4 -
+8 nh42so4 NH42SO4 NH42SO4/(NH4)2SO4 -
+9 sft SFT SULFATE/SULFATE -
+10 so2_aq SO2_AQ SO2_AQ/SO2 in aqueous phase -
+11 so4_aq SO4_AQ SO4_AQ/sulfate in aqueous phase -
+23 lrt_so2_s LRT_SO2_S LRT_SO2_S/long-range SO2_S -
+24 lrt_so4_s LRT_SO4_S LRT_SO4_S/LRT-contriubtion to SO4_S -
+25 lrt_sox_s LRT_SOX_S LRT_SOX_S/LRT-contriubtion to SO4_S -
+26 xsox_s XSOX_S XSOX_S/excess SOX (corrected for sea salt as sulfur) -
+27 so2_s SO2_S SO2_S/SO2 (as sulphur) -
+28 so4_s SO4_S SO4_S/SO4 (as sulphur) -
+29 sox_s SOX_S SOX_S/All oxidised sulphur compounds (as sulphur) -
+30 no NO NO -
+31 no2 NO2 NO2/NO2 -
+32 hno3 HNO3 HNO3/HNO3 -
+33 no3- NO3- NO3(-1)/NO3(-1) (nitrate) -
+34 nh4no3 NH4NO3 NH4NO3/NH4NO3 -
+35 nitrate NITRATE NITRATE/NITRATE -
+36 pno3 PNO3 PNO3/(COARSE) NITRATE -
+37 lrt_noy_n LRT_NOY_N LRT_NOY_N/long-range NOY_N -
+38 no3_n NO3_N NO3_N/NO3 as N -
+39 hno3_n HNO3_N HNO3_N/HNO3 as N -
+40 lrt_no3_n LRT_NO3_N LRT_NO3_N/long-range NO3_N -
+41 lrt_hno3_n LRT_HNO3_N LRT_HNO3_N/long-range HNO3_N -
+42 lrt_no2_n LRT_NO2_N LRT_NO2_N/long-range NO2_N -
+43 lrt_noz_n LRT_NOZ_N LRT_NOZ_N/long-range NOZ_N -
+44 nox NOX NOX/NOX as NO2 -
+45 no_n NO_N NO_N/NO as N -
+46 no2_n NO2_N NO2_N/NO2 as N -
+47 nox_n NOX_N NOX_N/NO2+NO (NOx) as nitrogen -
+48 noy_n NOY_N NOY_N/All oxidised N-compounds (as nitrogen) -
+49 noz_n NOZ_N NOZ_N/NOy-NOx (as nitrogen) -
+50 nh3 NH3 NH3/NH3 -
+51 nh4_plus NH4_PLUS NH4(+1)/NH4 -
+52 ammonium AMMONIUM AMMONIUM/AMMONIUM -
+54 nh3_n NH3_N NH3_N/NH3 (as nitrogen) -
+55 nh4_n NH4_N NH4_N/NH4 (as nitrogen) -
+56 lrt_nh3_n LRT_NH3_N LRT_NH3_N/long-range NH3_N -
+57 lrt_nh4_n LRT_NH4_N LRT_NH4_N/long-range NH4_N -
+58 lrt_nhx_n LRT_NHX_N LRT_NHX_N/long-range NHX_N -
+59 nhx_n NHX_N NHX_N/All reduced nitrogen (as nitrogen) -
+60 o3 O3 O3 -
+61 h2o2 H2O2 H2O2/H2O2 -
+62 oh OH OH/OH -
+63 o3_aq O3_AQ O3_AQ/O3 in aqueous phase -
+64 h2o2_aq H2O2_AQ H2O2_AQ/H2O2 in aqueous phase -
+65 ox OX OX/Ox=O3+NO2 -
+70 c C C -
+71 co CO CO/CO -
+72 co2 CO2 CO2/CO2 -
+73 ch4 CH4 CH4/CH4 -
+74 oc OC OC/Organic carbon (particles) -
+75 ec EC EC/Elementary carbon (particles) -
+80 cf6 CF6 CF6 -
+81 pmch PMCH PMCH/PMCH -
+82 pmcp PMCP PMCP/PMCP -
+83 tracer TRACER TRACER/Tracer -
+84 inert INERT Inert/Inert -
+85 h3 H3 H3 -
+86 ar41 AR41 Ar41/Ar41 -
+87 kr85 KR85 Kr85/Kr85 -
+88 kr88 KR88 Kr88/Kr88 -
+91 xe131 XE131 Xe131/Xe131 -
+92 xe133 XE133 Xe133/Xe133 -
+93 rn222 RN222 Rn222/Rn222 -
+95 i131 I131 I131/I131 -
+96 i132 I132 I132/I132 -
+97 i133 I133 I133/I133 -
+98 i135 I135 I135/I135 -
+100 sr90 SR90 Sr90 -
+101 co60 CO60 Co60/Co60 -
+102 ru103 RU103 Ru103/Ru103 -
+103 ru106 RU106 Ru106/Ru106 -
+104 cs134 CS134 Cs134/Cs134 -
+105 cs137 CS137 Cs137/Cs137 -
+106 ra223 RA223 Ra223/Ra123 -
+108 ra228 RA228 Ra228/Ra228 -
+110 zr95 ZR95 Zr95 -
+111 nb95 NB95 Nb95/Nb95 -
+112 ce144 CE144 Ce144/Ce144 -
+113 np238 NP238 Np238/Np238 -
+114 np239 NP239 Np239/Np239 -
+115 pu241 PU241 Pu241/Pu241 -
+116 pb210 PB210 Pb210/Pb210 -
+119 all ALL ALL -
+120 nacl NACL NACL -
+121 na_plus NA_PLUS SODIUM/Na+ -
+122 mg_2plus MG_2PLUS MAGNESIUM/Mg++ -
+123 k_plus K_PLUS POTASSIUM/K+ -
+124 ca_2plus CA_2PLUS CALCIUM/Ca++ -
+125 xmg XMG XMG/excess Mg++ (corrected for sea salt) -
+126 xk XK XK/excess K+   (corrected for sea salt) -
+128 xca XCA XCA/excess Ca++ (corrected for sea salt) -
+140 cl2 CL2 Cl2/Cloride -
+160 pmfine PMFINE PMFINE -
+161 pmcoarse PMCOARSE PMCOARSE/Coarse particles -
+162 dust DUST DUST/Dust (particles) -
+163 pnumber PNUMBER PNUMBER/Number concentration -
+164 pradius PRADIUS PRADIUS/Particle radius -
+165 psurface PSURFACE PSURFACE/Particle surface conc -
+166 pmass PMASS PMASS/Particle mass conc -
+167 pm10 PM10 PM10/PM10 particles -
+168 psox PSOX PSOX/Particulate sulfate -
+169 pnox PNOX PNOX/Particulate nitrate -
+170 pnhx PNHX PNHX/Particulate ammonium -
+171 ppmfine PPMFINE PPMFINE/Primary emitted fine particles -
+172 ppm10 PPM10 PPM10/Primary emitted particles -
+173 soa SOA SOA/Secondary Organic Aerosol -
+174 pm2.5 PM2.5 PM2.5/PM2.5 particles -
+175 pm PM PM/Total particulate matter -
+180 birch_pollen BIRCH_POLLEN BIRCH_POLLEN/Birch pollen -
+200 kz KZ KZ m2/s
+201 l L L/Monin-Obukhovs length [m] m
+202 u_star U_STAR U*/Friction velocity [m/s] m/s
+203 w_star W_STAR W*/Convective velocity scale [m/s] m/s
+204 z-d Z-D Z-D/Z0 minus displacement length [m] m
+210 surftype SURFTYPE SURFTYPE/Surface type (see \link{OCTET45}) -
+211 lai LAI LAI/Leaf area index -
+212 soiltype SOILTYPE SOILTYPE/Soil type -
+213 ssalb SSALB SSALB/Single scattering albodo [1] 1
+214 asympar ASYMPAR ASYMPAR/Asymmetry parameter -
+215 vis VIS VIS/Visibility [m] m
+216 ext EXT EXT/Extinction [1/m] 1/m
+217 bsca BSCA BSCA/Backscattering coeff [1/m/sr] 1/m/sr
+218 aod AOD AOD/Aerosol opt depth [1] 1
+219 daod DAOD DAOD/AOD per layer [1] 1
+220 conv_tied CONV_TIED CONV_TIED -
+221 conv_bot CONV_BOT CONV_BOT/Convective cloud bottom (unit?) -
+222 conv_top CONV_TOP CONV_TOP/Convective cloud top (unit?) -
+223 dxdy DXDY DXDY/Gridsize [m2] m2
+240 emis EMIS EMIS/Sectoral emissions -
+241 long LONG LONG/Longitude -
+242 lat LAT LAT/Latitude -

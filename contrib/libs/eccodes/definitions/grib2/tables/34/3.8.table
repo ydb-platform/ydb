@@ -1,0 +1,10 @@
+# Code table 3.8 - Grid point position
+0 0 Grid points at triangle vertices
+1 1 Grid points at centres of triangles
+2 2 Grid points at midpoints of triangle sides
+3 3 Grid points at shape vertices
+4 4 Grid points at centre of shapes
+5 5 Grid points at midpoints of shape sides
+# 6-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,14 @@
+{
+  "$id": "bar.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JobRun",
+  "description": "Scheduled Execution Context Configuration.",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "description": "If Live Execution is Enabled.",
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

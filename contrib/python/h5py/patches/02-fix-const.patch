@@ -1,0 +1,25 @@
+--- contrib/python/h5py/h5py/_errors.pxd	(index)
++++ contrib/python/h5py/h5py/_errors.pxd	(working tree)
+@@ -207,4 +207,4 @@ cdef extern from "hdf5.h":
+-        char    *func_name          #  function in which error occurred
+-        char    *file_name          #  file in which error occurred
+-        unsigned    line            #  line in file where error occurs
+-        char    *desc               #  optional supplied description
++        const char    *func_name          #  function in which error occurred
++        const char    *file_name          #  file in which error occurred
++        const unsigned    line            #  line in file where error occurs
++        const char    *desc               #  optional supplied description
+--- contrib/python/h5py/h5py/defs.pyx	(index)
++++ contrib/python/h5py/h5py/defs.pyx	(working tree)
+@@ -1963,2 +1963,2 @@ cdef hid_t H5Pget_driver(hid_t fapl_id) except *:
+-cdef void* H5Pget_driver_info(hid_t plist_id) except <void*>NULL:
+-    cdef void* r
++cdef const void* H5Pget_driver_info(hid_t plist_id) except <void*>NULL:
++    cdef const void* r
+--- contrib/python/h5py/h5py/h5l.pyx	(index)
++++ contrib/python/h5py/h5py/h5l.pyx	(working tree)
+@@ -169,2 +169,2 @@ cdef class LinkProxy:
+-        cdef char* ext_file_name = NULL
+-        cdef char* ext_obj_name = NULL
++        cdef const char* ext_file_name = NULL
++        cdef const char* ext_obj_name = NULL

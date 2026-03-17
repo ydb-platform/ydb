@@ -1,0 +1,36 @@
+	libgeotiff Binary Distribution for Unix
+	---------------------------------------
+
+This tree contains a binary distribution of libgeotiff, and related
+utilities (listgeo, and geotifcp) for a Unix platform (as indicated in 
+the distribution filename).  
+
+The distribution should consist of:
+
+README: this file
+bin/listgeo: utility program
+bin/geotifcp: utility program
+lib/libgeotiff.a: static library for libgeotiff, applications also have
+                  to link against libtiff.
+lib/libgeotiff-$VERSION.so: Shared library version of the above.
+lib/libgeotiff.so: link to the specific shared library.
+include: The include files for libgeotiff.
+
+This distribution is intended to be suitable to untar directly under
+/usr/local or /usr to give a rough equivelent to having done a "make install" 
+from the libgeotiff source, though this README should be removed.
+
+User documentation for listgeo and geotifcp can be found at:
+
+  http://www.remotesensing.org/geotiff/listgeo.html
+  http://www.remotesensing.org/geotiff/geotifcp.html
+
+General information on libgeotiff, and GeoTIFF can be found at:
+
+  http://www.remotesensing.org/geotiff/geotiff.html 
+
+or 
+
+  http://www.geotiff.org/
+
+

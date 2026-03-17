@@ -1,0 +1,74 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block javascripts %}
+    {{ block.super }}
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function(){
+                var anchors = $("#grp-docutils-content").find("h3");
+                $(anchors).each(function() {
+                    var anchorId = $(this).attr("id");
+                    $(this).removeAttr("id");
+                    $("<span id=" + anchorId + " class='grp-anchor' />").insertBefore(this);
+                });
+                $("#grp-docutils-content .grp-group").grp_collapsible_group();
+                $("#grp-docutils-content .grp-collapse").grp_collapsible();
+            });
+        })(grp.jQuery);
+    </script>
+{% endblock %}
+
+{% block bodyclass %}grp-docutils{% endblock %}
+{% block content-class %}{% endblock %}
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../../">{% trans "Home" %}</a></li>
+        <li><a href="../">Documentation</a></li>
+        <li>Filters</li>
+    </ul>
+{% endblock %}
+{% block title %}Template filters{% endblock %}
+
+{% block content %}
+    <h1>Template filter documentation</h1>
+    <div class="g-d-c">
+        <div class="g-d-6">
+            {% regroup filters|dictsort:"library" by library as filter_libraries %}
+            {% for library in filter_libraries %}
+                <div class="grp-module">
+                    <h2>{% firstof library.grouper "Built-in filters" %}</h2>
+                    <ul class="grp-listing-small">
+                        {% for filter in library.list|dictsort:"name" %}
+                            <li class="grp-row"><a href="#{{ filter.name }}"><strong>{{ filter.name }}</strong></a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endfor %}
+        </div>
+        <div class="g-d-18 g-d-l grp-rte" id="grp-docutils-content">
+            {% regroup filters|dictsort:"library" by library as filter_libraries %}
+            {% for library in filter_libraries %}
+                <div class="grp-group grp-collapse grp-open">
+                    <h2 class="grp-collapse-handler">{% firstof library.grouper "Built-in filters" %}</h2>
+                    {% if library.grouper %}
+                        <div class="grp-row" style="border: 0">
+                            <p>To use these filters, put <code>{% templatetag openblock %} load {{ library.grouper }} {% templatetag closeblock %}</code> in your template before using the filter.</p>
+                        </div>
+                    {% endif %}
+                    {% for filter in library.list|dictsort:"name" %}
+                        <div class="grp-module">
+                            <h3 id="{{ filter.name }}">{{ filter.name }}</h3>
+                            {% if filter.title or filter.body %}
+                                <div class="grp-row">
+                                    {% if filter.title %}<h4>{{ filter.title }}</h4>{% endif %}
+                                    {% if filter.body %}<p>{{ filter.body }}</p>{% endif %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}
+

@@ -1,0 +1,18 @@
+about_resource: dmp.py
+version: a6367d7
+download_url: https://github.com/google/diff-match-patch/blob/a6367d7866833ac037fbdefcdbcbee4def86e326/python2/diff_match_patch.py
+name: diff-match-patch
+
+description: Modified diff-match-patch with various optimizations and simplifications.
+notes: this file was heavily modified
+
+homepage_url: https://github.com/google/diff-match-patch
+
+copyright: Copyright 2018 The diff-match-patch Authors.
+
+owner: nexB
+
+license_expression: apache-2.0
+licenses:
+-   file: dmp.py.LICENSE
+    key: apache-2.0

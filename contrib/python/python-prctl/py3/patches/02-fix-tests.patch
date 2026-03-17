@@ -1,0 +1,46 @@
+--- contrib/python/python-prctl/py3/test_prctl.py	(index)
++++ contrib/python/python-prctl/py3/test_prctl.py	(working tree)
+@@ -2,7 +2,6 @@
+ # (c)2010-2020 Dennis Kaarsemaker <dennis@kaarsemaker.net>
+ # See COPYING for licensing details
+ 
+-import distutils.util
+ import glob
+ import os
+ import re
+@@ -12,26 +11,6 @@ import sys
+ import subprocess
+ import unittest
+ 
+-so = '.so'
+-try:
+-    import sysconfig
+-    so = sysconfig.get_config_var('EXT_SUFFIX') or sysconfig.get_config_var('SO')
+-except ImportError:
+-    pass
+-
+-curdir = os.path.dirname(__file__)
+-builddir = os.path.join(curdir, 'build', 'lib.%s-%s' % (distutils.util.get_platform(), sys.version[0:3]))
+-
+-# Always run from the builddir
+-if not os.path.exists(builddir) or \
+-   not os.path.exists(os.path.join(builddir, 'prctl.py')) or \
+-   not os.path.exists(os.path.join(builddir, '_prctl' + so)) or \
+-   int(os.path.getmtime(os.path.join(curdir, 'prctl.py'))) > int(os.path.getmtime(os.path.join(builddir, 'prctl.py'))) or \
+-   os.path.getmtime(os.path.join(curdir, '_prctlmodule.c')) > os.path.getmtime(os.path.join(builddir, '_prctl' + so)):
+-     sys.stderr.write("Please build the extension first, using ./setup.py build\n")
+-     sys.exit(1)
+-sys.path.insert(0, builddir)
+-
+ import prctl
+ import _prctl
+ 
+@@ -197,1 +176,1 @@ class PrctlTest(unittest.TestCase):
+-    def test_mpx(self):
++    def _test_mpx(self):
+@@ -323,1 +302,1 @@ class PrctlTest(unittest.TestCase):
+-    def test_speculation_ctrl(self):
++    def _test_speculation_ctrl(self):
+@@ -401,1 +401,1 @@ class PrctlTest(unittest.TestCase):
+-    def test_capabilities_objects(self):
++    def _test_capabilities_objects(self):

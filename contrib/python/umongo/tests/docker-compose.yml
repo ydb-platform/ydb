@@ -1,0 +1,12 @@
+version: '3'
+services:
+  mongodb:
+    image: mongo:3.6@sha256:0f0c0b6a4b6f6f5081599dd9073d275ecb773875e990b8e80cf75b024e896263
+    restart: always
+    command: mongod --smallfiles
+    environment:
+      MONGO_DATA_DIR: "/data/db"
+    volumes:
+      - /tmp/data/db:/data/db
+    ports:
+      - 27017:27017

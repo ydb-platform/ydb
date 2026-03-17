@@ -1,0 +1,136 @@
+Metadata-Version: 2.1
+Name: clickhouse-sqlalchemy
+Version: 0.1.11
+Summary: Simple ClickHouse SQLAlchemy Dialect
+Home-page: https://github.com/xzkostyan/clickhouse-sqlalchemy
+Author: Konstantin Lebedev
+Author-email: kostyan.lebedev@gmail.com
+License: MIT
+Keywords: ClickHouse db database cloud analytics
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: SQL
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Topic :: Database
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, <4
+Requires-Dist: sqlalchemy<1.4,>=1.3
+Requires-Dist: requests
+Requires-Dist: clickhouse-driver>=0.1.2
+Requires-Dist: ipaddress; python_version < "3.4"
+
+ClickHouse SQLAlchemy
+=====================
+
+ClickHouse dialect for SQLAlchemy to `ClickHouse database <https://clickhouse.yandex/>`_.
+
+
+.. image:: https://img.shields.io/pypi/v/clickhouse-sqlalchemy.svg
+    :target: https://pypi.org/project/clickhouse-sqlalchemy
+
+.. image:: https://coveralls.io/repos/github/xzkostyan/clickhouse-sqlalchemy/badge.svg?branch=master
+    :target: https://coveralls.io/github/xzkostyan/clickhouse-sqlalchemy?branch=master
+
+.. image:: https://img.shields.io/pypi/l/clickhouse-sqlalchemy.svg
+    :target: https://pypi.org/project/clickhouse-sqlalchemy
+
+.. image:: https://img.shields.io/pypi/pyversions/clickhouse-sqlalchemy.svg
+    :target: https://pypi.org/project/clickhouse-sqlalchemy
+
+.. image:: https://img.shields.io/pypi/dm/clickhouse-sqlalchemy.svg
+    :target: https://pypi.org/project/clickhouse-sqlalchemy
+
+.. image:: https://github.com/xzkostyan/clickhouse-sqlalchemy/actions/workflows/actions.yml/badge.svg
+   :target: https://github.com/xzkostyan/clickhouse-sqlalchemy/actions/workflows/actions.yml
+
+
+Documentation
+=============
+
+Documentation is available at https://clickhouse-sqlalchemy.readthedocs.io.
+
+
+Usage
+=====
+
+Supported interfaces:
+
+- **native** [recommended] (TCP) via `clickhouse-driver <https://github.com/mymarilyn/clickhouse-driver>`_
+- **http** via requests
+
+Define table
+
+    .. code-block:: python
+
+        from sqlalchemy import create_engine, Column, MetaData
+
+        from clickhouse_sqlalchemy import (
+            Table, make_session, get_declarative_base, types, engines
+        )
+
+        uri = 'clickhouse+native://localhost/default'
+
+        engine = create_engine(uri)
+        session = make_session(engine)
+        metadata = MetaData(bind=engine)
+
+        Base = get_declarative_base(metadata=metadata)
+
+        class Rate(Base):
+            day = Column(types.Date, primary_key=True)
+            value = Column(types.Int32)
+
+            __table_args__ = (
+                engines.Memory(),
+            )
+
+        Rate.__table__.create()
+
+
+Insert some data
+
+    .. code-block:: python
+
+        from datetime import date, timedelta
+
+        from sqlalchemy import func
+
+        today = date.today()
+        rates = [
+            {'day': today - timedelta(i), 'value': 200 - i}
+            for i in range(100)
+        ]
+
+
+And query inserted data
+
+    .. code-block:: python
+
+        session.execute(Rate.__table__.insert(), rates)
+
+        session.query(func.count(Rate.day)) \
+            .filter(Rate.day > today - timedelta(20)) \
+            .scalar()
+
+
+License
+=======
+
+ClickHouse SQLAlchemy is distributed under the `MIT license
+<http://www.opensource.org/licenses/mit-license.php>`_.
+
+

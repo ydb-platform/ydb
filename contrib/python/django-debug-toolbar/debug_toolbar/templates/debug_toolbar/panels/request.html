@@ -1,0 +1,49 @@
+{% load i18n %}
+
+<h4>{% trans "View information" %}</h4>
+<table>
+  <thead>
+    <tr>
+      <th>{% trans "View function" %}</th>
+      <th>{% trans "Arguments" %}</th>
+      <th>{% trans "Keyword arguments" %}</th>
+      <th>{% trans "URL name" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>{{ view_func }}</code></td>
+      <td><code>{{ view_args|pprint }}</code></td>
+      <td><code>{{ view_kwargs|pprint }}</code></td>
+      <td><code>{{ view_urlname }}</code></td>
+    </tr>
+  </tbody>
+</table>
+
+{% if cookies %}
+  <h4>{% trans "Cookies" %}</h4>
+  {% include 'debug_toolbar/panels/request_variables.html' with variables=cookies %}
+{% else %}
+  <h4>{% trans "No cookies" %}</h4>
+{% endif %}
+
+{% if session %}
+  <h4>{% trans "Session data" %}</h4>
+  {% include 'debug_toolbar/panels/request_variables.html' with variables=session %}
+{% else %}
+  <h4>{% trans "No session data" %}</h4>
+{% endif %}
+
+{% if get %}
+  <h4>{% trans "GET data" %}</h4>
+  {% include 'debug_toolbar/panels/request_variables.html' with variables=get %}
+{% else %}
+  <h4>{% trans "No GET data" %}</h4>
+{% endif %}
+
+{% if post %}
+  <h4>{% trans "POST data" %}</h4>
+  {% include 'debug_toolbar/panels/request_variables.html' with variables=post %}
+{% else %}
+  <h4>{% trans "No POST data" %}</h4>
+{% endif %}

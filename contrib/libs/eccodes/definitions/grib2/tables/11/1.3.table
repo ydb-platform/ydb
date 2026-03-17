@@ -1,0 +1,10 @@
+# Code table 1.3 - Production status of data
+0 0 Operational products
+1 1 Operational test products
+2 2 Research products
+3 3 Re-analysis products
+4 4 THORPEX Interactive Grand Global Ensemble (TIGGE)
+5 5 THORPEX Interactive Grand Global Ensemble test (TIGGE)
+6 6 Sub-seasonal to seasonal prediction project (S2S)
+7 7 Sub-seasonal to seasonal prediction project test (S2S)
+255 255 Missing

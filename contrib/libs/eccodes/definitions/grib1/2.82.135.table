@@ -1,0 +1,104 @@
+1 grg1 GRG1 GRG1/MOZART specie kg/kg
+2 grg2 GRG2 GRG2/MOZART specie kg/kg
+3 grg3 GRG3 GRG3/MOZART specie kg/kg
+4 grg4 GRG4 GRG4/MOZART specie kg/kg
+5 grg5 GRG5 GRG5/MOZART specie kg/kg
+100 vis-340 VIS-340 VIS-340/Visibility at 340 nm m
+101 vis-355 VIS-355 VIS-355/Visibility at 355 nm m
+102 vis-380 VIS-380 VIS-380/Visibility at 380 nm m
+103 vis-440 VIS-440 VIS-440/Visibility at 440 nm m
+104 vis-500 VIS-500 VIS-500/Visibility at 500 nm m
+105 vis-532 VIS-532 VIS-532/Visibility at 532 nm m
+106 vis-675 VIS-675 VIS-675/Visibility at 675 nm m
+107 vis-870 VIS-870 VIS-870/Visibility at 870 nm m
+108 vis-1020 VIS-1020 VIS-1020/Visibility at 1020 nm m
+109 vis-1064 VIS-1064 VIS-1064/Visibility at 1064 nm m
+110 vis-3500 VIS-3500 VIS-3500/Visibility at 3500 nm m
+111 vis-10000 VIS-10000 VIS-10000/Visibility at 10000 nm m
+120 bsca-340 BSCA-340 BSCA-340/Backscatter at 340 nm 1/m/sr
+121 bsca-355 BSCA-355 BSCA-355/Backscatter at 355 nm 1/m/sr
+122 bsca-380 BSCA-380 BSCA-380/Backscatter at 380 nm 1/m/sr
+123 bsca-440 BSCA-440 BSCA-440/Backscatter at 440 nm 1/m/sr
+124 bsca-500 BSCA-500 BSCA-500/Backscatter at 500 nm 1/m/sr
+125 bsca-532 BSCA-532 BSCA-532/Backscatter at 532 nm 1/m/sr
+126 bsca-675 BSCA-675 BSCA-675/Backscatter at 675 nm 1/m/sr
+127 bsca-870 BSCA-870 BSCA-870/Backscatter at 870 nm 1/m/sr
+128 bsca-1020 BSCA-1020 BSCA-1020/Backscatter at 1020 nm 1/m/sr
+129 bsca-1064 BSCA-1064 BSCA-1064/Backscatter at 1064 nm 1/m/sr
+130 bsca-3500 BSCA-3500 BSCA-3500/Backscatter at 3500 nm 1/m/sr
+131 bsca-10000 BSCA-10000 BSCA-10000/Backscatter at 10000 nm 1/m/sr
+140 ext-340 EXT-340 EXT-340/Extinction at 340 nm 1/m
+141 ext-355 EXT-355 EXT-355/Extinction at 355 nm 1/m
+142 ext-380 EXT-380 EXT-380/Extinction at 380 nm 1/m
+143 ext-440 EXT-440 EXT-440/Extinction at 440 nm 1/m
+144 ext-500 EXT-500 EXT-500/Extinction at 500 nm 1/m
+145 ext-532 EXT-532 EXT-532/Extinction at 532 nm 1/m
+146 ext-675 EXT-675 EXT-675/Extinction at 675 nm 1/m
+147 ext-870 EXT-870 EXT-870/Extinction at 870 nm 1/m
+148 ext-1020 EXT-1020 EXT-1020/Extinction at 1020 nm 1/m
+149 ext-1064 EXT-1064 EXT-1064/Extinction at 1064 nm 1/m
+150 ext-3500 EXT-3500 EXT-3500/Extinction at 3500 nm 1/m
+151 ext-10000 EXT-10000 EXT-10000/Extinction at 10000 nm 1/m
+160 aod-340 AOD-340 AOD-340/Aerosol optical depth at 340 nm 1
+161 aod-355 AOD-355 AOD-355/Aerosol optical depth at 355 nm 1
+162 aod-380 AOD-380 AOD-380/Aerosol optical depth at 380 nm 1
+163 aod-440 AOD-440 AOD-440/Aerosol optical depth at 440 nm 1
+164 aod-500 AOD-500 AOD-500/Aerosol optical depth at 500 nm 1
+165 aod-532 AOD-532 AOD-532/Aerosol optical depth at 532 nm 1
+166 aod-675 AOD-675 AOD-675/Aerosol optical depth at 675 nm 1
+167 aod-870 AOD-870 AOD-870/Aerosol optical depth at 870 nm 1
+168 aod-1020 AOD-1020 AOD-1020/Aerosol optical depth at 1020 nm 1
+169 aod-1064 AOD-1064 AOD-1064/Aerosol optical depth at 1064 nm 1
+170 aod-3500 AOD-3500 AOD-3500/Aerosol optical depth at 3500 nm 1
+171 aod-10000 AOD-10000 AOD-10000/Aerosol optical depth at 10000 nm 1
+180 aod-635 AOD-635 Aerosol optical thickness at 0.635 micro-m 1
+181 aod-810 AOD-810 Aerosol optical thickness at 0.810 micro-m 1
+182 aod-1640 AOD-1640 Aerosol optical thickness at 1.640 micro-m 1
+183 ang ANG Angstrom coefficient 1
+208 frain FRAIN Rain fraction of total cloud water Proportion
+209 facrain FACRAIN Rain factor Numeric
+210 tqr TQR Total column integrated rain kg/m2
+211 tqs TQS Total column integrated snow kg/m2
+212 twatp TWATP Total water precipitation kg/m2
+213 tsnowp TSNOWP Total snow precipitation kg/m2
+214 tcw TCW Total column water (Vertically integrated total water) kg/m2
+215 lsprate LSPRATE Large scale precipitation rate kg/m2/s
+216 csrwe CSRWE Convective snowfall rate water equivalent kg/m2/s
+217 prs_gsp PRS_GSP Large scale snowfall rate water equivalent kg/m2/s
+218 tsrate TSRATE Total snowfall rate m/s
+219 csrate CSRATE Convective snowfall rate m/s
+220 lssrate LSSRATE Large scale snowfall rate m/s
+221 sdwe SDWE Snow depth water equivalent kg/m2
+222 se SE Snow evaporation kg/m2
+223 tciwv TCIWV Total column integrated water vapour kg/m2
+224 rprate RPRATE Rain precipitation rate kg/m2/s
+225 sprate SPRATE Snow precipitation rate kg/m2/s
+226 fprate FPRATE Freezing rain precipitation rate kg/m2/s
+227 iprate IPRATE Ice pellets precipitation rate kg/m2/s
+228 clwc CLWC Specific cloud liquid water content kg/kg
+229 ciwc CIWC Specific cloud ice water content kg/kg
+230 crwc CRWC Specific rain water content kg/kg
+231 cswc CSWC Specific snow water content kg/kg
+232 ugust UGUST u-component of wind (gust) m/s
+233 vgust VGUST v-component of wind (gust) m/s
+234 vwsh VWSH Vertical speed shear 1/s
+235 mflx MFLX Horizontal momentum flux N/m2
+236 ustm USTM u-component storm motion m/s
+237 vstm VSTM v-component storm motion m/s
+238 cd CD Drag coefficient Numeric
+239 eta ETA Eta coordinate vertical velocity 1/s
+240 alts ALTS Altimeter setting Pa
+241 thick THICK Thickness m
+242 presalt PRESALT Pressure altitude m
+243 denalt DENALT Density altitude m
+244 5wavh 5WAVH 5-wave geopotential height gpm
+245 u-gwd U-GWD Zonal flux of gravity wave stress N/m2
+246 v-gwd V-GWD Meridional flux of gravity wave stress N/m2
+247 hbpl HBPL Planetary boundary layer height m
+248 5wava 5WAVA 5-wave geopotential height anomaly gpm
+249 stdsgor STDSGOR Standard deviation of sub-gridscale orography m
+250 angsgor ANGSGOR Angle of sub-gridscale orography rad
+251 slsgor SLSGOR Slope of sub-gridscale orography Numeric
+252 gwd GWD Gravity wave dissipation W/m2
+253 isor ISOR Anisotropy of sub-gridscale orography Numeric
+254 nlpres NLPRES Natural logarithm of pressure in Pa Numeric

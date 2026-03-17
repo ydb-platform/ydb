@@ -1,0 +1,27 @@
+# (C) Copyright 2005- ECMWF.
+#
+# This software is licensed under the terms of the Apache Licence Version 2.0
+# which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+# 
+# In applying this licence, ECMWF does not waive the privileges and immunities granted to it by
+# virtue of its status as an intergovernmental organisation nor does it submit to any jurisdiction.
+#
+
+position startOfHeaders;
+ascii[4] identifier;
+
+alias ls.identifier=identifier;
+transient missingValue   = 9999;
+constant  ieeeFloats   = 0;
+template  section1 "tide/section.1.def";
+template  mars     "tide/mars_labeling.def";
+
+# Used to mark end of headers. Can be accessed with grib_get_offset()
+position   endOfHeadersMarker;
+meta lengthOfHeaders evaluate( endOfHeadersMarker-startOfHeaders);
+meta md5Headers md5(startOfHeaders,lengthOfHeaders);
+
+template  section4 "tide/section.4.def";
+ascii[4]  endMark;
+
+position   totalLength;

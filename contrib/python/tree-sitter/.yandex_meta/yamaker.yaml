@@ -1,0 +1,32 @@
+requirements:
+  - contrib/libs/tree_sitter/core
+  - contrib/libs/tree_sitter/grammars/c
+  - contrib/libs/tree_sitter/grammars/cpp
+  - contrib/libs/tree_sitter/grammars/go
+  - contrib/libs/tree_sitter/grammars/java
+  - contrib/libs/tree_sitter/grammars/kotlin
+  - contrib/libs/tree_sitter/grammars/proto
+  - contrib/libs/tree_sitter/grammars/python
+  - contrib/libs/tree_sitter/grammars/rust
+  - contrib/libs/tree_sitter/grammars/scala
+  - contrib/libs/tree_sitter/grammars/sql
+  - contrib/libs/tree_sitter/grammars/swift
+  - contrib/libs/tree_sitter/grammars/typescript
+  - contrib/libs/tree_sitter/grammars/javascript
+  - contrib/libs/tree_sitter/grammars/c-sharp
+  - contrib/libs/tree_sitter/grammars/ruby
+  - contrib/libs/tree_sitter/grammars/tsx
+  - contrib/libs/tree_sitter/grammars/css
+  - library/python/symbols/registry
+  - setuptools
+exclude_from_macros:
+  - grammars/*
+exclude:
+  - tree_sitter/core/*
+keep:
+  - syms.cpp
+  - tree_sitter/binding.pyi
+  - tree_sitter/py.typed
+  - tests/test_tree_sitter.py
+mark_as_sources:
+  - syms.cpp

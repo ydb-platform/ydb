@@ -1,0 +1,58 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 7.2, Grid point data - complex packing
+
+position offsetBeforeData;
+
+constant orderOfSpatialDifferencing     = 0;
+constant numberOfOctetsExtraDescriptors = 0;
+
+meta codedValues data_g2second_order_packing(
+     section7Length,
+     offsetBeforeData,
+     offsetSection7,
+	unitsFactor,
+     unitsBias,
+     changingPrecision,
+     numberOfCodedValues,
+     bitsPerValue,
+     referenceValue,
+     binaryScaleFactor,
+     decimalScaleFactor,
+     # g2second_order_packing
+     halfByte,
+     packingType,
+     grid_ieee,
+     precision,
+     widthOfFirstOrderValues,
+     firstOrderValues,
+     N1,
+     N2,
+     numberOfGroups,
+     codedNumberOfGroups,
+     numberOfSecondOrderPackedValues,
+     extraValues,
+     groupWidths,
+     widthOfWidths,
+     groupLengths,
+     widthOfLengths,
+     NL,
+     SPD,
+     widthOfSPD,
+     orderOfSPD,
+     numberOfPoints
+): read_only;
+
+meta values data_apply_bitmap(
+     codedValues,
+     bitmap,
+     missingValue,
+     binaryScaleFactor,
+     numberOfDataPoints,
+     numberOfValues
+) : dump;
+
+alias data.packedValues = codedValues;
+
+template statistics "common/statistics_grid.def";
+template missing_values "common/missing_values_grid.def";

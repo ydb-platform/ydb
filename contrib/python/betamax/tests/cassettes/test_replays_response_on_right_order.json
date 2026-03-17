@@ -1,0 +1,63 @@
+{
+  "http_interactions": [
+    {
+      "recorded_at": "2013-12-22T16:30:30",
+      "response": {
+        "headers": {
+          "server": "gunicorn/0.17.4",
+          "access-control-allow-origin": "*",
+          "date": "Sun, 22 Dec 2013 16:31:13 GMT",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "content-length": "295"
+        },
+        "status_code": 200,
+        "body": {
+          "string": "{\n  \"headers\": {\n    \"Accept-Encoding\": \"gzip, deflate, compress\",\n    \"Accept\": \"*/*\",\n    \"Host\": \"httpbin.org\",\n    \"User-Agent\": \"python-requests/2.0.0 CPython/3.3.2 Linux/3.2.29\",\n    \"Connection\": \"close\"\n  },\n  \"origin\": \"72.160.214.132\",\n  \"args\": {},\n  \"url\": \"http://httpbin.org/get\"\n}",
+          "encoding": null
+        },
+        "url": "http://httpbin.org/get"
+      },
+      "request": {
+        "method": "GET",
+        "headers": {
+          "Accept-Encoding": "gzip, deflate, compress",
+          "Accept": "*/*",
+          "User-Agent": "python-requests/2.0.0 CPython/3.3.2 Linux/3.2.29"
+        },
+        "uri": "http://httpbin.org/get",
+        "body": ""
+      }
+    },
+    {
+      "recorded_at": "2013-12-22T16:30:30",
+      "response": {
+        "headers": {
+          "server": "gunicorn/0.17.4",
+          "access-control-allow-origin": "*",
+          "date": "Sun, 22 Dec 2013 16:31:13 GMT",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "content-length": "295"
+        },
+        "status_code": 200,
+        "body": {
+          "string": "{\n  \"headers\": {\n    \"Accept-Encoding\": \"gzip, deflate, compress\",\n    \"Accept\": \"*/*\",\n    \"Host\": \"httpbin.org\",\n    \"User-Agent\": \"python-requests/2.0.0 CPython/3.3.2 Linux/3.2.29\",\n    \"Connection\": \"close\"\n  },\n  \"origin\": \"72.160.214.133\",\n  \"args\": {},\n  \"url\": \"http://httpbin.org/get\"\n}",
+          "encoding": null
+        },
+        "url": "http://httpbin.org/get"
+      },
+      "request": {
+        "method": "GET",
+        "headers": {
+          "Accept-Encoding": "gzip, deflate, compress",
+          "Accept": "*/*",
+          "User-Agent": "python-requests/2.0.0 CPython/3.3.2 Linux/3.2.29"
+        },
+        "uri": "http://httpbin.org/get",
+        "body": ""
+      }
+    }
+  ],
+  "recorded_with": "betamax"
+}

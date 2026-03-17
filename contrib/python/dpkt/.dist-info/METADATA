@@ -1,0 +1,43 @@
+Metadata-Version: 2.1
+Name: dpkt
+Version: 1.9.8
+Summary: fast, simple packet creation / parsing, with definitions for the basic TCP/IP protocols
+Home-page: https://github.com/kbandla/dpkt
+Author: Various
+Author-email: 
+License: BSD
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: AUTHORS
+
+# dpkt
+
+![Python package](https://github.com/kbandla/dpkt/workflows/Python%20package/badge.svg)
+[![Coverage Status](https://coveralls.io/repos/github/kbandla/dpkt/badge.svg?branch=master)](https://coveralls.io/github/kbandla/dpkt?branch=master)
+[![supported-versions](https://img.shields.io/pypi/pyversions/dpkt.svg)](https://pypi.python.org/pypi/dpkt)
+[![supported-versions](https://img.shields.io/pypi/implementation/dpkt.svg)](https://pypi.python.org/pypi/dpkt)
+
+The dpkt project is a python module for fast, simple packet parsing, with definitions for the basic TCP/IP protocols.
+
+### Installation
+```
+pip install dpkt
+```
+
+### Examples and Documentation
+- [Main Docs for DPKT](https://kbandla.github.io/dpkt)
+
+
+

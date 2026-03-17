@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "properties": {
+    "bounding_box": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "coordinates": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": [{
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }]
+            }
+          }
+        }
+      },
+      "required": [
+        "coordinates",
+        "type"
+      ]
+    },
+    "attributes": {
+      "type": "object"
+    }
+  }
+}

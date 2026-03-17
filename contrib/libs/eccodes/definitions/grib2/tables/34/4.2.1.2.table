@@ -1,0 +1,28 @@
+# Product discipline 1 - Hydrological products, parameter category 2: inland water and sediment properties
+0 0 Water depth (m)
+1 1 Water temperature (K)
+2 2 Water fraction (Proportion)
+3 3 Sediment thickness (m)
+4 4 Sediment temperature (K)
+5 5 Ice thickness (m)
+6 6 Ice temperature (K)
+7 7 Ice cover (Proportion)
+8 8 Land cover (0 = water, 1 = land) (Proportion)
+9 9 Shape factor with respect to salinity profile (-)
+10 10 Shape factor with respect to temperature profile in thermocline (-)
+11 11 Attenuation coefficient of water with respect to solar radiation (m)
+12 12 Salinity (kg/kg)
+13 13 Cross-sectional area of flow in channel (m2)
+14 14 Snow temperature (K)
+15 15 Lake depth (m)
+16 16 River depth (m)
+17 17 Floodplain depth (m)
+18 18 Floodplain flooded fraction (proportion)
+19 19 FLoodplain flooded area (m2)
+20 20 River fraction (proportion)
+21 21 River area (m2)
+22 22 Fraction of river coverage plus river related flooding (proportion)
+23 23 Area of river coverage plus river related flooding (m2)
+# 24-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

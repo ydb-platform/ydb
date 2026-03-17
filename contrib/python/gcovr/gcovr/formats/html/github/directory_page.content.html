@@ -1,0 +1,89 @@
+{# -*- engine: jinja -*- #}
+<div class="Box m-3 filelist">
+  <div class="Box-header py-2 d-flex sticky">
+    {% set class_sortable = " sortable" if not info.static_report and entries | length > 1 else "" %}
+    <div role="rowheader" class="color-fg-muted flex-auto min-width-0 col-md-2{{class_sortable}}{% if info.sort_by == 'filename' and class_sortable %} {{info.sorted}}{% endif %}">File</div>
+    <div role="rowheader" class="color-fg-muted flex-auto min-width-0 d-flex flex-justify-end flex-wrap flex-items-baseline{{class_sortable}}{% if info.sort_by == 'lines' and class_sortable %} {{info.sorted}}{% endif %}">Lines</div>
+    <div role="rowheader" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2{{class_sortable}}">Functions</div>
+    <div role="rowheader" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2{{class_sortable}}{% if info.sort_by == 'branches' and class_sortable %} {{info.sorted}}{% endif %}">Branches</div>
+    {% if SHOW_CONDITION_COVERAGE %}
+    <div role="rowheader" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2{{class_sortable}}">Conditions</div>
+    {% endif %}
+    {% if SHOW_DECISION %}
+    <div role="rowheader" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2{{class_sortable}}">Decisions</div>
+    {% endif %}
+    {% if SHOW_CALLS %}
+    <div role="rowheader" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2{{class_sortable}}">Calls</div>
+    {% endif %}
+  </div>
+  {% for row in entries %}
+  <div class="Box-row Box-row--focus-gray py-2 d-flex">
+    <div role="gridcell" class="color-fg-muted flex-auto min-width-0 col-md-2">
+      <div class="d-flex">
+        <span class="mr-2">
+          <svg aria-hidden="true" focusable="false" role="img" class="color-fg-muted" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" style="display: inline-block; user-select: none; vertical-align: text-bottom; overflow: visible;"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"></path></svg>
+        </span>
+        <span class="css-truncate css-truncate-target d-block width-fit">
+          {% if row.link is not none %}
+          <a class="" title="{{row.filename}}" href="{% if info.single_page %}#{% endif %}{{row.link}}">{{row.filename}}</a>
+          {% else %}
+          {{row.filename}}
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    <div role="gridcell" class="color-fg-muted flex-auto min-width-0 d-flex flex-justify-end flex-wrap flex-items-baseline" data-sort="{{row.lines.sort}}">
+      <span class="text-small color-fg-muted mr-2">{{row.lines.exec}} of {{row.lines.total}} lines, {{row.lines.excluded}} excl
+        <span class="line-percentage-text {% if SHOW_DECISION and SHOW_CALLS %}d-none{% endif %}">({{row.lines.coverage}}%)</span>
+      </span>
+      <div class="Label--minw meter-label {% if SHOW_DECISION and SHOW_CALLS %}d-block{% else %}d-none{% endif %}">
+        <span class="Label mr-1 Label--{{row.lines.class}}">{{row.lines.coverage}}%</span>
+      </div>
+      {% if row.lines.coverage == "-" %}
+      <span style="width: 200px;"></span>
+      {% else %}
+      <span class="meter Progress Progress--large d-inline-flex {% if SHOW_DECISION and SHOW_CALLS %}d-none{% endif %}" style="width: 200px;">
+        <span class="Progress-item {{row.lines.class}}" style="width: {{row.lines.coverage}}%"></span>
+      </span>
+      {% endif %}
+    </div>
+    <div role="gridcell" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2" data-sort="{{row.functions.sort}}">
+      <span class="text-small color-fg-muted mr-2">{{row.functions.exec}} of {{row.functions.total}} functions, {{row.functions.excluded}} excl</span>
+      <div class="Label--minw">
+        <span class="Label mr-1 Label--{{row.functions.class}}">{{row.functions.coverage}}%</span>
+      </div >
+    </div>
+    <div role="gridcell" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2" data-sort="{{row.branches.sort}}">
+      <span class="text-small color-fg-muted mr-2">{{row.branches.exec}} of {{row.branches.total}} branches, {{row.branches.excluded}} excl</span>
+      <div class="Label--minw">
+        <span class="Label mr-1 Label--{{row.branches.class}}">{{row.branches.coverage}}%</span>
+      </div>
+    </div>
+    {% if SHOW_CONDITION_COVERAGE %}
+    <div role="gridcell" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2" data-sort="{{row.conditions.sort}}">
+      <span class="text-small color-fg-muted mr-2">{{row.conditions.exec}} of {{row.conditions.total}} conditions, {{row.conditions.excluded}} excl</span>
+      <div class="Label--minw">
+        <span class="Label mr-1 Label--{{row.conditions.class}}">{{row.conditions.coverage}}%</span>
+      </div>
+    </div>
+    {% endif %}
+    {% if SHOW_DECISION %}
+    <div role="gridcell" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2" data-sort="{{row.decisions.sort}}">
+      <span class="text-small color-fg-muted mr-2">{{row.decisions.exec}} of {{row.decisions.total}} decisions</span>
+      <div class="Label--minw">
+        <span class="Label mr-1 Label--{{row.decisions.class}}">{{row.decisions.coverage}}%</span>
+      </div>
+    </div>
+    {% endif %}
+    {% if SHOW_CALLS %}
+    <div role="gridcell" class="color-fg-muted d-flex flex-justify-end flex-wrap col-2" data-sort="{{row.calls.sort}}">
+      <span class="text-small color-fg-muted mr-2">{{row.calls.exec}} of {{row.calls.total}} calls, {{row.calls.excluded}} excl</span>
+      <div class="Label--minw">
+        <span class="Label mr-1 Label--{{row.calls.class}}">{{row.calls.coverage}}%</span>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+

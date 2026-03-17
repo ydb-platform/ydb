@@ -1,0 +1,226 @@
+[
+  {
+    "country_code": "IE",
+    "bic": "CHASIE4L",
+    "bank_code": "CHAS",
+    "name": "J.P. Morgan Bank Luxembourg S.A. Dublin Branch",
+    "short_name": "J.P. Morgan Bank Luxembourg S.A. Dublin Branch",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "BOFIIE2D",
+    "bank_code": "BOFI",
+    "name": "Bank Of Ireland",
+    "short_name": "Bank Of Ireland",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "AIBKIE2DXXX",
+    "bank_code": "AIBK",
+    "name": "Allied Irish Banks, p.l.c.",
+    "short_name": "Allied Irish Banks, p.l.c.",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "BOFAIE3XXXX",
+    "bank_code": "BOFA",
+    "name": "Bank of America Europe Designated Activity Company",
+    "short_name": "Bank of America Europe Designated Activity Company",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "BOFIIE2D",
+    "bank_code": "BOFI",
+    "name": "Bank of Ireland Group plc",
+    "short_name": "Bank of Ireland",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "BOFMIE2DXXX",
+    "bank_code": "BOFM",
+    "name": "Bank of Montreal",
+    "short_name": "Bank of Montreal",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "BUNQIE22XXX",
+    "bank_code": "BUNQ",
+    "name": "bunq B.V.",
+    "short_name": "bunq B.V.",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "BARCIE2DXXX",
+    "bank_code": "BARC",
+    "name": "Barclays Bank Ireland PLC",
+    "short_name": "Barclays Bank Ireland PLC",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "CITIIE2XXXX",
+    "bank_code": "CITI",
+    "name": "Citibank Europe plc",
+    "short_name": "Citibank",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "DBILIE2DXXX",
+    "bank_code": "DBIL",
+    "name": "Dell Bank International Designated Activity Company",
+    "short_name": "Dell Bank International Designated Activity Company",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "DPFAIE2DXXX",
+    "bank_code": "DPFA",
+    "name": "DEPFA Bank plc",
+    "short_name": "DEPFA Bank plc",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "EBSIIE2DXXX",
+    "bank_code": "EBSI",
+    "name": "EBS d.a.c.",
+    "short_name": "EBS d.a.c.",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "USBKIE22XXX",
+    "bank_code": "USBK",
+    "name": "Elavon Financial Services Designated Activity Company",
+    "short_name": "Elavon Financial Services Designated Activity Company",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "IRCEIE2DXXX",
+    "bank_code": "IRCE",
+    "name": "Central Bank of Ireland",
+    "short_name": "Central Bank of Ireland",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "HEINIE21XXX",
+    "bank_code": "HEIN",
+    "name": "Hewlett-Packard International Bank Designated Activity Company",
+    "short_name": "Hewlett-Packard International Bank Designated Activity Company",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "BCITIE2DXXX",
+    "bank_code": "BCIT",
+    "name": "Intesa Sanpaolo Bank Ireland P.L.C.",
+    "short_name": "Intesa Sanpaolo Bank Ireland P.L.C.",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "IVESIE2DXXX",
+    "bank_code": "IVES",
+    "name": "Investec Europe Limited",
+    "short_name": "Investec Europe Limited",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "JPMBIE2DXXX",
+    "bank_code": "JPMB",
+    "name": "JP Morgan Bank Dublin plc",
+    "short_name": "JP Morgan Bank Dublin plc",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "ICONIE2DXXX",
+    "bank_code": "ICON",
+    "name": "KBC Bank Ireland plc",
+    "short_name": "KBC Bank Ireland plc",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "MACQIE2DXXX",
+    "bank_code": "MACQ",
+    "name": "Macquarie Bank Europe Designated Activity Company",
+    "short_name": "Macquarie Bank Europe Designated Activity Company",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "IPBSIE2DXXX",
+    "bank_code": "IPBS",
+    "name": "Permanent TSB Group Holdings plc",
+    "short_name": "Permanent TSB Group Holdings plc",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "NOSCIE2XXXX",
+    "bank_code": "NOSC",
+    "name": "Scotiabank (Ireland) Designated Activity Company",
+    "short_name": "Scotiabank (Ireland) Designated Activity Company",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "ULSBIE2DXXX",
+    "bank_code": "ULSB",
+    "name": "Ulster Bank Ireland DAC",
+    "short_name": "Ulster Bank Ireland DAC",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "UNCRIE2DXXX",
+    "bank_code": "UNCR",
+    "name": "UniCredit Bank Ireland plc",
+    "short_name": "UniCredit Bank Ireland plc",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "PNBPIE2DXXX",
+    "bank_code": "PNBP",
+    "name": "Wells Fargo Bank International Unlimited Company",
+    "short_name": "Wells Fargo Bank International Unlimited Company",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "SUMUIE22",
+    "bank_code": "SUMU",
+    "name": "SumUp Limited",
+    "short_name": "SumUp",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "MODRIE22",
+    "bank_code": "MODR",
+    "name": "Modulr Finance B.V.",
+    "short_name": "Modulr Finance B.V.",
+    "primary": true
+  },
+  {
+    "country_code": "IE",
+    "bic": "REVOIE23",
+    "bank_code": "REVO",
+    "name": "Revolut Bank UAB",
+    "short_name": "Revolut Bank UAB",
+    "primary": true
+  }
+]

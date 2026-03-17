@@ -1,0 +1,48 @@
+/*++
+Copyright (c) 2006 Microsoft Corporation
+
+Module Name:
+
+    uses_theory.cpp
+
+Abstract:
+
+    <abstract>
+
+Author:
+
+    Leonardo de Moura (leonardo) 2008-10-21.
+
+Revision History:
+
+--*/
+
+#include "smt/uses_theory.h"
+#include "ast/for_each_expr.h"
+
+bool uses_theory(expr * n, family_id fid) {
+    expr_mark visited;
+    return uses_theory(n, fid, visited);
+}
+
+namespace {
+    struct found {}; 
+    struct proc {
+        family_id m_fid;
+        proc(family_id fid):m_fid(fid) {}
+        void operator()(var * n) {}
+        void operator()(app * n) { if (n->get_family_id() == m_fid) throw found(); }
+        void operator()(quantifier * n) {}
+    };
+}
+
+bool uses_theory(expr * n, family_id fid, expr_mark & visited) {
+    proc p(fid);
+    try {
+        for_each_expr(p, visited, n);
+    }
+    catch (const found &) {
+        return true;
+    }
+    return false;
+}

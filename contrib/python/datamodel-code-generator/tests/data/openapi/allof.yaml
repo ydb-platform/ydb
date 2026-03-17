@@ -1,0 +1,225 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Swagger Petstore
+  license:
+    name: MIT
+servers:
+  - url: http://petstore.swagger.io/v1
+paths:
+  /pets:
+    get:
+      summary: List all pets
+      operationId: listPets
+      tags:
+        - pets
+      parameters:
+        - name: limit
+          in: query
+          description: How many items to return at one time (max 100)
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: A paged array of pets
+          headers:
+            x-next:
+              description: A link to the next page of responses
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+                x-amazon-apigateway-integration:
+                  uri:
+                    Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PythonVersionFunction.Arn}/invocations
+                  passthroughBehavior: when_no_templates
+                  httpMethod: POST
+                  type: aws_proxy
+    post:
+      summary: Create a pet
+      operationId: createPets
+      tags:
+        - pets
+      responses:
+        '201':
+          description: Null response
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+                x-amazon-apigateway-integration:
+                  uri:
+                    Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PythonVersionFunction.Arn}/invocations
+                  passthroughBehavior: when_no_templates
+                  httpMethod: POST
+                  type: aws_proxy
+  /pets/{petId}:
+    get:
+      summary: Info for a specific pet
+      operationId: showPetById
+      tags:
+        - pets
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          description: The id of the pet to retrieve
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Expected response to a valid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    x-amazon-apigateway-integration:
+      uri:
+        Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PythonVersionFunction.Arn}/invocations
+      passthroughBehavior: when_no_templates
+      httpMethod: POST
+      type: aws_proxy
+components:
+  schemas:
+    Pet:
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        tag:
+          type: string
+    Car:
+      required:
+        - number
+      properties:
+        number:
+          type: string
+    AllOfref:
+      allOf:
+        - $ref: "#/components/schemas/Pet"
+        - $ref: "#/components/schemas/Car"
+    AllOfNested1:
+      allOf:
+       - $ref: "#/components/schemas/AllOfNested2"
+       - type: object
+         properties:
+           name:
+             $ref: "#/components/schemas/AllOfCombine"
+    AllOfNested2:
+      allOf:
+       - $ref: "#/components/schemas/AllOfNested3"
+       - type: object
+         properties:
+           name:
+             $ref: "#/components/schemas/AllOfNested1"
+    AllOfNested3:
+      allOf:
+       - $ref: "#/components/schemas/AllOfCombine"
+       - type: object
+         properties:
+           name:
+             $ref: "#/components/schemas/AnyOfCombine"
+    AllOfobj:
+      allOf:
+        - type: object
+          properties:
+            name:
+              type: string
+        - type: object
+          properties:
+            number:
+              type: string
+    AllOfCombine:
+      allOf:
+        - $ref: "#/components/schemas/Pet"
+        - type: object
+          properties:
+            birthdate:
+              type: string
+              format: date
+            size:
+              type: integer
+              minimum: 1
+    AnyOfCombine:
+        allOf:
+          - $ref: "#/components/schemas/Pet"
+          - $ref: "#/components/schemas/Car"
+          - type: object
+            properties:
+              age:
+                type: string
+    AnyOfCombineInObject:
+      type: object
+      properties:
+        item:
+          allOf:
+            - $ref: "#/components/schemas/Pet"
+            - $ref: "#/components/schemas/Car"
+            - type: object
+              properties:
+                age:
+                  type: string
+    AnyOfCombineInArray:
+      type: array
+      items:
+        allOf:
+          - $ref: "#/components/schemas/Pet"
+          - $ref: "#/components/schemas/Car"
+          - type: object
+            properties:
+              age:
+                type: string
+    AnyOfCombineInRoot:
+      allOf:
+        - $ref: "#/components/schemas/Pet"
+        - $ref: "#/components/schemas/Car"
+        - type: object
+          properties:
+            age:
+              type: string
+            birthdate:
+              type: string
+              format: date-time
+    AnyOfCombineUnknownObjectInRoot:
+      type: array
+      items:
+        allOf:
+          - $ref: "#/components/schemas/Pet"
+          - description: 'TODO'
+    AnyOfCombineUnknownObjectInArray:
+      allOf:
+        - $ref: "#/components/schemas/Pet"
+        - description: 'TODO'
+    Error:
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string

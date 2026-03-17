@@ -1,0 +1,18 @@
+--- contrib/python/django-moderation/moderation/helpers.py	(index)
++++ contrib/python/django-moderation/moderation/helpers.py	(working tree)
+@@ -21,7 +21,6 @@ def import_moderator(app):
+     Import moderator module and register all models it contains with moderation
+     '''
+     from importlib import import_module
+-    import imp
+ 
+     # Yandex specific
+     try:
+@@ -36,6 +35,7 @@ def import_moderator(app):
+         return None
+ 
+     try:
++        import imp
+         imp.find_module('moderator', app_path)
+     except ImportError:
+         return None

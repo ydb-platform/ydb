@@ -1,0 +1,4 @@
+Neo4j
+Copyright (c) Neo4j Sweden AB (referred to in this notice as "Neo4j") [https://neo4j.com]
+
+This product includes software ("Software") developed by Neo4j

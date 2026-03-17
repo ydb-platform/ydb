@@ -1,0 +1,6 @@
+# Code table 4.14 - Clutter filter indicator
+0 0 No clutter filter used
+1 1 Clutter filter used
+# 2-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

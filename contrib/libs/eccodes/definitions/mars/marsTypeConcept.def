@@ -1,0 +1,9 @@
+#set uses the last one
+#get returns the first match
+  "an" = { marsType="ia"; }
+  "an" = { marsType="an"; }
+  "fc" = { marsType="fc"; }
+  "cf" = { marsType="cf"; }
+  "pf" = { marsType="pf"; }
+  "cp" = { marsType="pf"; }
+  "ep" = { marsType="pf"; }

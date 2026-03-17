@@ -1,0 +1,42 @@
+Metadata-Version: 2.1
+Name: banal
+Version: 1.0.6
+Summary: Commons of banal micro-functions for Python.
+Home-page: http://github.com/pudo/banal
+Author: Friedrich Lindenberg
+Author-email: friedrich@pudo.org
+License: MIT
+Keywords: utilities commons functions
+Platform: UNKNOWN
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+Requires-Dist: mypy ; extra == 'dev'
+Requires-Dist: wheel ; extra == 'dev'
+
+# banal
+
+Commons of Python micro-functions. This basically an out-sourced, shared
+utils module with a focus on functions that buffer type uncertainties in
+Python (e.g. "is this a list?").
+
+Rules:
+
+* Functions are properly typed, library passes `mypy`.
+* Cannot depend on anything but six and the standard library
+
+## Functions
+
+* ``is_listish``: check if something is list-ish
+* ``is_mapping``: check if an object is dict-ish
+* ``ensure_list``: make sure an argument is a list, or make it into a single-element list
+* ``clean_dict``: remove null values from a dict, recursively
+* ``decode_path``: decode a path name to be unicode
+* ``hash_data``: generate a SHA1 from a dict of reasonable objects
+

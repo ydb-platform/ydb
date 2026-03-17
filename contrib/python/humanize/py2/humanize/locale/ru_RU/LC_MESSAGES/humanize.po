@@ -1,0 +1,280 @@
+# Russian (Russia) translations for PROJECT.
+# Copyright (C) 2013 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2013.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2020-02-08 19:58+0200\n"
+"PO-Revision-Date: 2014-03-24 20:32+0300\n"
+"Last-Translator: Sergey Prokhorov <me@seriyps.ru>\n"
+"Language-Team: ru_RU <LL@li.org>\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
+"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"Generated-By: Babel 0.9.6\n"
+"X-Generator: Poedit 1.5.4\n"
+
+# в Django тут "ий" но на самом деле оба варианта работают плохо
+#: src/humanize/number.py:24
+msgctxt "0"
+msgid "th"
+msgstr "ой"
+
+#: src/humanize/number.py:25
+msgctxt "1"
+msgid "st"
+msgstr "ый"
+
+#: src/humanize/number.py:26
+msgctxt "2"
+msgid "nd"
+msgstr "ой"
+
+#: src/humanize/number.py:27
+msgctxt "3"
+msgid "rd"
+msgstr "ий"
+
+# в Django тут "ий" но на самом деле оба варианта работают плохо
+#: src/humanize/number.py:28
+msgctxt "4"
+msgid "th"
+msgstr "ый"
+
+# в Django тут "ий" но на самом деле оба варианта работают плохо
+#: src/humanize/number.py:29
+msgctxt "5"
+msgid "th"
+msgstr "ый"
+
+# в Django тут "ий" но на самом деле оба варианта работают плохо
+#: src/humanize/number.py:30
+msgctxt "6"
+msgid "th"
+msgstr "ой"
+
+# в Django тут "ий" но на самом деле оба варианта работают плохо
+#: src/humanize/number.py:31
+msgctxt "7"
+msgid "th"
+msgstr "ой"
+
+# в Django тут "ий" но на самом деле оба варианта работают плохо
+#: src/humanize/number.py:32
+msgctxt "8"
+msgid "th"
+msgstr "ой"
+
+# в Django тут "ий" но на самом деле оба варианта работают плохо
+#: src/humanize/number.py:33
+msgctxt "9"
+msgid "th"
+msgstr "ый"
+
+#: src/humanize/number.py:62
+msgid "million"
+msgstr "миллиона"
+
+#: src/humanize/number.py:63
+msgid "billion"
+msgstr "миллиарда"
+
+#: src/humanize/number.py:64
+msgid "trillion"
+msgstr "триллиона"
+
+#: src/humanize/number.py:65
+msgid "quadrillion"
+msgstr "квадриллиона"
+
+#: src/humanize/number.py:66
+msgid "quintillion"
+msgstr "квинтиллиона"
+
+#: src/humanize/number.py:67
+msgid "sextillion"
+msgstr "сикстиллиона"
+
+#: src/humanize/number.py:68
+msgid "septillion"
+msgstr "септиллиона"
+
+#: src/humanize/number.py:69
+msgid "octillion"
+msgstr "октиллиона"
+
+#: src/humanize/number.py:70
+msgid "nonillion"
+msgstr "нониллиона"
+
+#: src/humanize/number.py:71
+msgid "decillion"
+msgstr "децилиона"
+
+#: src/humanize/number.py:72
+msgid "googol"
+msgstr "гогола"
+
+#: src/humanize/number.py:108
+msgid "one"
+msgstr "один"
+
+#: src/humanize/number.py:109
+msgid "two"
+msgstr "два"
+
+#: src/humanize/number.py:110
+msgid "three"
+msgstr "три"
+
+#: src/humanize/number.py:111
+msgid "four"
+msgstr "четыре"
+
+#: src/humanize/number.py:112
+msgid "five"
+msgstr "пять"
+
+#: src/humanize/number.py:113
+msgid "six"
+msgstr "шесть"
+
+#: src/humanize/number.py:114
+msgid "seven"
+msgstr "семь"
+
+#: src/humanize/number.py:115
+msgid "eight"
+msgstr "восемь"
+
+#: src/humanize/number.py:116
+msgid "nine"
+msgstr "девять"
+
+#: src/humanize/time.py:68 src/humanize/time.py:131
+msgid "a moment"
+msgstr "только что"
+
+#: src/humanize/time.py:70
+msgid "a second"
+msgstr "секунду"
+
+#: src/humanize/time.py:72
+#, python-format
+msgid "%d second"
+msgid_plural "%d seconds"
+msgstr[0] "%d секунда"
+msgstr[1] "%d секунды"
+msgstr[2] "%d секунд"
+
+#: src/humanize/time.py:74
+msgid "a minute"
+msgstr "минуту"
+
+#: src/humanize/time.py:77
+#, python-format
+msgid "%d minute"
+msgid_plural "%d minutes"
+msgstr[0] "%d минута"
+msgstr[1] "%d минуты"
+msgstr[2] "%d минут"
+
+#: src/humanize/time.py:79
+msgid "an hour"
+msgstr "час"
+
+#: src/humanize/time.py:82
+#, python-format
+msgid "%d hour"
+msgid_plural "%d hours"
+msgstr[0] "%d час"
+msgstr[1] "%d часа"
+msgstr[2] "%d часов"
+
+#: src/humanize/time.py:85
+msgid "a day"
+msgstr "день"
+
+#: src/humanize/time.py:87 src/humanize/time.py:90
+#, python-format
+msgid "%d day"
+msgid_plural "%d days"
+msgstr[0] "%d день"
+msgstr[1] "%d дня"
+msgstr[2] "%d дней"
+
+#: src/humanize/time.py:92
+msgid "a month"
+msgstr "месяц"
+
+#: src/humanize/time.py:94
+#, python-format
+msgid "%d month"
+msgid_plural "%d months"
+msgstr[0] "%d месяц"
+msgstr[1] "%d месяца"
+msgstr[2] "%d месяцев"
+
+#: src/humanize/time.py:97
+msgid "a year"
+msgstr "год"
+
+#: src/humanize/time.py:99 src/humanize/time.py:108
+#, python-format
+msgid "1 year, %d day"
+msgid_plural "1 year, %d days"
+msgstr[0] "1 год, %d день"
+msgstr[1] "1 год, %d дня"
+msgstr[2] "1 год, %d дней"
+
+#: src/humanize/time.py:102
+msgid "1 year, 1 month"
+msgstr "1 год, 1 месяц"
+
+#: src/humanize/time.py:105
+#, python-format
+msgid "1 year, %d month"
+msgid_plural "1 year, %d months"
+msgstr[0] "1 год, %d месяц"
+msgstr[1] "1 год, %d месяца"
+msgstr[2] "1 год, %d месяцев"
+
+#: src/humanize/time.py:110
+#, python-format
+msgid "%d year"
+msgid_plural "%d years"
+msgstr[0] "%d год"
+msgstr[1] "%d года"
+msgstr[2] "%d лет"
+
+#: src/humanize/time.py:128
+#, python-format
+msgid "%s from now"
+msgstr "через %s"
+
+#: src/humanize/time.py:128
+#, python-format
+msgid "%s ago"
+msgstr "%s назад"
+
+#: src/humanize/time.py:132
+msgid "now"
+msgstr "сейчас"
+
+#: src/humanize/time.py:151
+msgid "today"
+msgstr "сегодня"
+
+#: src/humanize/time.py:153
+msgid "tomorrow"
+msgstr "завтра"
+
+#: src/humanize/time.py:155
+msgid "yesterday"
+msgstr "вчера"

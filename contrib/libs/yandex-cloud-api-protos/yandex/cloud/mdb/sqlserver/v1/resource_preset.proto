@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.sqlserver.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/sqlserver/v1;sqlserver";
+option java_outer_classname = "PSR";
+option java_package = "yandex.cloud.api.mdb.sqlserver.v1";
+
+// A preset of resources for hardware configuration of SQL Server hosts.
+message ResourcePreset {
+  // ID of the resource preset.
+  string id = 1;
+
+  // IDs of availability zones where the resource preset is available.
+  repeated string zone_ids = 2;
+
+  // Number of CPU cores for an SQL Server host created with the preset.
+  int64 cores = 3;
+
+  // RAM volume for an SQL Server host created with the preset, in bytes.
+  int64 memory = 4;
+}

@@ -1,0 +1,27 @@
+commit fdccbf0ae54a059174326cf0a47dc3830c027f37
+author: wawaka
+date: 2014-12-08T17:18:32+03:00
+revision: 1533812
+
+    не знаю, зачем, но так было
+
+--- a/libxslt/xsltutils.c	(425da2014253e7cf8e0f20b643158ce0b2889450)
++++ b/libxslt/xsltutils.c	(fdccbf0ae54a059174326cf0a47dc3830c027f37)
+@@ -1491,7 +1491,7 @@ xsltSaveResultTo(xmlOutputBufferPtr buf, xmlDocPtr result,
+ 	htmlDocContentDumpFormatOutput(buf, result, (const char *) encoding,
+ 		                       indent);
+ 	xmlOutputBufferFlush(buf);
+-    } else if ((method != NULL) &&
++    } /*else if ((method != NULL) &&
+ 	(xmlStrEqual(method, (const xmlChar *) "xhtml"))) {
+ 	if (encoding != NULL) {
+ 	    htmlSetMetaEncoding(result, (const xmlChar *) encoding);
+@@ -1500,7 +1500,7 @@ xsltSaveResultTo(xmlOutputBufferPtr buf, xmlDocPtr result,
+ 	}
+ 	htmlDocContentDumpOutput(buf, result, (const char *) encoding);
+ 	xmlOutputBufferFlush(buf);
+-    } else if ((method != NULL) &&
++    }*/ else if ((method != NULL) &&
+ 	       (xmlStrEqual(method, (const xmlChar *) "text"))) {
+ 	xmlNodePtr cur;
+ 

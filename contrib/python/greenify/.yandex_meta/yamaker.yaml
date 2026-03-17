@@ -1,0 +1,4 @@
+copy:
+  - include/*
+  - src/*
+  - greenify.pyx

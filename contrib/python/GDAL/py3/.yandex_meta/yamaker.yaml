@@ -1,0 +1,5 @@
+requirements:
+  - contrib/libs/gdal
+  - numpy
+copy:
+  - extensions/*

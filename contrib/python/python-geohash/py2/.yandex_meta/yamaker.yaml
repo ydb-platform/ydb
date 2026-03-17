@@ -1,0 +1,3 @@
+copy:
+  - src/*.cpp
+  - src/*.h

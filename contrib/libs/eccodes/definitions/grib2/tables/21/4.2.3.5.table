@@ -1,0 +1,7 @@
+# Code table 4.2 - Parameter number by product discipline and parameter category
+0 0 Interface sea-surface temperature (K)
+1 1 Skin sea-surface temperature (K)
+2 2 Sub-skin sea-surface temperature (K)
+3 3 Foundation sea-surface temperature (K)
+4 4 Estimated bias between sea-surface temperature and standard (K)
+5 5 Estimated standard deviation between sea surface temperature and standard (K)

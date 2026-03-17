@@ -1,0 +1,4 @@
+---
+$defs:
+  RefObject:
+    $ref: "root_file_reference_from_file.spec.yaml#/components/schemas/PlainObject"

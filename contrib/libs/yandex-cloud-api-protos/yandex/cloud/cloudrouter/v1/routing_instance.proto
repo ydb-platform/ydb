@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package yandex.cloud.cloudrouter.v1;
+
+import "yandex/cloud/validation.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cloudrouter/v1;cloudrouter";
+option java_package = "yandex.cloud.api.cloudrouter.v1";
+
+message RoutingInstance {
+    // ID of the routingInstance.
+    string id = 1;
+
+    // Name of the routingInstance.
+    // The name must be unique within the folder.
+    // Value must match the regular expression ``\|[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?``.
+    string name = 2;
+
+    // Description of the routingInstance. 0-256 characters long.
+    string description = 3;
+
+    reserved 4;
+
+    // ID of the folder that the routingInstance belongs to.
+    string folder_id = 5;
+
+    // ID of the region that the routingInstance belongs to.
+    string region_id = 6;
+
+    // List of the info about vpcNetworks which are attached to routingInstance.
+    repeated VpcInfo vpc_info = 7;
+
+    // List of the info about privateConnections which are attached to routingInstance.
+    repeated CicPrivateConnectionInfo cic_private_connection_info = 8;
+
+    // Status of the routingInstance.
+    Status status = 9;
+
+    reserved 10;
+
+    // Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+    google.protobuf.Timestamp created_at = 11;
+  
+    reserved 12 to 23;
+
+    // Resource labels, `key:value` pairs.
+    // No more than 64 per resource.
+    // The maximum string length in characters for each value is 63.
+    // Each value must match the regular expression `[-_0-9a-z]*`.
+    // The string length in characters for each key must be 1-63.
+    // Each key must match the regular expression `[a-z][-_0-9a-z]*`.
+    map<string, string> labels = 24;
+
+    message CicPrivateConnectionInfo {
+        // ID of the cicPrivateConnection that is attached to the routingInstance.
+        string cic_private_connection_id = 1 [(required) = true, (length) = "<=50"];
+    }
+
+    message VpcInfo {
+        // ID of the vpcNetwork that is attached to the routingInstance.
+        string vpc_network_id = 1 [(required) = true, (length) = "<=50"];
+
+        // List of the az-related info about vpcNetworks which are attached to routingInstance
+        repeated VpcAzInfo az_infos = 2 [(required) = true, (size) = "1-50"];
+    }
+
+    message VpcAzInfo {
+        reserved 1;
+
+        // VpcInfo which is set by user
+        VpcManualInfo manual_info = 2 [(required) = true];
+    }
+
+    message VpcManualInfo {
+        // ID of the AZ
+        string az_id = 1 [(required) = true, (length) = "<=50"];
+
+        reserved 2 to 4;
+
+        // List of prefixes to announce
+        repeated string prefixes = 5 [(required) = true, (size) = "1-10000"];
+    }
+
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        CREATING = 1;
+        UPDATING = 2;
+        DELETING = 3;
+        ACTIVE = 4;
+    }
+}

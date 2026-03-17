@@ -1,0 +1,154 @@
+--- contrib/python/chdb/cpp/src/Common/transformEndianness.h	(index)
++++ contrib/python/chdb/cpp/src/Common/transformEndianness.h	(working tree)
+@@ -10,12 +10,31 @@
+ 
+ namespace DB
+ {
++
++template <typename T>
++inline constexpr T byteswap(T n) noexcept
++{
++
++    if constexpr (sizeof(T) == 1) {
++        return n;
++    } else if constexpr (sizeof(T) == 2) {
++        return std::bit_cast<T>(__builtin_bswap16(std::bit_cast<uint16_t>(n)));
++    } else if constexpr (sizeof(T) == 4) {
++        return std::bit_cast<T>(__builtin_bswap32(std::bit_cast<uint32_t>(n)));
++    } else if constexpr (sizeof(T) == 8) {
++        return std::bit_cast<T>(__builtin_bswap64(std::bit_cast<uint64_t>(n)));
++    } else {
++        static_assert(sizeof(T) == 16);
++        return std::bit_cast<T>(__builtin_bswap128(std::bit_cast<__uint128_t>(n)));
++    }
++}
++
+ template <std::endian ToEndian, std::endian FromEndian = std::endian::native, typename T>
+ requires std::is_integral_v<T>
+ inline void transformEndianness(T & value)
+ {
+     if constexpr (ToEndian != FromEndian)
+-        value = std::byteswap(value);
++        value = DB::byteswap(value);
+ }
+ 
+ template <std::endian ToEndian, std::endian FromEndian = std::endian::native, typename T>
+@@ -25,7 +44,7 @@ inline void transformEndianness(T & x)
+     if constexpr (ToEndian != FromEndian)
+     {
+         auto & items = x.items;
+-        std::transform(std::begin(items), std::end(items), std::begin(items), [](auto & item) { return std::byteswap(item); });
++        std::transform(std::begin(items), std::end(items), std::begin(items), [](auto & item) { return DB::byteswap(item); });
+         std::reverse(std::begin(items), std::end(items));
+     }
+ }
+--- contrib/python/chdb/cpp/src/IO/BitHelpers.h	(index)
++++ contrib/python/chdb/cpp/src/IO/BitHelpers.h	(working tree)
+@@ -140,7 +140,7 @@ private:
+         source_current += bytes_to_read;
+ 
+         if constexpr (std::endian::native == std::endian::little)
+-            tmp_buffer = std::byteswap(tmp_buffer);
++            tmp_buffer = DB::byteswap(tmp_buffer);
+ 
+         bits_buffer |= BufferType(tmp_buffer) << ((sizeof(BufferType) - sizeof(tmp_buffer)) * 8 - bits_count);
+         bits_count += static_cast<UInt8>(bytes_to_read) * 8;
+@@ -224,7 +224,7 @@ private:
+ 
+         UInt64 tmp_buffer = static_cast<UInt64>(bits_buffer >> (sizeof(bits_buffer) - sizeof(UInt64)) * 8);
+         if constexpr (std::endian::native == std::endian::little)
+-            tmp_buffer = std::byteswap(tmp_buffer);
++            tmp_buffer = DB::byteswap(tmp_buffer);
+ 
+         memcpy(dest_current, &tmp_buffer, to_write);
+         dest_current += to_write;
+--- contrib/python/chdb/cpp/src/IO/FileEncryptionCommon.cpp	(index)
++++ contrib/python/chdb/cpp/src/IO/FileEncryptionCommon.cpp	(working tree)
+@@ -404,7 +404,7 @@ void Header::read(ReadBuffer & in)
+     UInt16 algorithm_u16;
+     readPODBinary(algorithm_u16, in);
+     if (std::endian::native != endian)
+-        algorithm_u16 = std::byteswap(algorithm_u16);
++        algorithm_u16 = DB::byteswap(algorithm_u16);
+     if (algorithm_u16 >= static_cast<UInt16>(Algorithm::MAX))
+         throw Exception(ErrorCodes::DATA_ENCRYPTION_ERROR, "Algorithm {} is not supported", algorithm_u16);
+     algorithm = static_cast<Algorithm>(algorithm_u16);
+@@ -419,7 +419,7 @@ void Header::read(ReadBuffer & in)
+         readPODBinary(small_key_hash, in);
+         bytes_to_skip -= sizeof(key_id) + sizeof(small_key_hash);
+         if (std::endian::native != endian)
+-            key_id = std::byteswap(key_id);
++            key_id = DB::byteswap(key_id);
+         key_fingerprint = calculateV1KeyFingerprint(small_key_hash, key_id);
+     }
+     else
+--- contrib/python/chdb/cpp/src/AggregateFunctions/AggregateFunctionMaxIntersections.cpp	(index)
++++ contrib/python/chdb/cpp/src/AggregateFunctions/AggregateFunctionMaxIntersections.cpp	(working tree)
+@@ -135,7 +135,7 @@ public:
+             if constexpr (std::endian::native == std::endian::little)
+                 writePODBinary(value[i].second, buf);
+             else
+-                writePODBinary(std::byteswap(value[i].second), buf);
++                writePODBinary(DB::byteswap(value[i].second), buf);
+         }
+     }
+ 
+--- contrib/python/chdb/cpp/src/Functions/FunctionsCodingIP.cpp	(index)
++++ contrib/python/chdb/cpp/src/Functions/FunctionsCodingIP.cpp	(working tree)
+@@ -581,7 +581,7 @@ private:
+ #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+             unalignedStoreLittleEndian<UInt64>(buf + 8, 0x00000000FFFF0000ull | (static_cast<UInt64>(ntohl(in)) << 32));
+ #else
+-            unalignedStoreLittleEndian<UInt64>(buf + 8, 0x00000000FFFF0000ull | (static_cast<UInt64>(std::byteswap(in)) << 32));
++            unalignedStoreLittleEndian<UInt64>(buf + 8, 0x00000000FFFF0000ull | (static_cast<UInt64>(DB::byteswap(in)) << 32));
+ #endif
+     }
+ };
+--- contrib/python/chdb/cpp/src/Functions/FunctionsCodingULID.cpp	(index)
++++ contrib/python/chdb/cpp/src/Functions/FunctionsCodingULID.cpp	(working tree)
+@@ -159,7 +159,7 @@ public:
+         memcpy(reinterpret_cast<UInt8 *>(&ms) + 2, buffer, 6);
+ 
+ #    if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+-        ms = std::byteswap(ms);
++        ms = DB::byteswap(ms);
+ #    endif
+ 
+         return DecimalUtils::decimalFromComponents<DateTime64>(ms / intExp10(DATETIME_SCALE), ms % intExp10(DATETIME_SCALE), DATETIME_SCALE);
+--- contrib/python/chdb/cpp/src/Functions/FunctionsConversion.cpp	(index)
++++ contrib/python/chdb/cpp/src/Functions/FunctionsConversion.cpp	(working tree)
+@@ -1656,8 +1656,8 @@ struct ConvertImpl
+                         std::is_same_v<DataTypeUInt128::FieldType, DataTypeUUID::FieldType::UnderlyingType>,
+                         "UInt128 and IPv6 types must be same");
+ 
+-                    vec_to[i].items[1] = std::byteswap(vec_from[i].toUnderType().items[0]);
+-                    vec_to[i].items[0] = std::byteswap(vec_from[i].toUnderType().items[1]);
++                    vec_to[i].items[1] = DB::byteswap(vec_from[i].toUnderType().items[0]);
++                    vec_to[i].items[0] = DB::byteswap(vec_from[i].toUnderType().items[1]);
+                 }
+                 else if constexpr (std::is_same_v<FromDataType, DataTypeUUID> != std::is_same_v<ToDataType, DataTypeUUID>)
+                 {
+--- contrib/python/chdb/cpp/src/Functions/byteSwap.cpp	(index)
++++ contrib/python/chdb/cpp/src/Functions/byteSwap.cpp	(working tree)
+@@ -15,7 +15,7 @@ template <typename T>
+ requires std::is_integral_v<T>
+ T byteSwap(T x)
+ {
+-    return std::byteswap(x);
++    return DB::byteswap(x);
+ }
+ 
+ template <typename T>
+--- contrib/python/chdb/cpp/src/Storages/MergeTree/MergeTreeMarksLoader.cpp	(index)
++++ contrib/python/chdb/cpp/src/Storages/MergeTree/MergeTreeMarksLoader.cpp	(working tree)
+@@ -189,8 +189,8 @@ MarkCache::MappedPtr MergeTreeMarksLoader::loadMarksImpl()
+         plain_marks,
+         [](auto & plain_mark)
+         {
+-            plain_mark.offset_in_compressed_file = std::byteswap(plain_mark.offset_in_compressed_file);
+-            plain_mark.offset_in_decompressed_block = std::byteswap(plain_mark.offset_in_decompressed_block);
++            plain_mark.offset_in_compressed_file = DB::byteswap(plain_mark.offset_in_compressed_file);
++            plain_mark.offset_in_decompressed_block = DB::byteswap(plain_mark.offset_in_decompressed_block);
+         });
+ #endif
+ 

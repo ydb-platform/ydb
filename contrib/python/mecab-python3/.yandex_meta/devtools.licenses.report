@@ -1,0 +1,213 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     GPL-2.0-only         0b4522f703d289b4b504cc5676734691
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: GPL at line 60
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 99.08
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        GPL [1:338]
+
+KEEP     BSD-3-Clause         35864a557f9a10e478ca8d73a8c6886e
+BELONGS ya.make
+FILE_INCLUDE BSD found in files: .dist-info/METADATA at line 21
+    License text:
+        Classifier: License :: OSI Approved :: BSD License
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        .dist-info/METADATA [21:21]
+
+KEEP     BSD-3-Clause         4f8467cabc7cc5cc00c2868f3d1bcd3f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.53
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        BSD [5:31]
+
+KEEP     GPL-1.0-or-later AND GPL-1.0-or-later AND LGPL-2.0-or-later 55ff1f19cd6af793259c9b6be42cbef9
+BELONGS ya.make
+FILE_INCLUDE GPL found in files: COPYING at line 3
+FILE_INCLUDE LGPL found in files: COPYING at line 3
+    License text:
+        any of the GPL (see the file GPL), the LGPL (see the file LGPL), or the
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 90.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        COPYING [3:3]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        COPYING [3:3]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        COPYING [3:3]
+
+KEEP     LGPL-2.0-only        8483b1d2a11526d54a8ee3b4fcd27387
+BELONGS ya.make
+FILE_INCLUDE GPL found in files: .dist-info/METADATA at line 158, README.md at line 136
+    License text:
+        Alternatively, it may be redistributed under the terms of the
+        GNU General Public License, version 2 (see the file `GPL`) or the
+    Scancode info:
+        Original SPDX id: LGPL-2.0-only
+        Score           : 77.41
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-2.0.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-only
+    Files with this license:
+        .dist-info/METADATA [157:158]
+        README.md [135:136]
+
+KEEP     GPL-1.0-or-later     ace2614076cc4f9e00c6578873b4f340
+BELONGS ya.make
+FILE_INCLUDE GPL found in files: .dist-info/METADATA at line 158, README.md at line 136
+    License text:
+        GNU General Public License, version 2 (see the file `GPL`) or the
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        .dist-info/METADATA [158:158]
+        README.md [136:136]
+
+KEEP     BSD-3-Clause         bdecc4d3129b3a1475a0993772b0f5a9
+BELONGS ya.make
+FILE_INCLUDE BSD found in files: COPYING at line 4
+FILE_INCLUDE GPL found in files: COPYING at line 3
+FILE_INCLUDE LGPL found in files: COPYING at line 3
+    License text:
+        any of the GPL (see the file GPL), the LGPL (see the file LGPL), or the
+        BSD License (see the file BSD).
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [3:4]
+
+KEEP     BSD-3-Clause         cad157b608e1384d39a544dd73b510dc
+BELONGS ya.make
+FILE_INCLUDE BSD found in files: .dist-info/METADATA at line 156, README.md at line 134
+    License text:
+        and is distributed under a 3-clause BSD license (see the file `BSD`).
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        .dist-info/METADATA [156:156]
+        README.md [134:134]
+
+KEEP     LGPL-2.1-only        d0c6c514661e32fa3f2189ebe5ec415a
+BELONGS ya.make
+FILE_INCLUDE GPL found in files: .dist-info/METADATA at line 158, README.md at line 136
+FILE_INCLUDE LGPL found in files: .dist-info/METADATA at line 159, README.md at line 137
+    License text:
+        GNU General Public License, version 2 (see the file `GPL`) or the
+        GNU Lesser General Public License, version 2.1 (see the file `LGPL`).
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        .dist-info/METADATA [158:159]
+        README.md [136:137]
+
+KEEP     LGPL-2.1-only        f4fd0f509affd1d84b01fa9a6bdbba1d
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: LGPL at line 116
+FILE_INCLUDE GPL found in files: LGPL at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 99.37
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        LGPL [1:502]
+
+KEEP     BSD-3-Clause         f70b749c7c654ee2e92e723b86d3bc0a
+BELONGS ya.make
+FILE_INCLUDE BSD found in files: .dist-info/METADATA at line 8
+    License text:
+        License: BSD
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        .dist-info/METADATA [8:8]
+
+KEEP     LGPL-2.0-or-later    fe0c350f40cf7c82430a92f74a898b81
+BELONGS ya.make
+FILE_INCLUDE LGPL found in files: .dist-info/METADATA at line 159, README.md at line 137
+    License text:
+        GNU Lesser General Public License, version 2.1 (see the file `LGPL`).
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        .dist-info/METADATA [159:159]
+        README.md [137:137]

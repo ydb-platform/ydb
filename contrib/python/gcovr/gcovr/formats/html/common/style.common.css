@@ -1,0 +1,140 @@
+.sticky {
+  position: sticky;
+  top: 0;
+}
+
+a:link
+{
+  color: navy;
+  text-decoration: underline;
+}
+a:visited
+{
+  color: maroon;
+  text-decoration: underline;
+}
+
+.js-enabled .js-enabled-hidden {
+  display: none
+}
+
+.js-disabled .js-disabled-hidden {
+  display: none
+}
+
+.block-separator {
+  border-bottom: 5px solid var(--color-border-muted);
+}
+
+@media (max-width: 544px) {
+  .filelist .Box-row {
+    flex-direction: column;
+  }
+  .functionslist .Box-row {
+    flex-direction: column;
+  }
+
+  .filelist .Box-row > div {
+    width: 100%;
+  }
+  .functionslist .Box-row > div {
+    width: 100%;
+  }
+}
+
+button.button_toggle_coveredLine,
+button.button_toggle_uncoveredLine,
+button.button_toggle_excludedLine,
+button.button_toggle_partialCoveredLine {
+  margin-left: 1em;
+  border: 1px solid;
+  border-radius: 6px;
+  color: var(--color-fg-default);
+  display: inline-flex;
+  align-items: center;
+  text-decoration: line-through;
+}
+button.button_toggle_coveredLine.show_coveredLine,
+button.button_toggle_uncoveredLine.show_uncoveredLine,
+button.button_toggle_excludedLine.show_excludedLine,
+button.button_toggle_partialCoveredLine.show_partialCoveredLine {
+  text-decoration: none;
+}
+
+button.button_toggle_coveredLine {
+  background-color: var(--covered_color) !important;
+}
+button.button_toggle_uncoveredLine {
+  background-color: var(--uncovered_color) !important;
+}
+button.button_toggle_excludedLine {
+  background-color: var(--excluded_color) !important;
+}
+button.button_toggle_partialCoveredLine {
+  background-color: var(--partial_covered_color) !important;
+}
+
+div.nav {
+  margin-left: auto;
+}
+
+a.nav {
+  text-decoration: none;
+  color: grey;
+  padding-left: 1em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+a.nav:hover {
+  text-decoration: underline;
+}
+
+a.nav.prev::after {
+  content: "« prev";
+}
+
+a.nav.index::after {
+  content: "^ index";
+}
+
+a.nav.next::after {
+  content: "» next";
+}
+
+.sortable {
+  cursor: pointer;
+}
+
+.sorted-ascending::after {
+  content: " ↑";
+  white-space: pre;
+}
+
+.sorted-descending::after {
+  content: " ↓";
+  white-space: pre;
+}
+
+.source-table-container {
+  overflow-x: auto;
+}
+
+#scroll_marker {
+  position: fixed;
+  z-index: 3;
+  right: 0;
+  top: 0;
+  width: 12px;
+  height: 100%;
+  background-color: var(--color-canvas-default);
+  border-left: 1px solid var(--color-border-default);
+  will-change: transform;
+}
+
+#scroll_marker .marker {
+  background: #cccccc;
+  position: absolute;
+  min-height: 3px;
+  width: 100%;
+}

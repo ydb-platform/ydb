@@ -1,0 +1,9 @@
+<div class="{% if error %}{{ field.error_class }}{% endif %}">
+    <input id="{{ field.id }}" name="{{ field.id }}"
+           class="{{ field.class_ }} {% if error %}{{ field.error_class }}{% endif %}"
+           value="{{ '' if data is none else data }}" {{ field.input_params() | safe }} />
+    {% if field.help_text %}
+        <small class="form-hint">{{ field.help_text }}</small>
+    {% endif %}
+</div>
+{% include "forms/_error.html" %}

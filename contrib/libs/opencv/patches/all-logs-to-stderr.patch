@@ -1,0 +1,11 @@
+--- a/modules/core/src/logger.cpp
++++ b/modules/core/src/logger.cpp
+@@ -227,7 +227,7 @@ void writeLogMessage(LogLevel logLevel, const char* message)
+     }
+     __android_log_print(android_logLevel, "OpenCV/" CV_VERSION, "%s", ss.str().c_str());
+ #endif
+-    std::ostream* out = (logLevel <= LOG_LEVEL_WARNING) ? &std::cerr : &std::cout;
++    std::ostream* out = &std::cerr;
+     (*out) << ss.str();
+     if (logLevel <= LOG_LEVEL_WARNING)
+         (*out) << std::flush;

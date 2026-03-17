@@ -1,0 +1,12 @@
+<input type="text"
+ id="{{ id }}"
+ class="colorfield_field coloris {{ id }} {% if class %}{{ class }}{% else %}form-control{% endif %}"
+ name="{{ name }}"
+ value="{% firstof value default '' %}"
+ placeholder="{% firstof value default '' %}"
+ data-coloris=""
+ data-coloris-options-json-script-id="{{ data_coloris_id }}"
+ {% if disabled %}disabled{% endif %}
+ {% if required %}required{% endif %}
+/>
+{{ data_coloris_options|json_script:data_coloris_id }}

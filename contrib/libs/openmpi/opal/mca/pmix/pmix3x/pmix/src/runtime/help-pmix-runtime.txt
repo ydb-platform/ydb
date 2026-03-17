@@ -1,0 +1,89 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2007 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2011      Oak Ridge National Labs.  All rights reserved.
+# Copyright (c) 2014 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2017-2018 Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for PMIX.
+#
+[pmix_init:startup:internal-failure]
+It looks like pmix_init failed for some reason; your parallel process is
+likely to abort.  There are many reasons that a parallel process can
+fail during pmix_init; some of which are due to configuration or
+environment problems.  This failure appears to be an internal failure;
+here's some additional information (which may only be relevant to an
+PMIX developer):
+
+  %s failed
+  --> Returned value %d instead of PMIX_SUCCESS
+#
+[missingdata]
+PMIx has detected that the host RM failed to provide all the job-level
+information specified by the PMIx standard. This is not necessarily
+a fatal situation, but may negatively impact your launch performance.
+
+If you feel you have received this warning in error, or wish to ignore
+it in the future, you can disable it by setting the PMIx MCA parameter
+"pmix_suppress_missing_data_warning=1"
+#
+[no-plugins]
+We were unable to find any usable plugins for the %s framework. This PMIx
+framework requires at least one plugin in order to operate. This can be caused
+by any of the following:
+
+* we were unable to build any of the plugins due to some combination
+  of configure directives and available system support
+
+* no plugin was selected due to some combination of MCA parameter
+  directives versus built plugins (i.e., you excluded all the plugins
+  that were built and/or could execute)
+
+* the PMIX_INSTALL_PREFIX environment variable, or the MCA parameter
+  "mca_base_component_path", is set and doesn't point to any location
+  that includes at least one usable plugin for this framework.
+
+Please check your installation and environment.
+#
+[ptl:msg_size]
+A received msg header indicates a size that is too large:
+
+  Requested size:  %lu
+  Size limit:      %lu
+
+If you believe this msg is legitimate, please increase the
+max msg size via the ptl_base_max_msg_size parameter.
+#
+[tool:no-server]
+A call was made to PMIx_tool_connect_to_server, but no information
+was given as to which server the tool should be connected. Accepted
+attributes include:
+
+  - PMIX_CONNECT_TO_SYSTEM: connect solely to the system server
+
+  - PMIX_CONNECT_SYSTEM_FIRST: a request to use the system server first,
+      if existing, and then look for the server specified in a different
+      attribute
+
+  - PMIX_SERVER_URI: connect to the server at the given URI
+
+  - PMIX_SERVER_NSPACE: connect to the server of a given nspace
+
+  - PMIX_SERVER_PIDINFO: connect to a server embedded in the process with
+      the given pid
+
+Please correct your program and try again.

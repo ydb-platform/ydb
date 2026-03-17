@@ -1,0 +1,116 @@
+Metadata-Version: 2.4
+Name: djangorestframework_simplejwt
+Version: 5.5.1
+Summary: A minimal JSON Web Token authentication plugin for Django REST Framework
+Home-page: https://github.com/jazzband/djangorestframework-simplejwt
+Author: David Sanders
+Author-email: davesque@gmail.com
+License: MIT
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 4.2
+Classifier: Framework :: Django :: 5.0
+Classifier: Framework :: Django :: 5.1
+Classifier: Framework :: Django :: 5.2
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Internet :: WWW/HTTP
+Requires-Python: >=3.9
+License-File: LICENSE.txt
+Requires-Dist: django>=4.2
+Requires-Dist: djangorestframework>=3.14
+Requires-Dist: pyjwt>=1.7.1
+Provides-Extra: test
+Requires-Dist: cryptography; extra == "test"
+Requires-Dist: freezegun; extra == "test"
+Requires-Dist: pytest-cov; extra == "test"
+Requires-Dist: pytest-django; extra == "test"
+Requires-Dist: pytest-xdist; extra == "test"
+Requires-Dist: pytest; extra == "test"
+Requires-Dist: tox; extra == "test"
+Provides-Extra: lint
+Requires-Dist: ruff; extra == "lint"
+Requires-Dist: yesqa; extra == "lint"
+Requires-Dist: pyupgrade; extra == "lint"
+Requires-Dist: pre-commit; extra == "lint"
+Provides-Extra: doc
+Requires-Dist: Sphinx; extra == "doc"
+Requires-Dist: sphinx_rtd_theme>=0.1.9; extra == "doc"
+Provides-Extra: dev
+Requires-Dist: pytest-watch; extra == "dev"
+Requires-Dist: wheel; extra == "dev"
+Requires-Dist: twine; extra == "dev"
+Requires-Dist: ipython; extra == "dev"
+Requires-Dist: cryptography; extra == "dev"
+Requires-Dist: freezegun; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: pytest-django; extra == "dev"
+Requires-Dist: pytest-xdist; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: tox; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: yesqa; extra == "dev"
+Requires-Dist: pyupgrade; extra == "dev"
+Requires-Dist: pre-commit; extra == "dev"
+Requires-Dist: Sphinx; extra == "dev"
+Requires-Dist: sphinx_rtd_theme>=0.1.9; extra == "dev"
+Requires-Dist: python-jose==3.3.0; extra == "dev"
+Provides-Extra: python-jose
+Requires-Dist: python-jose==3.3.0; extra == "python-jose"
+Provides-Extra: crypto
+Requires-Dist: cryptography>=3.3.1; extra == "crypto"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+Simple JWT
+==========
+
+.. image:: https://jazzband.co/static/img/badge.svg
+   :target: https://jazzband.co/
+   :alt: Jazzband
+.. image:: https://github.com/jazzband/djangorestframework-simplejwt/workflows/Test/badge.svg
+   :target: https://github.com/jazzband/djangorestframework-simplejwt/actions
+   :alt: GitHub Actions
+.. image:: https://codecov.io/gh/jazzband/djangorestframework-simplejwt/branch/master/graph/badge.svg
+  :target: https://codecov.io/gh/jazzband/djangorestframework-simplejwt
+.. image:: https://img.shields.io/pypi/v/djangorestframework-simplejwt.svg
+  :target: https://pypi.python.org/pypi/djangorestframework-simplejwt
+.. image:: https://img.shields.io/pypi/pyversions/djangorestframework-simplejwt.svg
+  :target: https://pypi.python.org/pypi/djangorestframework-simplejwt
+.. image:: https://img.shields.io/pypi/djversions/djangorestframework-simplejwt.svg
+  :target: https://pypi.python.org/pypi/djangorestframework-simplejwt
+.. image:: https://readthedocs.org/projects/django-rest-framework-simplejwt/badge/?version=latest
+  :target: https://django-rest-framework-simplejwt.readthedocs.io/en/latest/
+
+Abstract
+--------
+
+Simple JWT is a JSON Web Token authentication plugin for the `Django REST
+Framework <http://www.django-rest-framework.org/>`__.
+
+For full documentation, visit `django-rest-framework-simplejwt.readthedocs.io
+<https://django-rest-framework-simplejwt.readthedocs.io/en/latest/>`__.
+
+
+Translations
+------------
+
+Contribute translations directly with PRs or via inlang https://inlang.com/editor/github.com/jazzband/djangorestframework-simplejwt

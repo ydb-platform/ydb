@@ -1,0 +1,29 @@
+# (C) Copyright 2005- ECMWF.
+# 4DVar model errors for long window 4Dvar system
+
+template mars_labeling "grib1/mars_labeling.def";
+
+#1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=39;
+if (stepType is "instant") {
+  alias productDefinitionTemplateNumber=zero;
+} else {
+  alias productDefinitionTemplateNumber=eight;
+}
+
+constant GRIBEXSection1Problem = 56 - section1Length ;
+
+unsigned[1] componentIndex  : dump;
+alias mars.number=componentIndex;
+unsigned[1] numberOfComponents  : dump;
+unsigned[1] modelErrorType  : dump;
+
+# Hours
+unsigned[2] offsetToEndOf4DvarWindow : dump;
+unsigned[2] lengthOf4DvarWindow : dump;
+alias anoffset=offsetToEndOf4DvarWindow;
+
+alias local.componentIndex=componentIndex;
+alias local.numberOfComponents=numberOfComponents;
+alias local.modelErrorType=modelErrorType;

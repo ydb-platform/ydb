@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.test;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/test;test";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.test";
+
+import "google/protobuf/timestamp.proto";
+
+// Test imbalance point.
+message ImbalancePoint {
+  // Imbalance moment timestamp.
+  google.protobuf.Timestamp at = 1;
+
+  // Imbalance moment RPS.
+  int64 rps = 2;
+
+  // Imbalance reason comment.
+  string comment = 3;
+}

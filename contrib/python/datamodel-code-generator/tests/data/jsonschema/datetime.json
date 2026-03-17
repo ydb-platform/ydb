@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "User": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "example": "ken"
+        },
+        "birthDay": {
+          "type": "string",
+          "format": "date-time",
+          "example": "2016-08-29T09:12:33.001Z"
+        }
+      }
+    }
+  }
+}

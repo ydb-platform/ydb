@@ -1,0 +1,892 @@
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_converter.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_converter.py	(working tree)
+@@ -13,7 +13,7 @@ from graphene.relay import Node
+-from ..converter import (convert_sqlalchemy_column,
+-                         convert_sqlalchemy_composite,
+-                         convert_sqlalchemy_relationship)
+-from ..fields import (UnsortedSQLAlchemyConnectionField,
+-                      default_connection_field_factory)
+-from ..registry import Registry
+-from ..types import SQLAlchemyObjectType
++from graphene_sqlalchemy.converter import (convert_sqlalchemy_column,
++                         convert_sqlalchemy_composite,
++                         convert_sqlalchemy_relationship)
++from graphene_sqlalchemy.fields import (UnsortedSQLAlchemyConnectionField,
++                      default_connection_field_factory)
++from graphene_sqlalchemy.registry import Registry
++from graphene_sqlalchemy.types import SQLAlchemyObjectType
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_reflected.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_reflected.py	(working tree)
+@@ -1,2 +1,2 @@
+-from ..registry import Registry
+-from ..types import SQLAlchemyObjectType
++from graphene_sqlalchemy.registry import Registry
++from graphene_sqlalchemy.types import SQLAlchemyObjectType
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_schema.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_schema.py	(working tree)
+@@ -1,2 +1,2 @@
+-from ..registry import Registry
+-from ..types import SQLAlchemyObjectType
++from graphene_sqlalchemy.registry import Registry
++from graphene_sqlalchemy.types import SQLAlchemyObjectType
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_types.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_types.py	(working tree)
+@@ -6,6 +6,6 @@
+-from ..fields import (SQLAlchemyConnectionField,
+-                      UnsortedSQLAlchemyConnectionField,
+-                      registerConnectionFieldFactory,
+-                      unregisterConnectionFieldFactory)
+-from ..registry import Registry
+-from ..types import SQLAlchemyObjectType, SQLAlchemyObjectTypeOptions
++from graphene_sqlalchemy.fields import (SQLAlchemyConnectionField,
++                      UnsortedSQLAlchemyConnectionField,
++                      registerConnectionFieldFactory,
++                      unregisterConnectionFieldFactory)
++from graphene_sqlalchemy.registry import Registry
++from graphene_sqlalchemy.types import SQLAlchemyObjectType, SQLAlchemyObjectTypeOptions
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_registry.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_registry.py	(working tree)
+@@ -1,2 +1,2 @@
+-from ..registry import Registry
+-from ..types import SQLAlchemyObjectType
++from graphene_sqlalchemy.registry import Registry
++from graphene_sqlalchemy.types import SQLAlchemyObjectType
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_utils.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_utils.py	(working tree)
+@@ -2,1 +2,1 @@
+-from ..utils import get_session, sort_argument_for_model, sort_enum_for_model
++from graphene_sqlalchemy.utils import get_session, sort_argument_for_model, sort_enum_for_model, get_operator_function
+@@ -74,3 +74,28 @@ def test_get_session():
+     assert set(arg.default_value) == set(
+         (MultiplePK.foo.name + "_asc", MultiplePK.bar.name + "_asc")
+     )
++
++
++def test_get_operator_function():
++    func = get_operator_function("=")
++    assert func(1, 1)
++    assert not func(1, 2)
++
++    func = get_operator_function("!=")
++    assert not func(1, 1)
++    assert func(1, 2)
++
++    class DummyLike:
++        def __init__(self, value):
++            self.value = value
++
++        def like(self, other):
++            return self.value == other
++
++    func = get_operator_function("like")
++    assert func(DummyLike(1), 1)
++    assert not func(DummyLike(1), 2)
++
++    func = get_operator_function(lambda x, y: x > y)
++    assert func(5, 3)
++    assert not func(3, 5)
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_query.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_query.py	(working tree)
+@@ -1,21 +1,18 @@
+ import pytest
+-from sqlalchemy import create_engine
+ from sqlalchemy.orm import scoped_session, sessionmaker
+ 
+ import graphene
+ from graphene.relay import Connection, Node
+ 
+-from ..fields import SQLAlchemyConnectionField
+-from ..registry import reset_global_registry
+-from ..types import SQLAlchemyObjectType
+-from ..utils import sort_argument_for_model, sort_enum_for_model
++from graphene_sqlalchemy.fields import SQLAlchemyConnectionField
++from graphene_sqlalchemy.registry import reset_global_registry
++from graphene_sqlalchemy.types import SQLAlchemyObjectType, SQLAlchemyList
++from graphene_sqlalchemy.utils import sort_argument_for_model, sort_enum_for_model
+ from .models import Article, Base, Editor, Hairkind, Pet, Reporter
+ 
+-db = create_engine("sqlite:///test_sqlalchemy.sqlite3")
+-
+ 
+ @pytest.yield_fixture(scope="function")
+-def session():
++def session(db):
+     reset_global_registry()
+     connection = db.engine.connect()
+     transaction = connection.begin()
+@@ -48,7 +45,7 @@ def setup_fixtures(session):
+     session.commit()
+ 
+ 
+-def test_should_query_well(session):
++def test_should_query_well_with_graphene_types(session):
+     setup_fixtures(session)
+ 
+     class ReporterType(SQLAlchemyObjectType):
+@@ -187,6 +184,241 @@ def test_should_query_enums(session):
+     assert result.data == expected, result.data
+ 
+ 
++def test_should_filter_with_sqlalchemy_fields(session):
++    setup_fixtures(session)
++
++    class ReporterType(SQLAlchemyObjectType):
++        class Meta:
++            model = Reporter
++
++    class Query(graphene.ObjectType):
++        reporters = SQLAlchemyList(ReporterType)
++
++    query = """
++         query ReporterQuery {
++           reporters(firstName: "ABA") {
++             firstName,
++             lastName,
++             email
++           }
++         }
++     """
++    expected = {
++        "reporters": [{
++            "firstName": "ABA",
++            "lastName": "X",
++            "email": None
++        }]
++    }
++    schema = graphene.Schema(query=Query)
++    result = schema.execute(query, context_value={"session": session})
++    assert not result.errors
++    assert result.data == expected
++
++
++def test_should_filter_with_custom_argument(session):
++    setup_fixtures(session)
++
++    class ReporterType(SQLAlchemyObjectType):
++        class Meta:
++            model = Reporter
++
++    class Query(graphene.ObjectType):
++        reporters = SQLAlchemyList(ReporterType, contains_o=graphene.Boolean())
++
++        def query_reporters(self, info, query, **kwargs):
++            return query.filter(Reporter.first_name.contains("O") == kwargs["contains_o"])
++
++    query = """
++         query ReporterQuery {
++           reporters(lastName: "Y", containsO: true) {
++             firstName,
++             lastName,
++             email
++           }
++         }
++     """
++    expected = {
++        "reporters": [{
++            "firstName": "ABO",
++            "lastName": "Y",
++            "email": None
++        }]
++    }
++    schema = graphene.Schema(query=Query)
++    result = schema.execute(query, context_value={"session": session})
++    assert not result.errors
++    assert result.data == expected
++
++    query = """
++         query ReporterQuery {
++           reporters(containsO: false) {
++             firstName,
++             lastName,
++             email
++           }
++         }
++     """
++    expected = {
++        "reporters": [{
++            "firstName": "ABA",
++            "lastName": "X",
++            "email": None
++        }]
++    }
++    schema = graphene.Schema(query=Query)
++    result = schema.execute(query, context_value={"session": session})
++    assert not result.errors
++    assert result.data == expected
++
++
++def test_should_filter_with_custom_operator(session):
++    setup_fixtures(session)
++
++    class ReporterType(SQLAlchemyObjectType):
++        class Meta:
++            model = Reporter
++
++    class Query(graphene.ObjectType):
++        reporters = SQLAlchemyList(ReporterType, operator="like")
++
++    query = """
++         query ReporterQuery {
++           reporters(firstName: "%BO%") {
++             firstName,
++             lastName,
++             email
++           }
++         }
++     """
++    expected = {
++        "reporters": [{
++            "firstName": "ABO",
++            "lastName": "Y",
++            "email": None
++        }]
++    }
++    schema = graphene.Schema(query=Query)
++    result = schema.execute(query, context_value={"session": session})
++    assert not result.errors
++    assert result.data == expected
++
++
++def test_should_order_by(session):
++    setup_fixtures(session)
++
++    class ReporterType(SQLAlchemyObjectType):
++        class Meta:
++            model = Reporter
++
++    class Query(graphene.ObjectType):
++        reporters = SQLAlchemyList(ReporterType, order_by="firstName")
++
++    query = """
++         query ReporterQuery {
++           reporters {
++             firstName,
++             lastName,
++             email
++           }
++         }
++     """
++    expected = {
++        "reporters": [{
++            "firstName": "ABA",
++            "lastName": "X",
++            "email": None
++        },
++            {
++                "firstName": "ABO",
++                "lastName": "Y",
++                "email": None
++            }]
++    }
++    schema = graphene.Schema(query=Query)
++    result = schema.execute(query, context_value={"session": session})
++    assert not result.errors
++    assert result.data == expected
++
++
++def test_should_order_by_asc(session):
++    setup_fixtures(session)
++
++    class ReporterType(SQLAlchemyObjectType):
++        class Meta:
++            model = Reporter
++
++    class Query(graphene.ObjectType):
++        reporters = SQLAlchemyList(ReporterType, order_by="first_name ASC")
++
++    query = """
++         query ReporterQuery {
++           reporters {
++             firstName,
++             lastName,
++             email
++           }
++         }
++     """
++    expected = {
++        "reporters": [
++            {
++                "firstName": "ABA",
++                "lastName": "X",
++                "email": None
++            },
++            {
++                "firstName": "ABO",
++                "lastName": "Y",
++                "email": None
++            }
++        ]
++    }
++    schema = graphene.Schema(query=Query)
++    result = schema.execute(query, context_value={"session": session})
++    assert not result.errors
++    assert result.data == expected
++
++
++def test_should_order_by_desc(session):
++    setup_fixtures(session)
++
++    class ReporterType(SQLAlchemyObjectType):
++        class Meta:
++            model = Reporter
++
++    class Query(graphene.ObjectType):
++        reporters = SQLAlchemyList(ReporterType, order_by="firstName desc")
++
++    query = """
++         query ReporterQuery {
++           reporters {
++             firstName,
++             lastName,
++             email
++           }
++         }
++     """
++    expected = {
++        "reporters": [
++            {
++                "firstName": "ABO",
++                "lastName": "Y",
++                "email": None
++            },
++            {
++                "firstName": "ABA",
++                "lastName": "X",
++                "email": None
++            }
++        ]
++    }
++    schema = graphene.Schema(query=Query)
++    result = schema.execute(query, context_value={"session": session})
++    assert not result.errors
++    assert result.data == expected
++
++
+ def test_should_node(session):
+     setup_fixtures(session)
+ 
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/conftest.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/conftest.py	(working tree)
+@@ -0,0 +1,7 @@
++import pytest
++from sqlalchemy import create_engine
++
++
++@pytest.fixture(scope="session")
++def db():
++    return create_engine("sqlite:///test_sqlalchemy.sqlite3")
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_mutations.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/tests/test_mutations.py	(working tree)
+@@ -0,0 +1,337 @@
++import graphene
++import pytest
++from sqlalchemy.orm import scoped_session, sessionmaker
++
++from graphene_sqlalchemy import SQLAlchemyObjectType
++from graphene_sqlalchemy.mutations import create, delete, update, delete_all
++from graphene_sqlalchemy.registry import reset_global_registry
++from graphene_sqlalchemy.types import SQLAlchemyList
++from .models import Base, Reporter
++
++
++@pytest.yield_fixture(scope="function")
++def session(db):
++    reset_global_registry()
++    connection = db.engine.connect()
++    transaction = connection.begin()
++    Base.metadata.create_all(connection)
++
++    # options = dict(bind=connection, binds={})
++    session_factory = sessionmaker(bind=connection)
++    session = scoped_session(session_factory)
++
++    yield session
++
++    # Finalize test here
++    transaction.rollback()
++    connection.close()
++    session.remove()
++
++
++def setup_fixtures(session):
++    reporter = Reporter(first_name="ABC", last_name="def")
++    session.add(reporter)
++    reporter2 = Reporter(first_name="CBA", last_name="fed")
++    session.add(reporter2)
++    session.commit()
++
++
++def test_should_create_with_create_field(session):
++    class ReporterType(SQLAlchemyObjectType):
++        class Meta:
++            model = Reporter
++
++    SQLAlchemyList.build_columns_dict(ReporterType)
++
++    class Query(graphene.ObjectType):
++        reporters = graphene.List(ReporterType)
++
++        def resolve_reporters(self, *args, **kwargs):
++            return session.query(Reporter)
++
++    class Mutation(graphene.ObjectType):
++        createReporter = create(ReporterType)
++
++    query = """
++        query ReporterQuery {
++          reporters {
++            firstName,
++            lastName,
++            email
++          }
++        }
++    """
++    expected = {
++        "reporters": []
++    }
++    schema = graphene.Schema(query=Query, mutation=Mutation)
++    result = schema.execute(query)
++    assert not result.errors
++    assert result.data == expected
++
++    query = """
++        mutation createReporter{
++            createReporter (firstName: "ABC", lastName: "def") {
++                firstName,
++                lastName,
++                email
++            }
++        }
++    """
++    expected = {
++        "createReporter": {
++            "firstName": "ABC",
++            "lastName": "def",
++            "email": None,
++        }
++    }
++    schema = graphene.Schema(query=Query, mutation=Mutation)
++    result = schema.execute(query, context_value={"session": session})
++    assert not result.errors
++    assert result.data == expected
++
++
++def test_should_delete_with_delete_field(session):
++    setup_fixtures(session)
++
++    class ReporterType(SQLAlchemyObjectType):
++        class Meta:
++            model = Reporter
++
++    class Query(graphene.ObjectType):
++        reporters = graphene.List(ReporterType)
++
++        def resolve_reporters(self, *args, **kwargs):
++            return session.query(Reporter)
++
++    class Mutation(graphene.ObjectType):
++        deleteReporter = delete(ReporterType)
++
++    query = """
++            query ReporterQuery {
++              reporters {
++                firstName,
++                lastName,
++                email
++              }
++            }
++        """
++    expected = {
++        "reporters": [
++            {
++                "firstName": "ABC",
++                "lastName": "def",
++                "email": None
++            },
++            {
++                "firstName": "CBA",
++                "lastName": "fed",
++                "email": None
++            }
++        ]
++    }
++    schema = graphene.Schema(query=Query, mutation=Mutation)
++    result = schema.execute(query)
++    assert not result.errors
++    assert result.data == expected
++
++    query = """
++        mutation deleteReporter {
++            deleteReporter (id: 1) {
++                firstName,
++                lastName,
++                email
++            }
++        }
++    """
++    expected = {
++        "deleteReporter": {
++            "firstName": "ABC",
++            "lastName": "def",
++            "email": None,
++        }
++    }
++    schema = graphene.Schema(query=Query, mutation=Mutation)
++    result = schema.execute(query, context_value={"session": session})
++    assert not result.errors
++    assert result.data == expected
++
++    query = """
++            query ReporterQuery {
++              reporters {
++                firstName,
++                lastName,
++                email
++              }
++            }
++        """
++    expected = {
++        "reporters": [
++            {
++                "firstName": "CBA",
++                "lastName": "fed",
++                "email": None
++            }
++        ]
++    }
++    schema = graphene.Schema(query=Query, mutation=Mutation)
++    result = schema.execute(query)
++    assert not result.errors
++    assert result.data == expected
++
++
++def test_should_delete_all_with_delete_all_field(session):
++    setup_fixtures(session)
++
++    class ReporterType(SQLAlchemyObjectType):
++        class Meta:
++            model = Reporter
++
++    class Query(graphene.ObjectType):
++        reporters = graphene.List(ReporterType)
++
++        def resolve_reporters(self, *args, **kwargs):
++            return session.query(Reporter)
++
++    class Mutation(graphene.ObjectType):
++        deleteReporters = delete_all(ReporterType)
++
++    query = """
++            query ReporterQuery {
++              reporters {
++                firstName,
++                lastName,
++                email
++              }
++            }
++        """
++    expected = {
++        "reporters": [
++            {
++                "firstName": "ABC",
++                "lastName": "def",
++                "email": None
++            },
++            {
++                "firstName": "CBA",
++                "lastName": "fed",
++                "email": None
++            }
++        ]
++    }
++    schema = graphene.Schema(query=Query, mutation=Mutation)
++    result = schema.execute(query)
++    assert not result.errors
++    assert result.data == expected
++
++    query = """
++        mutation deleteReporters {
++            deleteReporters (firstName: "ABC") {
++                firstName,
++                lastName,
++                email
++            }
++        }
++    """
++    expected = {
++        "deleteReporters": [
++            {
++                "firstName": "ABC",
++                "lastName": "def",
++                "email": None,
++            }
++        ]
++    }
++    schema = graphene.Schema(query=Query, mutation=Mutation)
++    result = schema.execute(query, context_value={"session": session})
++    assert not result.errors
++    assert result.data == expected
++
++    query = """
++            query ReporterQuery {
++              reporters {
++                firstName,
++                lastName,
++                email
++              }
++            }
++        """
++    expected = {
++        "reporters": [
++            {
++                "firstName": "CBA",
++                "lastName": "fed",
++                "email": None
++            }
++        ]
++    }
++    schema = graphene.Schema(query=Query, mutation=Mutation)
++    result = schema.execute(query)
++    assert not result.errors
++    assert result.data == expected
++
++
++def test_should_update_with_update_field(session):
++    setup_fixtures(session)
++
++    class ReporterType(SQLAlchemyObjectType):
++        class Meta:
++            model = Reporter
++
++    class Query(graphene.ObjectType):
++        reporters = graphene.List(ReporterType)
++
++        def resolve_reporters(self, *args, **kwargs):
++            return session.query(Reporter)
++
++    class Mutation(graphene.ObjectType):
++        updateReporter = update(ReporterType)
++
++    query = """
++        mutation updateReporter {
++            updateReporter (id: 1, lastName: "updated", email: "test@test.io") {
++                firstName,
++                lastName,
++                email
++            }
++        }
++    """
++    expected = {
++        "updateReporter": {
++            "firstName": "ABC",
++            "lastName": "updated",
++            "email": "test@test.io",
++        }
++    }
++    schema = graphene.Schema(query=Query, mutation=Mutation)
++    result = schema.execute(query, context_value={"session": session})
++    assert not result.errors
++    assert result.data == expected
++
++    query = """
++            query ReporterQuery {
++              reporters {
++                firstName,
++                lastName,
++                email
++              }
++            }
++        """
++    expected = {
++        "reporters": [
++            {
++                "firstName": "ABC",
++                "lastName": "updated",
++                "email": "test@test.io",
++            },
++            {
++                "firstName": "CBA",
++                "lastName": "fed",
++                "email": None
++            }
++        ]
++    }
++    schema = graphene.Schema(query=Query, mutation=Mutation)
++    result = schema.execute(query)
++    assert not result.errors
++    assert result.data == expected
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/__init__.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/__init__.py	(working tree)
+@@ -1,4 +1,4 @@
+-from .types import SQLAlchemyObjectType
++from .types import SQLAlchemyObjectType, SQLAlchemyList
+ from .fields import SQLAlchemyConnectionField
+ from .utils import get_query, get_session
+ 
+@@ -8,6 +8,7 @@ from .utils import (
+     "__version__",
+     "SQLAlchemyObjectType",
+     "SQLAlchemyConnectionField",
++    "SQLAlchemyList"
+     "get_query",
+     "get_session",
+ ]
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/types.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/types.py	(working tree)
+@@ -1,3 +1,4 @@
++import six
+ from collections import OrderedDict
+ 
+ import sqlalchemy
+@@ -5,7 +6,7 @@
+ from sqlalchemy.inspection import inspect as sqlalchemyinspect
+ from sqlalchemy.orm.exc import NoResultFound
+ 
+-from graphene import Field  # , annotate, ResolveInfo
++from graphene import Field, List, String  # , annotate, ResolveInfo
+ from graphene.relay import Connection, Node
+ from graphene.types.objecttype import ObjectType, ObjectTypeOptions
+ from graphene.types.utils import yank_fields_from_attrs
+@@ -16,7 +17,7 @@
+                         convert_sqlalchemy_relationship)
+ from .fields import default_connection_field_factory
+ from .registry import Registry, get_global_registry
+-from .utils import get_query, is_mapped_class, is_mapped_instance
++from .utils import get_operator_function, get_query, get_snake_or_camel_attr, is_mapped_class, is_mapped_instance
+ 
+ 
+ def construct_fields(model, registry, only_fields, exclude_fields, connection_field_factory):
+@@ -191,3 +188,76 @@ class SQLAlchemyObjectType(ObjectType):
+         # graphene_type = info.parent_type.graphene_type
+         keys = self.__mapper__.primary_key_from_instance(self)
+         return tuple(keys) if len(keys) > 1 else keys[0]
++
++
++class SQLAlchemyList(List):
++    def __init__(self, of_type, exclude_fields=(), include_fields=(), operator=None, order_by=(), *args, **kwargs):
++        columns_dict = self.build_columns_dict(of_type)
++
++        if include_fields:
++            columns_dict = {k: columns_dict[k] for k in include_fields}
++        for exclude_field in exclude_fields:
++            if exclude_field in columns_dict.keys():
++                del columns_dict[exclude_field]
++
++        kwargs.update(**columns_dict)
++        kwargs["operator"] = String(description="Operator to use for filtering")
++        kwargs["order_by"] = List(String, description="Fields to use for results ordering")
++
++        default_operator = get_operator_function(operator)
++        if isinstance(order_by, six.string_types):
++            order_by = (order_by,)
++        default_order_by = order_by
++
++        def filters_resolver(self, info, **kwargs):
++            operator = default_operator
++            if "operator" in kwargs:
++                operator = get_operator_function(kwargs["operator"])
++
++            query = of_type.get_query(info)
++
++            for (k, v) in kwargs.items():
++                if hasattr(of_type._meta.model, k):
++                    query = query.filter(operator(get_snake_or_camel_attr(of_type._meta.model, k), v))
++
++            order_by = default_order_by
++            if "order_by" in kwargs:
++                order_by = kwargs["order_by"]
++
++            for order_by_item in order_by:
++                if order_by_item.lower().endswith(" asc"):
++                    order_by_item = order_by_item[:-len(" asc")]
++                    query = query.order_by(get_snake_or_camel_attr(of_type._meta.model, order_by_item).asc())
++                elif order_by_item.lower().endswith(" desc"):
++                    order_by_item = order_by_item[:-len(" desc")]
++                    query = query.order_by(get_snake_or_camel_attr(of_type._meta.model, order_by_item).desc())
++                else:
++                    query = query.order_by(get_snake_or_camel_attr(of_type._meta.model, order_by_item))
++
++            query_transformer = getattr(info.parent_type.graphene_type, "query_" + info.field_name, False)
++            if callable(query_transformer):
++                transformed_query = query_transformer(info.parent_type.graphene_type(), info, query, **kwargs)
++                if transformed_query:
++                    query = transformed_query
++
++            return query.all()
++
++        kwargs["resolver"] = filters_resolver
++        super(SQLAlchemyList, self).__init__(of_type, *args, **kwargs)
++
++    @staticmethod
++    def build_columns_dict(of_type):
++        columns_dict = {}
++        inspected_model = sqlalchemyinspect(of_type._meta.model)
++        for column in inspected_model.columns:
++            column.nullable = True  # Set nullable to false to build an optional graph type
++            graphene_type = convert_sqlalchemy_column(column)
++            columns_dict[column.name] = graphene_type
++        return columns_dict
++
++    def __eq__(self, other):
++        return isinstance(other, SQLAlchemyList) and (
++            self.of_type == other.of_type and
++            self.args == other.args and
++            self.kwargs == other.kwargs
++        )
+--- contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/utils.py	(index)
++++ contrib/python/graphene-sqlalchemy/py2/graphene_sqlalchemy/utils.py	(working tree)
+@@ -2,6 +2,7 @@
+ from sqlalchemy.inspection import inspect
+ from sqlalchemy.orm import class_mapper, object_mapper
+ from sqlalchemy.orm.exc import UnmappedClassError, UnmappedInstanceError
++from graphene.utils.str_converters import to_camel_case, to_snake_case
+ 
+ from graphene import Argument, Enum, List
+ 
+@@ -23,6 +24,46 @@ def get_query(model, context):
+     return query
+ 
+ 
++_operator_aliases = {
++    "==": lambda x, y: x == y,
++    "=": lambda x, y: x == y,
++    ">=": lambda x, y: x >= y,
++    ">": lambda x, y: x > y,
++    "<=": lambda x, y: x <= y,
++    "<": lambda x, y: x < y,
++    "!=": lambda x, y: x != y
++}
++
++
++def get_operator_function(operator=None):
++    if not operator:
++        def operator(x, y):
++            return x == y
++
++    if not callable(operator):
++        operator_attr = operator
++
++        if operator in _operator_aliases:
++            operator = _operator_aliases[operator_attr]
++        else:
++            def operator(x, y):
++                return getattr(x, operator_attr)(y)
++
++    return operator
++
++
++def get_snake_or_camel_attr(model, attr):
++    try:
++        return getattr(model, to_snake_case(attr))
++    except Exception:
++        pass
++    try:
++        return getattr(model, to_camel_case(attr))
++    except Exception:
++        pass
++    return getattr(model, attr)
++
++
+ def is_mapped_class(cls):
+     try:
+         class_mapper(cls)

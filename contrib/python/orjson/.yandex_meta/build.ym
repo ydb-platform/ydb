@@ -1,0 +1,76 @@
+{#
+run `ya tool yamaker ym2 reimport -t ~/arcadia/contrib/python/orjson/.yandex_meta/build.ym` on me
+docs:
+https://docs.yandex-team.ru/contrib-automation/templates
+https://a.yandex-team.ru/arcadia/devtools/yamaker/libym2/templates/pycargo.ym
+#}
+
+{% extends '//builtin/pycargo.ym' %}
+
+{% block mod_name %}
+_orjson
+{% endblock %}
+
+{% block current_version %}3.11.3{% endblock %}
+{% block current_url %}https://github.com/ijl/orjson/archive/refs/tags/{{self.version().strip()}}.tar.gz{% endblock %}
+
+{% block platforms %}
+aarch64-apple-darwin
+x86_64-apple-darwin
+aarch64-unknown-linux-gnu
+x86_64-unknown-linux-musl
+x86_64-unknown-linux-gnu
+x86_64-pc-windows-msvc
+{% endblock %}
+
+{% block patch_source %}
+sed -e 's|cdylib|staticlib|' -i Cargo.toml
+{% endblock %}
+
+{# rust from pycargo.ym is too old #}
+{% block rust_version %}1.87.0{% endblock %}
+{% block rustup_verison %}1.28.2{% endblock %}
+
+
+{#
+In case of error `ld.lld: error: undefined symbol: PyInit_6orjson6orjson` to find original symbol name run
+llvm-nm --extern-only --defined-only -A a/x86_64-unknown-linux-gnu/release/liborjson.a 2>/dev/null | sed -e 's|.* ||' | grep PyInit
+#}
+{% block build_source %}
+export PYO3_CROSS_PYTHON_VERSION=3.12
+{{super()}}
+
+# delete intermidiate lib that is somehow in build dir
+find "${BUILD}/x86_64-unknown-linux-gnu/" -name 'libyyjson.a' -type f -delete
+
+find "${BUILD}/x86_64-pc-windows-msvc/" -name '*.lib' -type f  | while read l; do
+    llvm-ar d ${l} $(llvm-ar t ${l} | grep dll)
+done
+
+(find ${BUILD} -type f -name '*.a'; find ${BUILD} -type f -name '*.lib') | grep -v "/deps/" | while read l; do
+    llvm-objcopy --redefine-sym "_PyInit_orjson=_PyInit_6orjson6orjson" ${l}
+    llvm-objcopy --redefine-sym "PyInit_orjson=PyInit_6orjson6orjson" ${l}
+done
+
+{% endblock %}
+
+{% block move_to_output %}
+{{super()}}
+
+find "${OUTPUT}/a/x86_64-pc-windows-msvc" -name '*.lib' -type f  | while read l; do
+    new_l=$(echo ${l} | sed -e 's|orjson.lib$|liborjson.lib|')
+    mv ${l} ${new_l}
+done
+{% endblock %}
+
+{% block prepare_yamake %}
+:
+{% endblock %}
+
+{% block run_license_analyzer %}
+:
+{% endblock %}
+
+{% block step_install %}
+rsync --recursive --perms ${OUTPUT}/a ${DST_PATH}
+{% endblock %}

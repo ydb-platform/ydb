@@ -1,0 +1,2 @@
+django_query_profiler
+tests

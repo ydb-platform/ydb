@@ -1,0 +1,58 @@
+--- contrib/libs/libev/ev++.h	(index)
++++ contrib/libs/libev/ev++.h	(working tree)
+@@ -300,6 +300,7 @@ namespace ev {
+     template<class K, void (K::*method)()>
+     static void method_noargs_thunk (int revents, void *arg)
+     {
++      (void)revents;
+       (static_cast<K *>(arg)->*method)
+         ();
+     }
+@@ -314,6 +315,7 @@ namespace ev {
+     template<void (*cb)(int)>
+     static void simpler_func_thunk (int revents, void *arg)
+     {
++      (void)arg;
+       (*cb)
+         (revents);
+     }
+@@ -328,6 +330,8 @@ namespace ev {
+     template<void (*cb)()>
+     static void simplest_func_thunk (int revents, void *arg)
+     {
++      (void)revents;
++      (void)arg;
+       (*cb)
+         ();
+     }
+@@ -455,6 +459,9 @@ namespace ev {
+     template<void (*function)(watcher &w, int)>
+     static void function_thunk (EV_P_ ev_watcher *w, int revents)
+     {
++    #if EV_MULTIPLICITY
++      (void)EV_A;
++    #endif
+       function
+         (*static_cast<watcher *>(w), revents);
+     }
+@@ -476,6 +483,9 @@ namespace ev {
+     template<class K, void (K::*method)(watcher &w, int)>
+     static void method_thunk (EV_P_ ev_watcher *w, int revents)
+     {
++    #if EV_MULTIPLICITY
++      (void)EV_A;
++    #endif
+       (static_cast<K *>(w->data)->*method)
+         (*static_cast<watcher *>(w), revents);
+     }
+@@ -490,6 +500,10 @@ namespace ev {
+     template<class K, void (K::*method)()>
+     static void method_noargs_thunk (EV_P_ ev_watcher *w, int revents)
+     {
++    #if EV_MULTIPLICITY
++      (void)EV_A;
++    #endif
++      (void)revents;
+       (static_cast<K *>(w->data)->*method)
+         ();
+     }

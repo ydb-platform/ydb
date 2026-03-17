@@ -1,0 +1,176 @@
+syntax = "proto3";
+package yandex.cloud.billing.usage_records.v1;
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/billing/usage_records/v1;usageRecords";
+option java_package = "yandex.cloud.api.billing.usage_records.v1";
+
+import "google/protobuf/timestamp.proto";
+
+import "yandex/cloud/billing/usage_records/v1/billing_types.proto";
+import "yandex/cloud/billing/usage_records/v1/common_types.proto";
+import "yandex/cloud/billing/usage_records/v1/credit.proto";
+
+// Usage and billing data for the billing account entity in the report.
+// This represents the second level in the response structure hierarchy (entity-level totals),
+// containing both summary data for the specified billing account across the entire period and a time series breakdown.
+message BillingAccountUsageReportEntityData {
+    // Total cost associated with this billing account.
+    StringDecimal cost = 1;
+
+    // Total credits (discounts, grants, adjustments) applied to this billing account.
+    CreditDetails credit_details = 2;
+
+    // Total expense (including cost and credit) for this billing account.
+    StringDecimal expense = 3;
+
+    // Metadata for the specified billing account entity.
+    BillingAccount billing_account = 4;
+
+    // Time series with usage and billing details for each TimeGrouping period (e.g., daily).
+    repeated UsageReportPeriodicData periodic = 5;
+}
+
+// Usage and billing data for a cloud entity in the report.
+// This represents the second level in the response structure hierarchy (entity-level totals),
+// containing both summary data for the entity across the entire period and a time series breakdown.
+message CloudUsageReportEntityData {
+    // Total cost associated with this cloud.
+    StringDecimal cost = 1;
+
+    // Total credits (discounts, grants, adjustments) applied to this cloud.
+    CreditDetails credit_details = 2;
+
+    // Total expense (including cost and credit) for this cloud.
+    StringDecimal expense = 3;
+
+    // Metadata for the cloud entity.
+    Cloud cloud = 4;
+
+    // Time series with usage and billing details for each TimeGrouping period (e.g., daily).
+    repeated UsageReportPeriodicData periodic = 5;
+}
+
+// Usage and billing data for a folder entity in the report.
+// This represents the second level in the response structure hierarchy (entity-level totals),
+// containing both summary data for the entity across the entire period and a time series breakdown.
+message FolderUsageReportEntityData {
+    // Total cost associated with this folder.
+    StringDecimal cost = 1;
+
+    // Total credits (discounts, grants, adjustments) applied to this folder.
+    CreditDetails credit_details = 2;
+
+    // Total expense (including cost and credit) for this folder.
+    StringDecimal expense = 3;
+
+    // Metadata for the folder entity.
+    Folder folder = 4;
+
+    // Time series with usage and billing details for each TimeGrouping period (e.g., daily).
+    repeated UsageReportPeriodicData periodic = 5;
+}
+
+// Usage and billing data for a service entity in the report.
+// This represents the second level in the response structure hierarchy (entity-level totals),
+// containing both summary data for the entity across the entire period and a time series breakdown.
+message ServiceUsageReportEntityData {
+    // Total cost associated with this service.
+    StringDecimal cost = 1;
+
+    // Total credits (discounts, grants, adjustments) applied to this service.
+    CreditDetails credit_details = 2;
+
+    // Total expense (including cost and credit) for this service.
+    StringDecimal expense = 3;
+
+    // Metadata for the service entity.
+    Service service = 4;
+
+    // Time series with usage and billing details for each TimeGrouping period (e.g., daily).
+    repeated UsageReportPeriodicData periodic = 5;
+}
+
+// Usage and billing data for a SKU entity in the report.
+// This represents the second level in the response structure hierarchy (entity-level totals),
+// containing both summary data for the entity across the entire period and a time series breakdown.
+message SKUUsageReportEntityData {
+    // Total cost associated with this entity.
+    StringDecimal cost = 1;
+
+    // Total credits (discounts, grants, adjustments) applied to this entity.
+    CreditDetails credit_details = 2;
+
+    // Total expense (including cost and credit) for this entity.
+    StringDecimal expense = 3;
+
+    // Total resource usage (pricing quantity) for this entity, measured in pricing units.
+    StringDecimal pricing_quantity = 4;
+
+    // Metadata for a product/SKU entity.
+    SKU sku = 5;
+
+    // Time series with usage and billing details for each TimeGrouping period (e.g., daily).
+    repeated UsageReportPeriodicData periodic = 6;
+}
+
+// Usage and billing data for a resource entity in the report.
+// This represents the second level in the response structure hierarchy (entity-level totals),
+// containing both summary data for the entity across the entire period and a time series breakdown.
+message ResourceUsageReportEntityData {
+    // Total cost associated with this label group.
+    StringDecimal cost = 1;
+
+    // Total credits (discounts, grants, adjustments) applied to this label group.
+    CreditDetails credit_details = 2;
+
+    // Total expense (including cost and credit) for this label group.
+    StringDecimal expense = 3;
+
+    // Metadata for the label-based grouping.
+    Resource resource = 4;
+
+    // Time series with usage and billing details for each TimeGrouping period (e.g., daily).
+    repeated UsageReportPeriodicData periodic = 5;
+}
+
+// Usage and billing data for a label-based entity/grouping in the report.
+// This represents the second level in the response structure hierarchy (entity-level totals),
+// containing both summary data for the entity across the entire period and a time series breakdown.
+message LabelUsageReportEntityData {
+    // Total cost associated with this label group.
+    StringDecimal cost = 1;
+
+    // Total credits (discounts, grants, adjustments) applied to this label group.
+    CreditDetails credit_details = 2;
+
+    // Total expense (including cost and credit) for this label group.
+    StringDecimal expense = 3;
+
+    // Metadata for the label-based grouping.
+    Label label = 4;
+
+    // Time series with usage and billing details for each TimeGrouping period (e.g., daily).
+    repeated UsageReportPeriodicData periodic = 5;
+}
+
+// Represents usage and billing data for a specific aggregation period (e.g., a single day, month).
+// This message is part of the third level in the response structure hierarchy, providing the
+// time series breakdown for entities. It appears in the 'periodic' field of each entity data object,
+// containing financial metrics for each time interval within the requested date range.
+message UsageReportPeriodicData {
+    // Cost incurred during this specific period.
+    // This is the raw cost before any credits are applied.
+    StringDecimal cost = 1;
+
+    // Credits applied during this period.
+    // Contains a detailed breakdown of all credit types (monetary grants, volume incentives, etc.)
+    // that were applied during this specific time interval.
+    CreditDetails credit_details = 2;
+
+    // Total expense (including cost and credit) for this period.
+    // This is the final billable amount after all credits have been applied.
+    // Formula: expense = cost + credit_details.credit
+    StringDecimal expense = 3;
+
+    // Timestamp indicating the beginning of the TimeGrouping period.
+    google.protobuf.Timestamp timestamp = 4;
+}

@@ -1,0 +1,28 @@
+Metadata-Version: 2.1
+Name: types-atomicwrites
+Version: 1.4.5.1
+Summary: Typing stubs for atomicwrites
+Home-page: https://github.com/python/typeshed
+License: Apache-2.0 license
+Project-URL: GitHub, https://github.com/python/typeshed
+Project-URL: Changes, https://github.com/typeshed-internal/stub_uploader/blob/main/data/changelogs/atomicwrites.md
+Project-URL: Issue tracker, https://github.com/python/typeshed/issues
+Project-URL: Chat, https://gitter.im/python/typing
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python :: 3
+Classifier: Typing :: Stubs Only
+Description-Content-Type: text/markdown
+
+## Typing stubs for atomicwrites
+
+This is a PEP 561 type stub package for the `atomicwrites` package.
+It can be used by type-checking tools like mypy, PyCharm, pytype etc. to check code
+that uses `atomicwrites`. The source for this package can be found at
+https://github.com/python/typeshed/tree/master/stubs/atomicwrites. All fixes for
+types and metadata should be contributed there.
+
+*Note:* `types-atomicwrites` is unmaintained and won't be updated.
+
+
+See https://github.com/python/typeshed/blob/master/README.md for more details.
+This package was generated from typeshed commit `03c38d91ae4ea2987f9853539534ce64959abf7a`.

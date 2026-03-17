@@ -1,0 +1,9 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.88, Analysis or Forecast at a horizontal level or in a horizontal layer at a local time
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.generating_process.def"
+# no template.4.forecast_time.def component in this template.
+include "grib2/templates/template.4.horizontal.def"
+include "grib2/templates/template.4.localtime.def"

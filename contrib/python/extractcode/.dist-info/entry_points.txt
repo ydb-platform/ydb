@@ -1,0 +1,2 @@
+[console_scripts]
+extractcode = extractcode.cli:extractcode

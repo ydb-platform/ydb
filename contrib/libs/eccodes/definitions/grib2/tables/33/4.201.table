@@ -1,0 +1,17 @@
+# Code table 4.201 - Precipitation type
+0 0 No precipitation
+1 1 Rain
+2 2 Thunderstorm
+3 3 Freezing rain
+4 4 Mixed/ice
+5 5 Snow
+6 6 Wet snow
+7 7 Mixture of rain and snow
+8 8 Ice pellets
+9 9 Graupel
+10 10 Hail
+11 11 Drizzle
+12 12 Freezing drizzle
+# 13-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

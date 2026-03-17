@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1;iam";
+option java_package = "yandex.cloud.api.iam.v1";
+
+// An ApiKey resource. For more information, see [Api-Key](/docs/iam/concepts/authorization/api-key).
+message ApiKey {
+  // ID of the API Key.
+  string id = 1;
+
+  // ID of the service account that the API key belongs to.
+  string service_account_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Description of the API key. 0-256 characters long.
+  string description = 4;
+
+  // Timestamp for the last authentication using this API key.
+  google.protobuf.Timestamp last_used_at = 5;
+
+  // Draft
+  // Scope of the API key. 0-256 characters long.
+  string scope = 6 [deprecated = true];
+
+  // Scopes of the API key. 0-256 characters long.
+  repeated string scopes = 8;
+
+  // API key expiration timestamp.
+  google.protobuf.Timestamp expires_at = 7;
+}

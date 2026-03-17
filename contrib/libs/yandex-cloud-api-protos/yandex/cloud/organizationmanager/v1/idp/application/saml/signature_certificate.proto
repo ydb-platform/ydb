@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package yandex.cloud.organizationmanager.v1.idp.application.saml;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/organizationmanager/v1/idp/application/saml;saml";
+option java_package = "yandex.cloud.api.organizationmanager.v1.idp.application.saml";
+
+// A signature certificate for SAML applications.
+message SignatureCertificate {
+  // Represents the current status of a signature certificate.
+  enum Status {
+    // The status is not specified.
+    STATUS_UNSPECIFIED = 0;
+    // The certificate is active and can be used for signing.
+    ACTIVE = 1;
+    // The certificate is inactive and cannot be used for signing.
+    INACTIVE = 2;
+  }
+
+  // Unique identifier of the signature certificate.
+  string id = 1;
+
+  // ID of the SAML application that the signature certificate belongs to.
+  string application_id = 2;
+
+  // Current status of the signature certificate.
+  Status status = 3;
+
+  // Name of the signature certificate.
+  string name = 4;
+
+  // Description of the signature certificate.
+  string description = 5;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 6;
+
+  // Certificate data in PEM format.
+  string data = 7;
+
+  // SHA256-fingerprint of the signature certificate.
+  string fingerprint = 8;
+
+  // Time after which the signature certificate is not valid.
+  google.protobuf.Timestamp not_after = 9;
+
+  // Time before which the signature certificate is not valid.
+  google.protobuf.Timestamp not_before = 10;
+}

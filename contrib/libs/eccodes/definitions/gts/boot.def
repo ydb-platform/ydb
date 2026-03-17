@@ -1,0 +1,51 @@
+# (C) Copyright 2005- ECMWF.
+#
+# This software is licensed under the terms of the Apache Licence Version 2.0
+# which can be obtained at http://www.apache.org/licenses/LICENSE-2.0.
+# 
+# In applying this licence, ECMWF does not waive the privileges and immunities granted to it by
+# virtue of its status as an intergovernmental organisation nor does it submit to any jurisdiction.
+#
+
+position startOfHeaders;
+
+ascii[4] SOH : hidden;
+ascii[3] nnn : dump;
+ascii[3] crcrlf : hidden;
+ascii[2] TT : dump;
+ascii[2] AA : dump;
+ascii[2] II : dump;
+ascii[1] sp1 : hidden;
+ascii[4] CCCC : dump;
+ascii[1] sp2 : hidden;
+ascii[2] YY : dump;
+ascii[2] GG : dump;
+ascii[2] gg : dump;
+
+lookup[2] lBB (29,BB);
+if (lBB is 'RR' || lBB is 'CC' || lBB is 'AA' ) {
+    ascii[1] sp3 : hidden;
+    ascii[3] BBB : dump;
+} else {
+    constant BBB="NNN";
+}
+alias ls.BBB=BBB;
+
+alias ls.count=count;
+alias ls.TT=TT;
+alias ls.AA=AA;
+alias ls.II=II;
+alias ls.CCCC=CCCC;
+alias ls.YY=YY;
+alias ls.GG=GG;
+alias ls.gg=gg;
+position endOfHeadersMarker;
+
+message[4] theMessage;
+
+meta lengthOfHeaders evaluate(endOfHeadersMarker-startOfHeaders);
+meta md5Headers md5(startOfHeaders, lengthOfHeaders);
+
+ascii[4] endMark;
+position totalLength; 
+alias ls.totalLength=totalLength;

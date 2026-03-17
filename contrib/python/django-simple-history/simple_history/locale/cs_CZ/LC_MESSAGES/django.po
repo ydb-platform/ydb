@@ -1,0 +1,134 @@
+# Czech translation for django-simple-history
+# Copyright (C) 2021
+# This file is distributed under the same license as the django-simple-history package.
+# Robert Durica <rdurica@github.com>, 2021.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-simple-history\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-09-18 21:54+0200\n"
+"PO-Revision-Date: 2021-09-20 19:50+0200\n"
+"Last-Translator: Robert Durica <rdurica@github.com>\n"
+"Language-Team: Czech <django-commons@github.com>\n"
+"Language: cs\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n == 1 && n % 1 == 0) ? 0 : (n >= 2 && n "
+"<= 4 && n % 1 == 0) ? 1: (n % 1 != 0 ) ? 2 : 3;\n"
+
+#: simple_history/admin.py:102
+#, python-format
+msgid "View history: %s"
+msgstr "Zobrazit historii: %s"
+
+#: simple_history/admin.py:104
+#, python-format
+msgid "Change history: %s"
+msgstr "Historie změn: %s"
+
+#: simple_history/admin.py:110
+#, python-format
+msgid "The %(name)s \"%(obj)s\" was changed successfully."
+msgstr "%(name)s \"%(obj)s\" bylo úspěšně změněno."
+
+#: simple_history/admin.py:116
+msgid "You may edit it again below"
+msgstr "Níže jej můžete znovu upravit"
+
+#: simple_history/admin.py:216
+#, python-format
+msgid "View %s"
+msgstr "Zobrazit %s"
+
+#: simple_history/admin.py:218
+#, python-format
+msgid "Revert %s"
+msgstr "Vrátit změny: %s"
+
+#: simple_history/models.py:433
+msgid "Created"
+msgstr "Vytvořeno"
+
+#: simple_history/models.py:433
+msgid "Changed"
+msgstr "Změněno"
+
+#: simple_history/models.py:433
+msgid "Deleted"
+msgstr "Smazáno"
+
+#: simple_history/templates/simple_history/object_history.html:11
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr ""
+"Vyberte datum ze seznamu níže a vraťte se k předchozí verzi tohoto objektu."
+
+#: simple_history/templates/simple_history/object_history.html:16
+msgid "This object doesn't have a change history."
+msgstr "Tento objekt nemá historii změn."
+
+#: simple_history/templates/simple_history/object_history_form.html:7
+msgid "Home"
+msgstr "Domů"
+
+#: simple_history/templates/simple_history/object_history_form.html:11
+msgid "History"
+msgstr "Historie"
+
+#: simple_history/templates/simple_history/object_history_form.html:12
+#, python-format
+msgid "View %(verbose_name)s"
+msgstr "Zobrazit %(verbose_name)s"
+
+#: simple_history/templates/simple_history/object_history_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Vrátit %(verbose_name)s"
+
+#: simple_history/templates/simple_history/object_history_form.html:25
+msgid ""
+"Press the 'Revert' button below to revert to this version of the object."
+msgstr "Stisknutím tlačítka 'Vrátit změny' se vrátíte k této verzi objektu."
+
+#: simple_history/templates/simple_history/object_history_form.html:25
+msgid "Press the 'Change History' button below to edit the history."
+msgstr "Chcete-li historii upravit, stiskněte tlačítko 'Změnit historii'"
+
+#: simple_history/templates/simple_history/object_history_list.html:9
+msgid "Object"
+msgstr "Objekt"
+
+#: simple_history/templates/simple_history/object_history_list.html:13
+msgid "Date/time"
+msgstr "Datum/čas"
+
+#: simple_history/templates/simple_history/object_history_list.html:14
+msgid "Comment"
+msgstr "Komentář"
+
+#: simple_history/templates/simple_history/object_history_list.html:15
+msgid "Changed by"
+msgstr "Změnil"
+
+#: simple_history/templates/simple_history/object_history_list.html:16
+msgid "Change reason"
+msgstr "Důvod změny"
+
+#: simple_history/templates/simple_history/object_history_list.html:42
+msgid "None"
+msgstr "Žádné"
+
+#: simple_history/templates/simple_history/submit_line.html:4
+msgid "Revert"
+msgstr "Vrátit změny"
+
+#: simple_history/templates/simple_history/submit_line.html:6
+msgid "Change History"
+msgstr "Historie změn"
+
+#: simple_history/templates/simple_history/submit_line.html:7
+msgid "Close"
+msgstr "Zavřít"

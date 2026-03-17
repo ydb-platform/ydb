@@ -1,0 +1,26 @@
+Metadata-Version: 2.0
+Name: djangorestframework-jsonp
+Version: 1.0.2
+Summary: JSONP support for Django REST Framework
+Home-page: https://github.com/jpadilla/django-rest-framework-jsonp
+Author: José Padilla
+Author-email: hello@jpadilla.com
+License: BSD
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Django
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Topic :: Internet :: WWW/HTTP
+
+UNKNOWN
+
+

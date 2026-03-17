@@ -1,0 +1,20 @@
+# (C) Copyright 2005- ECMWF.
+# 4D variational increments
+
+constant GRIBEXSection1Problem = 52 - section1Length ;
+
+# 1->2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=20;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] iterationNumber  : dump;
+unsigned[1] totalNumberOfIterations  : dump;
+alias iteration = iterationNumber;
+
+alias local.iterationNumber=iterationNumber;
+alias local.totalNumberOfIterations=totalNumberOfIterations;
+
+# spareSetToZero
+pad padding_loc20_1(1);

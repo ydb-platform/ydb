@@ -1,0 +1,56 @@
+# (C) Copyright 2005- ECMWF.
+# Forecasting Systems with Variable Resolution
+
+constant GRIBEXSection1Problem = 106 - section1Length ;
+
+# used in local definition 13
+transient localFlag=3 : hidden;
+
+# 1-> 2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=30;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+#1->2
+if (stepType is "instant" ) {
+  if (type is "em" || type is "es" ) {
+    alias productDefinitionTemplateNumber=epsStatisticsPoint;
+  } else {
+    alias productDefinitionTemplateNumber=epsPoint;
+  }
+} else {
+  if (type is "em" || type is "es" ) {
+    alias productDefinitionTemplateNumber=epsStatisticsContinous;
+  } else {
+    alias productDefinitionTemplateNumber=epsContinuous;
+  }
+}
+
+unsigned[1] perturbationNumber  : dump;
+alias number=perturbationNumber;
+unsigned[1] numberOfForecastsInEnsemble  : dump;
+alias totalNumber=numberOfForecastsInEnsemble;
+
+unsigned[1] oceanAtmosphereCoupling : dump;
+
+pad padding_loc30_1(3);
+
+unsigned[4] legBaseDate  : dump ;
+unsigned[2] legBaseTime : dump ;
+unsigned[1] legNumber : dump ;
+unsigned[4] referenceDate  : dump ;
+unsigned[4] climateDateFrom  : dump ;
+unsigned[4] climateDateTo  : dump;
+
+alias local.oceanAtmosphereCoupling=oceanAtmosphereCoupling;
+alias local.legBaseDate=legBaseDate ;
+alias local.legBaseTime=legBaseTime ;
+alias local.legNumber=legNumber ;
+alias local.referenceDate=referenceDate ;
+alias local.climateDateFrom=climateDateFrom ;
+alias local.climateDateTo=climateDateTo;
+
+alias mars._leg_number = legNumber;
+
+pad padding_loc30_2(32);

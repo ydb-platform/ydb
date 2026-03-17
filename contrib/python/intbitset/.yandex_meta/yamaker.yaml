@@ -1,0 +1,5 @@
+mark_as_cython_c:
+  - intbitset/intbitset.pyx
+exclude:
+  - intbitset/intbitset.egg-info/*
+  - tests/intbitset_example.int

@@ -1,0 +1,17 @@
+--- contrib/python/parsel/py3/tests/test_xml_attacks.py	(index)
++++ contrib/python/parsel/py3/tests/test_xml_attacks.py	(working tree)
+@@ -15,1 +15,2 @@ from psutil import Process
+-    folder_path = Path(__file__).parent
++    import yatest.common as yc
++    folder_path = Path(yc.source_path(__file__)).parent
+--- contrib/python/parsel/py3/tests/test_selector_csstranslator.py	(index)
++++ contrib/python/parsel/py3/tests/test_selector_csstranslator.py	(working tree)
+@@ -55 +55 @@ HTMLBODY = """
+-class TestTranslatorBase(ABC):
++class _TestTranslatorBase(ABC):
+@@ -156 +156 @@ class TestTranslatorBase(ABC):
+-class TestHTMLTranslator(TestTranslatorBase):
++class TestHTMLTranslator(_TestTranslatorBase):
+@@ -160 +160 @@ class TestHTMLTranslator(TestTranslatorBase):
+-class TestGenericTranslator(TestTranslatorBase):
++class TestGenericTranslator(_TestTranslatorBase):

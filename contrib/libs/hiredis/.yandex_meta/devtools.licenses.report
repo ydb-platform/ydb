@@ -1,0 +1,116 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-3-Clause         3058f894a31f01e2d5fb8c350fd79b29
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.48
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        adapters/macosx.h [4:31]
+        examples/example-macosx.c [4:31]
+
+KEEP     BSD-3-Clause AND BSD-3-Clause 5c0488fc7f7fc95dd8b53236c1e55be8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.53
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        adapters/ae.h [6:28]
+        adapters/libev.h [6:28]
+        adapters/libevent.h [6:28]
+        alloc.c [6:28]
+        alloc.h [6:28]
+        async.c [7:29]
+        async.h [7:29]
+        async_private.h [7:29]
+        dict.c [11:33]
+        dict.h [11:33]
+        examples/example-push.c [6:28]
+        hiredis.c [9:31]
+        hiredis.h [9:31]
+        hiredis_ssl.h [7:29]
+        net.c [10:32]
+        net.h [10:32]
+        read.c [7:29]
+        sds.c [8:30]
+        sds.h [8:30]
+        sdsalloc.h [8:30]
+        sockcompat.c [6:28]
+        sockcompat.h [6:28]
+        ssl.c [8:30]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 98.13
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        read.h [7:29]
+
+KEEP     BSD-3-Clause         90d9efa806a5632b2cc86cc4a0dfcd1d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.53
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [6:29]
+
+KEEP     BSD-3-Clause         9373093d18f0979f5529c2335d10320e
+BELONGS ya.make
+    License text:
+        released under the BSD license._
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [832:832]
+
+KEEP     BSD-2-Clause         bf051c87d119e1636d30ee4903ceb38e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        adapters/qt.h [4:23]

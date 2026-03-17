@@ -1,0 +1,121 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+#
+# Translators:
+msgid ""
+msgstr ""
+"Project-Id-Version: django-constance\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2022-07-19 16:00+0000\n"
+"PO-Revision-Date: 2014-11-27 18:13+0000\n"
+"Last-Translator: Vasyl Dizhak <vasyl@dizhak.com>\n"
+"Language-Team: (http://www.transifex.com/projects/p/django-constance/"
+"language/uk/)\n"
+"Language: uk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
+"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#: admin.py:109
+msgid "You don't have permission to change these values"
+msgstr "У вас немає прав для зміни цих значень"
+
+#: admin.py:117
+#, python-format
+msgid ""
+"Default value type must be equal to declared config parameter type. Please "
+"fix the default value of '%(name)s'."
+msgstr ""
+"Тип значення за замовчуванням повинен співпадати із вказаним типом параметра "
+"конфігурації. Будь ласка, виправте значення за замовчуванням для '%(name)s'."
+
+#: admin.py:127
+#, python-format
+msgid ""
+"Constance doesn't support config values of the type %(config_type)s. Please "
+"fix the value of '%(name)s'."
+msgstr ""
+"Constance не підтрумує значення наступного типу %(config_type)s. Будь ласка, "
+"змініть тип для значення '%(name)s'"
+
+#: admin.py:166
+msgid ""
+"The settings have been modified by someone else. Please reload the form and "
+"resubmit your changes."
+msgstr ""
+"Налаштування було змінено кимось іншим. Буд ласка, перезавантажте форму та "
+"повторно збережіть зміни."
+
+#: admin.py:178 checks.py:19
+msgid ""
+"CONSTANCE_CONFIG_FIELDSETS is missing field(s) that exists in "
+"CONSTANCE_CONFIG."
+msgstr ""
+"Одне чи кілька полів з CONSTANCE_CONFIG відсутні в "
+"CONSTANCE_CONFIG_FIELDSETS."
+
+#: admin.py:250
+msgid "Live settings updated successfully."
+msgstr "Налаштування успішно збережені."
+
+#: admin.py:267
+msgid "Failed to update live settings."
+msgstr "Не вдалося зберегти налаштування."
+
+#: admin.py:326
+msgid "config"
+msgstr "налаштування"
+
+#: apps.py:8
+msgid "Constance"
+msgstr ""
+
+#: backends/database/models.py:19
+msgid "constance"
+msgstr "налаштування"
+
+#: backends/database/models.py:20
+msgid "constances"
+msgstr "налаштування"
+
+#: management/commands/constance.py:30
+msgid "Get/Set In-database config settings handled by Constance"
+msgstr "Отримати/встановити налашування в базі даних, якими керує Constance"
+
+#: templates/admin/constance/change_list.html:61
+msgid "Save"
+msgstr "Зберегти"
+
+#: templates/admin/constance/change_list.html:70
+msgid "Home"
+msgstr "Головна"
+
+#: templates/admin/constance/includes/results_list.html:6
+msgid "Name"
+msgstr "Назва"
+
+#: templates/admin/constance/includes/results_list.html:7
+msgid "Default"
+msgstr "За замовчуванням"
+
+#: templates/admin/constance/includes/results_list.html:8
+msgid "Value"
+msgstr "Поточне значення"
+
+#: templates/admin/constance/includes/results_list.html:9
+msgid "Is modified"
+msgstr "Було змінено"
+
+#: templates/admin/constance/includes/results_list.html:26
+msgid "Current file"
+msgstr "Поточний файл"
+
+#: templates/admin/constance/includes/results_list.html:44
+msgid "Reset to default"
+msgstr "Скинути до значення за замовчуванням"
+
+#~ msgid "Constance config"
+#~ msgstr "Настройки"

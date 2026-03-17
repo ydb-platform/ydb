@@ -1,0 +1,39 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.100, Triangular grid based on an icosahedron (see Attachment I.2-GRIB-Att.)
+constant isGridded = true;
+
+# Exponent of 2 for the number of intervals on main triangle sides
+unsigned[1] n2  : dump ;
+
+# Exponent of 3 for the number of intervals on main triangle sides
+unsigned[1] n3  : dump ;
+
+# Number of intervals on main triangle sides of the icosahedron
+unsigned[2] Ni  : dump ;
+
+# Number of diamonds
+unsigned[1] nd  : dump ;
+alias numberOfDiamonds=nd;
+
+# Latitude of the pole point of the icosahedron on the sphere
+signed[4] latitudeOfThePolePoint  : dump ;
+meta geography.latitudeOfThePolePointInDegrees scale(latitudeOfThePolePoint,one,grib2divider,truncateDegrees) : dump;
+
+# Longitude of the pole point of the icosahedron on the sphere
+unsigned[4] longitudeOfThePolePoint  : dump ;
+meta geography.longitudeOfThePolePointInDegrees g2lon(longitudeOfThePolePoint);
+
+# Longitude of the centre line of the first diamond of the icosahedron on the sphere
+unsigned[4] longitudeOfFirstDiamondCentreLine : dump ;
+meta geography.longitudeOfFirstDiamondCentreLineInDegrees g2lon(longitudeOfFirstDiamondCentreLine);
+
+codetable[1] gridPointPosition ('3.8.table',masterDir,localDir);
+
+flags[1] numberingOrderOfDiamonds 'grib2/tables/[tablesVersion]/3.9.table';
+
+flags[1] scanningModeForOneDiamond 'grib2/tables/[tablesVersion]/3.10.table';
+
+unsigned[4] totalNumberOfGridPoints : dump ;
+alias nt = totalNumberOfGridPoints;
+

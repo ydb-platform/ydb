@@ -1,0 +1,26 @@
+{
+    "$schema": "http://json-schema.org/schema#",
+    "type": "object",
+    "properties": {
+        "my_obj": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": [
+                            "array",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "items"
+                ]
+            }
+        }
+    },
+    "required": [
+        "my_obj"
+    ]
+}

@@ -1,0 +1,134 @@
+# Urdu translation for django-simple-history
+# Copyright (C) 2023
+# This file is distributed under the same license as the django-simple-history package.
+# Muneeb Shahid <muneeb706@github.com>, 2023.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-simple-history\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2023-07-02 11:10+0800\n"
+"PO-Revision-Date: 2023-07-02 11:50+0800\n"
+"Last-Translator: Muneeb Shahid <muneeb706@github.com>\n"
+"Language-Team: Urdu <django-commons@github.com>\n"
+"Language: ur\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: .\simple_history\admin.py:102
+#, python-format
+msgid "View history: %s"
+msgstr "تاریخ دیکھیں: %s"
+
+#: .\simple_history\admin.py:104
+#, python-format
+msgid "Change history: %s"
+msgstr "تاریخ کو تبدیل کریں: %s"
+
+#: .\simple_history\admin.py:110
+#, python-format
+msgid "The %(name)s \"%(obj)s\" was changed successfully."
+msgstr "%(name)s \"%(obj)s\" کامیابی سے تبدیل کر دیا گیا."
+
+#: .\simple_history\admin.py:116
+msgid "You may edit it again below"
+msgstr "آپ نیچے اس میں دوبارہ ترمیم کر سکتے ہیں"
+
+#: .\simple_history\admin.py:217
+#, python-format
+msgid "View %s"
+msgstr "دیکھیں %s"
+
+#: .\simple_history\admin.py:219
+#, python-format
+msgid "Revert %s"
+msgstr "تبدیلی واپس کریں %s"
+
+#: .\simple_history\models.py:552
+msgid "Created"
+msgstr "بنایا"
+
+#: .\simple_history\models.py:552
+msgid "Changed"
+msgstr "بدل گیا"
+
+#: .\simple_history\models.py:552
+msgid "Deleted"
+msgstr "حذف کر دیا گیا"
+
+#: .\simple_history\templates\simple_history\object_history.html:11
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr ""
+"اس آبجیکٹ کے پچھلے ورژن پر واپس جانے کے لیے نیچے دی گئی فہرست میں سے ایک تاریخ کا انتخاب کریں۔"
+
+#: .\simple_history\templates\simple_history\object_history.html:16
+msgid "This object doesn't have a change history."
+msgstr "اس آبجیکٹ کی تاریخ نہیں ہے."
+
+#: .\simple_history\templates\simple_history\object_history_form.html:7
+msgid "Home"
+msgstr "گھر"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:11
+msgid "History"
+msgstr "تاریخ"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:12
+#, python-format
+msgid "View %(verbose_name)s"
+msgstr "دیکھیں %(verbose_name)s"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "تبدیلی واپس کریں %(verbose_name)s"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:25
+msgid ""
+"Press the 'Revert' button below to revert to this version of the object."
+msgstr ""
+"آبجیکٹ کے اس ورژن پر واپس جانے کے لیے نیچے 'تبدیلی واپس کریں' کے بٹن کو دبائیں."
+
+#: .\simple_history\templates\simple_history\object_history_form.html:25
+msgid "Press the 'Change History' button below to edit the history."
+msgstr "تاریخ میں ترمیم کرنے کے لیے نیچے دیے گئے 'تاریخ کو تبدیل کریں' کے بٹن کو دبائیں."
+
+#: .\simple_history\templates\simple_history\object_history_list.html:9
+msgid "Object"
+msgstr "آبجیکٹ"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:13
+msgid "Date/time"
+msgstr "تاریخ/وقت"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:14
+msgid "Comment"
+msgstr "تبصرہ"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:15
+msgid "Changed by"
+msgstr "کی طرف سے تبدیل"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:16
+msgid "Change reason"
+msgstr "تبدیلی کا سبب"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:42
+msgid "None"
+msgstr "کوئی نہیں"
+
+#: .\simple_history\templates\simple_history\submit_line.html:4
+msgid "Revert"
+msgstr "تبدیلی واپس کریں"
+
+#: .\simple_history\templates\simple_history\submit_line.html:6
+msgid "Change History"
+msgstr "تاریخ کو تبدیل کریں"
+
+#: .\simple_history\templates\simple_history\submit_line.html:7
+msgid "Close"
+msgstr "بند کریں"

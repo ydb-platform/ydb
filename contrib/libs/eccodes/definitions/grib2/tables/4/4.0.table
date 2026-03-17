@@ -1,0 +1,39 @@
+# CODE TABLE 4.0, Product Definition Template Number
+0 0 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time
+1 1 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time
+2 2 Derived forecast based on all ensemble members at a horizontal level or in a horizontal layer at a point in time
+3 3 Derived forecasts based on a cluster of ensemble members over a rectangular area at a horizontal level or in a horizontal layer at a point in time
+4 4 Derived forecasts based on a cluster of ensemble members over a circular area at a horizontal level or in a horizontal layer at a point in time
+5 5 Probability forecasts at a horizontal level or in a horizontal layer at a point in time
+6 6 Percentile forecasts at a horizontal level or in a horizontal layer at a point in time
+7 7 Analysis or forecast error at a horizontal level or in a horizontal layer at a point in time
+8 8 Average, accumulation, extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+9 9 Probability forecasts at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+10 10 Percentile forecasts at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+11 11 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval
+12 12 Derived forecasts based in all ensemble members at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval
+13 13 Derived forecasts based on a cluster of ensemble members over a rectangular area, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval
+14 14 Derived forecasts based on a cluster of ensemble members over a circular area, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval
+20 20 Radar product
+30 30 Satellite product
+31 31 Satellite product
+311 311 Satellite product auxiliary information
+40 40 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for atmospheric chemical constituents
+41 41 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for atmospheric chemical constituents
+42 42 Average, accumulation, extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for atmospheric chemical constituents
+43 43 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval for atmospheric chemical constituents
+44 44 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for atmospheric aerosol
+45 45 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for atmospheric aerosol
+46 46 Average, accumulation, extreme values or other statistically processed values at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval for atmospheric aerosol
+47 47 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval for atmospheric aerosol
+48 48 Analysis or forecast at a horizontal level or in a horizontal layer at a point in time for optical properties of atmospheric aerosol
+51 51 Categorical forecasts at a horizontal level or in a horizontal layer at a point in time
+91 91 Categorical forecasts at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+254 254 CCITT IA5 character string
+1000 1000 Cross section of analysis and forecast at a point in time
+1001 1001 Cross section of averaged or otherwise statistically processed analysis or forecast over a range of time
+1002 1002 Cross-section of analysis and forecast, averaged or otherwise statistically processed
+1100 1100 Hovmoller-type grid with no averaging or other statistical processing
+1101 1101 Hovmoller-type grid with averaging or other statistical processing
+50001 50001 Forecasting Systems with Variable Resolution in a point in time
+50011 50011 Forecasting Systems with Variable Resolution in a continous or non countinous time interval

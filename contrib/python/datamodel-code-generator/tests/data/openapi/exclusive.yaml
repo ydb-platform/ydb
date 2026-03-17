@@ -1,0 +1,42 @@
+openapi: 3.0.3
+info:
+  version: 1.0.0
+  title: Bug
+servers: []
+paths: {}
+components:
+  schemas:
+    MaximumProblem:
+      type: object
+      properties:
+        status:
+          type: integer
+          minimum: 100
+          maximum: 600
+          exclusiveMaximum: true
+    MinimumProblem:
+      type: object
+      properties:
+        status:
+          type: integer
+          minimum: 100
+          maximum: 600
+          exclusiveMinimum: true
+    MinimumMaximumProblem:
+      type: object
+      properties:
+        status:
+          type: integer
+          minimum: 100
+          maximum: 600
+          exclusiveMinimum: true
+          exclusiveMaximum: true
+    Problem:
+      type: object
+      properties:
+        status:
+          type: integer
+          minimum: 100
+          maximum: 600
+          exclusiveMinimum: false
+          exclusiveMaximum: false

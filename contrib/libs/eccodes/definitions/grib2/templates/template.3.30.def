@@ -1,0 +1,99 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.30, Lambert conformal
+include "grib2/templates/template.3.shape_of_the_earth.def"
+
+constant isGridded = true;
+
+unsigned[4] Nx : dump;
+alias Ni = Nx;
+alias numberOfPointsAlongXAxis = Nx;
+alias geography.Nx=Nx;
+
+unsigned[4] Ny : dump;
+alias Nj = Ny;
+alias numberOfPointsAlongYAxis = Nj;
+alias numberOfPointsAlongAMeridian = Nj;
+alias geography.Ny=Ny;
+
+# La1 - latitude of first grid point
+signed[4] latitudeOfFirstGridPoint : edition_specific;
+alias La1 = latitudeOfFirstGridPoint;
+meta geography.latitudeOfFirstGridPointInDegrees
+        scale(latitudeOfFirstGridPoint,one,grib2divider,truncateDegrees) : dump;
+alias La1InDegrees=latitudeOfFirstGridPointInDegrees;
+#meta latitudeOfFirstGridPointInMicrodegrees times(latitudeOfFirstGridPointInDegrees,oneConstant): no_copy;
+
+# Lo1 - longitude of first grid point
+unsigned[4] longitudeOfFirstGridPoint : edition_specific;
+alias Lo1 = longitudeOfFirstGridPoint;
+meta geography.longitudeOfFirstGridPointInDegrees
+        scale(longitudeOfFirstGridPoint,one,grib2divider,truncateDegrees) : dump;
+alias Lo1InDegrees = longitudeOfFirstGridPointInDegrees;
+#meta longitudeOfFirstGridPointInMicrodegrees times(longitudeOfFirstGridPoint,oneConstant) : no_copy;
+
+include "grib2/templates/template.3.resolution_flags.def"
+
+# LaD - Latitude where Dx and Dy are specified
+signed[4] LaD : edition_specific;
+alias latitudeWhereDxAndDyAreSpecified=LaD;
+meta geography.LaDInDegrees scale(LaD,one,grib2divider,truncateDegrees) : dump;
+
+# LoV - Longitude of meridian parallel to Y-axis along which latitude increases as the Y-coordinate increases
+unsigned[4] LoV  : edition_specific;
+meta geography.LoVInDegrees scale(LoV,one,grib2divider,truncateDegrees) : dump;
+
+# Dx - X-direction grid length (in units of millimetres)
+unsigned[4] Dx : edition_specific;
+alias xDirectionGridLength=Dx;
+alias Di =  Dx;
+meta geography.DxInMetres scale(Dx,one,thousand) : dump;
+
+# Dy - Y-direction grid length (in units of millimetres)
+unsigned[4] Dy : edition_specific;
+alias yDirectionGridLength=Dy;
+alias Dj =  Dy;
+meta geography.DyInMetres scale(Dy,one,thousand) : dump;
+
+# Projection centre flag
+flags[1] projectionCentreFlag 'grib2/tables/[tablesVersion]/3.5.table' : dump;
+
+include "grib2/templates/template.3.scanning_mode.def"
+
+# Latin 1 - first latitude from the pole at which the secant cone cuts the sphere
+signed[4] Latin1   : edition_specific;
+alias firstLatitude=Latin1;
+meta geography.Latin1InDegrees scale(Latin1,one,grib2divider,truncateDegrees) : dump;
+
+# Latin 2 - second latitude from the pole at which the secant cone cuts the sphere
+signed[4] Latin2  : dump;
+alias secondLatitude=Latin2;
+meta geography.Latin2InDegrees scale(Latin2,one,grib2divider,truncateDegrees) : dump;
+
+# Latitude of the southern pole of projection
+signed[4] latitudeOfSouthernPole : edition_specific;
+alias latitudeOfTheSouthernPoleOfProjection=latitudeOfSouthernPole;
+meta geography.latitudeOfSouthernPoleInDegrees scale(latitudeOfSouthernPole,one,grib2divider,truncateDegrees) : dump;
+
+# Longitude of the southern pole of projection
+unsigned[4] longitudeOfSouthernPole : edition_specific;
+alias longitudeOfTheSouthernPoleOfProjection=longitudeOfSouthernPole;
+meta geography.longitudeOfSouthernPoleInDegrees scale(longitudeOfSouthernPole,oneConstant,grib2divider,truncateDegrees) : dump;
+
+iterator lambert_conformal(numberOfPoints,missingValue,values,
+          radius,Nx,Ny,
+          LoVInDegrees,LaDInDegrees,
+          Latin1InDegrees,Latin2InDegrees,
+          latitudeOfFirstGridPointInDegrees,longitudeOfFirstGridPointInDegrees,
+          DxInMetres,DyInMetres,
+          iScansNegatively, jScansPositively,
+          jPointsAreConsecutive, alternativeRowScanning);
+
+nearest lambert_conformal(values,radius,Nx,Ny);
+
+meta latLonValues latlonvalues(values);
+alias latitudeLongitudeValues=latLonValues;
+meta latitudes latitudes(values,0);
+meta longitudes longitudes(values,0);
+meta distinctLatitudes latitudes(values,1);
+meta distinctLongitudes longitudes(values,1);

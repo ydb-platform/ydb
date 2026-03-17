@@ -1,0 +1,2 @@
+[opentelemetry_instrumentor]
+pymongo = opentelemetry.instrumentation.pymongo:PymongoInstrumentor

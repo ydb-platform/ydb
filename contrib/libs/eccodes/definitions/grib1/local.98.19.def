@@ -1,0 +1,42 @@
+# (C) Copyright 2005- ECMWF.
+# Extreme forecast index data
+
+template mars_labeling "grib1/mars_labeling.def";
+
+constant GRIBEXSection1Problem = 80 - section1Length ;
+
+# zeroForMarsCompatibility
+#pad padding_loc19_1(1);
+unsigned[1] number : dump;
+alias perturbationNumber=number;
+
+unsigned[1] ensembleSize  : dump;
+alias totalNumber=ensembleSize;
+alias numberOfForecastsInEnsemble=ensembleSize;
+
+meta quantile sprintf("%s:%s",number,ensembleSize);
+
+# See GRIB-862 for the reason behind the aliases
+
+unsigned[1] versionNumberOfExperimentalSuite : dump;
+alias powerOfTenUsedToScaleClimateWeight=versionNumberOfExperimentalSuite;
+
+unsigned[4] implementationDateOfModelCycle : dump;
+alias weightAppliedToClimateMonth1=implementationDateOfModelCycle;
+
+unsigned[3] numberOfReforecastYearsInModelClimate : dump;
+alias firstMonthUsedToBuildClimateMonth1=numberOfReforecastYearsInModelClimate;
+
+unsigned[3] numberOfDaysInClimateSamplingWindow : dump;
+alias lastMonthUsedToBuildClimateMonth1=numberOfDaysInClimateSamplingWindow;
+
+unsigned[3] sampleSizeOfModelClimate : dump;
+alias firstMonthUsedToBuildClimateMonth2=sampleSizeOfModelClimate;
+
+unsigned[3] versionOfModelClimate : dump;
+alias lastMonthUsedToBuildClimateMonth2=versionOfModelClimate;
+
+unsigned[1] efiOrder : dump;
+
+# spareSetToZero
+pad padding_loc19_2(11);

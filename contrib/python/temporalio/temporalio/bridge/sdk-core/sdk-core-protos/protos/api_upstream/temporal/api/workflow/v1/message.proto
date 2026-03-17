@@ -1,0 +1,638 @@
+syntax = "proto3";
+
+package temporal.api.workflow.v1;
+
+option go_package = "go.temporal.io/api/workflow/v1;workflow";
+option java_package = "io.temporal.api.workflow.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Workflow::V1";
+option csharp_namespace = "Temporalio.Api.Workflow.V1";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/field_mask.proto";
+
+import "temporal/api/activity/v1/message.proto";
+import "temporal/api/enums/v1/common.proto";
+import "temporal/api/enums/v1/event_type.proto";
+import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
+import "temporal/api/taskqueue/v1/message.proto";
+import "temporal/api/sdk/v1/user_metadata.proto";
+
+
+// Hold basic information about a workflow execution.
+// This structure is a part of visibility, and thus contain a limited subset of information.
+message WorkflowExecutionInfo {
+    temporal.api.common.v1.WorkflowExecution execution = 1;
+    temporal.api.common.v1.WorkflowType type = 2;
+    google.protobuf.Timestamp start_time = 3;
+    google.protobuf.Timestamp close_time = 4;
+    temporal.api.enums.v1.WorkflowExecutionStatus status = 5;
+    int64 history_length = 6;
+    string parent_namespace_id = 7;
+    temporal.api.common.v1.WorkflowExecution parent_execution = 8;
+    google.protobuf.Timestamp execution_time = 9;
+    temporal.api.common.v1.Memo memo = 10;
+    temporal.api.common.v1.SearchAttributes search_attributes = 11;
+    ResetPoints auto_reset_points = 12;
+    string task_queue = 13;
+    int64 state_transition_count = 14;
+    int64 history_size_bytes = 15;
+    // If set, the most recent worker version stamp that appeared in a workflow task completion
+    // Deprecated. This field should be cleaned up when versioning-2 API is removed. [cleanup-experimental-wv]
+    temporal.api.common.v1.WorkerVersionStamp most_recent_worker_version_stamp = 16 [deprecated = true];
+    // Workflow execution duration is defined as difference between close time and execution time.
+    // This field is only populated if the workflow is closed.
+    google.protobuf.Duration execution_duration = 17;
+    // Contains information about the root workflow execution.
+    // The root workflow execution is defined as follows:
+    // 1. A workflow without parent workflow is its own root workflow.
+    // 2. A workflow that has a parent workflow has the same root workflow as its parent workflow.
+    // Note: workflows continued as new or reseted may or may not have parents, check examples below.
+    //
+    // Examples:
+    //   Scenario 1: Workflow W1 starts child workflow W2, and W2 starts child workflow W3.
+    //     - The root workflow of all three workflows is W1.
+    //   Scenario 2: Workflow W1 starts child workflow W2, and W2 continued as new W3.
+    //     - The root workflow of all three workflows is W1.
+    //   Scenario 3: Workflow W1 continued as new W2.
+    //     - The root workflow of W1 is W1 and the root workflow of W2 is W2.
+    //   Scenario 4: Workflow W1 starts child workflow W2, and W2 is reseted, creating W3
+    //     - The root workflow of all three workflows is W1.
+    //   Scenario 5: Workflow W1 is reseted, creating W2.
+    //     - The root workflow of W1 is W1 and the root workflow of W2 is W2.
+    temporal.api.common.v1.WorkflowExecution root_execution = 18;
+    // The currently assigned build ID for this execution. Presence of this value means worker versioning is used
+    // for this execution. Assigned build ID is selected based on Worker Versioning Assignment Rules
+    // when the first workflow task of the execution is scheduled. If the first workflow task fails and is scheduled
+    // again, the assigned build ID may change according to the latest versioning rules.
+    // Assigned build ID can also change in the middle of a execution if Compatible Redirect Rules are applied to
+    // this execution.
+    // Deprecated. This field should be cleaned up when versioning-2 API is removed. [cleanup-experimental-wv]
+    string assigned_build_id = 19 [deprecated = true];
+    // Build ID inherited from a previous/parent execution. If present, assigned_build_id will be set to this, instead
+    // of using the assignment rules.
+    // Deprecated. This field should be cleaned up when versioning-2 API is removed. [cleanup-experimental-wv]
+    string inherited_build_id = 20 [deprecated = true];
+    // The first run ID in the execution chain.
+    // Executions created via the following operations are considered to be in the same chain
+    // - ContinueAsNew
+    // - Workflow Retry
+    // - Workflow Reset
+    // - Cron Schedule
+    string first_run_id = 21;
+
+    // Absent value means the workflow execution is not versioned. When present, the execution might
+    // be versioned or unversioned, depending on `versioning_info.behavior` and `versioning_info.versioning_override`.
+    // Experimental. Versioning info is experimental and might change in the future.
+    WorkflowExecutionVersioningInfo versioning_info = 22;
+
+    // The name of Worker Deployment that completed the most recent workflow task.
+    // Experimental. Worker Deployments are experimental and might change in the future.
+    string worker_deployment_name = 23;
+
+    // Priority metadata
+    temporal.api.common.v1.Priority priority = 24;
+}
+
+// Holds all the extra information about workflow execution that is not part of Visibility.
+message WorkflowExecutionExtendedInfo {
+    // Workflow execution expiration time is defined as workflow start time plus expiration timeout.
+    // Workflow start time may change after workflow reset.
+    google.protobuf.Timestamp execution_expiration_time = 1;
+
+    // Workflow run expiration time is defined as current workflow run start time plus workflow run timeout.
+    google.protobuf.Timestamp run_expiration_time = 2;
+
+    // indicates if the workflow received a cancel request
+    bool cancel_requested = 3;
+
+    // Last workflow reset time. Nil if the workflow was never reset.
+    google.protobuf.Timestamp last_reset_time = 4;
+
+    // Original workflow start time.
+    google.protobuf.Timestamp original_start_time = 5;
+
+    // Reset Run ID points to the new run when this execution is reset. If the execution is reset multiple times, it points to the latest run.
+    string reset_run_id = 6;
+
+    // Request ID information (eg: history event information associated with the request ID).
+    // Note: It only contains request IDs from StartWorkflowExecution requests, including indirect
+    // calls (eg: if SignalWithStartWorkflowExecution starts a new workflow, then the request ID is
+    // used in the StartWorkflowExecution request).
+    map<string, RequestIdInfo> request_id_infos = 7;
+}
+
+// Holds all the information about worker versioning for a particular workflow execution.
+// Experimental. Versioning info is experimental and might change in the future.
+message WorkflowExecutionVersioningInfo {
+    // Versioning behavior determines how the server should treat this execution when workers are
+    // upgraded. When present it means this workflow execution is versioned; UNSPECIFIED means
+    // unversioned. See the comments in `VersioningBehavior` enum for more info about different
+    // behaviors.
+    // This field is first set after an execution completes its first workflow task on a versioned
+    // worker, and set again on completion of every subsequent workflow task.
+    // For child workflows of Pinned parents, this will be set to Pinned (along with `deployment_version`) when
+    // the the child starts so that child's first workflow task goes to the same Version as the
+    // parent. After the first workflow task, it depends on the child workflow itself if it wants
+    // to stay pinned or become unpinned (according to Versioning Behavior set in the worker).
+    // Note that `behavior` is overridden by `versioning_override` if the latter is present.
+    temporal.api.enums.v1.VersioningBehavior behavior = 1;
+    // The worker deployment that completed the last workflow task of this workflow execution. Must
+    // be present if `behavior` is set. Absent value means no workflow task is completed, or the
+    // last workflow task was completed by an unversioned worker. Unversioned workers may still send
+    // a deployment value which will be stored here, so the right way to check if an execution is
+    // versioned if an execution is versioned or not is via the `behavior` field.
+    // Note that `deployment` is overridden by `versioning_override` if the latter is present.
+    // Deprecated. Use `deployment_version`.
+    temporal.api.deployment.v1.Deployment deployment = 2 [deprecated = true];
+    // Deprecated. Use `deployment_version`.
+    string version = 5 [deprecated = true];
+    // The Worker Deployment Version that completed the last workflow task of this workflow execution.
+    // An absent value means no workflow task is completed, or the workflow is unversioned.
+    // If present, and `behavior` is UNSPECIFIED, the last task of this workflow execution was completed
+    // by a worker that is not using versioning but _is_ passing Deployment Name and Build ID.
+    //
+    // For child workflows of Pinned parents, this will be set to the parent's Pinned Version when
+    // the child starts, so that the child's first workflow task goes to the same Version as the parent.
+    // Note that if `versioning_override.behavior` is PINNED then `versioning_override.pinned_version`
+    // will override this value.
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 7;
+    // Present if user has set an execution-specific versioning override. This override takes
+    // precedence over SDK-sent `behavior` (and `version` when override is PINNED). An
+    // override can be set when starting a new execution, as well as afterwards by calling the
+    // `UpdateWorkflowExecutionOptions` API.
+    // Pinned overrides are automatically inherited by child workflows, continue-as-new workflows,
+    // workflow retries, and cron workflows.
+    VersioningOverride versioning_override = 3;
+    // When present, indicates the workflow is transitioning to a different deployment. Can
+    // indicate one of the following transitions: unversioned -> versioned, versioned -> versioned
+    // on a different deployment, or versioned -> unversioned.
+    // Not applicable to workflows with PINNED behavior.
+    // When a workflow with AUTO_UPGRADE behavior creates a new workflow task, it will automatically
+    // start a transition to the task queue's current deployment if the task queue's current
+    // deployment is different from the workflow's deployment.
+    // If the AUTO_UPGRADE workflow is stuck due to backlogged activity or workflow tasks, those
+    // tasks will be redirected to the task queue's current deployment. As soon as a poller from
+    // that deployment is available to receive the task, the workflow will automatically start a
+    // transition to that deployment and continue execution there.
+    // A deployment transition can only exist while there is a pending or started workflow task.
+    // Once the pending workflow task completes on the transition's target deployment, the
+    // transition completes and the workflow's `deployment` and `behavior` fields are updated per
+    // the worker's task completion response.
+    // Pending activities will not start new attempts during a transition. Once the transition is
+    // completed, pending activities will start their next attempt on the new deployment.
+    // Deprecated. Use version_transition.
+    DeploymentTransition deployment_transition = 4 [deprecated = true];
+    // When present, indicates the workflow is transitioning to a different deployment version
+    // (which may belong to the same deployment name or another). Can indicate one of the following
+    // transitions: unversioned -> versioned, versioned -> versioned
+    // on a different deployment version, or versioned -> unversioned.
+    // Not applicable to workflows with PINNED behavior.
+    // When a workflow with AUTO_UPGRADE behavior creates a new workflow task, it will automatically
+    // start a transition to the task queue's current version if the task queue's current version is
+    // different from the workflow's current deployment version.
+    // If the AUTO_UPGRADE workflow is stuck due to backlogged activity or workflow tasks, those
+    // tasks will be redirected to the task queue's current version. As soon as a poller from
+    // that deployment version is available to receive the task, the workflow will automatically
+    // start a transition to that version and continue execution there.
+    // A version transition can only exist while there is a pending or started workflow task.
+    // Once the pending workflow task completes on the transition's target version, the
+    // transition completes and the workflow's `behavior`, and `deployment_version` fields are updated per the
+    // worker's task completion response.
+    // Pending activities will not start new attempts during a transition. Once the transition is
+    // completed, pending activities will start their next attempt on the new version.
+    DeploymentVersionTransition version_transition = 6;
+}
+
+// Holds information about ongoing transition of a workflow execution from one deployment to another.
+// Deprecated. Use DeploymentVersionTransition.
+message DeploymentTransition {
+    // The target deployment of the transition. Null means a so-far-versioned workflow is
+    // transitioning to unversioned workers.
+    temporal.api.deployment.v1.Deployment deployment = 1;
+
+    // Later: safe transition info
+}
+
+// Holds information about ongoing transition of a workflow execution from one worker
+// deployment version to another.
+// Experimental. Might change in the future.
+message DeploymentVersionTransition {
+    // Deprecated. Use `deployment_version`.
+    string version = 1 [deprecated = true];
+
+    // The target Version of the transition.
+    // If nil, a so-far-versioned workflow is transitioning to unversioned workers.
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 2;
+
+    // Later: safe transition info
+}
+
+message WorkflowExecutionConfig {
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 1;
+    google.protobuf.Duration workflow_execution_timeout = 2;
+    google.protobuf.Duration workflow_run_timeout = 3;
+    google.protobuf.Duration default_workflow_task_timeout = 4;
+    // User metadata provided on start workflow.
+    temporal.api.sdk.v1.UserMetadata user_metadata = 5;
+}
+
+message PendingActivityInfo {
+    string activity_id = 1;
+    temporal.api.common.v1.ActivityType activity_type = 2;
+    temporal.api.enums.v1.PendingActivityState state = 3;
+    temporal.api.common.v1.Payloads heartbeat_details = 4;
+    google.protobuf.Timestamp last_heartbeat_time = 5;
+    google.protobuf.Timestamp last_started_time = 6;
+    int32 attempt = 7;
+    int32 maximum_attempts = 8;
+    google.protobuf.Timestamp scheduled_time = 9;
+    google.protobuf.Timestamp expiration_time = 10;
+    temporal.api.failure.v1.Failure last_failure = 11;
+    string last_worker_identity = 12;
+    // Absence of `assigned_build_id` generally means this task is on an "unversioned" task queue.
+    // In rare cases, it can also mean that the task queue is versioned but we failed to write activity's
+    // independently-assigned build ID to the database. This case heals automatically once the task is dispatched.
+    // Deprecated. This field should be cleaned up when versioning-2 API is removed. [cleanup-experimental-wv]
+    oneof assigned_build_id {
+        // Deprecated. When present, it means this activity is assigned to the build ID of its workflow.
+        google.protobuf.Empty use_workflow_build_id = 13 [deprecated = true];
+        // Deprecated. This means the activity is independently versioned and not bound to the build ID of its workflow.
+        // The activity will use the build id in this field instead.
+        // If the task fails and is scheduled again, the assigned build ID may change according to the latest versioning
+        // rules.
+        string last_independently_assigned_build_id = 14 [deprecated = true];
+    }
+    // Deprecated. The version stamp of the worker to whom this activity was most recently dispatched
+    // This field should be cleaned up when versioning-2 API is removed. [cleanup-experimental-wv]
+    temporal.api.common.v1.WorkerVersionStamp last_worker_version_stamp = 15 [deprecated = true];
+
+    // The time activity will wait until the next retry.
+    // If activity is currently running it will be next retry interval if activity failed.
+    // If activity is currently waiting it will be current retry interval.
+    // If there will be no retry it will be null.
+    google.protobuf.Duration current_retry_interval = 16;
+
+    // The time when the last activity attempt was completed. If activity has not been completed yet then it will be null.
+    google.protobuf.Timestamp last_attempt_complete_time = 17;
+
+    // Next time when activity will be scheduled.
+    // If activity is currently scheduled or started it will be null.
+    google.protobuf.Timestamp next_attempt_schedule_time = 18;
+
+    // Indicates if activity is paused.
+    bool paused = 19;
+
+    // The deployment this activity was dispatched to most recently. Present only if the activity
+    // was dispatched to a versioned worker.
+    // Deprecated. Use `last_deployment_version`.
+    temporal.api.deployment.v1.Deployment last_deployment = 20 [deprecated = true];
+    // The Worker Deployment Version this activity was dispatched to most recently.
+    // Deprecated. Use `last_deployment_version`.
+    string last_worker_deployment_version = 21 [deprecated = true];
+    // The Worker Deployment Version this activity was dispatched to most recently.
+    // If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
+    temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 25;
+
+
+    // Priority metadata
+    temporal.api.common.v1.Priority priority = 22;
+
+    message PauseInfo {
+        // The time when the activity was paused.
+        google.protobuf.Timestamp pause_time = 1;
+
+        message Manual {
+            // The identity of the actor that paused the activity.
+            string identity = 1;
+            // Reason for pausing the activity.
+            string reason = 2;
+        }
+
+        message Rule {
+            // The rule that paused the activity.
+            string rule_id = 1;
+            // The identity of the actor that created the rule.
+            string identity = 2;
+            // Reason why rule was created. Populated from rule description.
+            string reason = 3;
+        }
+
+        oneof paused_by {
+            // activity was paused by the manual intervention
+            Manual manual = 2;
+
+
+            // activity was paused by the rule
+            Rule rule = 4;
+        }
+    }
+
+    PauseInfo pause_info = 23;
+
+    // Current activity options. May be different from the one used to start the activity.
+    temporal.api.activity.v1.ActivityOptions activity_options = 24;
+}
+
+message PendingChildExecutionInfo {
+    string workflow_id = 1;
+    string run_id = 2;
+    string workflow_type_name = 3;
+    int64 initiated_id = 4;
+    // Default: PARENT_CLOSE_POLICY_TERMINATE.
+    temporal.api.enums.v1.ParentClosePolicy parent_close_policy = 5;
+}
+
+message PendingWorkflowTaskInfo {
+    temporal.api.enums.v1.PendingWorkflowTaskState state = 1;
+    google.protobuf.Timestamp scheduled_time = 2;
+    // original_scheduled_time is the scheduled time of the first workflow task during workflow task heartbeat.
+    // Heartbeat workflow task is done by RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true and no command
+    // In this case, OriginalScheduledTime won't change. Then when current time - original_scheduled_time exceeds
+    // some threshold, the workflow task will be forced timeout.
+    google.protobuf.Timestamp original_scheduled_time = 3;
+    google.protobuf.Timestamp started_time = 4;
+    int32 attempt = 5;
+}
+
+message ResetPoints {
+    repeated ResetPointInfo points = 1;
+}
+
+// ResetPointInfo records the workflow event id that is the first one processed by a given
+// build id or binary checksum. A new reset point will be created if either build id or binary
+// checksum changes (although in general only one or the other will be used at a time).
+message ResetPointInfo {
+    // Worker build id.
+    string build_id = 7;
+    // Deprecated. A worker binary version identifier.
+    string binary_checksum = 1 [deprecated = true];
+    // The first run ID in the execution chain that was touched by this worker build.
+    string run_id = 2;
+    // Event ID of the first WorkflowTaskCompleted event processed by this worker build.
+    int64 first_workflow_task_completed_id = 3;
+    google.protobuf.Timestamp create_time = 4;
+    // (-- api-linter: core::0214::resource-expiry=disabled
+    //     aip.dev/not-precedent: TTL is not defined for ResetPointInfo. --)
+    // The time that the run is deleted due to retention.
+    google.protobuf.Timestamp expire_time = 5;
+    // false if the reset point has pending childWFs/reqCancels/signalExternals.
+    bool resettable = 6;
+}
+
+// NewWorkflowExecutionInfo is a shared message that encapsulates all the
+// required arguments to starting a workflow in different contexts.
+message NewWorkflowExecutionInfo {
+    string workflow_id = 1;
+    temporal.api.common.v1.WorkflowType workflow_type = 2;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 3;
+    // Serialized arguments to the workflow.
+    temporal.api.common.v1.Payloads input = 4;
+    // Total workflow execution timeout including retries and continue as new.
+    google.protobuf.Duration workflow_execution_timeout = 5;
+    // Timeout of a single workflow run.
+    google.protobuf.Duration workflow_run_timeout = 6;
+    // Timeout of a single workflow task.
+    google.protobuf.Duration workflow_task_timeout = 7;
+    // Default: WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE.
+    temporal.api.enums.v1.WorkflowIdReusePolicy workflow_id_reuse_policy = 8;
+    // The retry policy for the workflow. Will never exceed `workflow_execution_timeout`.
+    temporal.api.common.v1.RetryPolicy retry_policy = 9;
+    // See https://docs.temporal.io/docs/content/what-is-a-temporal-cron-job/
+    string cron_schedule = 10;
+    temporal.api.common.v1.Memo memo = 11;
+    temporal.api.common.v1.SearchAttributes search_attributes = 12;
+    temporal.api.common.v1.Header header = 13;
+    // Metadata on the workflow if it is started. This is carried over to the WorkflowExecutionConfig
+    // for use by user interfaces to display the fixed as-of-start summary and details of the
+    // workflow.
+    temporal.api.sdk.v1.UserMetadata user_metadata = 14;
+    // If set, takes precedence over the Versioning Behavior sent by the SDK on Workflow Task completion.
+    // To unset the override after the workflow is running, use UpdateWorkflowExecutionOptions.
+    VersioningOverride versioning_override = 15;
+    // Priority metadata
+    temporal.api.common.v1.Priority priority = 16;
+}
+
+// CallbackInfo contains the state of an attached workflow callback.
+message CallbackInfo {
+    // Trigger for when the workflow is closed.
+    message WorkflowClosed {}
+
+    message Trigger {
+        oneof variant {
+            WorkflowClosed workflow_closed = 1;
+        }
+    }
+
+    // Information on how this callback should be invoked (e.g. its URL and type).
+    temporal.api.common.v1.Callback callback = 1;
+    // Trigger for this callback.
+    Trigger trigger = 2;
+    // The time when the callback was registered.
+    google.protobuf.Timestamp registration_time = 3;
+
+    temporal.api.enums.v1.CallbackState state = 4;
+    // The number of attempts made to deliver the callback.
+    // This number represents a minimum bound since the attempt is incremented after the callback request completes.
+    int32 attempt = 5;
+
+    // The time when the last attempt completed.
+    google.protobuf.Timestamp last_attempt_complete_time = 6;
+    // The last attempt's failure, if any.
+    temporal.api.failure.v1.Failure last_attempt_failure = 7;
+    // The time when the next attempt is scheduled.
+    google.protobuf.Timestamp next_attempt_schedule_time = 8;
+
+    // If the state is BLOCKED, blocked reason provides additional information.
+    string blocked_reason = 9;
+}
+
+// PendingNexusOperationInfo contains the state of a pending Nexus operation.
+message PendingNexusOperationInfo {
+    // Endpoint name.
+    // Resolved to a URL via the cluster's endpoint registry.
+    string endpoint = 1;
+    // Service name.
+    string service = 2;
+    // Operation name.
+    string operation = 3;
+
+    // Operation ID. Only set for asynchronous operations after a successful StartOperation call.
+    //
+    // Deprecated. Renamed to operation_token.
+    string operation_id = 4 [deprecated = true];
+
+    // Schedule-to-close timeout for this operation.
+    // This is the only timeout settable by a workflow.
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is used to indicate interval. --)
+    google.protobuf.Duration schedule_to_close_timeout = 5;
+
+    // The time when the operation was scheduled.
+    google.protobuf.Timestamp scheduled_time = 6;
+
+    temporal.api.enums.v1.PendingNexusOperationState state = 7;
+
+    // The number of attempts made to deliver the start operation request.
+    // This number represents a minimum bound since the attempt is incremented after the request completes.
+    int32 attempt = 8;
+
+    // The time when the last attempt completed.
+    google.protobuf.Timestamp last_attempt_complete_time = 9;
+    // The last attempt's failure, if any.
+    temporal.api.failure.v1.Failure last_attempt_failure = 10;
+    // The time when the next attempt is scheduled.
+    google.protobuf.Timestamp next_attempt_schedule_time = 11;
+
+    NexusOperationCancellationInfo cancellation_info = 12;
+
+    // The event ID of the NexusOperationScheduled event. Can be used to correlate an operation in the
+    // DescribeWorkflowExecution response with workflow history.
+    int64 scheduled_event_id = 13;
+
+    // If the state is BLOCKED, blocked reason provides additional information.
+    string blocked_reason = 14;
+
+    // Operation token. Only set for asynchronous operations after a successful StartOperation call.
+    string operation_token = 15;
+}
+
+// NexusOperationCancellationInfo contains the state of a nexus operation cancellation.
+message NexusOperationCancellationInfo {
+    // The time when cancellation was requested.
+    google.protobuf.Timestamp requested_time = 1;
+
+    temporal.api.enums.v1.NexusOperationCancellationState state = 2;
+
+    // The number of attempts made to deliver the cancel operation request.
+    // This number represents a minimum bound since the attempt is incremented after the request completes.
+    int32 attempt = 3;
+
+    // The time when the last attempt completed.
+    google.protobuf.Timestamp last_attempt_complete_time = 4;
+    // The last attempt's failure, if any.
+    temporal.api.failure.v1.Failure last_attempt_failure = 5;
+    // The time when the next attempt is scheduled.
+    google.protobuf.Timestamp next_attempt_schedule_time = 6;
+
+    // If the state is BLOCKED, blocked reason provides additional information.
+    string blocked_reason = 7;
+}
+
+message WorkflowExecutionOptions {
+    // If set, takes precedence over the Versioning Behavior sent by the SDK on Workflow Task completion.
+    VersioningOverride versioning_override = 1;
+}
+
+// Used to override the versioning behavior (and pinned deployment version, if applicable) of a
+// specific workflow execution. If set, takes precedence over the worker-sent values. See
+// `WorkflowExecutionInfo.VersioningInfo` for more information. To remove the override, call
+// `UpdateWorkflowExecutionOptions` with a null `VersioningOverride`, and use the `update_mask`
+// to indicate that it should be mutated.
+// Pinned overrides are automatically inherited by child workflows, continue-as-new workflows,
+// workflow retries, and cron workflows.
+message VersioningOverride {
+    // Indicates whether to override the workflow to be AutoUpgrade or Pinned.
+    oneof override {
+        // Send the next workflow task to the Version specified in the override.
+        PinnedOverride pinned = 3;
+        // Send the next workflow task to the Current Deployment Version
+        // of its Task Queue when the next workflow task is dispatched.
+        bool auto_upgrade = 4;
+    }
+    // Required.
+    // Deprecated. Use `override`.
+    temporal.api.enums.v1.VersioningBehavior behavior = 1 [deprecated = true];
+
+    // Required if behavior is `PINNED`. Must be null if behavior is `AUTO_UPGRADE`.
+    // Identifies the worker deployment to pin the workflow to.
+    // Deprecated. Use `override.pinned.version`.
+    temporal.api.deployment.v1.Deployment deployment = 2 [deprecated = true];
+
+    // Required if behavior is `PINNED`. Must be absent if behavior is not `PINNED`.
+    // Identifies the worker deployment version to pin the workflow to, in the format
+    // "<deployment_name>.<build_id>".
+    // Deprecated. Use `override.pinned.version`.
+    string pinned_version = 9 [deprecated = true];
+
+    message PinnedOverride {
+        // Defaults to PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED.
+        // See `PinnedOverrideBehavior` for details.
+        PinnedOverrideBehavior behavior = 1;
+        // Required.
+        temporal.api.deployment.v1.WorkerDeploymentVersion version = 2;
+    }
+
+    // Used to specify different sub-types of Pinned override that we plan to add in the future.
+    enum PinnedOverrideBehavior {
+        // Unspecified.
+        PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED = 0;
+        // Override workflow behavior to be Pinned.
+        PINNED_OVERRIDE_BEHAVIOR_PINNED = 1;
+    }
+}
+
+// When StartWorkflowExecution uses the conflict policy WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING and
+// there is already an existing running workflow, OnConflictOptions defines actions to be taken on
+// the existing running workflow. In this case, it will create a WorkflowExecutionOptionsUpdatedEvent
+// history event in the running workflow with the changes requested in this object.
+message OnConflictOptions {
+    // Attaches the request ID to the running workflow.
+    bool attach_request_id = 1;
+    // Attaches the completion callbacks to the running workflow.
+    bool attach_completion_callbacks = 2;
+    // Attaches the links to the WorkflowExecutionOptionsUpdatedEvent history event.
+    bool attach_links = 3;
+}
+
+// RequestIdInfo contains details of a request ID.
+message RequestIdInfo {
+    // The event type of the history event generated by the request.
+    temporal.api.enums.v1.EventType event_type = 1;
+    // The event id of the history event generated by the request. It's possible the event ID is not
+    // known (unflushed buffered event). In this case, the value will be zero or a negative value,
+    // representing an invalid ID.
+    int64 event_id = 2;
+    // Indicate if the request is still buffered. If so, the event ID is not known and its value
+    // will be an invalid event ID.
+    bool buffered = 3;
+}
+
+// PostResetOperation represents an operation to be performed on the new workflow execution after a workflow reset.
+message PostResetOperation {
+    // SignalWorkflow represents sending a signal after a workflow reset.
+    // Keep the parameter in sync with temporal.api.workflowservice.v1.SignalWorkflowExecutionRequest.
+    message SignalWorkflow {
+        // The workflow author-defined name of the signal to send to the workflow.
+        string signal_name = 1;
+        // Serialized value(s) to provide with the signal.
+        temporal.api.common.v1.Payloads input = 2;
+        // Headers that are passed with the signal to the processing workflow.
+        temporal.api.common.v1.Header header = 3;
+        // Links to be associated with the WorkflowExecutionSignaled event.
+        repeated temporal.api.common.v1.Link links = 4;
+    }
+
+    // UpdateWorkflowOptions represents updating workflow execution options after a workflow reset.
+    // Keep the parameters in sync with temporal.api.workflowservice.v1.UpdateWorkflowExecutionOptionsRequest.
+    message UpdateWorkflowOptions {
+        // Update Workflow options that were originally specified via StartWorkflowExecution. Partial updates are accepted and controlled by update_mask.
+        temporal.api.workflow.v1.WorkflowExecutionOptions workflow_execution_options = 1;
+        // Controls which fields from `workflow_execution_options` will be applied.
+        // To unset a field, set it to null and use the update mask to indicate that it should be mutated.
+        google.protobuf.FieldMask update_mask = 2;
+    }
+
+    oneof variant {
+        SignalWorkflow signal_workflow = 1;
+        UpdateWorkflowOptions update_workflow_options = 2;
+    }
+}
+

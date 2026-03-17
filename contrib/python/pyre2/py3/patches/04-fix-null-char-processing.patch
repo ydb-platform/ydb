@@ -1,0 +1,29 @@
+--- contrib/python/pyre2/py3/src/pattern.pxi	(85f11eff27ce28ef84edee4d7ec74c8495f91a09)
++++ contrib/python/pyre2/py3/src/pattern.pxi	(index)
+@@ -374,7 +374,7 @@ cdef class Pattern:
+                 resultlist.append(
+                         char_to_unicode(&sp.data()[pos], sp.length() - pos))
+             else:
+-                resultlist.append(sp.data()[pos:])
++                resultlist.append(sp.data()[pos:size])
+         finally:
+             del sp
+             delete_StringPiece_array(matches)
+@@ -512,7 +512,7 @@ cdef class Pattern:
+                 num_repl[0] += 1
+                 if count and num_repl[0] >= count:
+                     break
+-            result.extend(sp.data()[pos:])
++            result.extend(sp.data()[pos:size])
+         finally:
+             del sp
+             release_cstring(&buf)
+@@ -572,7 +572,7 @@ cdef class Pattern:
+                 num_repl[0] += 1
+                 if count and num_repl[0] >= count:
+                     break
+-            result.extend(sp.data()[pos:])
++            result.extend(sp.data()[pos:size])
+         finally:
+             del sp
+             release_cstring(&buf)

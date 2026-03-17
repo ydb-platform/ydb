@@ -1,0 +1,6 @@
+requirements:
+  - contrib/libs/apache/apr
+  - contrib/libs/apache/apr-util
+  - contrib/libs/subversion/subversion/libsvn_client
+exclude_from_macros:
+  - subvertpy/_ra_iter_log.c

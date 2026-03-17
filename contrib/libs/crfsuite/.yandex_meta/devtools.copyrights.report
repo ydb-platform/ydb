@@ -1,0 +1,110 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 026d76a2be1ee120a634208ff7fdf1b9
+BELONGS ya.make
+    License text:
+        Copyright (c) 2007, Naoaki Okazaki
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/cqdb/COPYING [3:4]
+        lib/cqdb/include/cqdb.h [4:5]
+        lib/cqdb/src/cqdb.c [4:5]
+        lib/cqdb/src/main.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 12fdf164c10385fdb92e34d451e02b11
+BELONGS ya.make
+    License text:
+        /** Copyright string of CRFSuite library. */
+        \#define CRFSUITE_COPYRIGHT  "Copyright (c) 2007-2013 Naoaki Okazaki"
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/crfsuite.h [59:60]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1fa69eb3bce08d31feef0c85becb2586
+BELONGS ya.make
+    License text:
+        Copyright (c) 2007-2010, Naoaki Okazaki
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:4]
+        include/crfsuite.h [4:5]
+        include/crfsuite.hpp [4:5]
+        include/crfsuite_api.hpp [4:5]
+        include/os.h [4:5]
+        lib/crf/src/crf1d.h [4:5]
+        lib/crf/src/crf1d_context.c [4:5]
+        lib/crf/src/crf1d_encode.c [4:5]
+        lib/crf/src/crf1d_feature.c [4:5]
+        lib/crf/src/crf1d_model.c [4:5]
+        lib/crf/src/crf1d_tag.c [4:5]
+        lib/crf/src/crfsuite.c [4:5]
+        lib/crf/src/crfsuite_internal.h [4:5]
+        lib/crf/src/crfsuite_train.c [4:5]
+        lib/crf/src/dataset.c [4:5]
+        lib/crf/src/dictionary.c [4:5]
+        lib/crf/src/holdout.c [4:5]
+        lib/crf/src/logging.c [4:5]
+        lib/crf/src/logging.h [4:5]
+        lib/crf/src/params.c [4:5]
+        lib/crf/src/params.h [4:5]
+        lib/crf/src/quark.c [4:5]
+        lib/crf/src/quark.h [4:5]
+        lib/crf/src/train_arow.c [4:5]
+        lib/crf/src/train_averaged_perceptron.c [4:5]
+        lib/crf/src/train_l2sgd.c [4:5]
+        lib/crf/src/train_lbfgs.c [4:5]
+        lib/crf/src/train_passive_aggressive.c [4:5]
+        lib/crf/src/vecmath.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a67a22132d05c190dcd29bdc6b7c3e16
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005-2007 Jesse Long <jpl@unknown.za.net>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/crf/src/rumavl.c [4:5]
+        lib/crf/src/rumavl.h [4:5]

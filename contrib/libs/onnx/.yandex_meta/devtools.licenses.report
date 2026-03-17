@@ -1,0 +1,365 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           09738dd03994ae745d569cfe559bf6f6
+BELONGS proto/ya.make python/ya.make ya.make
+    License text:
+        // SPDX-License-Identifier: Apache-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        onnx/checker.cc [3:3]
+        onnx/checker.h [3:3]
+        onnx/common/constants.h [3:3]
+        onnx/common/model_helpers.cc [3:3]
+        onnx/common/model_helpers.h [3:3]
+        onnx/cpp2py_export.cc [3:3]
+        onnx/onnx_data.proto [6:6]
+        onnx/onnx_ml.proto [6:6]
+        onnx/proto_utils.h [3:3]
+        onnx/py_utils.h [3:3]
+        onnx/shape_inference/implementation.cc [3:3]
+        onnx/shape_inference/implementation.h [3:3]
+        onnx/string_utils.h [3:3]
+        onnx/version_converter/helper.cc [3:3]
+        onnx/version_converter/helper.h [3:3]
+    Belongs difference:
+        + proto/ya.make python/ya.make
+
+KEEP     Apache-2.0           1d6de71d586d7e32f2b1ef2cb94dabc2
+BELONGS ya.make
+    License text:
+        SPDX-License-Identifier = "Apache-2.0"
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        REUSE.toml [14:14]
+        REUSE.toml [20:20]
+        REUSE.toml [26:26]
+        REUSE.toml [32:32]
+        REUSE.toml [38:38]
+        REUSE.toml [44:44]
+        REUSE.toml [50:50]
+        REUSE.toml [56:56]
+        REUSE.toml [62:62]
+        REUSE.toml [68:68]
+        REUSE.toml [74:74]
+        REUSE.toml [80:80]
+        REUSE.toml [86:86]
+        REUSE.toml [92:92]
+        REUSE.toml [98:98]
+        REUSE.toml [104:104]
+        REUSE.toml [110:110]
+        REUSE.toml [116:116]
+        REUSE.toml [122:122]
+        REUSE.toml [128:128]
+        REUSE.toml [134:134]
+        REUSE.toml [140:140]
+        REUSE.toml [146:146]
+        REUSE.toml [152:152]
+        REUSE.toml [158:158]
+        REUSE.toml [164:164]
+        REUSE.toml [170:170]
+        REUSE.toml [176:176]
+        REUSE.toml [182:182]
+        REUSE.toml [188:188]
+        REUSE.toml [194:194]
+        REUSE.toml [200:200]
+        REUSE.toml [206:206]
+        REUSE.toml [212:212]
+
+KEEP     Apache-2.0           20b29e2c7e3913769b67427eed320cc1
+BELONGS proto/ya.make python/ya.make ya.make
+    License text:
+         * SPDX-License-Identifier: Apache-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        onnx/common/array_ref.h [4:4]
+        onnx/common/assertions.cc [4:4]
+        onnx/common/assertions.h [4:4]
+        onnx/common/common.h [4:4]
+        onnx/common/file_utils.h [4:4]
+        onnx/common/graph_node_list.h [4:4]
+        onnx/common/interned_strings.cc [4:4]
+        onnx/common/interned_strings.h [4:4]
+        onnx/common/ir.h [4:4]
+        onnx/common/ir_pb_converter.cc [4:4]
+        onnx/common/ir_pb_converter.h [4:4]
+        onnx/common/path.cc [2:2]
+        onnx/common/path.h [2:2]
+        onnx/common/platform_helpers.h [4:4]
+        onnx/common/proto_util.h [4:4]
+        onnx/common/status.cc [4:4]
+        onnx/common/status.h [4:4]
+        onnx/common/tensor.h [4:4]
+        onnx/common/visitor.h [4:4]
+        onnx/defs/attr_proto_util.cc [4:4]
+        onnx/defs/attr_proto_util.h [4:4]
+        onnx/defs/controlflow/defs.cc [4:4]
+        onnx/defs/controlflow/old.cc [4:4]
+        onnx/defs/controlflow/utils.cc [2:2]
+        onnx/defs/controlflow/utils.h [2:2]
+        onnx/defs/data_propagators.h [4:4]
+        onnx/defs/data_type_utils.cc [2:2]
+        onnx/defs/data_type_utils.h [2:2]
+        onnx/defs/function.cc [2:2]
+        onnx/defs/function.h [2:2]
+        onnx/defs/generator/defs.cc [2:2]
+        onnx/defs/generator/old.cc [2:2]
+        onnx/defs/generator/utils.cc [2:2]
+        onnx/defs/generator/utils.h [2:2]
+        onnx/defs/image/defs.cc [2:2]
+        onnx/defs/logical/defs.cc [2:2]
+        onnx/defs/logical/old.cc [2:2]
+        onnx/defs/math/defs.cc [2:2]
+        onnx/defs/math/old.cc [2:2]
+        onnx/defs/math/utils.cc [2:2]
+        onnx/defs/math/utils.h [2:2]
+        onnx/defs/nn/defs.cc [2:2]
+        onnx/defs/nn/old.cc [2:2]
+        onnx/defs/object_detection/defs.cc [2:2]
+        onnx/defs/object_detection/old.cc [2:2]
+        onnx/defs/operator_sets.h [2:2]
+        onnx/defs/operator_sets_ml.h [2:2]
+        onnx/defs/operator_sets_preview.h [2:2]
+        onnx/defs/operator_sets_training.h [2:2]
+        onnx/defs/optional/defs.cc [2:2]
+        onnx/defs/optional/old.cc [2:2]
+        onnx/defs/parser.cc [2:2]
+        onnx/defs/parser.h [2:2]
+        onnx/defs/printer.cc [2:2]
+        onnx/defs/printer.h [2:2]
+        onnx/defs/quantization/defs.cc [2:2]
+        onnx/defs/quantization/old.cc [2:2]
+        onnx/defs/reduction/defs.cc [2:2]
+        onnx/defs/reduction/old.cc [2:2]
+        onnx/defs/reduction/utils.cc [2:2]
+        onnx/defs/reduction/utils.h [2:2]
+        onnx/defs/rnn/defs.cc [2:2]
+        onnx/defs/rnn/old.cc [2:2]
+        onnx/defs/schema.cc [2:2]
+        onnx/defs/schema.h [2:2]
+        onnx/defs/sequence/defs.cc [2:2]
+        onnx/defs/shape_inference.cc [2:2]
+        onnx/defs/shape_inference.h [2:2]
+        onnx/defs/tensor/defs.cc [2:2]
+        onnx/defs/tensor/old.cc [2:2]
+        onnx/defs/tensor/utils.cc [2:2]
+        onnx/defs/tensor/utils.h [2:2]
+        onnx/defs/tensor_proto_util.cc [2:2]
+        onnx/defs/tensor_proto_util.h [2:2]
+        onnx/defs/tensor_util.cc [2:2]
+        onnx/defs/tensor_util.h [2:2]
+        onnx/defs/traditionalml/old.cc [2:2]
+        onnx/defs/training/defs.cc [2:2]
+        onnx/inliner/inliner.cc [4:4]
+        onnx/inliner/inliner.h [4:4]
+        onnx/onnx-data_pb.h [2:2]
+        onnx/onnx-operators_pb.h [2:2]
+        onnx/onnx_pb.h [2:2]
+        onnx/shape_inference/attribute_binder.h [4:4]
+        onnx/version_converter/BaseConverter.h [4:4]
+        onnx/version_converter/adapters/adapter.h [4:4]
+        onnx/version_converter/adapters/axes_attribute_to_input.h [4:4]
+        onnx/version_converter/adapters/axes_input_to_attribute.h [4:4]
+        onnx/version_converter/adapters/axis_attribute_to_input.h [4:4]
+        onnx/version_converter/adapters/axis_input_to_attribute.h [4:4]
+        onnx/version_converter/adapters/batch_normalization_13_14.h [4:4]
+        onnx/version_converter/adapters/broadcast_backward_compatibility.h [4:4]
+        onnx/version_converter/adapters/broadcast_forward_compatibility.h [4:4]
+        onnx/version_converter/adapters/cast_9_8.h [4:4]
+        onnx/version_converter/adapters/clip_10_11.h [4:4]
+        onnx/version_converter/adapters/compatible.h [4:4]
+        onnx/version_converter/adapters/dropout_11_12.h [4:4]
+        onnx/version_converter/adapters/extend_supported_types.h [4:4]
+        onnx/version_converter/adapters/gemm_6_7.h [4:4]
+        onnx/version_converter/adapters/gemm_7_6.h [4:4]
+        onnx/version_converter/adapters/gridsample_19_20.h [4:4]
+        onnx/version_converter/adapters/group_normalization_20_21.h [4:4]
+        onnx/version_converter/adapters/maxpool_8_7.h [4:4]
+        onnx/version_converter/adapters/no_previous_version.h [4:4]
+        onnx/version_converter/adapters/pad_10_11.h [4:4]
+        onnx/version_converter/adapters/q_dq_21_20.h [4:4]
+        onnx/version_converter/adapters/remove_consumed_inputs.h [4:4]
+        onnx/version_converter/adapters/reshape_4_5.h [4:4]
+        onnx/version_converter/adapters/reshape_5_4.h [4:4]
+        onnx/version_converter/adapters/resize_10_11.h [4:4]
+        onnx/version_converter/adapters/scan_8_9.h [4:4]
+        onnx/version_converter/adapters/scan_9_8.h [4:4]
+        onnx/version_converter/adapters/scatter_10_11.h [4:4]
+        onnx/version_converter/adapters/slice_9_10.h [4:4]
+        onnx/version_converter/adapters/softmax_12_13.h [4:4]
+        onnx/version_converter/adapters/softmax_13_12.h [4:4]
+        onnx/version_converter/adapters/split_12_13.h [4:4]
+        onnx/version_converter/adapters/split_13_12.h [4:4]
+        onnx/version_converter/adapters/split_17_18.h [4:4]
+        onnx/version_converter/adapters/sum_8_7.h [4:4]
+        onnx/version_converter/adapters/topk_9_10.h [4:4]
+        onnx/version_converter/adapters/transformers.h [4:4]
+        onnx/version_converter/adapters/type_restriction.h [4:4]
+        onnx/version_converter/adapters/upsample_6_7.h [4:4]
+        onnx/version_converter/adapters/upsample_8_9.h [4:4]
+        onnx/version_converter/adapters/upsample_9_10.h [4:4]
+        onnx/version_converter/adapters/upsample_9_8.h [4:4]
+        onnx/version_converter/convert.cc [4:4]
+        onnx/version_converter/convert.h [4:4]
+    Belongs difference:
+        + proto/ya.make python/ya.make
+
+KEEP     Apache-2.0           2675027859ef2b90d074697f80235f0d
+BELONGS proto/ya.make python/ya.make ya.make
+    License text:
+        \# License
+        [Apache License v2.0](LICENSE)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [108:110]
+    Belongs difference:
+        + proto/ya.make python/ya.make
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS proto/ya.make python/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+    Belongs difference:
+        + proto/ya.make python/ya.make
+
+KEEP     Apache-2.0           30232e808176c391372f3977f44c3781
+BELONGS ya.make
+    License text:
+        \## License
+        [Apache License v2.0](/LICENSE)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        CONTRIBUTING.md [198:200]
+
+KEEP     Apache-2.0           444e123a722afdbc8a80d86053b344bd
+BELONGS proto/ya.make python/ya.make ya.make
+    License text:
+        \# SPDX-License-Identifier: Apache-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        REUSE.toml [3:3]
+        onnx/__init__.py [3:3]
+        onnx/_custom_element_types.py [3:3]
+        onnx/checker.py [3:3]
+        onnx/compose.py [3:3]
+        onnx/defs/__init__.py [3:3]
+        onnx/external_data_helper.py [3:3]
+        onnx/gen_proto.py [3:3]
+        onnx/helper.py [3:3]
+        onnx/hub.py [3:3]
+        onnx/inliner.py [3:3]
+        onnx/mapping.py [3:3]
+        onnx/model_container.py [3:3]
+        onnx/numpy_helper.py [3:3]
+        onnx/onnx_cpp2py_export/inliner.pyi [3:3]
+        onnx/parser.py [3:3]
+        onnx/printer.py [3:3]
+        onnx/serialization.py [3:3]
+        onnx/shape_inference.py [3:3]
+        onnx/subbyte.py [3:3]
+        onnx/utils.py [3:3]
+        onnx/version_converter.py [3:3]
+    Belongs difference:
+        + proto/ya.make python/ya.make
+
+KEEP     Apache-2.0           752d8a8eaef169c21c12f3851fb72be1
+BELONGS ya.make
+    License text:
+        // Licensed under the Apache-2.0 license.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        onnx/onnx_operators_ml.proto [7:7]
+
+KEEP     NCSA                 9033de97f032dbea491e090d7921982d
+BELONGS ya.make
+    License text:
+        // This file is distributed under the University of Illinois Open Source
+        // License. See LICENSE.TXT for details.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 94.00
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        onnx/common/array_ref.h [14:15]
+
+KEEP     Apache-2.0           9dd9e817662fd0380ddd3711059a09de
+BELONGS proto/ya.make python/ya.make ya.make
+    License text:
+        SPDX-License-Identifier: Apache-2.0
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        CONTRIBUTING.md [4:4]
+        INSTALL.md [4:4]
+        README.md [4:4]
+        SECURITY.md [4:4]
+        onnx/defs/text/defs.cc [2:2]
+        onnx/defs/traditionalml/defs.cc [2:2]
+    Belongs difference:
+        + proto/ya.make python/ya.make

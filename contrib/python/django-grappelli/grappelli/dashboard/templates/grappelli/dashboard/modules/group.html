@@ -1,0 +1,7 @@
+{% extends "grappelli/dashboard/module.html" %}
+{% load i18n grp_dashboard_tags %}
+{% block module_content %}
+    {% for sub_module in module.children %}
+        {% grp_render_dashboard_module sub_module index forloop.counter %}
+    {% endfor %}
+{% endblock %}

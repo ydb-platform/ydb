@@ -1,0 +1,6 @@
+--- contrib/python/asyncssh/asyncssh/crypto/rsa.py	(index)
++++ contrib/python/asyncssh/asyncssh/crypto/rsa.py	(working tree)
+@@ -107,2 +107 @@ class RSAPrivateKey(_RSAKey):
+-        priv_key = priv.private_key(
+-            unsafe_skip_rsa_key_validation=skip_validation)
++        priv_key = priv.private_key()

@@ -1,0 +1,58 @@
+Metadata-Version: 2.1
+Name: python-pptx
+Version: 1.0.2
+Summary: Create, read, and update PowerPoint 2007+ (.pptx) files.
+Author-email: Steve Canny <stcanny@gmail.com>
+License: MIT
+Project-URL: Changelog, https://github.com/scanny/python-pptx/blob/master/HISTORY.rst
+Project-URL: Documentation, https://python-pptx.readthedocs.io/en/latest/
+Project-URL: Homepage, https://github.com/scanny/python-pptx
+Project-URL: Repository, https://github.com/scanny/python-pptx
+Keywords: powerpoint,ppt,pptx,openxml,office
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Office/Business :: Office Suites
+Classifier: Topic :: Software Development :: Libraries
+Requires-Python: >=3.8
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: Pillow >=3.3.2
+Requires-Dist: XlsxWriter >=0.5.7
+Requires-Dist: lxml >=3.1.0
+Requires-Dist: typing-extensions >=4.9.0
+
+*python-pptx* is a Python library for creating, reading, and updating PowerPoint (.pptx)
+files.
+
+A typical use would be generating a PowerPoint presentation from dynamic content such as
+a database query, analytics output, or a JSON payload, perhaps in response to an HTTP
+request and downloading the generated PPTX file in response. It runs on any Python
+capable platform, including macOS and Linux, and does not require the PowerPoint
+application to be installed or licensed.
+
+It can also be used to analyze PowerPoint files from a corpus, perhaps to extract search
+indexing text and images.
+
+In can also be used to simply automate the production of a slide or two that would be
+tedious to get right by hand, which is how this all got started.
+
+More information is available in the `python-pptx documentation`_.
+
+Browse `examples with screenshots`_ to get a quick idea what you can do with
+python-pptx.
+
+.. _`python-pptx documentation`:
+   https://python-pptx.readthedocs.org/en/latest/
+
+.. _`examples with screenshots`:
+   https://python-pptx.readthedocs.org/en/latest/user/quickstart.html

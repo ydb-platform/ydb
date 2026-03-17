@@ -1,0 +1,121 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 11855a0796de0e1b2b222b82a27c059e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2017-2020, Loup Vaillant
+        Copyright (c) 2017-2019, Michael Savage
+        Copyright (c) 2017-2020, Fabio Scotoni
+        Copyright (c) 2018-2020, Matt Liberty
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [14:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 12a793c6acaf997077aab1112fb2e668
+BELONGS ya.make
+    License text:
+        Copyright (c) 2017-2020, Loup Vaillant
+        Copyright (c) 2017-2019, Michael Savage
+        Copyright (c) 2017-2020, Fabio Scotoni
+        Copyright (c) 2018-2020, Matt Liberty
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [14:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 54e0f452cd4339d116e9f51eefa775f4
+BELONGS ya.make
+    License text:
+        Copyright (c) 2017-2020, Loup Vaillant
+        Copyright (c) 2017-2019, Michael Savage
+        Copyright (c) 2017-2020, Fabio Scotoni
+        Copyright (c) 2018-2020, Matt Liberty
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [14:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 84ba371fdf5090951abe4ec31c6d88b4
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2017-2019, Loup Vaillant
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        monocypher.h [14:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b1622b01156917c08e6c7be003eb15fc
+BELONGS ya.make
+    License text:
+        __author__ = 'Jetperch LLC'
+        __author_email__ = 'joulescope-dev@jetperch.com'
+        __license__ = 'BSD 2-clause'
+        __copyright__ = 'Copyright 2018-2025 Jetperch LLC'
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        c_monocypher.pyx [19:22]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c5c195cff8eeb900e3eb91c39ed9c74a
+BELONGS ya.make
+    License text:
+        Copyright (c) 2017-2020, Loup Vaillant
+        Copyright (c) 2017-2019, Michael Savage
+        Copyright (c) 2017-2020, Fabio Scotoni
+        Copyright (c) 2018-2020, Matt Liberty
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [14:18]
+        monocypher.c [14:15]

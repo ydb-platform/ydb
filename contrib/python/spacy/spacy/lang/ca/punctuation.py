@@ -1,0 +1,66 @@
+from ..char_classes import (
+    ALPHA,
+    ALPHA_LOWER,
+    ALPHA_UPPER,
+    CONCAT_QUOTES,
+    CURRENCY,
+    LIST_CURRENCY,
+    LIST_ELLIPSES,
+    LIST_ICONS,
+    LIST_PUNCT,
+    LIST_QUOTES,
+    PUNCT,
+    _units,
+    merge_chars,
+)
+
+ELISION = " ' ’ ".strip().replace(" ", "").replace("\n", "")
+
+_prefixes = (
+    ["§", "%", "=", "—", "–", "-", r"\+(?![0-9])"]
+    + LIST_PUNCT
+    + LIST_ELLIPSES
+    + LIST_QUOTES
+    + LIST_CURRENCY
+    + LIST_ICONS
+)
+
+_infixes = (
+    LIST_ELLIPSES
+    + LIST_ICONS
+    + [
+        r"(?<=[0-9])[+\-\*^](?=[0-9-])",
+        r"(?<=[{al}{q}])\.(?=[{au}{q}])".format(
+            al=ALPHA_LOWER, au=ALPHA_UPPER, q=CONCAT_QUOTES
+        ),
+        r"(?<=[{a}]),(?=[{a}])".format(a=ALPHA),
+        r"(?<=[{a}0-9])[:<>=/](?=[{a}])".format(a=ALPHA),
+        r"(?<=[{a}][{el}])(?=[{a}0-9])".format(a=ALPHA, el=ELISION),
+        r"('ls|'l|'ns|'t|'m|'n|-les|-la|-lo|-li|-los|-me|-nos|-te|-vos|-se|-hi|-ne|-ho)(?![A-Za-z])|(-l'|-m'|-t'|-n')",
+    ]
+)
+
+_units = _units.replace("% ", "")
+UNITS = merge_chars(_units)
+
+_suffixes = (
+    LIST_PUNCT
+    + LIST_ELLIPSES
+    + LIST_QUOTES
+    + LIST_ICONS
+    + [r"-", "—", "–"]
+    + [
+        r"(?<=[0-9])\+",
+        r"(?<=°[FfCcKk])\.",
+        r"(?<=[0-9])(?:{c})".format(c=CURRENCY),
+        r"(?<=[0-9])(?:{u})".format(u=UNITS),
+        r"(?<=[0-9{al}{e}{p}(?:{q})])\.".format(
+            al=ALPHA_LOWER, e=r"%²\-\+", q=CONCAT_QUOTES, p=PUNCT
+        ),
+        r"(?<=[{au}][{au}])\.".format(au=ALPHA_UPPER),
+    ]
+)
+
+TOKENIZER_INFIXES = _infixes
+TOKENIZER_SUFFIXES = _suffixes
+TOKENIZER_PREFIXES = _prefixes

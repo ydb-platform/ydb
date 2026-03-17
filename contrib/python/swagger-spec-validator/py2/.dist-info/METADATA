@@ -1,0 +1,22 @@
+Metadata-Version: 2.1
+Name: swagger-spec-validator
+Version: 2.7.6
+Summary: Validation of Swagger specifications
+Home-page: http://github.com/Yelp/swagger_spec_validator
+Author: Yelp
+Author-email: core-services@yelp.com
+License: Apache License, Version 2.0
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.6
+Requires-Dist: jsonschema
+Requires-Dist: pyyaml
+Requires-Dist: six
+
+UNKNOWN
+
+

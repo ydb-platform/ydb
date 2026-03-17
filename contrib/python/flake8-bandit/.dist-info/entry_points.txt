@@ -1,0 +1,2 @@
+[flake8.extension]
+S = flake8_bandit:BanditTester

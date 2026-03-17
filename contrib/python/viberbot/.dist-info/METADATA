@@ -1,0 +1,15 @@
+Metadata-Version: 2.1
+Name: viberbot
+Version: 1.0.12
+Summary: UNKNOWN
+Home-page: https://github.com/Viber/viber-bot-python
+Author: UNKNOWN
+Author-email: UNKNOWN
+License: UNKNOWN
+Platform: UNKNOWN
+Requires-Dist: future
+Requires-Dist: requests
+
+UNKNOWN
+
+

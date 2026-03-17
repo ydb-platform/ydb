@@ -1,0 +1,6 @@
+import json as json
+
+from ... import types as sqltypes
+
+class JSON(sqltypes.JSON): ...
+class JSONB(JSON): ...

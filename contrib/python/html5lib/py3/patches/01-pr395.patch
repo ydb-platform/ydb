@@ -1,0 +1,38 @@
+From 2d72f22832a8d7888d516f7998539a5124571cf4 Mon Sep 17 00:00:00 2001
+From: Tom Most <twm@freecog.net>
+Date: Sat, 9 Jun 2018 17:46:50 -0700
+Subject: [PATCH 1/2] Support the <wbr> element
+
+---
+ CHANGES.rst                      | 9 +++++++++
+ html5lib/constants.py            | 3 ++-
+ html5lib/filters/sanitizer.py    | 1 +
+ html5lib/tests/test_sanitizer.py | 6 ++++++
+ 4 files changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/html5lib/constants.py b/html5lib/constants.py
+index 1ff80419..0a0a4887 100644
+--- a/html5lib/constants.py
++++ b/html5lib/constants.py
+@@ -572,7 +572,8 @@
+     "col",
+     "input",
+     "source",
+-    "track"
++    "track",
++    "wbr",
+ ])
+ 
+ cdataElements = frozenset(['title', 'textarea'])
+diff --git a/html5lib/filters/sanitizer.py b/html5lib/filters/sanitizer.py
+index e852f53b..302c2a5d 100644
+--- a/html5lib/filters/sanitizer.py
++++ b/html5lib/filters/sanitizer.py
+@@ -111,6 +111,7 @@
+     (namespaces['html'], 'ul'),
+     (namespaces['html'], 'var'),
+     (namespaces['html'], 'video'),
++    (namespaces['html'], 'wbr'),
+     (namespaces['mathml'], 'maction'),
+     (namespaces['mathml'], 'math'),
+     (namespaces['mathml'], 'merror'),

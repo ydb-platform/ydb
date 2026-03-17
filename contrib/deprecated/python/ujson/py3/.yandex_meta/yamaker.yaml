@@ -1,0 +1,8 @@
+exclude:
+  - lib/Makefile
+  - python/version_template.h
+copy:
+  - lib/*
+  - python/*
+keep:
+  - ujson.pyi

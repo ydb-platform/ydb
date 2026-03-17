@@ -1,0 +1,114 @@
+Metadata-Version: 2.4
+Name: aiosmtplib
+Version: 5.1.0
+Summary: asyncio SMTP client
+Project-URL: Documentation, https://aiosmtplib.readthedocs.io/en/stable/
+Project-URL: Changelog, https://github.com/cole/aiosmtplib/blob/main/CHANGELOG.rst
+Project-URL: GitHub, https://github.com/cole/aiosmtplib
+Author-email: Cole Maclean <hi@colemaclean.dev>
+License: MIT
+License-File: LICENSE.txt
+Keywords: asyncio,email,smtp
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: No Input/Output (Daemon)
+Classifier: Framework :: AsyncIO
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Communications
+Classifier: Topic :: Communications :: Email
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Typing :: Typed
+Requires-Python: >=3.10
+Provides-Extra: docs
+Requires-Dist: furo>=2023.9.10; extra == 'docs'
+Requires-Dist: sphinx-autodoc-typehints>=1.24.0; extra == 'docs'
+Requires-Dist: sphinx-copybutton>=0.5.0; extra == 'docs'
+Requires-Dist: sphinx>=7.0.0; extra == 'docs'
+Provides-Extra: uvloop
+Requires-Dist: uvloop>=0.18; extra == 'uvloop'
+Description-Content-Type: text/x-rst
+
+aiosmtplib
+==========
+
+|circleci| |precommit.ci| |codecov| |zero-deps| |pypi-version| |downloads| |pypi-license|
+
+------------
+
+aiosmtplib is an asynchronous SMTP client for use with asyncio.
+
+For documentation, see `Read The Docs`_.
+
+Quickstart
+----------
+
+
+..
+  start quickstart
+
+.. code-block:: python
+
+    import asyncio
+    from email.message import EmailMessage
+
+    import aiosmtplib
+
+    message = EmailMessage()
+    message["From"] = "root@localhost"
+    message["To"] = "somebody@example.com"
+    message["Subject"] = "Hello World!"
+    message.set_content("Sent via aiosmtplib")
+
+    asyncio.run(aiosmtplib.send(message, hostname="127.0.0.1", port=25))
+
+..
+  end quickstart
+
+Requirements
+------------
+
+..
+  start requirements
+
+Python 3.10+ is required.
+
+..
+  end requirements
+
+
+Bug Reporting
+-------------
+
+..
+  start bug-reporting
+
+Bug reports (and feature requests) are welcome via `Github issues`_.
+
+.. _Github issues: https://github.com/cole/aiosmtplib/issues
+
+..
+  end bug-reporting
+
+
+.. |circleci| image:: https://circleci.com/gh/cole/aiosmtplib/tree/main.svg?style=shield
+           :target: https://circleci.com/gh/cole/aiosmtplib/tree/main
+           :alt: "aiosmtplib CircleCI build status"
+.. |pypi-version| image:: https://img.shields.io/pypi/v/aiosmtplib.svg
+                 :target: https://pypi.python.org/pypi/aiosmtplib
+                 :alt: "aiosmtplib on the Python Package Index"
+.. |pypi-status| image:: https://img.shields.io/pypi/status/aiosmtplib.svg
+.. |pypi-license| image:: https://img.shields.io/pypi/l/aiosmtplib.svg
+.. |codecov| image:: https://codecov.io/gh/cole/aiosmtplib/branch/main/graph/badge.svg
+             :target: https://codecov.io/gh/cole/aiosmtplib
+.. |downloads| image:: https://static.pepy.tech/badge/aiosmtplib/month
+               :target: https://pepy.tech/project/aiosmtplib
+               :alt: "aiosmtplib on pypy.tech"
+.. |precommit.ci| image:: https://results.pre-commit.ci/badge/github/cole/aiosmtplib/main.svg
+                  :target: https://results.pre-commit.ci/latest/github/cole/aiosmtplib/main
+                  :alt: "pre-commit.ci status"
+.. |zero-deps| image:: https://0dependencies.dev/0dependencies.svg
+               :target: https://0dependencies.dev
+               :alt: "0 dependencies"
+.. _Read The Docs: https://aiosmtplib.readthedocs.io/en/stable/

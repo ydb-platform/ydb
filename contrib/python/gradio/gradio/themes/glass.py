@@ -1,0 +1,97 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+
+from gradio.themes.base import Base
+from gradio.themes.utils import colors, fonts, sizes
+
+
+class Glass(Base):
+    def __init__(
+        self,
+        *,
+        primary_hue: colors.Color | str = colors.blue,
+        secondary_hue: colors.Color | str = colors.slate,
+        neutral_hue: colors.Color | str = colors.slate,
+        spacing_size: sizes.Size | str = sizes.spacing_sm,
+        radius_size: sizes.Size | str = sizes.radius_sm,
+        text_size: sizes.Size | str = sizes.text_sm,
+        font: fonts.Font | str | Iterable[fonts.Font | str] = (
+            "Optima",
+            "Candara",
+            "Noto Sans",
+            "source-sans-pro",
+            "sans-serif",
+        ),
+        font_mono: fonts.Font | str | Iterable[fonts.Font | str] = (
+            fonts.LocalFont("IBM Plex Mono"),
+            "ui-monospace",
+            "Consolas",
+            "monospace",
+        ),
+    ):
+        super().__init__(
+            primary_hue=primary_hue,
+            secondary_hue=secondary_hue,
+            neutral_hue=neutral_hue,
+            spacing_size=spacing_size,
+            radius_size=radius_size,
+            text_size=text_size,
+            font=font,
+            font_mono=font_mono,
+        )
+        self.name = "glass"
+        super().set(
+            body_background_fill_dark="*secondary_800",
+            background_fill_secondary_dark="*secondary_800",
+            block_background_fill_dark="*secondary_800",
+            button_primary_background_fill="linear-gradient(180deg, *primary_100 0%, *primary_200 30%)",
+            button_primary_background_fill_hover="linear-gradient(180deg, *primary_100 0%, *primary_200 30%)",
+            button_primary_background_fill_dark="linear-gradient(180deg, *primary_500 0%, *primary_600 30%)",
+            button_primary_background_fill_hover_dark="linear-gradient(180deg, *primary_500 0%, *primary_600 30%)",
+            button_primary_text_color="*body_text_color",
+            button_primary_border_color="*primary_200",
+            button_primary_border_color_hover="*button_primary_border_color",
+            button_secondary_background_fill="linear-gradient(180deg, *secondary_100 0%, *secondary_200 30%)",
+            button_secondary_background_fill_hover="linear-gradient(180deg, *secondary_100 0%, *secondary_200 30%)",
+            button_secondary_background_fill_dark="linear-gradient(180deg, *secondary_500 0%, *secondary_600 30%)",
+            button_secondary_background_fill_hover_dark="linear-gradient(180deg, *secondary_500 0%, *secondary_600 30%)",
+            checkbox_border_width="0px",
+            checkbox_border_width_dark="0px",
+            checkbox_label_background_fill="*button_secondary_background_fill",
+            checkbox_label_background_fill_dark="*button_secondary_background_fill",
+            checkbox_label_background_fill_hover="*button_secondary_background_fill_hover",
+            checkbox_label_background_fill_hover_dark="*button_secondary_background_fill_hover",
+            checkbox_label_border_width="1px",
+            checkbox_label_border_width_dark="1px",
+            checkbox_label_border_color_dark="*secondary_700",
+            checkbox_background_color_dark="*secondary_400",
+            button_border_width="1px",
+            shadow_inset="rgba(0,0,0,0.05) 0px 1px 2px 0px inset",
+            button_primary_shadow_active="*shadow_inset",
+            button_secondary_shadow_active="*shadow_inset",
+            input_background_fill="linear-gradient(0deg, *secondary_100 0%, white 100%)",
+            input_background_fill_dark="*secondary_600",
+            input_border_color_focus_dark="*secondary_500",
+            input_border_width="1px",
+            input_border_color_dark="*secondary_600",
+            block_label_text_color="*secondary_500",
+            block_title_text_color="*secondary_500",
+            block_label_text_weight="600",
+            block_title_text_weight="600",
+            block_label_text_size="*text_md",
+            block_title_text_size="*text_md",
+            block_label_background_fill="*secondary_200",
+            block_label_background_fill_dark="*secondary_700",
+            block_label_border_color_dark="*secondary_600",
+            block_border_width="0px",
+            block_border_width_dark="1px",
+            block_border_color_dark="*secondary_600",
+            panel_border_width="1px",
+            border_color_primary_dark="*secondary_600",
+            background_fill_primary_dark="*neutral_700",
+            background_fill_secondary="*secondary_100",
+            block_background_fill="*secondary_50",
+            table_even_background_fill_dark="*neutral_700",
+            table_odd_background_fill_dark="*neutral_700",
+        )

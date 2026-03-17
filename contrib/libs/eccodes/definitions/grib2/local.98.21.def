@@ -1,0 +1,32 @@
+# Local definition 21: Sensitive area predictions
+
+unsigned[2] forecastOrSingularVectorNumber  : dump;
+
+unsigned[2] numberOfIterations  : dump;
+unsigned[2] numberOfSingularVectorsComputed  : dump;
+unsigned[1] normAtInitialTime  : dump;
+unsigned[1] normAtFinalTime  : dump;
+unsigned[4] multiplicationFactorForLatLong  : dump;
+signed[4] northWestLatitudeOfVerficationArea  : dump;
+signed[4] northWestLongitudeOfVerficationArea  : dump;
+signed[4] southEastLatitudeOfVerficationArea  : dump;
+signed[4] southEastLongitudeOfVerficationArea  : dump;
+unsigned[4] accuracyMultipliedByFactor  : dump;
+unsigned[2] numberOfSingularVectorsEvolved  : dump;
+
+# Ritz numbers:
+signed[4] NINT_LOG10_RITZ  : dump;
+signed[4] NINT_RITZ_EXP  : dump;
+
+unsigned[1] optimisationTime  : dump;
+alias mars.opttime = optimisationTime;
+
+unsigned[1] forecastLeadTime  : dump;
+alias mars.leadtime = forecastLeadTime;
+
+ascii[1] marsDomain  : dump;
+unsigned[2] methodNumber  : dump;
+unsigned[1] shapeOfVerificationArea  : dump;
+
+# concept sensitiveAreaDomain(unknown,"sensitive_area_domain.def",conceptsMasterDir,conceptsLocalDir);
+alias mars.domain = marsDomain;

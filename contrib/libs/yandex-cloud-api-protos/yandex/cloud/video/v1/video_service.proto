@@ -1,0 +1,617 @@
+syntax = "proto3";
+
+package yandex.cloud.video.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/video/v1/manifest.proto";
+import "yandex/cloud/video/v1/video.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/video/v1;video";
+option java_package = "yandex.cloud.api.video.v1";
+
+// Video management service.
+// Provides methods for creating, retrieving, updating, and deleting videos,
+// as well as managing video-related operations such as transcoding, publishing,
+// and generating playback URLs.
+service VideoService {
+  // Retrieves detailed information about a specific video by its ID.
+  // Returns all video metadata, status, and related information.
+  rpc Get(GetVideoRequest) returns (Video) {
+    option (google.api.http) = {
+      get: "/video/v1/videos/{video_id}"
+    };
+  }
+
+  // Lists all videos in a specific channel with pagination support.
+  // Results can be filtered and sorted using the provided parameters.
+  rpc List(ListVideoRequest) returns (ListVideoResponse) {
+    option (google.api.http) = {
+      get: "/video/v1/videos"
+    };
+  }
+
+  // Retrieves multiple videos by their IDs in a specific channel in a single request.
+  // This is more efficient than making multiple Get requests when retrieving several videos.
+  rpc BatchGet(BatchGetVideosRequest) returns (BatchGetVideosResponse) {
+    option (google.api.http) = {
+      post: "/video/v1/videos:batchGet"
+      body: "*"
+    };
+  }
+
+  // Creates a new video in the specified channel.
+  // The video can be created from different sources: TUS upload, direct link, or S3 storage.
+  rpc Create(CreateVideoRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/video/v1/videos"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateVideoMetadata"
+      response: "Video"
+    };
+  }
+
+  // Updates an existing video's metadata and settings.
+  // Only fields specified in the field_mask will be updated.
+  rpc Update(UpdateVideoRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/video/v1/videos/{video_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateVideoMetadata"
+      response: "Video"
+    };
+  }
+
+  // Initiates or updates video transcoding with specified parameters.
+  // Can be used to start transcoding for videos with auto_transcode=DISABLE,
+  // or to re-process a completed video with new transcoding settings.
+  // Supports additional features like subtitle processing, translation, and summarization.
+  rpc Transcode(TranscodeVideoRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/video/v1/videos/{video_id}:transcode"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "TranscodeVideoMetadata"
+      response: "Video"
+    };
+  }
+
+  // Deletes a specific video by its ID.
+  rpc Delete(DeleteVideoRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      delete: "/video/v1/videos/{video_id}"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteVideoMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Deletes multiple videos in a specific channel in a single request.
+  // This is more efficient than making multiple Delete requests when removing several videos.
+  rpc BatchDelete(BatchDeleteVideosRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/video/v1/videos:batchDelete"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "BatchDeleteVideosMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Performs a specific action on a video, such as publishing or unpublishing.
+  rpc PerformAction(PerformVideoActionRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/video/v1/videos/{video_id}:performAction"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "PerformVideoActionMetadata"
+      response: "Video"
+    };
+  }
+
+  // Generates a standard player URL for watching the video.
+  // The URL respects the video's access rights and can include custom player parameters.
+  // For videos with signed URL access, an expiration duration can be specified.
+  rpc GetPlayerURL(GetVideoPlayerURLRequest) returns (GetVideoPlayerURLResponse) {
+    option (google.api.http) = {
+      get: "/video/v1/videos/{video_id}:getPlayerURL"
+    };
+  }
+
+  // Generates multiple player URLs for a list of videos in a specific channel in a single request.
+  // This is more efficient than making multiple GetPlayerURL requests when retrieving several URLs.
+  rpc BatchGetPlayerURLs(BatchGetVideoPlayerURLsRequest) returns (BatchGetVideoPlayerURLsResponse) {
+    option (google.api.http) = {
+      post: "/video/v1/videos:batchGetPlayerURLs"
+      body: "*"
+    };
+  }
+
+  // Retrieves the manifest URLs for a specific video.
+  // Manifests are used by video players to access the video content with adaptive bitrate streaming.
+  // Supports different manifest types (HLS, DASH) and configuration parameters.
+  //
+  // Manifests and its url MUST not be cached.
+  // The player MUST request a fresh manifest every time playback starts.
+  rpc GetManifests(GetVideoManifestsRequest) returns (GetVideoManifestsResponse) {
+    option (google.api.http) = {
+      get: "/video/v1/videos/{video_id}:getManifests"
+    };
+  }
+
+  // Generates a URL for downloading the original video file.
+  // This URL is time-limited and provides direct access to the source video.
+  rpc GenerateDownloadURL(GenerateVideoDownloadURLRequest) returns (GenerateVideoDownloadURLResponse) {
+    option (google.api.http) = {
+      post: "/video/v1/videos/{video_id}:generateDownloadURL"
+      body: "*"
+    };
+  }
+}
+
+message GetVideoRequest {
+  // ID of the video to retrieve.
+  string video_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListVideoRequest {
+  // Reserved for future use.
+  reserved 2 to 99;
+
+  // ID of the channel containing the videos to list.
+  string channel_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of videos to return per page.
+  int64 page_size = 100 [(value) = "<=100"];
+
+  // Page token for retrieving the next page of results.
+  // This token is obtained from the next_page_token field in the previous ListVideoResponse.
+  string page_token = 101 [(length) = "<=15000"];
+
+  // Specifies the ordering of results.
+  // Format is "<field> <order>" (e.g., "createdAt desc").
+  // Default: "id asc".
+  // Supported fields: ["id", "title", "createdAt", "updatedAt"].
+  // Both snake_case and camelCase field names are supported.
+  string order_by = 102 [(length) = "<=50"];
+
+  // Filter expression to narrow down the list of returned videos.
+  // Expressions consist of terms connected by logical operators.
+  // Values containing spaces or quotes must be enclosed in quotes (`'` or `"`)
+  // with inner quotes being backslash-escaped.
+  //
+  // Supported logical operators: ["AND", "OR"].
+  // Supported comparison operators: ["=", "!=", ":"] where ":" enables substring matching.
+  // Parentheses can be used to group logical expressions.
+  //
+  // Example: `title:'sample' AND (status='READY' OR visibilityStatus='PUBLISHED')`
+  //
+  // Filterable fields: ["id", "title", "status", "visibilityStatus"].
+  // Both snake_case and camelCase field names are supported.
+  string filter = 103 [(length) = "<=1000"];
+}
+
+message ListVideoResponse {
+  // Reserved for future use.
+  reserved 2 to 99;
+
+  // List of videos matching the request criteria.
+  // May be empty if no videos match the criteria or if the channel is empty.
+  repeated Video videos = 1;
+
+  // Token for retrieving the next page of results.
+  // Empty if there are no more results available.
+  string next_page_token = 100;
+}
+
+message BatchGetVideosRequest {
+  // ID of the channel containing the videos to retrieve.
+  string channel_id = 1 [(required) = true, (length) = "<=50"];
+
+  // List of video IDs to retrieve.
+  repeated string video_ids = 2 [(size) = "1-100", (length) = "<=50"];
+}
+
+message BatchGetVideosResponse {
+  // List of videos matching the requested IDs.
+  repeated Video videos = 1;
+}
+
+message CreateVideoRequest {
+  reserved 10, 2001, 2002;
+
+  // Reserved for future use.
+  reserved 9, 11 to 199, 201 to 999, 1001 to 1999;
+
+  // ID of the channel where the video will be created.
+  string channel_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Title of the video to be displayed in interfaces and players.
+  string title = 2 [(required) = true, (length) = "<=300"];
+
+  // Detailed description of the video content and context.
+  // Optional field that can provide additional information about the video.
+  string description = 3 [(length) = "<=5000"];
+
+  // ID of the thumbnail image to be used for the video.
+  // If not provided, a thumbnail may be automatically generated during transcoding.
+  string thumbnail_id = 4 [(length) = "<=50"];
+
+  // Controls whether transcoding starts automatically after upload.
+  // Set to ENABLE to automatically initiate transcoding after upload,
+  // or DISABLE for manual initiation via the Transcode() method.
+  AutoTranscode auto_transcode = 5;
+
+  // ID of the style preset to apply to the video during processing.
+  // Style presets define visual appearance settings for the video player.
+  string style_preset_id = 6 [(length) = "<=50"];
+
+  // Controls whether the video is automatically published after transcoding.
+  // When set to true, the video's visibility status will be set to PUBLISHED
+  // once transcoding is complete, making it available for watching.
+  google.protobuf.BoolValue auto_publish = 7;
+
+  // Controls the ability to display advertisements for this video.
+  // Default: true
+  // Set explicitly to false to disable advertisements for this specific video.
+  google.protobuf.BoolValue enable_ad = 8;
+
+  // Custom user-defined labels as `key:value` pairs.
+  // Maximum 64 labels per video.
+  // Keys must be lowercase alphanumeric strings with optional hyphens/underscores.
+  // Values can contain alphanumeric characters and various symbols.
+  map<string, string> labels = 200 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_.@:/0-9a-zA-Z]*", (map_key).length = "<=63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // Specifies the video upload source method (exactly one must be chosen).
+  oneof source {
+    option (exactly_one) = true;
+
+    // Upload video using the TUS (Tus Resumable Upload Protocol) protocol.
+    // This is a push-based upload method where the client pushes data to the server.
+    VideoTUSDParams tusd = 1000;
+  }
+
+  // Video access permission settings (exactly one must be chosen).
+  oneof access_rights {
+    option (exactly_one) = true;
+
+    // Video is publicly available.
+    VideoPublicAccessParams public_access = 2000;
+
+    // Access to the video is restricted by temporarily signed links.
+    VideoSignURLAccessParams sign_url_access = 2003;
+  }
+}
+
+message VideoTUSDParams {
+  // Total size of the file to be uploaded, in bytes.
+  int64 file_size = 1 [(value) = ">0"];
+
+  // Original name of the file being uploaded.
+  // This is used for reference and does not affect the upload process.
+  string file_name = 2;
+}
+
+// Parameters for video public access rights.
+message VideoPublicAccessParams {}
+
+// Parameters for video access restrictions based on temporary signed links.
+message VideoSignURLAccessParams {}
+
+message CreateVideoMetadata {
+  // Unique identifier of the video.
+  string video_id = 1;
+}
+
+message UpdateVideoRequest {
+  reserved 10, 2001, 2002;
+
+  // Reserved for future use.
+  reserved 9, 11 to 199, 201 to 1999;
+
+  // ID of the video to update.
+  string video_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask specifying which fields of the video should be updated.
+  // Only fields specified in this mask will be modified;
+  // all other fields will retain their current values.
+  // This allows for partial updates.
+  google.protobuf.FieldMask field_mask = 2 [(required) = true];
+
+  // New title for the video.
+  string title = 3 [(length) = "<=300"];
+
+  // New description for the video.
+  string description = 4 [(length) = "<=5000"];
+
+  // New thumbnail ID for the video.
+  string thumbnail_id = 5 [(length) = "<=50"];
+
+  // New auto-transcoding setting for the video.
+  // Controls whether transcoding starts automatically after upload.
+  AutoTranscode auto_transcode = 6;
+
+  // New style preset ID for the video.
+  string style_preset_id = 7 [(length) = "<=50"];
+
+  // New advertisement setting for the video.
+  // Set to false to disable advertisements for this specific video.
+  google.protobuf.BoolValue enable_ad = 8;
+
+  // New custom labels for the video as `key:value` pairs.
+  // Maximum 64 labels per video.
+  // If provided, replaces all existing labels.
+  map<string, string> labels = 200 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_.@:/0-9a-zA-Z]*", (map_key).length = "<=63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // New access rights setting for the video.
+  oneof access_rights {
+    // Makes the video publicly accessible to anyone with the direct link.
+    VideoPublicAccessParams public_access = 2000;
+
+    // Restricts video access using URL signatures for secure time-limited access.
+    VideoSignURLAccessParams sign_url_access = 2003;
+  }
+}
+
+message UpdateVideoMetadata {
+  // ID of the video.
+  string video_id = 1;
+}
+
+message TranscodeVideoRequest {
+  // ID of the video to transcode.
+  string video_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask specifying which transcoding-specific fields should be updated.
+  // Only fields specified in this mask will be modified;
+  // all other fields will retain their current values.
+  // This allows for partial updates.
+  google.protobuf.FieldMask field_mask = 2 [(required) = true];
+
+  // IDs of manually uploaded subtitle files to include in the transcoding process.
+  // These subtitles will be embedded in the video output.
+  repeated string subtitle_ids = 3;
+
+  // Settings for automatic translation of audio tracks.
+  // Defines source tracks and target languages for subtitle and audio translation.
+  VideoTranslationSettings translation_settings = 4;
+
+  // Settings for automatic video content summarization.
+  // Defines which audio tracks should be processed to generate text summaries.
+  VideoSummarizationSettings summarization_settings = 5;
+}
+
+message VideoTranslationSettings {
+  // Translation settings for each track.
+  repeated TranslationTrack tracks = 1;
+
+  message TranslationTrack {
+    // Input track settings.
+    InputTrack input_track = 1 [(required) = true];
+
+    // Settings for target subtitle tracks.
+    repeated SubtitleTrack subtitles = 2;
+
+    // Settings for target audio tracks.
+    repeated AudioTrack audio = 3;
+  }
+
+  message InputTrack {
+    // Input audio track index (one-based).
+    int64 track_index = 1 [(value) = ">=1"];
+
+    // Source track language represented as a three-letter code according to ISO 639-2/T.
+    // Track language will be deduced automatically if not provided.
+    // In the latter case the deduction accuracy is not guaranteed.
+    // For better performance please do specify the source track language when possible.
+    string src_lang = 2 [(length) = "0,3", (pattern) = "|ara|deu|eng|fra|ita|jpn|kor|rus|spa|tur|zho"];
+  }
+
+  message SubtitleTrack {
+    // Target language represented as a three-letter code according to ISO 639-2/T.
+    string dst_lang = 1 [(required) = true, (length) = "3", (pattern) = "ara|deu|eng|fra|ita|jpn|kaz|kor|rus|spa|tur|ukr|zho"];
+
+    // Track label to be displayed on the screen during video playback.
+    string label = 2 [(required) = true, (length) = "<=50"];
+  }
+
+  message AudioTrack {
+    // Target language represented as a three-letter code according to ISO 639-2/T.
+    string dst_lang = 1 [(required) = true, (length) = "3", (pattern) = "eng|kaz|rus"];
+
+    // Track label to be displayed on the screen during video playback.
+    string label = 2 [(required) = true, (length) = "<=50"];
+  }
+}
+
+message VideoSummarizationSettings {
+  reserved 1;
+
+  // Summarization settings for each track.
+  repeated SummarizationTrack tracks = 2;
+
+  // Summarize all available tracks.
+  // If enabled, `tracks` parameter is ignored.
+  // Enables automatic source language deduction for each track
+  // and thus may lead to performance degradation.
+  bool process_all_tracks = 3;
+
+  message SummarizationTrack {
+    // Input track settings.
+    InputTrack input_track = 1 [(required) = true];
+  }
+
+  message InputTrack {
+    // Input audio track index (one-based).
+    int64 track_index = 1 [(value) = ">=1"];
+
+    // Source track language represented as a three-letter code according to ISO 639-2/T.
+    // It will be deduced automatically if not provided.
+    // In the latter case the deduction accuracy is not guaranteed.
+    // For better performance please do specify the source track language when possible.
+    string src_lang = 2 [(length) = "0,3", (pattern) = "|ara|deu|eng|fra|ita|jpn|kor|rus|spa|tur|zho"];
+  }
+}
+
+message TranscodeVideoMetadata {
+  // ID of the video.
+  string video_id = 1;
+}
+
+message DeleteVideoRequest {
+  // ID of the video to delete.
+  string video_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteVideoMetadata {
+  // ID of the video.
+  // This identifier can be used to track the video deletion operation.
+  string video_id = 1;
+}
+
+message BatchDeleteVideosRequest {
+  // ID of the channel containing the videos to delete.
+  string channel_id = 1 [(required) = true, (length) = "<=50"];
+
+  // List of video IDs to delete.
+  repeated string video_ids = 2 [(size) = "1-100", (length) = "<=50"];
+}
+
+message BatchDeleteVideosMetadata {
+  // List of video IDs being deleted.
+  // This list can be used to track which videos are included
+  // in the batch deletion operation.
+  repeated string video_ids = 1;
+}
+
+message PerformVideoActionRequest {
+  // Reserved for future use.
+  reserved 2 to 999;
+
+  // ID of the video on which to perform the action.
+  string video_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Specifies the action to perform on the video (exactly one must be chosen).
+  oneof action {
+    option (exactly_one) = true;
+
+    // Publish the video, making it available for watching.
+    // Changes the video's visibility status to PUBLISHED.
+    PublishVideoAction publish = 1000;
+
+    // Unpublish the video, making it unavailable for watching.
+    // Changes the video's visibility status to UNPUBLISHED.
+    UnpublishVideoAction unpublish = 1001;
+  }
+}
+
+// Parameters for the publish action.
+message PublishVideoAction {}
+
+// Parameters for the unpublish action.
+message UnpublishVideoAction {}
+
+message PerformVideoActionMetadata {
+  // ID of the video on which the action is being performed.
+  // This identifier can be used to track the action operation
+  // and to verify that the action is being applied to the correct video.
+  string video_id = 1;
+}
+
+message GetVideoPlayerURLRequest {
+  // ID of the video for which to generate a player URL.
+  string video_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Optional player parameters to customize the playback experience.
+  // These parameters control initial player state such as mute, autoplay, and visibility of interface controls.
+  VideoPlayerParams params = 2;
+
+  // For episodes with signed URL access, specifies how long the generated URL will be valid.
+  // If not provided, a default expiration duration will be used.
+  google.protobuf.Duration signed_url_expiration_duration = 3;
+}
+
+message VideoPlayerParams {
+  // If true, the player will start with audio muted.
+  // Users can unmute the audio manually after playback starts.
+  bool mute = 1;
+
+  // If true, the video will start playing automatically when the player loads.
+  // This may be subject to browser autoplay policies that restrict autoplay with sound.
+  bool autoplay = 2;
+
+  // If true, the player interface controls will be hidden initially.
+  // Users can typically reveal the controls by moving the mouse over the player.
+  bool hidden = 3;
+}
+
+message GetVideoPlayerURLResponse {
+  // Direct URL to the video player.
+  // This URL can be used to access the video in a web browser
+  // or shared with users who have appropriate permissions.
+  string player_url = 1;
+
+  // HTML embed code in iframe format that can be inserted into web pages.
+  // This code allows the video to be embedded directly in third-party websites.
+  string html = 2;
+}
+
+message BatchGetVideoPlayerURLsRequest {
+  // ID of the channel containing the videos for which to generate player URLs.
+  string channel_id = 1 [(required) = true, (length) = "<=50"];
+
+  // List of video IDs for which to generate player URLs.
+  repeated string video_ids = 2 [(size) = "1-100", (length) = "<=50"];
+
+  // Optional player parameters to customize the playback experience.
+  // These parameters control initial player state such as mute, autoplay, and visibility of interface controls.
+  // These parameters will be applied to all generated player URLs.
+  VideoPlayerParams params = 3;
+
+  // For episodes with signed URL access, specifies how long the generated URL will be valid.
+  // If not provided, a default expiration duration will be used.
+  // This setting applies to all videos in the batch that use sign_url_access.
+  google.protobuf.Duration signed_url_expiration_duration = 4;
+}
+
+message BatchGetVideoPlayerURLsResponse {
+  // List of player URLs corresponding to the requested video IDs.
+  // The order of URLs matches the order of video IDs in the request.
+  repeated string player_urls = 1;
+}
+
+message GetVideoManifestsRequest {
+  // ID of the video for which to retrieve manifest URLs.
+  string video_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message GetVideoManifestsResponse {
+  // List of manifests available for the video.
+  // Different manifests may represent different streaming formats (e.g., HLS, DASH)
+  repeated Manifest manifests = 1;
+}
+
+message GenerateVideoDownloadURLRequest {
+    // ID of the video for which to generate a download URL.
+    string video_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message GenerateVideoDownloadURLResponse {
+    // Time-limited URL for downloading the original video file.
+    // This URL provides direct access to the source video file
+    // and can be used with standard download tools.
+    string download_url = 1;
+}

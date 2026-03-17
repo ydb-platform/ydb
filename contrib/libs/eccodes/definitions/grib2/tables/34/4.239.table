@@ -1,0 +1,17 @@
+# Code table 4.239 - Wetland Type
+0 0 Reserved
+1 1 Bog
+2 2 Drained
+3 3 Fen
+4 4 Floodplain
+5 5 Mangrove
+6 6 Marsh
+7 7 Rice
+8 8 Riverine
+9 9 Salt marsh
+10 10 Swamp
+11 11 Upland
+12 12 Wet tundra
+# 13-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

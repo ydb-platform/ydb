@@ -1,0 +1,8 @@
+exclude:
+  - lazy_object_proxy/utils_py3.py
+  - tests/test_async_py3.py
+  # В дистрибутиве два conftest.py и автоматика перетерает нужный,
+  # поэтому не прихраниваем нужный и из дистрибутива ничего не берем
+  - tests/conftest.py
+keep:
+  - tests/conftest.py

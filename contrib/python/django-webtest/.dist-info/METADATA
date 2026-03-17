@@ -1,0 +1,616 @@
+Metadata-Version: 2.4
+Name: django-webtest
+Version: 1.9.14
+Summary: Instant integration of Ian Bicking's WebTest (http://docs.pylonsproject.org/projects/webtest/) with Django's testing framework.
+Home-page: https://github.com/django-webtest/django-webtest
+Author: Mikhail Korobov
+Author-email: kmike84@gmail.com
+License: MIT license
+Project-URL: Code, https://github.com/django-webtest/django-webtest
+Project-URL: Issue Tracker, https://github.com/django-webtest/django-webtest/issues
+Project-URL: Changelog, https://github.com/django-webtest/django-webtest/blob/master/CHANGES.rst
+Keywords: django,webtest,pytest
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 4.2
+Classifier: Framework :: Django :: 5.0
+Classifier: Framework :: Django :: 5.1
+Classifier: Framework :: Django :: 5.2
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Software Development :: Testing
+License-File: LICENSE.txt
+License-File: AUTHORS.txt
+Requires-Dist: webtest>=1.3.3
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: project-url
+Dynamic: requires-dist
+Dynamic: summary
+
+==============
+django-webtest
+==============
+
+.. image:: https://img.shields.io/pypi/v/django-webtest.svg
+   :target: https://pypi.python.org/pypi/django-webtest
+   :alt: PyPI Version
+
+.. image:: https://img.shields.io/github/license/kmike/django-webtest.svg
+   :target: https://github.com/django-webtest/django-webtest/blob/master/LICENSE.txt
+   :alt: License
+
+.. image:: https://img.shields.io/travis/django-webtest/django-webtest/master.svg
+   :target: http://travis-ci.org/django-webtest/django-webtest
+   :alt: Build Status
+
+django-webtest is an app for instant integration of Ian Bicking's
+WebTest (http://docs.pylonsproject.org/projects/webtest/) with Django's
+testing framework.
+
+Installation
+============
+
+.. code-block:: console
+
+    $ pip install django-webtest
+
+Usage
+=====
+
+.. code-block:: python
+
+    from django_webtest import WebTest
+
+    class MyTestCase(WebTest):
+
+        # optional: we want some initial data to be able to login
+        fixtures = ['users', 'blog_posts']
+
+        # optional: default extra_environ for this TestCase
+        extra_environ = {'HTTP_ACCEPT_LANGUAGE': 'ru'}
+
+        def testBlog(self):
+            # pretend to be logged in as user `kmike` and go to the index page
+            index = self.app.get('/', user='kmike')
+
+            # All the webtest API is available. For example, we click
+            # on a <a href='/tech-blog/'>Blog</a> link, check that it
+            # works (result page doesn't raise exceptions and returns 200 http
+            # code) and test if result page have 'My Article' text in
+            # its body.
+            assert 'My Article' in index.click('Blog')
+
+django-webtest provides a django.test.TestCase subclass
+(``django_webtest.WebTest``) that creates ``webtest.TestApp`` around
+django wsgi interface and makes it available in tests as ``self.app``.
+
+It also features an optional ``user`` argument for ``self.app.get``,
+``self.app.post``, etc. to help making authorized requests. This argument
+should be a django.contrib.auth.models.User instance or a string with user's
+``username`` for the user who is supposed to be logged in. To log out again,
+call ``self.app.reset``, clearing all cookies.  To make a bunch of calls
+with the same user, call ``app.set_user(user)`` before your requests; if
+you want to disable that user, call ``app.get(..., user=None)`` for one
+request or ``app.set_user(None)`` to unset the user for all following calls.
+
+For 500 errors original traceback is shown instead of usual html result
+from handler500.
+
+You also get the ``response.templates`` and ``response.context`` goodness that
+is usually only available if you use Django's native test client. These
+attributes contain a list of templates that were used to render the response
+and the context used to render these templates. All of Django's native asserts (
+``assertFormError``,  ``assertTemplateUsed``, ``assertTemplateNotUsed``,
+``assertContains``, ``assertNotContains``, ``assertRedirects``) are
+also supported for WebTest responses.
+
+The session dictionary is available via ``self.app.session``, and has the
+same content than Django's native test client.
+
+Unlike Django's native test client CSRF checks are not suppressed
+by default so missing CSRF tokens will cause test fails (and that's good).
+
+If forms are submitted via WebTest forms API then all form fields (including
+CSRF token) are submitted automagically:
+
+.. code-block:: python
+
+    class AuthTest(WebTest):
+        fixtures = ['users.json']
+
+        def test_login(self):
+            form = self.app.get(reverse('auth_login')).form
+            form['username'] = 'foo'
+            form['password'] = 'bar'
+            response = form.submit().follow()
+            self.assertEqual(response.context['user'].username, 'foo')
+
+However if forms are submitted via raw POST requests using ``app.post`` then
+csrf tokens become hard to construct. CSRF checks can be disabled by setting
+``csrf_checks`` attribute to False in this case:
+
+.. code-block:: python
+
+    class MyTestCase(WebTest):
+        csrf_checks = False
+
+        def test_post(self):
+            self.app.post('/')
+
+When a subclass of Django's ``TransactionTestCase`` is desired,
+use ``django_webtest.TransactionWebTest``.
+
+For disabling CSRF checks in a ``pytest-django`` fixture, see
+`Usage with PyTest`_.
+
+All of these features can be easily set up manually (thanks to WebTest
+architecture) and they are even not neccessary for using WebTest with Django but
+it is nice to have some sort of integration instantly.
+
+See http://docs.pylonsproject.org/projects/webtest/ for API help. Webtest can
+follow links, submit forms, parse html, xml and json responses with different
+parsing libraries, upload files and more.
+
+Integration with django-rest-framework
+======================================
+
+If your project uses django-rest-framework__, the setting
+``REST_FRAMEWORK['AUTHENTICATION_CLASSES']`` will be patched
+automatically to include a class that links the rest-framework
+authentication system with ``app.get(user=user)``.
+
+.. __: https://www.django-rest-framework.org/
+
+Usage with PyTest
+=================
+
+You need to install `pytest-django <https://pytest-django.readthedocs.io>`_:
+
+.. code-block:: console
+
+    $ pip install pytest-django
+
+Then you can use ``django-webtest``'s fixtures:
+
+.. code-block:: python
+
+    def test_1(django_app):
+        resp = django_app.get('/')
+        assert resp.status_code == 200, 'Should return a 200 status code'
+
+We have a ``django_app_factory`` fixture we can use to create custom fixtures.
+For example, one that doesn't do CSRF checks:
+
+.. code-block:: python
+
+    # conftest.py
+
+    @pytest.fixture
+    def csrf_exempt_django_app(django_app_factory):
+        return django_app_factory(csrf_checks=False)
+
+``csrf_checks`` and ``extra_environ`` are the only arguments to
+``django_app_factory``.
+
+
+Why?
+====
+
+While django.test.client.Client is fine for its purposes, it is not
+well-suited for functional or integration testing. From Django's test client
+docstring:
+
+    This is not intended as a replacement for Twill/Selenium or
+    the like - it is here to allow testing against the
+    contexts and templates produced by a view, rather than the
+    HTML rendered to the end-user.
+
+WebTest plays on the same field as twill. WebTest has a nice API,
+is fast, small, talks to the django application via WSGI instead of HTTP
+and is an easy way to write functional/integration/acceptance tests.
+django-webtest is able to provide access to the names of rendered templates
+and template context just like native Django TestClient.
+
+Contributing
+============
+
+Development happens at github: https://github.com/django-webtest/django-webtest
+Issue tracker: https://github.com/django-webtest/django-webtest/issues
+
+Feel free to submit ideas, bugs or pull requests.
+
+Running tests
+-------------
+
+Make sure `tox`_ is installed and run:
+
+.. code-block:: console
+
+    $ tox
+
+from the source checkout.
+
+.. _tox: http://tox.testrun.org
+
+
+
+CHANGES
+=======
+
+1.9.14 (2025-10-06)
+-------------------
+
+- Do not return response from an exception handler, do it after. Fixed #137
+
+
+1.9.13 (2025-04-03)
+-------------------
+
+- Drop support for Django 3.x and 4.1
+- Add support for Django 5.2
+
+
+1.9.12 (2024-08-30)
+-------------------
+
+- Add support for Django 5
+
+- No longer compatible with assertFormError
+
+- pytest fixture now unpatch Django settings after fixture run
+
+
+1.9.11 (2023-09-18)
+-------------------
+
+- Add support for official Python & Django versions
+
+- Do not insert  WebtestAuthentication to the head of DEFAULT_AUTHENTICATION_CLASSES.
+
+1.9.10 (2022-03-02)
+-------------------
+
+- Add an optional WebTest backend that does not interfere with handling of permissions by
+  custom backends. Accessible via WEBTEST_AUTHENTICATION_BACKEND setting. Fixed #123
+
+
+1.9.9 (2021-12-27)
+------------------
+
+- Add Django 4 support
+
+- Remove Django 2 support
+
+
+1.9.8 (2021-10-06)
+------------------
+
+- Update testing configurations for Django and Python as per Django documentation
+    - https://docs.djangoproject.com/en/3.0/faq/install/#what-python-version-can-i-use-with-django
+
+- Add some useful metadata for the project's PyPI listing
+
+- Minor changes to documentation
+
+- Update getting session in DjangoTestApp.  Fixed #113
+
+- Remove py27/py35 support
+
+
+1.9.7 (2019-07-05)
+------------------
+
+- allow overriding HTTP_HOST with DjangoTestApp.__init__. Fixed #102
+
+
+1.9.6 (2019-06-07)
+------------------
+
+- rest_framework auth class. Fixed #98 #100
+
+
+1.9.5 (2019-05-31)
+------------------
+
+- Fix compatibility with django 3. See #96
+
+- Add integration with django-rest-framework auth
+
+- Add missing args to DjangoTestApp. Fixed #86
+
+
+1.9.4 (2018-10-27)
+------------------
+
+- py34 and Django 1.8 are no longer tested (but may works)
+
+- allow to use positionnal args; fixed #89
+
+- remove deprecated pytest.yield_fixture functions. use pytest.fixture instead;
+  fixed #88
+
+- Don't add duplicate WebtestUserMiddleware to the list of middlewares in
+  WebTestMixin. fixed #87
+
+- restore MIDDLEWARE_CLASSES support; fixed #84
+
+
+1.9.3 (2018-05-03)
+------------------
+
+- Passing `user=None` to get/post/etc. methods will clear a user
+  previously set with `set_user` instead of doing nothing.
+
+- Avoid sharing settings between tests in pytest plugin
+
+- Fix middleware settings name used
+
+
+1.9.2 (2017-05-17)
+------------------
+
+- silence warnings about is_authenticated on 1.11
+
+- include correct hostname (testserver) when using set_cookie
+
+
+1.9.1 (2017-03-09)
+------------------
+
+- Fix package description (multiline are no longer allowed by pypi)
+
+
+1.9.0 (2017-03-09)
+------------------
+
+- Backward incompatibility: positionnal arguments are no longer supported.
+  You'll need to replace them by keywords arguments.
+
+- Added support for Django 1.11
+
+- Dropped support for Django <= 1.7
+
+- Dropped support for Python 2.6
+
+- Changed value of `HTTP_HOST` header from `localhost` to `testserver`, to
+  match behaviour of Django test client.
+
+- Fixed `DjangoTestApp.options`
+
+- Added `DjangoTestApp.head`
+
+- Added pytest fixtures
+
+
+1.8.0 (2016-09-14)
+------------------
+
+- Fixed issue #40 - combining ``app.get`` ``auto_follow=True`` with other
+  keyword args.
+
+- Add compatibility to the MIDDLEWARE setting introduced in django 1.10
+
+- Drop support for django 1.2
+
+1.7.9 (2016-04-19)
+------------------
+
+- Add set_user() to allow to set a user globally for the app
+
+- Allow 'click' to be given a user param
+
+- Mention testapp.reset() in readme
+
+- Allow to use ``json_`` methods
+
+1.7.8 (2015-04-21)
+------------------
+
+- setup.py is switched to setuptools; WebTest is now installed automatically
+  (thanks Eric Araujo);
+- importlib from stdlib is used when available, for django 1.9 compatibility
+  (thanks Helen Sherwood-Taylor);
+- django-webtest's own tests are fixed to work in django 1.6+;
+- https://bitbucket.org/kmike/django-webtest repository is no longer supported.
+
+1.7.7 (2014-03-25)
+------------------
+
+- Fix installation for Python 3.x on systems with C locales.
+
+1.7.6 (2014-01-20)
+------------------
+
+- DjangoTestApp methods pass all custom keyword arguments to webtest.TestApp;
+  this allows to use ``xhr=True`` feature (thanks Max Kharandziuk).
+- Travis CI testing fixes (thanks Darian Moody).
+
+1.7.5 (2013-07-17)
+------------------
+
+- OPTIONS method is fixed;
+- added workaround for DELETE method warnings
+  (see https://github.com/Pylons/webtest/issues/50).
+
+1.7.4 (2013-07-14)
+------------------
+
+- Really add ``TransactionWebTest`` base class (thanks Julien Aubert).
+
+1.7.3 (2013-07-07)
+------------------
+
+- Added support for PATCH and OPTIONS HTTP methods (thanks Will Bradley).
+
+1.7.2 (2013-06-27)
+------------------
+
+- ``TransactionWebTest`` base class is added (thanks Iurii Kriachko).
+
+1.7.1 (2013-06-11)
+------------------
+
+- Added support for non-ascii usernames.
+
+1.7 (2013-05-23)
+----------------
+
+- Added support for django 1.6 (thanks Carl Meyer).
+
+1.6.1 (2013-03-31)
+------------------
+
+- Added support for django 1.5+ custom user models (thanks Gautier Hayoun).
+
+1.6 (2013-03-07)
+----------------
+
+- Added ability to pass a custom response_class and app_class to WebTest
+  (thanks Bruno Renié);
+- Added case-insensitive header access in DjangoWebtestResponse (thanks
+  Bruno Renié).
+
+1.5.7 (2013-02-27)
+------------------
+
+- WebTest 2.0 support.
+
+1.5.6 (2013-01-21)
+------------------
+
+- django 1.5 support: transaction handling is fixed (thanks Marco Braak).
+
+1.5.5 (2013-01-14)
+------------------
+
+- Fixed django 1.5 support: DjangoWebtestResponse.streaming attribute
+  is added (thanks David Winterbottom).
+
+1.5.4 (2012-09-13)
+------------------
+
+- fix django 1.5 issues with AdminMediaHandler (thanks Tai Lee);
+- tox.ini is updated to use latest django versions and the
+  official trunk with python3 support;
+- django 1.5 SimpleCookie issues are fixed.
+
+1.5.3 (2012-04-25)
+------------------
+
+- self.assertRedirects is fixed for authenticated requests.
+
+1.5.2 (2012-04-01)
+------------------
+
+- if AuthenticationMiddleware is not in a middleware list,
+  WebtestUserMiddleware is put to the end of middlewares in order to
+  provide better backward compatibility with 1.4.x in case of custom
+  auth middlewares.
+
+1.5.1 (2012-03-22)
+------------------
+
+- Fixed handling of forms with method="get". Thanks Jeroen Vloothuis.
+
+1.5 (2012-02-24)
+----------------
+
+- WebtestUserMiddleware is inserted after AuthenticationMiddleware, not to
+  the end of middleware list (thanks bigkevmcd);
+- don't list python 2.5 as supported because WebOb dropped 2.5 support;
+- python 3 support;
+- test running using tox.
+
+1.4.4 (2012-02-08)
+------------------
+
+- 'user' parameter for ``self.app.put`` and ``self.app.delete`` methods (thanks
+  Ruslan Popov).
+
+1.4.3 (2011-09-27)
+------------------
+
+- The django session dictionary is available via ``self.app.session``.
+
+1.4.2 (2011-08-26)
+------------------
+
+- ``REMOTE_ADDR`` is now ``'127.0.0.1'`` by default. This is how
+  standard django's test client behave.
+
+  Please note that this can slow tests down and cause other side effects
+  if django-debug-toolbar 0.9.x is installed+configured and
+  ``INTERNAL_IPS`` contain ``'127.0.0.1'`` because debug toolbar will
+  become turned on during tests. The workaround is to remove
+  django-debug-toolbar middleware during tests in your test settings::
+
+      DEBUG_MIDDLEWARE = 'debug_toolbar.middleware.DebugToolbarMiddleware'
+      if DEBUG_MIDDLEWARE in MIDDLEWARE_CLASSES:
+          MIDDLEWARE_CLASSES.remove(DEBUG_MIDDLEWARE)
+
+
+1.4.1 (2011-06-29)
+------------------
+
+- ``self.renew_app()`` method for resetting the 'browser' inside tests.
+
+1.4 (2011-06-23)
+----------------
+
+- Better auth implementation;
+- support for assertRedirects, assertContains and assertNotContains.
+
+1.3 (2010-12-31)
+----------------
+
+- Django 1.3 compatibility: test responses are now having 'templates' attribute;
+- Django 1.3 compatibility: the way exceptions are handled is changed;
+- auto_follow parameter for app.get method (redirect chains will be
+  auto-followed with auto_follow=True).
+
+1.2.1 (2010-08-24)
+------------------
+
+- REMOTE_USER authorization can be disabled.
+
+1.2 (2010-08-21)
+----------------
+
+- ``response.template`` and ``response.context`` goodness (thanks Gregor Müllegger);
+- tests (thanks Gregor Müllegger);
+- csrf checks are now optional (thanks Gregor Müllegger).
+
+1.1.1 (2010-07-16)
+------------------
+
+- User instance can be passed to `get` and `post` methods instead
+  of user's username.
+
+1.1 (2010-06-15)
+----------------
+
+- Original traceback instead of html 500 error page;
+- per-TestCase extra_environ (thanks Gael Pasgrimaud);
+- fixed a bug with app.post parameters (thanks anonymous).
+
+
+1.0 (2010-04-20)
+----------------
+Initial release (thanks Ian Bicking for WebTest).

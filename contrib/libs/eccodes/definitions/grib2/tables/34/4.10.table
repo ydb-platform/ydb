@@ -1,0 +1,22 @@
+# Code table 4.10 - Type of statistical processing
+0 avg Average
+1 accum Accumulation
+2 max Maximum
+3 min Minimum
+4 diff Difference (value at the end of time range minus value at the beginning)
+5 rms Root mean square
+6 sd Standard deviation
+7 cov Covariance (temporal variance)
+8 8 Difference (value at the start of time range minus value at the end)
+9 ratio Ratio
+10 10 Standardized anomaly
+11 11 Summation
+12 12 Return period
+13 13 Median
+# 14-99 Reserved
+100 100 Severity
+101 101 Mode
+102 102 Index processing
+# 103-191 Reserved
+# 192-254 Reserved for local use
+255 missing Missing

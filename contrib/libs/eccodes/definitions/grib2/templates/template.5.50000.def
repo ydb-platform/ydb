@@ -1,0 +1,40 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 5.50000, Spherical harmonics data - complex packing (IEEE)
+
+include "grib2/templates/template.5.packing.def"
+
+if (gribex_mode_on()) {
+  transient computeLaplacianOperator=0 : hidden;
+} else {
+  transient computeLaplacianOperator=1 : hidden;
+}
+
+meta _numberOfValues spectral_truncation(J,K,M,numberOfValues): read_only;
+
+constant laplacianScalingFactorUnset = -2147483647;
+signed[4] laplacianScalingFactor : edition_specific ;
+
+meta data.laplacianOperator scale(laplacianScalingFactor,one,million,truncateLaplacian) ;
+meta laplacianOperatorIsSet evaluate(laplacianScalingFactor != laplacianScalingFactorUnset && !computeLaplacianOperator);
+
+transient JS= 20 ;
+transient KS=20 ;
+transient MS=20 ;
+transient subSetJ=0 ;
+transient subSetK=0 ;
+transient subSetM=0 ;
+
+unsigned[4] TS ;
+
+meta _TS spectral_truncation(J,K,M,TS) : read_only,hidden;
+
+# This is read_only until we support other values
+codetable[1] unpackedSubsetPrecision ('5.7.table',masterDir,localDir) = 2 : dump;
+
+alias precisionOfTheUnpackedSubset=unpackedSubsetPrecision;
+concept accuracy(zero) {
+  32  = { unpackedSubsetPrecision = 1; }
+  64  = { unpackedSubsetPrecision = 2; }
+  128 = { unpackedSubsetPrecision = 3; }
+} : long_type, no_copy;

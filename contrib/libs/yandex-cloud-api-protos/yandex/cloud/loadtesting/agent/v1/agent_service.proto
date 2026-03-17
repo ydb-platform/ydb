@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.agent.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/agent/v1;agent";
+option java_package = "yandex.cloud.api.loadtesting.agent.v1";
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+
+service AgentService {
+
+  // Claims status for the specified agent.
+  rpc ClaimStatus (ClaimAgentStatusRequest) returns (ClaimAgentStatusResponse) {
+    option (google.api.http) = { post: "/loadtesting/agent/v1/agents/{agent_instance_id}/claimStatus" body: "*" };
+  };
+  rpc ReportEventLogs (ReportEventLogsRequest) returns (ReportEventLogsResponse) {
+    option (google.api.http) = { post: "/loadtesting/agent/v1/agents/{agent_instance_id}/reportEventLogs" body: "*" };
+  }
+
+}
+
+message ClaimAgentStatusRequest {
+  string agent_instance_id = 1;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    READY_FOR_TEST = 1;
+    PREPARING_TEST = 2;
+    TESTING = 3;
+    TANK_FAILED = 4;
+    STOPPED = 5;
+    UPLOADING_ARTIFACTS = 6;
+    ERROR = 7;
+  }
+  Status status = 2;
+  string status_message = 3;
+}
+
+message ClaimAgentStatusResponse {
+  int64 code = 1;
+}
+
+message ReportEventLogsRequest {
+  string agent_instance_id = 1  [(yandex.cloud.required) = true, (yandex.cloud.length) = "<=50"];
+  string idempotency_key = 2  [(yandex.cloud.required) = true, (yandex.cloud.length) = "<=36"];
+  repeated EventLog events = 3  [(yandex.cloud.size) = "<=1000"];
+}
+
+message ReportEventLogsResponse {
+}
+
+message EventLog {
+  enum Severity {
+    SEVERITY_UNSPECIFIED = 0;
+    DEBUG = 1;
+    INFO = 2;
+    WARNING = 3;
+    ERROR = 4;
+    FATAL = 5;
+  }
+
+  string message = 1  [(yandex.cloud.required) = true, (yandex.cloud.length) = "<=2000"];
+  Severity severity = 2;
+  google.protobuf.Timestamp timestamp = 3  [(yandex.cloud.required) = true];
+  map<string, string> metadata = 4;
+}

@@ -1,0 +1,28 @@
+VERS_1 {
+	global:
+		sctp_getpaddrs;
+		sctp_freepaddrs;
+		sctp_getladdrs;
+		sctp_freeladdrs;
+		sctp_getaddrlen;
+		sctp_bindx;
+		sctp_connectx;
+		sctp_opt_info;
+		sctp_peeloff;
+		sctp_recvmsg;
+		sctp_recvv;
+		sctp_sendmsg;
+		sctp_sendv;
+		sctp_send;
+
+	local:
+		*;
+};
+
+VERS_2 {
+	global:	sctp_connectx;
+} VERS_1;
+
+VERS_3 {
+	global:	sctp_connectx;
+} VERS_2;

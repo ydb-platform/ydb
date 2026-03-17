@@ -1,0 +1,13 @@
+#!/bin/sh
+
+MYSQL=$(which mysql 2>/dev/null)
+if [ "x$MYSQL" = "x" ]; then
+    exec >&2
+    echo "No mysql binary found, please install mysql-client package:
+
+$ sudo apt-get install mysql-client
+"
+    exit 1
+fi
+
+exec $MYSQL "$@"

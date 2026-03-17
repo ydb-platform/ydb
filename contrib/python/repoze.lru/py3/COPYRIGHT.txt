@@ -1,0 +1,3 @@
+Copyright (c) 2009 Agendaless Consulting and Contributors.
+(http://www.agendaless.com), All Rights Reserved
+

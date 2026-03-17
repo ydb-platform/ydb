@@ -1,0 +1,19 @@
+--- contrib/python/extractcode/extractcode/cli.py	(index)
++++ contrib/python/extractcode/extractcode/cli.py	(working tree)
+@@ -9,6 +9,7 @@
+ 
+ import os
+ import functools
++import importlib.resources
+ 
+ import click
+ click.disable_unicode_literals_warning = True
+@@ -68,7 +69,7 @@ Visit https://aboutcode.org and https://github.com/nexB/extractcode/ for support
+ '''
+ 
+ notice_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'NOTICE')
+-notice_text = open(notice_path).read()
++notice_text = importlib.resources.read_text(__package__, 'NOTICE')
+ 
+ 
+ def print_about(ctx, param, value):

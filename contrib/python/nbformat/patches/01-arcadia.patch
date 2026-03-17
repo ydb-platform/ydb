@@ -1,0 +1,7 @@
+--- contrib/python/nbformat/nbformat/validator.py	(index)
++++ contrib/python/nbformat/nbformat/validator.py	(working tree)
+@@ -94,1 +95,3 @@ def _get_schema_json(v, version=None, version_minor=None):
+-    with Path(schema_path).open(encoding="utf8") as f:
++    import importlib.resources, os
++    schema_path = os.path.relpath(schema_path, os.path.dirname(__file__))
++    with importlib.resources.files(__package__).joinpath(schema_path).open(encoding="utf8") as f:

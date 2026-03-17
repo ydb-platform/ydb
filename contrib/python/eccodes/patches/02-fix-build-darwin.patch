@@ -1,0 +1,11 @@
+--- contrib/python/eccodes/ya.make	(index)
++++ contrib/python/eccodes/ya.make	(working tree)
+@@ -19,6 +19,8 @@ ADDINCL(
+     contrib/libs/eccodes/src
+ )
+ 
++NO_COMPILER_WARNINGS()
++
+ NO_LINT()
+ 
+ PY_REGISTER(

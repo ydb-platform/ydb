@@ -1,0 +1,8 @@
+0 0 Estimated precipitation (kg m-2)
+1 1 Instantaneous rain rate (kg m-2 s-1)
+2 2 Cloud top height (m)
+3 3 Cloud top height quality indicator (Code table 4.219)
+4 4 Estimated u component of wind (m s-1)
+5 5 Estimated v component of wind (m s-1)
+255 255 Missing
+

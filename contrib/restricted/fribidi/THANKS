@@ -1,0 +1,40 @@
+Thanks to:
+
+Behdad Esfahbod <behdad@behdad.org>
+	* Author and maintainer of the entire 0.19 release series up
+        to Unicode 6.3 support.
+
+Dov Grobgeld <dov.grobgeld@gmail.com>
+	* Initial author, maintainer before the 0.19 releases. Implementation
+        of the BiDi algorithms changes in Unicode 6.3. Current maintainer.
+   
+Behnam Esfahbod <behnam@esfahbod.info>
+	* Testing and auditing code.
+
+Tim-Philipp Müller <tim@centricular.com>
+        * Provided meson compilation support.
+
+Khaled Hosny <khaledhosny@eglug.org>
+        * Provided lots of cleanup and release engineering support for recent
+        versions.
+
+And for the previous versions of FriBidi (pre 2002), thanks to:
+
+Tomas Frydrych <tomas@frydrych.uklinux.net>
+	* Contirbuted patches for compiling GNU FriBidi under other OSes.
+
+Franck Portaneri
+	* For the Mozilla BiDi languages support document;
+
+Roozbeh Pournader <roozbeh@sharif.edu>
+	* Fixed things here and there.
+
+Pablo Saratxaga <pablo@mandrakesoft.com>  
+	* Contributed several Arabic charset converters.
+
+Owen Tayler <otaylor@redhat.com>
+	* Contributed very important memory leak and speed patches.
+
+Omer Zak <w1@zak.co.il>
+	* Contributed several bug fixes, and several considerations for
+	  embedded systems.

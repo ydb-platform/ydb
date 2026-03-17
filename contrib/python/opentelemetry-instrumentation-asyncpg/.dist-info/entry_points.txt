@@ -1,0 +1,2 @@
+[opentelemetry_instrumentor]
+asyncpg = opentelemetry.instrumentation.asyncpg:AsyncPGInstrumentor

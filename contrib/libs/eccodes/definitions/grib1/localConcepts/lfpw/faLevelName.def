@@ -1,0 +1,36 @@
+'H' = {
+  indicatorOfParameter                               =             255;
+  indicatorOfTypeOfLevel                             =             105;
+  table2Version                                      =             255;
+}
+'P' = {
+  ZLMULT                                             =   1.0000000e-02;
+  indicatorOfParameter                               =             255;
+  indicatorOfTypeOfLevel                             =             100;
+  table2Version                                      =             255;
+}
+'V' = {
+  ZLMULT                                             =   1.0000000e+02;
+  indicatorOfParameter                               =             255;
+  indicatorOfTypeOfLevel                             =             117;
+  table2Version                                      =             255;
+}
+'KT' = {
+  ZLBASE                                             =   1.5000000e+01;
+  ZLMULT                                             =   1.0000000e+02;
+  indicatorOfParameter                               =             255;
+  indicatorOfTypeOfLevel                             =             115;
+  table2Version                                      =             255;
+}
+'KB' = {
+  ZLBASE                                             =   1.5000000e+01;
+  ZLMULT                                             =   1.0000000e+02;
+  indicatorOfParameter                               =             255;
+  indicatorOfTypeOfLevel                             =             115;
+  table2Version                                      =             255;
+}
+'default' = {
+  indicatorOfParameter                               =             255;
+  indicatorOfTypeOfLevel                             =             255;
+  table2Version                                      =             255;
+}

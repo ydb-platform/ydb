@@ -1,0 +1,81 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; Context Navigation{% endblock %}
+
+{% block extrahead %}
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(grp.jQuery);
+    </script>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Navigation</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Navigation</h1>
+    <div class="g-d-24">
+        <div class="grp-doc-description">
+            <p>As part of the header, <span class="grp-doc-id">#grp-navigation</span> wraps your admin title and user-tools.</p>
+        </div>
+    </div>
+    <div class="g-d-c">
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Admin Title</h1>
+                    <p>The title of your admin interface is defined in <span class="grp-doc-file">settings.py</span> and will be shown as <span class="grp-doc-dom"><span>h1 id="grp-admin-title"</span></span>.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<h1 id="grp-admin-title">Grappelli TEST –locale</h1>
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>User-Tools</h1>
+                    <p>The user-tools are defined as <span class="grp-doc-dom"><span>ul id="grp-user-tools"</span></span> and contain options for an authenticated user and a possible link to the django-documentation. As you usually don't need to customize them we will give no further explanation.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<ul id="grp-user-tools">
+    <li class="grp-user-options-container grp-collapse grp-closed">
+        <a href="javascript://" class="user-options-handler grp-collapse-handler">Username</a>
+        <ul class="grp-user-options">
+            <li><a href="/admin/password_change/">Change Password</a></li>
+            <li><a href="/admin/logout/">Logout</a></li>
+        </ul>
+    </li>
+    <li><a href="/admin/doc/">Documentation</a></li>
+</ul>
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+    </div>
+{% endblock %}
+

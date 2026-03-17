@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.clickhouse.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/clickhouse/v1;clickhouse";
+option java_package = "yandex.cloud.api.mdb.clickhouse.v1";
+
+message FormatSchema {
+  // Format schema name.
+  string name = 1;
+
+  // ClickHouse cluster ID.
+  string cluster_id = 2;
+
+  // Schema type. Possible values are the following:
+  //
+  // * FORMAT_SCHEMA_TYPE_PROTOBUF - [Protobuf](https://protobuf.dev/) data format (including [ProtobufSingle](https://clickhouse.com/docs/en/interfaces/formats#protobufsingle)).
+  // * FORMAT_SCHEMA_TYPE_CAPNPROTO - [Cap'n Proto](https://capnproto.org/) data format.
+  FormatSchemaType type = 3;
+
+  // Link to the file of a format schema in Yandex Object Storage. Managed Service for ClickHouse works only with format schemas imported to Object Storage.
+  string uri = 4;
+}
+
+enum FormatSchemaType {
+  FORMAT_SCHEMA_TYPE_UNSPECIFIED = 0;
+
+  FORMAT_SCHEMA_TYPE_PROTOBUF = 1;
+
+  FORMAT_SCHEMA_TYPE_CAPNPROTO = 2;
+}

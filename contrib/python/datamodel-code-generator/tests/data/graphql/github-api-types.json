@@ -1,0 +1,14 @@
+{
+  "Date": {
+    "py_type": "date"
+  },
+  "DateTime": {
+    "py_type": "datetime"
+  },
+  "BigInt": {
+    "py_type": "int"
+  },
+  "PreciseDateTime": {
+    "py_type": "datetime"
+  }
+}

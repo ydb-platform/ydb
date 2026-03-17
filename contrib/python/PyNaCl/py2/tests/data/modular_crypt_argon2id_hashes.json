@@ -1,0 +1,102 @@
+[
+  {
+    "iters": 1,
+    "maxmem": 131072,
+    "dgst_len": 30,
+    "passwd": "6GaBkxnU",
+    "salt": "SIWAuVklLU",
+    "construct": "argon2id",
+    "pwhash": "$argon2id$v=19$m=131072,t=1,p=1$U0lXQXVWa2xMVQ$+EaGmstgtSas9elKIXLVqcybaYJIBWifLeLWkFAZ",
+    "mode": "crypt"
+  },
+  {
+    "iters": 3,
+    "maxmem": 65536,
+    "dgst_len": 31,
+    "passwd": "JU1K5W8rzP1K",
+    "salt": "9Jve1X5OQ2tp",
+    "construct": "argon2id",
+    "pwhash": "$argon2id$v=19$m=65536,t=3,p=1$OUp2ZTFYNU9RMnRw$7yApdAtgdaPQZWisUa58lb328fR+kgznHqQqcafaCg",
+    "mode": "crypt"
+  },
+  {
+    "iters": 2,
+    "maxmem": 131072,
+    "dgst_len": 20,
+    "passwd": "zBqdT3A3WReQFO",
+    "salt": "ahTuAAVQ6",
+    "construct": "argon2id",
+    "pwhash": "$argon2id$v=19$m=131072,t=2,p=1$YWhUdUFBVlE2$jLdOXTu7R5XVuLKyHoEKVojIYsM",
+    "mode": "crypt"
+  },
+  {
+    "iters": 5,
+    "maxmem": 262144,
+    "dgst_len": 30,
+    "passwd": "FF3gKe0hL",
+    "salt": "XYpBw246J",
+    "construct": "argon2id",
+    "pwhash": "$argon2id$v=19$m=262144,t=5,p=1$WFlwQncyNDZK$8D7TbKnOi9PMuhooK9HUJLTKdPBXD9CZ5/dE4p0r",
+    "mode": "crypt"
+  },
+  {
+    "iters": 4,
+    "maxmem": 131072,
+    "dgst_len": 20,
+    "passwd": "tUhcdnSMH",
+    "salt": "qGQAKPomg08",
+    "construct": "argon2id",
+    "pwhash": "$argon2id$v=19$m=131072,t=4,p=1$cUdRQUtQb21nMDg$7kj3MDpz4aOZazen9BrazcIiMQE",
+    "mode": "crypt"
+  },
+  {
+    "iters": 5,
+    "maxmem": 131072,
+    "dgst_len": 19,
+    "passwd": "oxx700QV8RVHQA2l",
+    "salt": "r8R7NqsNyb",
+    "construct": "argon2id",
+    "pwhash": "$argon2id$v=19$m=131072,t=5,p=1$cjhSN05xc055Yg$yHz0aPvCukbkMw1oXaKejEkG6Q",
+    "mode": "crypt"
+  },
+  {
+    "iters": 4,
+    "maxmem": 262144,
+    "dgst_len": 27,
+    "passwd": "zTKzEfuKI4",
+    "salt": "ajbUgkhOX9bxaD",
+    "construct": "argon2id",
+    "pwhash": "$argon2id$v=19$m=262144,t=4,p=1$YWpiVWdraE9YOWJ4YUQ$h0NTYkqWF6qEpVnLP4Bqsk7oYjG4DNyn6+q0",
+    "mode": "crypt"
+  },
+  {
+    "iters": 2,
+    "maxmem": 65536,
+    "dgst_len": 21,
+    "passwd": "DicnLJsOvUTGBSAx",
+    "salt": "djp2efSTgmrz",
+    "construct": "argon2id",
+    "pwhash": "$argon2id$v=19$m=65536,t=2,p=1$ZGpwMmVmU1RnbXJ6$Ar5DxZsxCAjUrGrBZPsa0vOVhjvk",
+    "mode": "crypt"
+  },
+  {
+    "iters": 1,
+    "maxmem": 32768,
+    "dgst_len": 30,
+    "passwd": "HyURt4Ofuwivg8",
+    "salt": "9tArBEgW8GU",
+    "construct": "argon2id",
+    "pwhash": "$argon2id$v=19$m=32768,t=1,p=1$OXRBckJFZ1c4R1U$l/6y/kKeMPSk3WQb+bM4ir3bGj5yxj+/r6Wi/D8A",
+    "mode": "crypt"
+  },
+  {
+    "iters": 2,
+    "maxmem": 65536,
+    "dgst_len": 31,
+    "passwd": "ikt3keViPK0S",
+    "salt": "4Wh4LpHrUy",
+    "construct": "argon2id",
+    "pwhash": "$argon2id$v=19$m=65536,t=2,p=1$NFdoNExwSHJVeQ$MrbDWj1XHpotj2+n6vs5KF+2E0oUGt9Ge/mo0IJ0tA",
+    "mode": "crypt"
+  }
+]

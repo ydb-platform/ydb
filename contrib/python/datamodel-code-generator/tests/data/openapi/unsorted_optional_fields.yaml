@@ -1,0 +1,19 @@
+openapi: 3.0.3
+info:
+  title: Title
+  description: Title
+  version: 1.0.0
+servers:
+  - url: 'https'
+paths:
+components:
+  schemas:
+   Note:
+      type: object
+      required:
+        - text
+      properties:
+        author:
+          type: string
+        text:
+          type: string

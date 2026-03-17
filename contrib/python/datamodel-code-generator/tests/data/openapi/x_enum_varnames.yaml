@@ -1,0 +1,61 @@
+openapi: "3.0.0"
+components:
+  schemas:
+    string:
+      type: string
+      enum:
+        - 'dog'
+        - 'cat'
+        - 'snake'
+    unknown_type_string:
+      enum:
+        - 'dog'
+        - 'cat'
+        - 'snake'
+    named_string:
+      type: string
+      description: Operator to filter data by.
+      enum:
+        - '='
+        - '!='
+        - '>'
+        - '<'
+        - '>='
+        - '<='
+      x-enum-varnames:
+        - EQ
+        - NE
+        - GT
+        - LT
+        - GE
+        - LE
+      example: '>='
+      xml:
+        attribute: true
+    named_number:
+      type: number
+      description: Operator to filter data by.
+      enum:
+        - 1
+        - 2
+        - 3
+      x-enum-varnames:
+        - one
+        - two
+        - three
+      example: 1
+    number:
+      type: number
+      description: Operator to filter data by.
+      enum:
+        - 1
+        - 2
+        - 3
+      example: 1
+    unknown_type_number:
+      description: Operator to filter data by.
+      enum:
+        - 1
+        - 2
+        - 3
+      example: 1

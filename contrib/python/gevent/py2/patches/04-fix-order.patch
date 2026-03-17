@@ -1,0 +1,15 @@
+--- contrib/python/gevent/py2/ya.make	(index)
++++ contrib/python/gevent/py2/ya.make	(working tree)
+@@ -131,10 +131,10 @@ PY_SRCS(
+     gevent/timeout.py
+     gevent/util.py
+     gevent/win32util.py
+-    CYTHON_C
+-    gevent/resolver/cares.pyx
+     CYTHON_C_H
+     gevent/libev/corecext.pyx
++    CYTHON_C
++    gevent/resolver/cares.pyx
+     CYTHONIZE_PY
+     gevent/_abstract_linkable.py=gevent._gevent_c_abstract_linkable
+     gevent/_greenlet_primitives.py=gevent._gevent_c_greenlet_primitives

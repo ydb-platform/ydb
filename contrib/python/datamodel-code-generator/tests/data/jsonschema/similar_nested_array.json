@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ObjectA": {
+      "properties": {
+        "data": {
+          "items": {
+            "properties": {
+              "keyA": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "ObjectB": {
+      "properties": {
+        "data": {
+          "items": {
+            "properties": {
+              "keyB": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "ObjectC": {
+      "properties": {
+        "keyC": {
+          "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "nestedA": {
+                    "type": "string"
+                  }
+                }
+              },
+            {
+                "type": "object",
+                "properties": {
+                  "nestedB": {
+                    "type": "string"
+                  }
+                }
+              }
+          ]
+        }
+      }
+    },
+    "ObjectD": {
+      "properties": {
+        "keyC": {
+          "items": [
+              {
+                "type": "object",
+                "properties": {
+                  "nestedA": {
+                    "type": "string"
+                  }
+                }
+              },
+            {
+                "type": "object",
+                "properties": {
+                  "nestedB": {
+                    "type": "string"
+                  }
+                }
+              },
+            {
+                "type": "string",
+                "enum": ["dog", "cat", "snake"]
+              },
+                        {
+                "type": "string",
+                "enum": ["orange", "apple", "milk"]
+              }
+          ]
+        }
+      }
+    }
+  }
+}

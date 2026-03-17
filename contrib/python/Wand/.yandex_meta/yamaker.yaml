@@ -1,0 +1,8 @@
+requirements:
+  - contrib/libs/ImageMagick
+  - contrib/libs/ImageMagick/wand
+  - library/python/symbols/registry
+keep:
+  - syms.cpp
+mark_as_sources:
+  - syms.cpp

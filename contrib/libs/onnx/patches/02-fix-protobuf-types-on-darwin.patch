@@ -1,0 +1,47 @@
+Cast `i64` variables to `int64_t` because they are different types on Darwin (see IGNIETFERRO-1897).
+--- contrib/libs/onnx/onnx/defs/math/defs.cc	(index)
++++ contrib/libs/onnx/onnx/defs/math/defs.cc	(working tree)
+@@ -2193,7 +2193,7 @@ bool BuildContextDependentFunctionBody(
+       }
+     }
+   } else {
+-    builder.Const1D("const_ignore_index", ctx.getAttribute("ignore_index")->i());
++    builder.Const1D("const_ignore_index", static_cast<int64_t>(ctx.getAttribute("ignore_index")->i()));
+     builder.Add(R"(
+       const_zero_target_typed = Sub (expanded_target, expanded_target)
+       expanded_target_int64 = Cast <to = 7> (expanded_target)
+--- contrib/libs/onnx/onnx/defs/math/old.cc	(index)
++++ contrib/libs/onnx/onnx/defs/math/old.cc	(working tree)
+@@ -68,7 +68,7 @@ bool BuildContextDependentFunctionBody_opset13(
+       }
+     }
+   } else {
+-    builder.Const1D("const_ignore_index", ctx.getAttribute("ignore_index")->i());
++    builder.Const1D("const_ignore_index", static_cast<int64_t>(ctx.getAttribute("ignore_index")->i()));
+     builder.Add(R"(
+       const_zero_target_typed = Sub (expanded_target, expanded_target)
+       expanded_target_int64 = Cast <to = 7> (expanded_target)
+--- contrib/libs/onnx/onnx/defs/tensor/defs.cc	(index)
++++ contrib/libs/onnx/onnx/defs/tensor/defs.cc	(working tree)
+@@ -1028,8 +1028,8 @@ ONNX_OPERATOR_SET_SCHEMA(
+           // Only supports axis = 0 since the data comes from Shape
+           if ((!axes_specified || (axes->dim_size() == 1 && axes->dim(0).dim_value() == 0)) &&
+               starts->dim_size() == 1 && ends->dim_size() == 1) {
+-            auto start = starts->dim(0).dim_value();
+-            auto end = ends->dim(0).dim_value();
++            int64_t start = starts->dim(0).dim_value();
++            int64_t end = ends->dim(0).dim_value();
+             int64_t step = 1; // Default step is 1
+             if (steps_specified) {
+               if (steps->dim_size() != 1) {
+--- contrib/libs/onnx/onnx/defs/tensor/old.cc	(index)
++++ contrib/libs/onnx/onnx/defs/tensor/old.cc	(working tree)
+@@ -5167,7 +5167,7 @@ ONNX_OPERATOR_SET_SCHEMA(
+               // handle some simple cases.
+               const auto& dim = ctx.getInputType(0)->tensor_type().shape().dim((int)i);
+               if (dim.has_dim_value()) {
+-                auto dim_value = dim.dim_value();
++                int64_t dim_value = dim.dim_value();
+                 if (starts[j] < 0) {
+                   starts[j] += dim_value;
+                 }

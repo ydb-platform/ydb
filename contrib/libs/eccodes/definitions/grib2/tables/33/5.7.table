@@ -1,0 +1,7 @@
+# Code table 5.7 - Precision of floating-point numbers
+0 0 Reserved
+1 1 IEEE 32-bit (I=4 in section 7)
+2 2 IEEE 64-bit (I=8 in section 7)
+3 3 IEEE 128-bit (I=16 in section 7)
+# 4-254 Reserved
+255 255 Missing

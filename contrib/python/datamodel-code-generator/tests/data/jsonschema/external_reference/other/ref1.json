@@ -1,0 +1,9 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "anyOf": [
+        {
+            "$ref": "ref2.json#/"
+        },
+        {"type": "null"}
+    ]
+}

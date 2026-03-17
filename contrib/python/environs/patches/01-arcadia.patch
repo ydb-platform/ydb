@@ -1,0 +1,23 @@
+--- contrib/python/environs/environs/__init__.py	(index)
++++ contrib/python/environs/environs/__init__.py	(working tree)
+@@ -334,3 +334,3 @@ class Env:
+-    dj_db_url = _func2method(_dj_db_url_parser, "dj_db_url")
+-    dj_email_url = _func2method(_dj_email_url_parser, "dj_email_url")
+-    dj_cache_url = _func2method(_dj_cache_url_parser, "dj_cache_url")
++    #dj_db_url = _func2method(_dj_db_url_parser, "dj_db_url")
++    #dj_email_url = _func2method(_dj_email_url_parser, "dj_email_url")
++    #dj_cache_url = _func2method(_dj_cache_url_parser, "dj_cache_url")
+@@ -367,12 +367,7 @@ class Env:
+         """
+         if path is None:
+             # By default, start search from the same directory this function is called
+-            current_frame = inspect.currentframe()
+-            if current_frame is None:
+-                raise RuntimeError("Could not get current call frame.")
+-            frame = current_frame.f_back
+-            assert frame is not None  # noqa: S101
+-            caller_dir = Path(frame.f_code.co_filename).parent.resolve()
++            caller_dir = Path(os.path.realpath('.')).resolve()  # Start from current directory in arcadia build
+             start = caller_dir / ".env"
+         else:
+             if Path(path).is_dir():

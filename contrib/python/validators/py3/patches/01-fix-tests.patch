@@ -1,0 +1,11 @@
+--- contrib/python/validators/py3/tests/crypto_addresses/test_eth_address.py	(index)
++++ contrib/python/validators/py3/tests/crypto_addresses/test_eth_address.py	(working tree)
+@@ -6,6 +6,8 @@ import pytest
+ # local
+ from validators import ValidationError, eth_address
+ 
++pytest.importorskip("eth_hash")
++
+ 
+ @pytest.mark.parametrize(
+     "value",

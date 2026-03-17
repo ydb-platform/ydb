@@ -1,0 +1,2 @@
+mark_as_cython_c:
+  - validr/_validator_c.pyx

@@ -1,0 +1,129 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2014-01-14 19:05+0100\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Juraj Bubniak <translations@jbub.eu>\n"
+"Language-Team: Slovak <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n % 1 == 0 && n == 1 ? 0 : n % 1 == 0 && n "
+">= 2 && n <= 4 ? 1 : n % 1 != 0 ? 2: 3);\n"
+
+#: admin.py:153
+msgid "Initial version."
+msgstr "Počiatočná verzia."
+
+#: admin.py:187 templates/reversion/change_list.html:7
+#: templates/reversion/recover_form.html:11
+#: templates/reversion/recover_list.html:11
+#, python-format
+msgid "Recover deleted %(name)s"
+msgstr "Obnoviť vymazaný %(name)s"
+
+#: admin.py:304
+#, python-format
+msgid "Reverted to previous version, saved on %(datetime)s"
+msgstr "Obnovená predošlá verzia, uložená %(datetime)s"
+
+#: admin.py:306
+#, python-format
+msgid ""
+"The %(model)s \"%(name)s\" was reverted successfully. You may edit it again "
+"below."
+msgstr ""
+"Objekt %(model)s \"%(name)s\" bol úspešne obnovený. Môžete ho znovu upraviť "
+"nižšie."
+
+#: admin.py:391
+#, python-format
+msgid "Recover %(name)s"
+msgstr "Obnoviť %(name)s"
+
+#: admin.py:405
+#, python-format
+msgid "Revert %(name)s"
+msgstr "Vrátiť sa k predošlej verzii %(name)s"
+
+#: models.py:55
+msgid "date created"
+msgstr "dátum vytvorenia"
+
+#: models.py:61
+msgid "user"
+msgstr "používateľ"
+
+#: models.py:65
+msgid "comment"
+msgstr "komentár"
+
+#: templates/reversion/object_history.html:8
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr ""
+"Vyberte dátum z nižšie uvedeného zoznamu pre návrat k predošlej verzii tohto "
+"objektu."
+
+#: templates/reversion/object_history.html:15
+#: templates/reversion/recover_list.html:24
+msgid "Date/time"
+msgstr "Dátum/čas"
+
+#: templates/reversion/object_history.html:16
+msgid "User"
+msgstr "Používateľ"
+
+#: templates/reversion/object_history.html:17
+msgid "Comment"
+msgstr "Komentár"
+
+#: templates/reversion/object_history.html:36
+msgid ""
+"This object doesn't have a change history. It probably wasn't added via this "
+"admin site."
+msgstr ""
+"Tento objekt nemá históriu zmien. Pravdepodobne nebol pridaný cez túto "
+"admin stránku."
+
+#: templates/reversion/recover_form.html:8
+#: templates/reversion/recover_list.html:8
+#: templates/reversion/revision_form.html:8
+msgid "Home"
+msgstr "Domov"
+
+#: templates/reversion/recover_form.html:18
+msgid "Press the save button below to recover this version of the object."
+msgstr "Pre obnovenie tejto verzie objektu kliknite na tlačidlo uložiť nižšie."
+
+#: templates/reversion/recover_list.html:18
+msgid ""
+"Choose a date from the list below to recover a deleted version of an object."
+msgstr ""
+"Pre obnovenie vymazanej verzie objektu vyberte dátum z nižšie uvedeného zoznamu."
+
+#: templates/reversion/recover_list.html:38
+msgid "There are no deleted objects to recover."
+msgstr "Niesú dostupné žiadne vymazané objekty pre obnovenie."
+
+#: templates/reversion/revision_form.html:12
+msgid "History"
+msgstr "História"
+
+#: templates/reversion/revision_form.html:13
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Vrátiť sa k predošlej verzii %(verbose_name)s"
+
+#: templates/reversion/revision_form.html:26
+msgid "Press the save button below to revert to this version of the object."
+msgstr "Pre návrat na túto verziu objektu kliknite na tlačidlo uložiť nižšie."

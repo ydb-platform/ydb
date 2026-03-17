@@ -1,0 +1,132 @@
+Authors of unixODBC...
+
+Peter Harvey <pharvey@codebydesign.com>
+Nick Gorham <nick@easysoft.com>
+
+The PostgreSQL Driver was modified from the standard PostgreSQL 
+ODBC driver (http://www.postgresql.org)
+
+The NNTP Driver as written by Ke Jin
+
+The MySQL driver is a mirror from the MySQL folks.
+
+Other contributors include 
+
+Alex Hornby
+Axel Reinhold
+Alexander Mitin
+Artiom Morozov
+Arun K Desai
+Bard Hustveit
+Bill Bouma
+Bill Medland
+Bojnourdi Kaikavous
+Brian Harris
+Bruce A Mallett
+Charles Morrison
+Charles Overbeck
+Chris Friesen
+Christian Jullien
+Christian Werner
+Constantine Filin
+Craig A Berry
+Dave Berry
+David Brown
+Dmitriy Yusupov
+Donnie Pinkston
+Emile Heitor
+Erik Lundqvist
+Frediano Ziglio
+Gary Bunting
+Geoffrey Gowan
+Greg Bentz
+Heikki Linnakangas
+Holger Bischoff
+Holger Schurig
+Honza Horak
+Hristo Hristov
+Hugh McMaster
+Ian Ashley
+James Dugal
+Jan Cihlar
+Jan Stanek
+Jason Crummack
+Jay Cai
+Jay Q. Cai
+Jay Van Vark
+Jeff Garzik
+Jean Louis Charton
+Jens Schlegel
+Jess Balint
+Jim Ziegler
+Joel W. Reed
+John C. Rood
+John L Miller
+John Moreshead
+Jon Kåre Hellan
+Jon Pounder
+Jon Willeke
+Jürgen Pfeifer
+Keith Woodard 
+Lars Doelle
+Manush Dodunekov
+Markus Beth
+Mark Chopping
+Mark Hessling
+Mark Vanderwiel
+Martin Edlman
+Martin Evans
+Martin Hobbs
+Martin Kittel
+Martin Lacko
+Max Khon
+Michael Koch
+Michael Vetter
+Miloslav Marik
+Mike Schultz
+Mikko Vierula
+Murad Nayal
+Murray Todd Williams
+Nehal J Wani
+Nikolai Afanasiev 
+Ocke Janssen
+Oded Comay
+Ola Sundell 
+Oren Nechushtan
+Patrice Favre
+Paul Richardson
+Per Bengtsson
+Per I. Mathisen
+Petr Vandrovec
+Pierangelo Masarati
+Rafi Einstein
+Ralf Fassel
+Rick Flower
+Richard Kettlewell
+Ron Norman
+Samuel Cote
+Scot Loach
+Scott Courtney
+Shandy J. Brown
+Simon Pepping
+Stefan Radman
+Steffen Dettmer
+Steve Gilbert
+Steve Langasek
+Steven M. Schultz
+Steven Reynolds
+Stuart Coupe
+Thierry Laronde
+Thomas Langen
+Tim Roepken
+Tomas Zellerin
+Trond Eivind Glomsrød
+Venu Anuganti
+Zoltan Boszormenyi
+
+If I have omitted anyone from this let me know and I will amend it ASAP.
+
+I have removed the email address of the people on this list. If someone
+wants to get in touch, mail me and I will pass it on.
+
+Nick Gorham

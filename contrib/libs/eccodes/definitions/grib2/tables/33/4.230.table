@@ -1,0 +1,601 @@
+# Code table 4.230 - Atmospheric chemical constituent type
+0 0 Ozone O3
+1 1 Water vapour H2O
+2 2 Methane CH4
+3 3 Carbon dioxide CO2
+4 4 Carbon monoxide CO
+5 5 Nitrogen dioxide NO2
+6 6 Nitrous oxide N2O
+7 7 Formaldehyde HCHO
+8 8 Sulphur dioxide SO2
+9 9 Ammonia NH3
+10 10 Ammonium cation NH4+
+11 11 Nitrogen monoxide NO
+12 12 Atomic oxygen O
+13 13 Nitrate radical NO3*
+14 14 Hydroperoxyl radical HOO*
+15 15 Dinitrogen pentoxide N2O5
+16 16 Nitrous acid HONO
+17 17 Nitric acid HNO3
+18 18 Peroxynitric acid HO2NO2
+19 19 Hydrogen peroxide H2O2
+20 20 Dihydrogen H2
+21 21 Atomic nitrogen N
+22 22 Sulphate anion SO42-
+23 23 Atomic Radon Rn
+24 24 Mercury vapour Hg(0)
+25 25 Mercury(II) cation Hg2+
+26 26 Atomic chlorine Cl
+27 27 Chlorine monoxide ClO
+28 28 Dichlorine peroxide Cl2O2
+29 29 Hypochlorous acid HClO
+30 30 Chlorine nitrate ClONO2
+31 31 Chlorine dioxide ClO2
+32 32 Atomic bromine Br
+33 33 Bromine monoxide BrO
+34 34 Bromine chloride BrCl
+35 35 Hydrogen bromide HBr
+36 36 Hypobromous acid HBrO
+37 37 Bromine nitrate BrONO2
+38 38 Dioxygen O2
+39 39 Nitryl chloride NO2Cl
+40 40 Sulphuric acid H2SO4
+41 41 Hydrogen sulphide H2S
+42 42 Sulphur trioxide SO3
+43 43 Bromine Br2
+44 44 Hydrofluoric acid HF
+45 45 Sulphur hexafluoride SF6
+46 46 Chlorine Cl2
+# 47-9999 Reserved
+10000 10000 Hydroxyl radical HO*
+10001 10001 Methyl peroxy radical CH3OO*
+10002 10002 Methyl hydroperoxide CH3OOH
+10004 10004 Methanol CH3OH
+10005 10005 Formic acid HCOOH
+10006 10006 Hydrogen cyanide HCN
+10007 10007 Aceto nitrile CH3CN
+10008 10008 Ethane C2H6
+10009 10009 Ethene (= Ethylene) C2H4
+10010 10010 Ethyne (= Acetylene) C2H2
+10011 10011 Ethanol C2H5OH
+10012 10012 Acetic acid C2H5OOH
+10013 10013 Peroxyacetyl nitrate CH3C(O)OONO2
+10014 10014 Propane C3H8
+10015 10015 Propene C3H6
+10016 10016 Butane (all isomers) C4H10
+10017 10017 Isoprene C5H10
+10018 10018 Alpha pinene C10H16
+10019 10019 Beta pinene C10H16
+10020 10020 Limonene C10H16
+10021 10021 Benzene C6H6
+10022 10022 Toluene C7H8
+10023 10023 Xylene C8H10
+10024 10024 Methanesulphonic acid CH3SO3H
+10025 10025 Methylglyoxal (2-oxopropanal) CH3C(O)CHO
+10026 10026 Peroxyacetyl radical CH3C(O)OO*
+10027 10027 Methacrylic acid (2-methylprop-2-enoic acid) CH2C(CH3)COOH
+10028 10028 Methacrolein (2-methylprop-2-enal) CH2C(CH3)CHO
+10029 10029 Acetone (propan-2-one) CH3C(O)CH3
+10030 10030 Ethyl dioxidanyl radical CH3CH2OO*
+10031 10031 Butadiene (buta-1,3-diene) (CH2CH)2
+10032 10032 Acetaldehyde (ethanal) CH3CHO
+10033 10033 Glycolaldehyde (hydroxyethanal) HOCH2CHO
+10034 10034 Cresol (methylphenol), all isomers CH3C6H4OH
+10035 10035 Peracetic acid (ethaneperoxoic acid) CH3C(O)OOH
+10036 10036 2-hydroxyethyl oxidanyl radical HOCH2CH2O*
+10037 10037 2-hydroxyethyl dioxidanyl radical HOCH2CH2OO*
+10038 10038 Glyoxal (oxaldehyde) OCHCHO
+10039 10039 Isopropyl dioxidanyl radical (CH3)2CHOO*
+10040 10040 Isopropyl hydroperoxide (2-hydroperoxypropane) (CH3)2CHOOH
+10041 10041 Hydroxyacetone (1-hydroxypropan-2-one) CH3C(O)CH2OH
+10042 10042 Peroxyacetic acid (ethaneperoxoic acid) CH3C(O)OOH
+10043 10043 Methyl vinyl ketone (but-3-en-2-one) CH3C(O)CHCH2
+10044 10044 Phenoxy radical C6H5O*
+10045 10045 Methyl radical CH3*
+10046 10046 Carbonyl sulphide (carbon oxide sulphide) OCS
+10047 10047 Dibromomethane CH2Br2
+10048 10048 Methoxy radical CH3O*
+10049 10049 Tribromomethane CHBr3
+10050 10050 Formyl radical (oxomethyl radical) HOC*
+10051 10051 Hydroxymethyl dioxidanyl radical HOCH2OO*
+10052 10052 Ethyl hydroperoxide CH3CH2OOH
+10053 10053 3-hydroxypropyl dioxidanyl radical HOCH2CH2CH2OO*
+10054 10054 3-hydroxypropyl hydroperoxide HOCH2CH2CH2OOH
+10055 10055 Methyl-peroxy-nitrate (nitroperoxy-methane) CH3OONO2
+10056 10056 2-lambda^1-oxidanyloxy-2-methylbut-3-en-1-ol (4-hydroxy-3-methyl-1-butene-3-ylperoxy radical) HOCH2C(CH3)(OO*)CHCH2
+10057 10057 2-lambda^1-oxidanyloxy-3-methylbut-3-en-1-ol (2-hydroxy-1-isopropenylethylperoxy radical) HOCH2CH(OO*)C(CH3)CH2
+10058 10058 (Z)-4-hydroperoxy-2-methyl-2-butenal CH2(OOH)CHC(CH3)CHO
+10059 10059 (Z)-4-hydroperoxy-3-methyl-2-butenal CH2(OOH)C(CH3)CHCHO
+# 10060-10499 Reserved for other simple organic molecules (e.g. higher aldehydes, alcohols, peroxides, etc.)
+10500 10500 Dimethyl sulphide CH3SCH3 (DMS)
+10501 10501 DMSO (dimethyl sulfoxide) (CH3)2SO
+# 10502-20000 Reserved
+20001 20001 Hydrogen chloride HCl
+20002 20002 CFC-11 (trichlorofluoromethane) CCl3F
+20003 20003 CFC-12 (dichlorodifluoromethane) CCl2F2
+20004 20004 CFC-113 (1,1,2-trichloro-1,2,2-trifluoroethane) Cl2FC-CClF2
+20005 20005 CFC-113a (1,1,1-trichloro-2,2,2-trifluoroethane) Cl3C-CF3
+20006 20006 CFC-114 (1,2-dichloro-1,1,2,2-tetrafluoroethane) ClF2C-CClF2
+20007 20007 CFC-115 (1-chloro-1,1,2,2,2-pentafluoroethane) ClF2C-CF3
+20008 20008 HCFC-22 (chlorodifluoromethane) CHClF2
+20009 20009 HCFC-141b (1,1-dichloro-1-fluoroethane) Cl2FC-CH3
+20010 20010 HCFC-142b (1-chloro-1,1-difluoroethane) ClF2C-CH3
+20011 20011 Halon-1202 (dibromodifluoromethane) CBr2F2
+20012 20012 Halon-1211 (bromochlorodifluoromethane) CBrClF2
+20013 20013 Halon-1301 (bromotrifluoromethane) CBrF3
+20014 20014 Halon-2402 (1,2-dibromo-1,1,2,2-tetrafluoroethane) BrF2C-CBrF2
+20015 20015 HCC-40 (methyl chloride) CH3Cl
+20016 20016 HCC-10 (carbon tetrachloride) CCl4
+20017 20017 HCC-140a (1,1,1-trichloroethane) Cl3C-CH3
+20018 20018 HBC-40B1 (methyl bromide) CH3Br
+20019 20019 HCH (hexachlorocyclohexane) all isomers C6H6Cl6
+20020 20020 alpha-HCH (alpha-hexachlorocyclohexane) both enantiomers alpha-C6H6Cl6
+20021 20021 PCB-153 (2,2',4,4',5,5'-hexachlorobiphenyl) (C6H2Cl3)2
+20022 20022 HCFC-141a (1,1-dichloro-2-fluoroethane) Cl2HC-CH2F
+# 20023-29999 Reserved
+30000 30000 Radioactive pollutant (tracer, defined by originating centre)
+# 30001-30009 Reserved
+30010 30010 Tritium (Hydrogen 3) H-3
+30011 30011 Tritium organic bounded H-3o
+30012 30012 Tritium inorganic H-3a
+30013 30013 Beryllium 7 Be-7
+30014 30014 Beryllium 10 Be-10
+30015 30015 Carbon 14 C-14
+30016 30016 Carbon 14 CO2 C-14CO2
+30017 30017 Carbon 14 other gases C-14og
+30018 30018 Nitrogen 13 N-13
+30019 30019 Nitrogen 16 N-16
+30020 30020 Fluorine 18 F-18
+30021 30021 Sodium 22 Na-22
+30022 30022 Phosphate 32 P-32
+30023 30023 Phosphate 33 P-33
+30024 30024 Sulphur 35 S-35
+30025 30025 Chlorine 36 Cl-36
+30026 30026 Potassium 40 K-40
+30027 30027 Argon 41 Ar-41
+30028 30028 Calcium 41 Ca-41
+30029 30029 Calcium 45 Ca-45
+30030 30030 Titanium 44 Ti-44
+30031 30031 Scandium 46 Sc-46
+30032 30032 Vanadium 48 V-48
+30033 30033 Vanadium 49 V-49
+30034 30034 Chrome 51 Cr-51
+30035 30035 Manganese 52 Mn-52
+30036 30036 Manganese 54 Mn-54
+30037 30037 Iron 55 Fe-55
+30038 30038 Iron 59 Fe-59
+30039 30039 Cobalt 56 Co-56
+30040 30040 Cobalt 57 Co-57
+30041 30041 Cobalt 58 Co-58
+30042 30042 Cobalt 60 Co-60
+30043 30043 Nickel 59 Ni-59
+30044 30044 Nickel 63 Ni-63
+30045 30045 Zinc 65 Zn-65
+30046 30046 Gallium 67 Ga-67
+30047 30047 Gallium 68 Ga-68
+30048 30048 Germanium 68 Ge-68
+30049 30049 Germanium 69 Ge-69
+30050 30050 Arsenic 73 As-73
+30051 30051 Selenium 75 Se-75
+30052 30052 Selenium 79 Se-79
+30053 30053 Rubidium 81 Rb-81
+30054 30054 Rubidium 83 Rb-83
+30055 30055 Rubidium 84 Rb-84
+30056 30056 Rubidium 86 Rb-86
+30057 30057 Rubidium 87 Rb-87
+30058 30058 Rubidium 88 Rb-88
+30059 30059 Krypton 85 Kr-85
+30060 30060 Krypton 85 metastable Kr-85m
+30061 30061 Krypton 87 Kr-87
+30062 30062 Krypton 88 Kr-88
+30063 30063 Krypton 89 Kr-89
+30064 30064 Strontium 85 Sr-85
+30065 30065 Strontium 89 Sr-89
+30066 30066 Strontium 89/90 Sr-8990
+30067 30067 Strontium 90 Sr-90
+30068 30068 Strontium 91 Sr-91
+30069 30069 Strontium 92 Sr-92
+30070 30070 Yttrium 87 Y-87
+30071 30071 Yttrium 88 Y-88
+30072 30072 Yttrium 90 Y-90
+30073 30073 Yttrium 91 Y-91
+30074 30074 Yttrium 91 metastable Y-91m
+30075 30075 Yttrium 92 Y-92
+30076 30076 Yttrium 93 Y-93
+30077 30077 Zirconium 89 Zr-89
+30078 30078 Zirconium 93 Zr-93
+30079 30079 Zirconium 95 Zr-95
+30080 30080 Zirconium 97 Zr-97
+30081 30081 Niobium 93 metastable Nb-93m
+30082 30082 Niobium 94 Nb-94
+30083 30083 Niobium 95 Nb-95
+30084 30084 Niobium 95 metastable Nb-95m
+30085 30085 Niobium 97 Nb-97
+30086 30086 Niobium 97 metastable Nb-97m
+30087 30087 Molybdenum 93 Mo-93
+30088 30088 Molybdenum 99 Mo-99
+30089 30089 Technetium 95 metastable Tc-95m
+30090 30090 Technetium 96 Tc-96
+30091 30091 Technetium 99 Tc-99
+30092 30092 Technetium 99 metastable Tc-99m
+30093 30093 Rhodium 99 Rh-99
+30094 30094 Rhodium 101 Rh-101
+30095 30095 Rhodium 102 metastable Rh-102m
+30096 30096 Rhodium 103 metastable Rh-103m
+30097 30097 Rhodium 105 Rh-105
+30098 30098 Rhodium 106 Rh-106
+30099 30099 Palladium 100 Pd-100
+30100 30100 Palladium 103 Pd-103
+30101 30101 Palladium 107 Pd-107
+30102 30102 Ruthenium 103 Ru-103
+30103 30103 Ruthenium 105 Ru-105
+30104 30104 Ruthenium 106 Ru-106
+30105 30105 Silver 108 metastable Ag-108m
+30106 30106 Silver 110 metastable Ag-110m
+30107 30107 Cadmium 109 Cd-109
+30108 30108 Cadmium 113 metastable Cd-113m
+30109 30109 Cadmium 115 metastable Cd-115m
+30110 30110 Indium 114 metastable In-114m
+30111 30111 Tin 113 Sn-113
+30112 30112 Tin 119 metastable Sn-119m
+30113 30113 Tin 121 metastable Sn-121m
+30114 30114 Tin 122 Sn-122
+30115 30115 Tin 123 Sn-123
+30116 30116 Tin 126 Sn-126
+30117 30117 Antimony 124 Sb-124
+30118 30118 Antimony 125 Sb-125
+30119 30119 Antimony 126 Sb-126
+30120 30120 Antimony 127 Sb-127
+30121 30121 Antimony 129 Sb-129
+30122 30122 Tellurium 123 metastable Te-123m
+30123 30123 Tellurium 125 metastable Te-125m
+30124 30124 Tellurium 127 Te-127
+30125 30125 Tellurium 127 metastable Te-127m
+30126 30126 Tellurium 129 Te-129
+30127 30127 Tellurium 129 metastable Te-129m
+30128 30128 Tellurium 131 metastable Te-131m
+30129 30129 Tellurium 132 Te-132
+30130 30130 Iodine 123 I-123
+30131 30131 Iodine 124 I-124
+30132 30132 Iodine 125 I-125
+30133 30133 Iodine 126 I-126
+30134 30134 Iodine 129 I-129
+30135 30135 Iodine 129 elementary gaseous I-129g
+30136 30136 Iodine 129 organic bounded I-129o
+30137 30137 Iodine 131 I-131
+30138 30138 Iodine 131 elementary gaseous I-131g
+30139 30139 Iodine 131 organic bounded I-131o
+30140 30140 Iodine 131 gaseous elementary and organic bounded I-131go
+30141 30141 Iodine 131 aerosol I-131a
+30142 30142 Iodine 132 I-132
+30143 30143 Iodine 132 elementary gaseous I-132g
+30144 30144 Iodine 132 organic bounded I-132o
+30145 30145 Iodine 132 gaseous elementary and organic bounded I-132go
+30146 30146 Iodine 132 aerosol I-132a
+30147 30147 Iodine 133 I-133
+30148 30148 Iodine 133 elementary gaseous I-133g
+30149 30149 Iodine 133 organic bounded I-133o
+30150 30150 Iodine 133 gaseous elementary and organic bounded I-133go
+30151 30151 Iodine 133 aerosol I-133a
+30152 30152 Iodine 134 I-134
+30153 30153 Iodine 134 elementary gaseous I-134g
+30154 30154 Iodine 134 organic bounded I-134o
+30155 30155 Iodine 135 I-135
+30156 30156 Iodine 135 elementary gaseous I-135g
+30157 30157 Iodine 135 organic bounded I-135o
+30158 30158 Iodine 135 gaseous elementary and organic bounded I-135go
+30159 30159 Iodine 135 aerosol I-135a
+30160 30160 Xenon 131 metastable Xe-131m
+30161 30161 Xenon 133 Xe-133
+30162 30162 Xenon 133 metastable Xe-133m
+30163 30163 Xenon 135 Xe-135
+30164 30164 Xenon 135 metastable Xe-135m
+30165 30165 Xenon 137 Xe-137
+30166 30166 Xenon 138 Xe-138
+30167 30167 Xenon sum of all Xenon isotopes Xe-sum
+30168 30168 Caesium 131 Cs-131
+30169 30169 Caesium 134 Cs-134
+30170 30170 Caesium 135 Cs-135
+30171 30171 Caesium 136 Cs-136
+30172 30172 Caesium 137 Cs-137
+30173 30173 Barium 133 Ba-133
+30174 30174 Barium 137 metastable Ba-137m
+30175 30175 Barium 140 Ba-140
+30176 30176 Cerium 139 Ce-139
+30177 30177 Cerium 141 Ce-141
+30178 30178 Cerium 143 Ce-143
+30179 30179 Cerium 144 Ce-144
+30180 30180 Lanthanum 140 La-140
+30181 30181 Lanthanum 141 La-141
+30182 30182 Praseodymium 143 Pr-143
+30183 30183 Praseodymium 144 Pr-144
+30184 30184 Praseodymium 144 metastable Pr-144m
+30185 30185 Samarium 145 Sm-145
+30186 30186 Samarium 147 Sm-147
+30187 30187 Samarium 151 Sm-151
+30188 30188 Neodymium 147 Nd-147
+30189 30189 Promethium 146 Pm-146
+30190 30190 Promethium 147 Pm-147
+30191 30191 Promethium 151 Pm-151
+30192 30192 Europium 152 Eu-152
+30193 30193 Europium 154 Eu-154
+30194 30194 Europium 155 Eu-155
+30195 30195 Gadolinium 153 Gd-153
+30196 30196 Terbium 160 Tb-160
+30197 30197 Holmium 166 metastable Ho-166m
+30198 30198 Thulium 170 Tm-170
+30199 30199 Ytterbium 169 Yb-169
+30200 30200 Hafnium 175 Hf-175
+30201 30201 Hafnium 181 Hf-181
+30202 30202 Tantalum 179 Ta-179
+30203 30203 Tantalum 182 Ta-182
+30204 30204 Rhenium 184 Re-184
+30205 30205 Iridium 192 Ir-192
+30206 30206 Mercury 203 Hg-203
+30207 30207 Thallium 204 Tl-204
+30208 30208 Thallium 207 Tl-207
+30209 30209 Thallium 208 Tl-208
+30210 30210 Thallium 209 Tl-209
+30211 30211 Bismuth 205 Bi-205
+30212 30212 Bismuth 207 Bi-207
+30213 30213 Bismuth 210 Bi-210
+30214 30214 Bismuth 211 Bi-211
+30215 30215 Bismuth 212 Bi-212
+30216 30216 Bismuth 213 Bi-213
+30217 30217 Bismuth 214 Bi-214
+30218 30218 Polonium 208 Po-208
+30219 30219 Polonium 210 Po-210
+30220 30220 Polonium 212 Po-212
+30221 30221 Polonium 213 Po-213
+30222 30222 Polonium 214 Po-214
+30223 30223 Polonium 215 Po-215
+30224 30224 Polonium 216 Po-216
+30225 30225 Polonium 218 Po-218
+30226 30226 Lead 209 Pb-209
+30227 30227 Lead 210 Pb-210
+30228 30228 Lead 211 Pb-211
+30229 30229 Lead 212 Pb-212
+30230 30230 Lead 214 Pb-214
+30231 30231 Astatine 217 At-217
+30232 30232 Radon 219 Rn-219
+30233 30233 Radon 220 Rn-220
+30234 30234 Radon 222 Rn-222
+30235 30235 Francium 221 Fr-221
+30236 30236 Francium 223 Fr-223
+30237 30237 Radium 223 Ra-223
+30238 30238 Radium 224 Ra-224
+30239 30239 Radium 225 Ra-225
+30240 30240 Radium 226 Ra-226
+30241 30241 Radium 228 Ra-228
+30242 30242 Actinium 225 Ac-225
+30243 30243 Actinium 227 Ac-227
+30244 30244 Actinium 228 Ac-228
+30245 30245 Thorium 227 Th-227
+30246 30246 Thorium 228 Th-228
+30247 30247 Thorium 229 Th-229
+30248 30248 Thorium 230 Th-230
+30249 30249 Thorium 231 Th-231
+30250 30250 Thorium 232 Th-232
+30251 30251 Thorium 234 Th-234
+30252 30252 Protactinium 231 Pa-231
+30253 30253 Protactinium 233 Pa-233
+30254 30254 Protactinium 234 metastable Pa-234m
+30255 30255 Uranium 232 U-232
+30256 30256 Uranium 233 U-233
+30257 30257 Uranium 234 U-234
+30258 30258 Uranium 235 U-235
+30259 30259 Uranium 236 U-236
+30260 30260 Uranium 237 U-237
+30261 30261 Uranium 238 U-238
+30262 30262 Plutonium 236 Pu-236
+30263 30263 Plutonium 238 Pu-238
+30264 30264 Plutonium 239 Pu-239
+30265 30265 Plutonium 240 Pu-240
+30266 30266 Plutonium 241 Pu-241
+30267 30267 Plutonium 242 Pu-242
+30268 30268 Plutonium 244 Pu-244
+30269 30269 Neptunium 237 Np-237
+30270 30270 Neptunium 238 Np-238
+30271 30271 Neptunium 239 Np-239
+30272 30272 Americium 241 Am-241
+30273 30273 Americium 242 Am-242
+30274 30274 Americium 242 metastable Am-242m
+30275 30275 Americium 243 Am-243
+30276 30276 Curium 242 Cm-242
+30277 30277 Curium 243 Cm-243
+30278 30278 Curium 244 Cm-244
+30279 30279 Curium 245 Cm-245
+30280 30280 Curium 246 Cm-246
+30281 30281 Curium 247 Cm-247
+30282 30282 Curium 248 Cm-248
+30283 30283 Curium 243/244 Cm-243244
+30284 30284 Plutonium 238/Americium 241 Pu-238Am-241
+30285 30285 Plutonium 239/240 Pu-239240
+30286 30286 Berkelium 249 Bk-249
+30287 30287 Californium 249 Cf-249
+30288 30288 Californium 250 Cf-250
+30289 30289 Californium 252 Cf-252
+30290 30290 Sum aerosol particulates SumAer
+30291 30291 Sum Iodine SumIod
+30292 30292 Sum noble gas SumNG
+30293 30293 Activation gas ActGas
+30294 30294 Cs-137 Equivalent EquCs137
+30295 30295 Carbon-13 C-13
+30296 30296 Lead Pb
+30297 30297 Tellurium 131 Te-131
+30298 30298 Neodymium 137 Nd-137
+30299 30299 Pseudo radionuclide
+30300 30300 Silver 112 Ag-112
+30301 30301 Silver 115 Ag-115
+30302 30302 Barium 139 Ba-139
+30303 30303 Barium 141 Ba-141
+30304 30304 Barium 142 Ba-142
+30305 30305 Bromine 84 Br-84
+30306 30306 Cadminum 115 Cd-115
+30307 30307 Cadminum 117 Cd-117
+30308 30308 Cadminum 117 metastable Cd-117m
+30309 30309 Cerium 145 Ce-145
+30310 30310 Cerium 146 Ce-146
+30311 30311 Cobalt 58 metastable Co-58m
+30312 30312 Ceasium 138 Cs-138
+30313 30313 Ceasium 139 Cs-139
+30314 30314 Iodine 130 aerosol I-130a
+30315 30315 Iodine 130 elementary gaseous I-130e
+30316 30316 Iodine 130 organic bounded I-130o
+30317 30317 Iodine 132 metastable I-132m
+30318 30318 Iodine 134 metastable I-134m
+30319 30319 Indium 115 metastable In-115m
+30320 30320 Indium 117 metastable In-117m
+30321 30321 Krypton 83 metastable Kr-83m
+30322 30322 Lanthanum 142 La-142
+30323 30323 Lanthanum 143 La-143
+30324 30324 Manganese 56 Mn-56
+30325 30325 Molybdenum 101 Mo-101
+30326 30326 Molybdenum 102 Mo-102
+30327 30327 Neodymium 149 Nd-149
+30328 30328 Neodymium 151 Nd-151
+30329 30329 Palladium 109 Pd-109
+30330 30330 Palladium 112 Pd-112
+30331 30331 Praseodymium 145 Pr-145
+30332 30332 Praseodymium 146 Pr-146
+30333 30333 Praseodymium 147 Pr-147
+30334 30334 Rubidium 89 Rb-89
+30335 30335 Rubidium 90 Rb-90
+30336 30336 Rubidium 90 metastable Rb-90m
+30337 30337 Rhodium 105 metastable Rh-105m
+30338 30338 Rhodium 107 Rh-107
+30339 30339 Antimony 128 Sb-128
+30340 30340 Antimony 128 metastable Sb-128m
+30341 30341 Antimony 129 metastable Sb-129m
+30342 30342 Antimony 130 Sb-130
+30343 30343 Antimony 130 metastable Sb-130m
+30344 30344 Antimony 131 Sb-131
+30345 30345 Antimony 132 Sb-132
+30346 30346 Antimony 132 metastable Sb-132m
+30347 30347 Antimony 133 Sb-133
+30348 30348 Selenium 83 Se-83
+30349 30349 Tin 127 Sn-127
+30350 30350 Tin 127 metastable Sn-127m
+30351 30351 Tin 128 Sn-128
+30352 30352 Tin 129 metastable Sn-129m
+30353 30353 Tin 130 Sn-130
+30354 30354 Strontium 93 Sr-93
+30355 30355 Technetium 101 Tc-101
+30356 30356 Technetium 102 Tc-102
+30357 30357 Technetium 104 Tc-104
+30358 30358 Technetium 105 Tc-105
+30359 30359 Tellurium 133 Te-133
+30360 30360 Tellurium 133 metastable Te-133m
+30361 30361 Tellurium 134 Te-134
+30362 30362 Yttrium 93 metastable Y-93m
+30363 30363 Yttrium 94 Y-94
+30364 30364 Yttrium 95 Y-95
+30365 30365 Zirconium 96 Zr-96
+# 30366-39999 Reserved
+40000 40000 Singlet sigma oxygen (dioxygen (sigma singlet)) O2
+40001 40001 Singlet delta oxygen (dioxygen (delta singlet)) O2
+40002 40002 Singlet excited oxygen atom O(1D)
+40003 40003 Triplet ground state oxygen atom O(3P)
+# 40004-59999 Reserved
+60000 60000 HOx radical (OH+HO2) HOx*
+60001 60001 Total inorganic and organic peroxy radicals (HOO* + ROO*) ROO*
+60002 60002 Passive Ozone
+60003 60003 NOx expressed as nitrogen NOx
+60004 60004 All nitrogen oxides (NOy) expressed as nitrogen NOy
+60005 60005 Total inorganic chlorine Clx
+60006 60006 Total inorganic bromine Brx
+60007 60007 Total inorganic chlorine except HCl, ClONO2: ClOx
+60008 60008 Total inorganic bromine except HBr, BrONO2: BrOx
+60009 60009 Lumped alkanes
+60010 60010 Lumped alkenes
+60011 60011 Lumped aromatic compounds
+60012 60012 Lumped terpenes
+60013 60013 Non-methane volatile organic compounds expressed as carbon NMVOC
+60014 60014 Anthropogenic non-methane volatile organic compounds expressed as carbon aNMVOC
+60015 60015 Biogenic non-methane volatile organic compounds expressed as carbon bNMVOC
+60016 60016 Lumped oxygenated hydrocarbons OVOC
+60017 60017 NOx expressed as nitrogen dioxide (NO2) NOx
+60018 60018 Organic aldehydes RCHO
+60019 60019 Organic peroxides ROOH
+60020 60020 Organic nitrates RNO3
+60021 60021 Ethers ROR'
+60022 60022 Amines NRR'R''
+60023 60023 Ketones RC(O)R'
+60024 60024 Dicarbonyls unsaturated RC(O)CH2C(O)R'
+60025 60025 Hydroxy dicarbonyls unsaturated RC(O)CHOHC(O)R'
+60026 60026 Hydroxy ketones RC(OH)C(O)R'
+60027 60027 Oxides Ox
+60028 60028 Peroxyacyl nitrates RC(O)OONO2
+60029 60029 Aromatic peroxide radical (Aryl dioxydanyl radicals) ArOO*
+60030 60030 Biogenic secondary organic compound
+60031 60031 Anthropogenic secondary organic compound
+60032 60032 All hydroxy-peroxides products of the reaction of hydroxy-isoprene adducts with O2 ISOPOOH
+60033 60033 Anthropogenic volatile organic compounds aVOC
+60034 60034 Biomass burning volatile organic compounds bbVOC
+# 60035-61999 Reserved
+62000 62000 Total aerosol
+62001 62001 Dust dry
+62002 62002 Water in ambient
+62003 62003 Ammonium dry
+62004 62004 Nitrate dry
+62005 62005 Nitric acid trihydrate
+62006 62006 Sulphate dry
+62007 62007 Mercury dry
+62008 62008 Sea salt dry
+62009 62009 Black carbon dry
+62010 62010 Particulate organic matter dry
+62011 62011 Primary particulate organic matter dry
+62012 62012 Secondary particulate organic matter dry
+62013 62013 Black carbon hydrophilic dry
+62014 62014 Black carbon hydrophobic dry
+62015 62015 Particulate organic matter hydrophilic dry
+62016 62016 Particulate organic matter hydrophobic dry
+62017 62017 Nitrate hydrophilic dry
+62018 62018 Nitrate hydrophobic dry
+# 62019 Reserved
+62020 62020 Smoke - high absorption
+62021 62021 Smoke - low absorption
+62022 62022 Aerosol - high absorption
+62023 62023 Aerosol - low absorption
+# 62024 Reserved
+62025 62025 Volcanic ash
+62026 62026 Particulate matter (PM)
+# 62027 Reserved
+62028 62028 Total aerosol hydrophilic
+62029 62029 Total aerosol hydrophobic
+62030 62030 Primary particulate inorganic matter dry
+62031 62031 Secondary particulate inorganic matter dry
+62032 62032 Biogenic secondary organic aerosol
+62033 62033 Anthropogenic secondary organic aerosol
+62034 62034 Rain water H2Orain
+62035 62035 Cloud water H2Ocloud
+62036 62036 Brown carbon dry
+# 62037-62099 Reserved
+62100 62100 Alnus (alder) pollen
+62101 62101 Betula (birch) pollen
+62102 62102 Castanea (chestnut) pollen
+62103 62103 Carpinus (hornbeam) pollen
+62104 62104 Corylus (hazel) pollen
+62105 62105 Fagus (beech) pollen
+62106 62106 Fraxinus (ash) pollen
+62107 62107 Pinus (pine) pollen
+62108 62108 Platanus (plane) pollen
+62109 62109 Populus (cottonwood, poplar) pollen
+62110 62110 Quercus (oak) pollen
+62111 62111 Salix (willow) pollen
+62112 62112 Taxus (yew) pollen
+62113 62113 Tilia (lime, linden) pollen
+62114 62114 Ulmus (elm) pollen
+62115 62115 Olea (olive) pollen
+# 62116-62199 Reserved
+62200 62200 Ambrosia (ragweed, burr-ragweed) pollen
+62201 62201 Artemisia (sagebrush, wormwood, mugwort) pollen
+62202 62202 Brassica (rape, broccoli, Brussels sprouts, cabbage, cauliflower, collards, kale, kohlrabi, mustard, rutabaga) pollen
+62203 62203 Plantago (plantain) pollen
+62204 62204 Rumex (dock, sorrel) pollen
+62205 62205 Urtica (nettle) pollen
+# 62206-62299 Reserved
+62300 62300 Poaceae (grass family) pollen
+# 62301-62999 Reserved
+# 63000-65534 For experimental use at local level
+65535 65535 Missing

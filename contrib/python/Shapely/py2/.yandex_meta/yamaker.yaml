@@ -1,0 +1,5 @@
+requirements:
+  - contrib/libs/geos/capi/ctypes
+  - numpy
+keep:
+  - tests/canondata/*

@@ -1,0 +1,12 @@
+openapi: 3.0.3
+info:
+  title: Model B definitions
+  version: "1.0"
+paths: {}
+components:
+  schemas:
+    modules.quality_evaluation.QualityEvaluationRequest:
+      type: object
+      properties:
+        input:
+          $ref: "../model_a/types.openapi.yaml#/components/schemas/model_a.output"

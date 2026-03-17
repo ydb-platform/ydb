@@ -1,0 +1,21 @@
+--- contrib/python/schwifty/schwifty/registry.py	(index)
++++ contrib/python/schwifty/schwifty/registry.py	(working tree)
+@@ -49,3 +49,3 @@ def get(name: str) -> dict | list[dict]:
+-    assert isinstance(directory, Path)
+-    for entry in sorted(directory.glob("*.json")):
+-        assert isinstance(entry, Path)
++    for entry in directory.iterdir():
++        if not entry.name.endswith(".json"):
++            continue
+--- contrib/python/schwifty/schwifty/checksum/__init__.py	(index)
++++ contrib/python/schwifty/schwifty/checksum/__init__.py	(working tree)
+@@ -84,3 +84,3 @@ def register(*prefixes) -> Callable[[type[Algorithm]], type[Algorithm]]:
+-this = Path(__file__)
+-for path in this.parent.glob("*.py"):
+-    if path == this:
++import pkgutil
++for _, name, _ in pkgutil.walk_packages(__path__):
++    if name == "__init__":
+@@ -88 +88 @@ for path in this.parent.glob("*.py"):
+-    import_module(f"schwifty.checksum.{path.stem}")
++    import_module(f"schwifty.checksum.{name}")

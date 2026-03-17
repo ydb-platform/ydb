@@ -1,0 +1,17 @@
+Metadata-Version: 2.1
+Name: pyaes
+Version: 1.6.1
+Summary: Pure-Python Implementation of the AES block-cipher and common modes of operation
+Home-page: https://github.com/ricmoo/pyaes
+Author: Richard Moore
+Author-email: pyaes@ricmoo.com
+License: License :: OSI Approved :: MIT License
+Platform: UNKNOWN
+Classifier: Topic :: Security :: Cryptography
+Classifier: License :: OSI Approved :: MIT License
+
+A pure-Python implementation of the AES (FIPS-197)
+block-cipher algorithm and common modes of operation (CBC, CFB, CTR, ECB,
+OFB) with no dependencies beyond standard Python libraries. See README.md
+for API reference and details.
+

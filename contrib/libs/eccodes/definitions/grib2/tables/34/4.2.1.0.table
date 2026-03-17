@@ -1,0 +1,25 @@
+# Product discipline 1 - Hydrological products, parameter category 0: hydrology basic products
+0 0 Flash flood guidance (Encoded as an accumulation over a floating subinterval of time between the reference time and valid time) (kg m-2)
+1 1 Flash flood runoff (Encoded as an accumulation over a floating subinterval of time) (kg m-2)
+2 2 Remotely-sensed snow cover (Code table 4.215)
+3 3 Elevation of snow-covered terrain (Code table 4.216)
+4 4 Snow water equivalent per cent of normal (%)
+5 5 Baseflow-groundwater runoff (kg m-2)
+6 6 Storm surface runoff (kg m-2)
+7 7 Discharge from rivers or streams (m3/s)
+8 8 Groundwater upper storage (kg m-2)
+9 9 Groundwater lower storage (kg m-2)
+10 10 Side flow into river channel (m3 s-1 m-1)
+11 11 River storage of water (m3)
+12 12 Floodplain storage of water (m3)
+13 13 Water on soil surface (kg m-2)
+14 14 Upstream accumulated precipitation (kg m-2)
+15 15 Upstream accumulated snow melt (kg m-2)
+16 16 Percolation rate (kg m-2 s-1)
+17 17 River outflow of water (m3 s-1)
+18 18 Floodplain outflow of water (m3 s-1)
+19 19 Floodpath outflow of water (m3 s-1)
+20 20 Water on surface (kg m-2)
+# 21-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

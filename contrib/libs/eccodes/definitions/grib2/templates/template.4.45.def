@@ -1,0 +1,12 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.45, Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for aerosol
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.aerosol.def"
+include "grib2/templates/template.4.aerosol_size.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.point_in_time.def"
+include "grib2/templates/template.4.horizontal.def"
+include "grib2/templates/template.4.eps.def"

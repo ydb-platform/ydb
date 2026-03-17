@@ -1,0 +1,168 @@
+constant default_min_val = -1e13 : double_type, hidden;
+constant default_max_val = +1e13 : double_type, hidden;
+
+concept param_value_min(default_min_val) {
+    -150 = { paramId=165; }
+    -100 = { paramId=166; }
+    0 = { paramId=260260; }
+    0 = { paramId=228028; }
+    0 = { paramId=49; }
+    0 = { paramId=207; }
+    25 = { paramId=168; }
+    0 = { paramId=260242; }
+    160 = { paramId=167; }
+    0 = { paramId=260509; }
+    5 = { paramId=151175; }
+    0 = { paramId=260257; }
+    0 = { paramId=59; }
+    -60000 = { paramId=228001; }
+    0 = { paramId=151163; }
+    -3.5 = { paramId=151131; }
+    -3.5 = { paramId=262140; }
+    -10 = { paramId=260259; }
+    -13000 = { paramId=129; }
+    -1300 = { paramId=156; }
+    0 = { paramId=3075; }
+    0 = { paramId=172; }
+    -0.05 = { paramId=3062; }
+    0 = { paramId=260210; }
+    0 = { paramId=3073; }
+    160 = {
+        one=(step > 0);
+        paramId=121;
+    }
+    150 = {
+        one=(step > 0);
+        paramId=122;
+    }
+    85000 = { paramId=151; }
+    270 = { paramId=151126; }
+    -1 = { paramId=140230; }
+    0 = { paramId=140221; }
+    0 = { paramId=3074; }
+    0 = { paramId=140214; }
+    -3.5 = { paramId=151132; }
+    0 = { paramId=151225; }
+    -1300 = { paramId=228002; }
+    0 = { paramId=140231; }
+    0 = { paramId=260430; }
+    170 = { paramId=3; }
+    -1 = { paramId=60; }
+    100 = { paramId=54; }
+    0 = { paramId=157; }
+    -4 = { paramId=151145; }
+    0 = { paramId=151219; }
+    160 = { paramId=34; }
+    -0.00001 = { paramId=31; }
+    0 = { paramId=174098; }
+    0 = { paramId=140229; }
+    120 = { paramId=235; }
+    20 = { paramId=228032; }
+    10 = { paramId=33; }
+    0 = { paramId=3066; }
+    -1e-10 = { paramId=228141; }
+    0.005 = { paramId=260367; }
+    -1000 = { paramId=260364; }
+    0 = { paramId=228039; }
+    0 = { paramId=228087; }
+    -20 = { paramId=228086; }
+    170 = { paramId=260360; }
+    170 = { paramId=228139; }
+    170 = { paramId=228096; }
+    170 = { paramId=228095; }
+    0 = { paramId=43; }
+    -0.001 = { paramId=247; }
+    -0.001 = { paramId=246; }
+    -0.1 = { paramId=133; }
+    43000 = { paramId=134; }
+    0 = { paramId=173; }
+    140 = { paramId=130; }
+    -3 = { paramId=260057; }
+    -50 = { paramId=136; }
+    -250 = { paramId=131; }
+    -250 = { paramId=132; }
+    -30 = { paramId=135; }
+    0 = { paramId=260199; }
+    0 = { paramId=3031; }
+    0 = { paramId=10; }
+} : double_type, hidden;
+
+concept param_value_max(default_max_val) {
+    150 = { paramId=165; }
+    100 = { paramId=166; }
+    360.1 = { paramId=260260; }
+    140 = { paramId=228028; }
+    100 = { paramId=49; }
+    300 = { paramId=207; }
+    350 = { paramId=168; }
+    160 = { paramId=260242; }
+    370 = { paramId=167; }
+    100 = { paramId=260509; }
+    50 = { paramId=151175; }
+    100 = { paramId=260257; }
+    40000 = { paramId=59; }
+    1000 = { paramId=228001; }
+    1500 = { paramId=151163; }
+    3.5 = { paramId=151131; }
+    3.5 = { paramId=262140; }
+    5 = { paramId=260259; }
+    3500000 = { paramId=129; }
+    35000 = { paramId=156; }
+    100 = { paramId=3075; }
+    1 = { paramId=172; }
+    130 = { paramId=3062; }
+    1 = { paramId=260210; }
+    100 = { paramId=3073; }
+    380 = { paramId=121; }
+    125000 = { paramId=151; }
+    308 = { paramId=151126; }
+    360.5 = { paramId=140230; }
+    50 = { paramId=140221; }
+    100 = { paramId=3074; }
+    330 = { paramId=122; }
+    150 = { paramId=140214; }
+    3.5 = { paramId=151132; }
+    4000 = { paramId=151225; }
+    8888 = { paramId=228002; }
+    50 = { paramId=140231; }
+    30 = { paramId=260430; }
+    1200 = { paramId=3; }
+    1 = { paramId=60; }
+    108000 = { paramId=54; }
+    180 = { paramId=157; }
+    4 = { paramId=151145; }
+    50 = { paramId=151219; }
+    320 = { paramId=34; }
+    1.001 = { paramId=31; }
+    15 = { paramId=174098; }
+    100 = { paramId=140229; }
+    380 = { paramId=235; }
+    100 = { paramId=228032; }
+    1000 = { paramId=33; }
+    5 = { paramId=3066; }
+    15000 = { paramId=228141; }
+    100 = { paramId=260367; }
+    1000 = { paramId=260364; }
+    2000 = { paramId=228039; }
+    2000 = { paramId=228087; }
+    2000 = { paramId=228086; }
+    350 = { paramId=260360; }
+    350 = { paramId=228139; }
+    350 = { paramId=228096; }
+    350 = { paramId=228095; }
+    10 = { paramId=43; }
+    0.01 = { paramId=247; }
+    1e+06 = { paramId=246; }
+    0.1 = { paramId=133; }
+    115000 = { paramId=134; }
+    10 = { paramId=173; }
+    400 = { paramId=130; }
+    150 = { paramId=260057; }
+    220 = { paramId=136; }
+    250 = { paramId=131; }
+    250 = { paramId=132; }
+    30 = { paramId=135; }
+    1 = { paramId=260199; }
+    360.1 = { paramId=3031; }
+    300 = { paramId=10; }
+} : double_type, hidden;

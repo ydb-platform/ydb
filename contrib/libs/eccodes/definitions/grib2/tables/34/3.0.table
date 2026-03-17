@@ -1,0 +1,6 @@
+# Code table 3.0 - Source of grid definition
+0 0 Specified in Code table 3.1
+1 1 Predetermined grid definition (Defined by originating centre)
+# 2-191 Reserved
+# 192-254 Reserved for local use
+255 255 A grid definition does not apply to this product

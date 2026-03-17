@@ -1,0 +1,6386 @@
+[
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "000",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "001",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "002",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "003",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "004",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "005",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "006",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "007",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "008",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "009",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "010",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "011",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "012",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "013",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "014",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "015",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "016",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "017",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "018",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "019",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "020",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "021",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "022",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "023",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "024",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "025",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "026",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "027",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "028",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "029",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "030",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "031",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "032",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "033",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "034",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "035",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "036",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "037",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "038",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "039",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "040",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "041",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "042",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "043",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "044",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "045",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "046",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "047",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "048",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "049",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "050",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "051",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "052",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "053",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "054",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "055",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "056",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "057",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "058",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "059",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "060",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "061",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "062",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "063",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "064",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "065",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "066",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "067",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "068",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "069",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "070",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "071",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "072",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "073",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "074",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "075",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "076",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "077",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "078",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "079",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "080",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "081",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "082",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "083",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "084",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "085",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "086",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "087",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "088",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "089",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "090",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "091",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "092",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "093",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "094",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "095",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "096",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "097",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "098",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "099",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NBBEBEBB203",
+    "bank_code": "100",
+    "name": "Nationale Bank van Belgi\u00eb",
+    "short_name": "Nationale Bank van Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NBBEBEBBHCC",
+    "bank_code": "101",
+    "name": "Nationale Bank van Belgi\u00eb (Hoofdkas)",
+    "short_name": "Nationale Bank van Belgi\u00eb (Hoofdkas)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "102",
+    "name": "Uitwisselingscentrum en Verrekening (U.C.V.)",
+    "short_name": "Uitwisselingscentrum en Verrekening (U.C.V.)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "103",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "104",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "105",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "106",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "107",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "108",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "109",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "110",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ABERBE22",
+    "bank_code": "111",
+    "name": "Bank J. Van Breda & C\u00b0",
+    "short_name": "Bank J. Van Breda & C\u00b0"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "113",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "114",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PAUIBE22",
+    "bank_code": "115",
+    "name": "HR Pay Solutions",
+    "short_name": "HR Pay Solutions"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ATMNBE32XXX",
+    "bank_code": "116",
+    "name": "Atlantic Money NV/SA",
+    "short_name": "Atlantic Money NV/SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "119",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "120",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "121",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "122",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "123",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "124",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CPHBBE75",
+    "bank_code": "125",
+    "name": "Banque CPH",
+    "short_name": "Banque CPH"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CPHBBE75",
+    "bank_code": "126",
+    "name": "Banque CPH",
+    "short_name": "Banque CPH"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "127",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "129",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DIGEBEB2",
+    "bank_code": "130",
+    "name": "Digiteal SA",
+    "short_name": "Digiteal SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "131",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BNAGBEBB",
+    "bank_code": "132",
+    "name": "Bank Nagelmackers",
+    "short_name": "Bank Nagelmackers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "133",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "134",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "137",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "138",
+    "name": "Onbeschikbaar",
+    "short_name": "Onbeschikbaar"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "140",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "141",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "142",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "143",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "144",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "145",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "146",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "147",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "148",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "149",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BCMCBEBB",
+    "bank_code": "150",
+    "name": "Bancontact Payconiq Company",
+    "short_name": "Bancontact Payconiq Company"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "154",
+    "name": "VRIJ",
+    "short_name": "VRIJ"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CPHBBE75",
+    "bank_code": "171",
+    "name": "Banque CPH",
+    "short_name": "Banque CPH"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "175",
+    "name": "Syst\u00e8mes Technologiques d'Echange et de Traitement - STET",
+    "short_name": "Syst\u00e8mes Technologiques d'Echange et de Traitement - STET"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BSCHBEBBRET",
+    "bank_code": "176",
+    "name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb",
+    "short_name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "185",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "SMBCBEBB",
+    "bank_code": "189",
+    "name": "Sumitomo Mitsui Banking Corporation (SMBC)",
+    "short_name": "Sumitomo Mitsui Banking Corporation (SMBC)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "190",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "191",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "192",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "193",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "194",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "195",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "196",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "197",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "198",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "199",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "200",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "201",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "202",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "203",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "204",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "205",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "206",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "207",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "208",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "209",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "210",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "211",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "212",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "213",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "214",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "220",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "221",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "222",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "223",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "224",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "225",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "226",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "227",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "228",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "229",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "230",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "231",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "232",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "233",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "234",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "235",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "236",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "237",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "238",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "239",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "240",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "241",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "242",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "243",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "244",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "245",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "246",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "247",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "248",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "249",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "250",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "251",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "252",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "253",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "254",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "255",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "256",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "257",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "258",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "259",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "260",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "261",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "262",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "263",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "264",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "265",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "266",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "267",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "268",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "269",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "270",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "271",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "272",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "273",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "274",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "275",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "276",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "277",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "278",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "279",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "280",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "281",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "282",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "283",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "284",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "285",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "286",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "287",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "288",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "289",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "290",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "291",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "292",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "293",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "294",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "295",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "296",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "297",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "298",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "299",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "300",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "301",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "302",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "303",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "304",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "305",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "306",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "307",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "308",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "309",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "310",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "311",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "312",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "313",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "314",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "315",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "316",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "317",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "318",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "319",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "320",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "321",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "322",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "323",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "324",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "325",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "326",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "327",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "328",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "329",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "330",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "331",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "332",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "333",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "334",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "335",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "336",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "337",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "338",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "339",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "340",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "341",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "342",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "343",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "344",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "345",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "346",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "347",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "348",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "349",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "350",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "351",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "352",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "353",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "354",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "355",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "356",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "357",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "358",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "359",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "360",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "361",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "362",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "363",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "364",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "365",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "366",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "367",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "368",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "369",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "370",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "371",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "372",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "373",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "374",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "375",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "376",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "377",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "378",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "379",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "380",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "381",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "382",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "383",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "384",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "385",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "386",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "387",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "388",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "389",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "390",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "391",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "392",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "393",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "394",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "395",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "396",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "397",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "398",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "399",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "400",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "401",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "402",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "403",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "404",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "405",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "406",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "407",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "408",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "409",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "410",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "411",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "412",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "413",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "414",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "415",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "416",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "417",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "418",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "419",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "420",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "421",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "422",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "423",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "424",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "425",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "426",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "427",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "428",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "429",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "430",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "431",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "432",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "433",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "434",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "435",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "436",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "437",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "438",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "439",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "440",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "441",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "442",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "443",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "444",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "445",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "446",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "447",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "448",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "449",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "450",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "451",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "452",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "453",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "454",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "455",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "456",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "457",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "458",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "459",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "460",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "461",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "462",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "463",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "464",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "465",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "466",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "467",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "468",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "469",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "470",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "471",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "472",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "473",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "474",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "475",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "476",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "477",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "478",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "479",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "480",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "481",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "482",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "483",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "484",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "485",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "486",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "487",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "488",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "489",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "490",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "491",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "492",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "493",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "494",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "495",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "496",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "497",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "498",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "499",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DHBNBEBB",
+    "bank_code": "501",
+    "name": "Demir-Halk Bank (Nederland) (DHB)",
+    "short_name": "Demir-Halk Bank (Nederland) (DHB)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PANXBEB1",
+    "bank_code": "504",
+    "name": "Unifiedpost Payments",
+    "short_name": "Unifiedpost Payments"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DIERBE21",
+    "bank_code": "507",
+    "name": "Dierickx, Leys & Cie Effectenbank",
+    "short_name": "Dierickx, Leys & Cie Effectenbank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PARBBEBZMDC",
+    "bank_code": "508",
+    "name": "BNP Paribas SA, Belgium Branch \u2013 Securities Services business",
+    "short_name": "BNP Paribas SA, Belgium Branch \u2013 Securities Services business"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ABNABE2AIPC",
+    "bank_code": "509",
+    "name": "ABN AMRO Bank N.V.",
+    "short_name": "ABN AMRO Bank N.V."
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "VAPEBE22",
+    "bank_code": "510",
+    "name": "VAN DE PUT & CO Privaatbankiers",
+    "short_name": "VAN DE PUT & CO Privaatbankiers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DNIBBE21",
+    "bank_code": "512",
+    "name": "NIBC BANK",
+    "short_name": "NIBC BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ABNABE2AIPC",
+    "bank_code": "513",
+    "name": "ABN AMRO Bank N.V.",
+    "short_name": "ABN AMRO Bank N.V."
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PUILBEBB",
+    "bank_code": "514",
+    "name": "Puilaetco Branch of Quintet Private Bank SA",
+    "short_name": "Puilaetco Branch of Quintet Private Bank SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "IRVTBEBB",
+    "bank_code": "515",
+    "name": "The Bank of New York Mellon NV/SA",
+    "short_name": "The Bank of New York Mellon NV/SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "520",
+    "name": "Onbeschikbaar",
+    "short_name": "Onbeschikbaar"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "FVLBBE22",
+    "bank_code": "521",
+    "name": "F. van Lanschot Bankiers",
+    "short_name": "F. van Lanschot Bankiers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "UTWBBEBB",
+    "bank_code": "522",
+    "name": "United Taiwan Bank",
+    "short_name": "United Taiwan Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "TRIOBEBB",
+    "bank_code": "523",
+    "name": "Triodos Bank",
+    "short_name": "Triodos Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "WAFABEBB",
+    "bank_code": "524",
+    "name": "Attijariwafa bank Europe",
+    "short_name": "Attijariwafa bank Europe"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "FVLBBE22",
+    "bank_code": "525",
+    "name": "F. van Lanschot Bankiers",
+    "short_name": "F. van Lanschot Bankiers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "529",
+    "name": "VRIJ",
+    "short_name": "VRIJ"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "539",
+    "name": "Onbeschikbaar",
+    "short_name": "Onbeschikbaar"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BKIDBE22",
+    "bank_code": "541",
+    "name": "BANK OF INDIA",
+    "short_name": "BANK OF INDIA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "545",
+    "name": "Onbeschikbaar",
+    "short_name": "Onbeschikbaar"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "WAFABEBB",
+    "bank_code": "546",
+    "name": "Attijariwafa bank Europe",
+    "short_name": "Attijariwafa bank Europe"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "LOCYBEBB",
+    "bank_code": "548",
+    "name": "Lombard Odier (Europe)",
+    "short_name": "Lombard Odier (Europe)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CHASBEBX",
+    "bank_code": "549",
+    "name": "J.P. Morgan SE -Brussels Branch",
+    "short_name": "J.P. Morgan SE -Brussels Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "550",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "551",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "552",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "553",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "554",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "555",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "556",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "557",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "558",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "559",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "560",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "562",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "563",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "564",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "565",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "566",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "567",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "568",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "569",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CITIBEBX",
+    "bank_code": "570",
+    "name": "Citibank Europe Plc - Belgium Branch",
+    "short_name": "Citibank Europe Plc - Belgium Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CITIBEBX",
+    "bank_code": "571",
+    "name": "Citibank Europe Plc - Belgium Branch",
+    "short_name": "Citibank Europe Plc - Belgium Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CITIBEBX",
+    "bank_code": "572",
+    "name": "Citibank Europe Plc - Belgium Branch",
+    "short_name": "Citibank Europe Plc - Belgium Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CITIBEBX",
+    "bank_code": "573",
+    "name": "Citibank Europe Plc - Belgium Branch",
+    "short_name": "Citibank Europe Plc - Belgium Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CITIBEBX",
+    "bank_code": "574",
+    "name": "Citibank Europe Plc - Belgium Branch",
+    "short_name": "Citibank Europe Plc - Belgium Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CITIBEBX",
+    "bank_code": "575",
+    "name": "Citibank Europe Plc - Belgium Branch",
+    "short_name": "Citibank Europe Plc - Belgium Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CITIBEBX",
+    "bank_code": "576",
+    "name": "Citibank Europe Plc - Belgium Branch",
+    "short_name": "Citibank Europe Plc - Belgium Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CITIBEBX",
+    "bank_code": "577",
+    "name": "Citibank Europe Plc - Belgium Branch",
+    "short_name": "Citibank Europe Plc - Belgium Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CITIBEBX",
+    "bank_code": "578",
+    "name": "Citibank Europe Plc - Belgium Branch",
+    "short_name": "Citibank Europe Plc - Belgium Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CITIBEBX",
+    "bank_code": "579",
+    "name": "Citibank Europe Plc - Belgium Branch",
+    "short_name": "Citibank Europe Plc - Belgium Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "MHCBBEBB",
+    "bank_code": "581",
+    "name": "Mizuho Bank Europe N.V. Brussels Branch",
+    "short_name": "Mizuho Bank Europe N.V. Brussels Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DEGRBEBB",
+    "bank_code": "583",
+    "name": "Banque Degroof Petercam Luxembourg",
+    "short_name": "Banque Degroof Petercam Luxembourg"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "RCBPBEBB",
+    "bank_code": "585",
+    "name": "Rothschild Belgique Succursale Rothschild Martin Maurel",
+    "short_name": "Rothschild Belgique Succursale Rothschild Martin Maurel"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CFFRBEB1",
+    "bank_code": "586",
+    "name": "Cr\u00e9dit Foncier de France",
+    "short_name": "Cr\u00e9dit Foncier de France"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BIBLBE21",
+    "bank_code": "587",
+    "name": "BinckBank",
+    "short_name": "BinckBank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CMCIBEB1BTB",
+    "bank_code": "588",
+    "name": "Banque Transatlantique Belgium",
+    "short_name": "Banque Transatlantique Belgium"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BSCHBEBB",
+    "bank_code": "590",
+    "name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb",
+    "short_name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BSCHBEBB",
+    "bank_code": "591",
+    "name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb",
+    "short_name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BSCHBEBB",
+    "bank_code": "592",
+    "name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb",
+    "short_name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BSCHBEBB",
+    "bank_code": "593",
+    "name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb",
+    "short_name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BSCHBEBB",
+    "bank_code": "594",
+    "name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb",
+    "short_name": "Santander Consumer Finance \u2013 Succursale en Belgique/Bijkantoor in Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "595",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "596",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "597",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "598",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "599",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "600",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "601",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "SWNBBEB2",
+    "bank_code": "603",
+    "name": "SWAN SAS",
+    "short_name": "SWAN SAS"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "SWNBBEB2",
+    "bank_code": "604",
+    "name": "SWAN SAS",
+    "short_name": "SWAN SAS"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BKCHBEBB",
+    "bank_code": "605",
+    "name": "Bank of China (Europe) SA Brussels Branch",
+    "short_name": "Bank of China (Europe) SA Brussels Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ICBKBEBB",
+    "bank_code": "607",
+    "name": "Industrial and Commercial Bank of China (Europe)",
+    "short_name": "Industrial and Commercial Bank of China (Europe)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DEUTBEBE",
+    "bank_code": "610",
+    "name": "Deutsche Bank AG",
+    "short_name": "Deutsche Bank AG"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DEUTBEBE",
+    "bank_code": "611",
+    "name": "Deutsche Bank AG",
+    "short_name": "Deutsche Bank AG"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DEUTBEBE",
+    "bank_code": "612",
+    "name": "Deutsche Bank AG",
+    "short_name": "Deutsche Bank AG"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DEUTBEBE",
+    "bank_code": "613",
+    "name": "Deutsche Bank AG",
+    "short_name": "Deutsche Bank AG"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "624",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "625",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "630",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "631",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BNAGBEBB",
+    "bank_code": "634",
+    "name": "Bank Nagelmackers",
+    "short_name": "Bank Nagelmackers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BNAGBEBB",
+    "bank_code": "635",
+    "name": "Bank Nagelmackers",
+    "short_name": "Bank Nagelmackers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BNAGBEBB",
+    "bank_code": "636",
+    "name": "Bank Nagelmackers",
+    "short_name": "Bank Nagelmackers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "638",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "640",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBVABEBB",
+    "bank_code": "642",
+    "name": "Banco Bilbao Vizcaya Argentaria",
+    "short_name": "Banco Bilbao Vizcaya Argentaria"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BMPBBEBB",
+    "bank_code": "643",
+    "name": "UniCredit SA/NV",
+    "short_name": "UniCredit SA/NV"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "644",
+    "name": "FCA Bank S.p.A.",
+    "short_name": "FCA Bank S.p.A."
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "JVBABE22",
+    "bank_code": "645",
+    "name": "Bank J. Van Breda & C\u00b0",
+    "short_name": "Bank J. Van Breda & C\u00b0"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BNAGBEBB",
+    "bank_code": "646",
+    "name": "Bank Nagelmackers",
+    "short_name": "Bank Nagelmackers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BNAGBEBB",
+    "bank_code": "647",
+    "name": "Bank Nagelmackers",
+    "short_name": "Bank Nagelmackers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BMPBBEBBVOD",
+    "bank_code": "648",
+    "name": "UniCredit SA/NV",
+    "short_name": "UniCredit SA/NV"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CEPABEB2",
+    "bank_code": "649",
+    "name": "Caisse d'Epargne et de Pr\u00e9voyance Hauts de France",
+    "short_name": "Caisse d'Epargne et de Pr\u00e9voyance Hauts de France"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "REVOBEB2XXX",
+    "bank_code": "650",
+    "name": "Revolut Bank UAB Belgian branch",
+    "short_name": "Revolut Bank UAB Belgian branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KEYTBEBB",
+    "bank_code": "651",
+    "name": "Ark\u00e9a Direct Bank (nom commercial / commerci\u00eble naam: Keytrade Bank)",
+    "short_name": "Ark\u00e9a Direct Bank (nom commercial / commerci\u00eble naam: Keytrade Bank)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "652",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BARCBEBB",
+    "bank_code": "653",
+    "name": "Barclays Bank Ireland Plc Brussels Branch",
+    "short_name": "Barclays Bank Ireland Plc Brussels Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "657",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "HABBBEBB",
+    "bank_code": "658",
+    "name": "Habib Bank",
+    "short_name": "Habib Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BMEUBEB1",
+    "bank_code": "663",
+    "name": "BMCE Euro Services",
+    "short_name": "BMCE Euro Services"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BCDMBEBB",
+    "bank_code": "664",
+    "name": "Banque Chaabi du Maroc",
+    "short_name": "Banque Chaabi du Maroc"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "666",
+    "name": "WORLDLINE NV",
+    "short_name": "WORLDLINE NV"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CMCIBEB1CIC",
+    "bank_code": "667",
+    "name": "Cr\u00e9dit Industriel et Commercial - Succursale de Bruxelles",
+    "short_name": "Cr\u00e9dit Industriel et Commercial - Succursale de Bruxelles"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "SBINBE2X",
+    "bank_code": "668",
+    "name": "State Bank of India",
+    "short_name": "State Bank of India"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "669",
+    "name": "WORLDLINE NV",
+    "short_name": "WORLDLINE NV"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "EURBBE99",
+    "bank_code": "671",
+    "name": "Europabank",
+    "short_name": "Europabank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "672",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "673",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ABNABE2AIDJ",
+    "bank_code": "674",
+    "name": "ABN AMRO Bank N.V.",
+    "short_name": "ABN AMRO Bank N.V."
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BYBBBEBB",
+    "bank_code": "675",
+    "name": "Byblos Bank Europe",
+    "short_name": "Byblos Bank Europe"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DEGRBEBB",
+    "bank_code": "676",
+    "name": "Bank Degroof Petercam",
+    "short_name": "Bank Degroof Petercam"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CBPXBE99",
+    "bank_code": "677",
+    "name": "Intesa Sanpaolo Wealth Management",
+    "short_name": "Intesa Sanpaolo Wealth Management"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DELEBE22",
+    "bank_code": "678",
+    "name": "Delen Private Bank",
+    "short_name": "Delen Private Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GEBABEBB",
+    "bank_code": "679",
+    "name": "BNP Paribas Fortis",
+    "short_name": "BNP Paribas Fortis"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "680",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "682",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "683",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "SGABBEB2",
+    "bank_code": "684",
+    "name": "Soci\u00e9t\u00e9 G\u00e9n\u00e9rale",
+    "short_name": "Soci\u00e9t\u00e9 G\u00e9n\u00e9rale"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BOFABE3X",
+    "bank_code": "685",
+    "name": "Bank of America Europe DAC - Brussels Branch",
+    "short_name": "Bank of America Europe DAC - Brussels Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BOFABE3X",
+    "bank_code": "686",
+    "name": "Bank of America Europe DAC - Brussels Branch",
+    "short_name": "Bank of America Europe DAC - Brussels Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "MGTCBEBE",
+    "bank_code": "687",
+    "name": "Euroclear Bank",
+    "short_name": "Euroclear Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "SGABBEB2",
+    "bank_code": "688",
+    "name": "Soci\u00e9t\u00e9 G\u00e9n\u00e9rale",
+    "short_name": "Soci\u00e9t\u00e9 G\u00e9n\u00e9rale"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BOFABE3X",
+    "bank_code": "689",
+    "name": "Bank of America Europe DAC - Brussels Branch",
+    "short_name": "Bank of America Europe DAC - Brussels Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BOTKBEBX",
+    "bank_code": "693",
+    "name": "MUFG Bank (Europe)",
+    "short_name": "MUFG Bank (Europe)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DEUTBEBE",
+    "bank_code": "694",
+    "name": "Deutsche Bank AG",
+    "short_name": "Deutsche Bank AG"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "MGTCBEBE",
+    "bank_code": "695",
+    "name": "Euroclear Bank",
+    "short_name": "Euroclear Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CRLYBEBB",
+    "bank_code": "696",
+    "name": "Cr\u00e9dit Agricole Corporate & Investment Bank",
+    "short_name": "Cr\u00e9dit Agricole Corporate & Investment Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "MGTCBEBE",
+    "bank_code": "699",
+    "name": "Euroclear Bank",
+    "short_name": "Euroclear Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "700",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "701",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "702",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "703",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "704",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "705",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "706",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "707",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "708",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "709",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ABNABE2AXXX",
+    "bank_code": "719",
+    "name": "ABN AMRO Bank N.V.",
+    "short_name": "ABN AMRO Bank N.V."
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ABNABE2AIPC",
+    "bank_code": "722",
+    "name": "ABN AMRO Bank N.V.",
+    "short_name": "ABN AMRO Bank N.V."
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "725",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "726",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "727",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "728",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "729",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "730",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "731",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "732",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "733",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "734",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "735",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "736",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "737",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "738",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "739",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "740",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "741",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CREGBEBB",
+    "bank_code": "742",
+    "name": "CBC Banque et Assurances",
+    "short_name": "CBC Banque et Assurances"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "743",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "744",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "745",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "746",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "747",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "748",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "749",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "750",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "751",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "752",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "753",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "754",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "755",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "756",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "757",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "758",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "759",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "760",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "761",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "762",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "763",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "764",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "765",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "772",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "773",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "774",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "775",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "776",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "777",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "778",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "779",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "780",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "781",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "782",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "783",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "784",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "785",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "786",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "787",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "788",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "789",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "790",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "791",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "792",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "793",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "794",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "795",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "796",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "797",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "798",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "799",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "800",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "801",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "802",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "803",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "804",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "805",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "806",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ISAEBEBB",
+    "bank_code": "817",
+    "name": "CACEIS Bank Belgian Branch",
+    "short_name": "CACEIS Bank Belgian Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BLUXBEBB",
+    "bank_code": "823",
+    "name": "Banque de Luxembourg",
+    "short_name": "Banque de Luxembourg"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DEUTBEBE",
+    "bank_code": "825",
+    "name": "Deutsche Bank AG",
+    "short_name": "Deutsche Bank AG"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DEUTBEBE",
+    "bank_code": "826",
+    "name": "Deutsche Bank AG",
+    "short_name": "Deutsche Bank AG"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "828",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "830",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "831",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "832",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "833",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "834",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "835",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "836",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "837",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "838",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GKCCBEBB",
+    "bank_code": "839",
+    "name": "BELFIUS BANK",
+    "short_name": "BELFIUS BANK"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PRIBBEBB",
+    "bank_code": "840",
+    "name": "Edmond de Rothschild (Europe)",
+    "short_name": "Edmond de Rothschild (Europe)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DEGRBEBB",
+    "bank_code": "845",
+    "name": "Bank Degroof Petercam",
+    "short_name": "Bank Degroof Petercam"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "850",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "851",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "852",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "853",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "859",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "860",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "862",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "863",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "865",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "NICABEBB",
+    "bank_code": "866",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "KREDBEBB",
+    "bank_code": "868",
+    "name": "KBC Bank",
+    "short_name": "KBC Bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BNAGBEBB",
+    "bank_code": "871",
+    "name": "Bank Nagelmackers",
+    "short_name": "Bank Nagelmackers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PCHQBEBB",
+    "bank_code": "873",
+    "name": "bpost",
+    "short_name": "bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "MBWMBEBB",
+    "bank_code": "876",
+    "name": "MeDirect Bank S.A.",
+    "short_name": "MeDirect Bank S.A."
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BNAGBEBB",
+    "bank_code": "877",
+    "name": "Bank Nagelmackers",
+    "short_name": "Bank Nagelmackers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BNAGBEBB",
+    "bank_code": "878",
+    "name": "Bank Nagelmackers",
+    "short_name": "Bank Nagelmackers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BNAGBEBB",
+    "bank_code": "879",
+    "name": "Bank Nagelmackers",
+    "short_name": "Bank Nagelmackers"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "880",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "881",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "883",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "884",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "887",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "888",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "VDSPBE91",
+    "bank_code": "890",
+    "name": "vdk bank",
+    "short_name": "vdk bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "VDSPBE91",
+    "bank_code": "891",
+    "name": "vdk bank",
+    "short_name": "vdk bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "VDSPBE91",
+    "bank_code": "892",
+    "name": "vdk bank",
+    "short_name": "vdk bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "VDSPBE91",
+    "bank_code": "893",
+    "name": "vdk bank",
+    "short_name": "vdk bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "VDSPBE91",
+    "bank_code": "894",
+    "name": "vdk bank",
+    "short_name": "vdk bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "VDSPBE91",
+    "bank_code": "895",
+    "name": "vdk bank",
+    "short_name": "vdk bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "VDSPBE91",
+    "bank_code": "896",
+    "name": "vdk bank",
+    "short_name": "vdk bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "VDSPBE91",
+    "bank_code": "897",
+    "name": "vdk bank",
+    "short_name": "vdk bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "VDSPBE91",
+    "bank_code": "898",
+    "name": "vdk bank",
+    "short_name": "vdk bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "VDSPBE91",
+    "bank_code": "899",
+    "name": "vdk bank",
+    "short_name": "vdk bank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "900",
+    "name": "Onbeschikbaar",
+    "short_name": "Onbeschikbaar"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "901",
+    "name": "Onbeschikbaar",
+    "short_name": "Onbeschikbaar"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "902",
+    "name": "Onbeschikbaar",
+    "short_name": "Onbeschikbaar"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "TRWIBEB1",
+    "bank_code": "903",
+    "name": "Wise Europe SA",
+    "short_name": "Wise Europe SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "TRWIBEBB",
+    "bank_code": "904",
+    "name": "Wise Europe SA",
+    "short_name": "Wise Europe SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "TRWIBEB1",
+    "bank_code": "905",
+    "name": "Wise Europe SA",
+    "short_name": "Wise Europe SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CEKVBE88",
+    "bank_code": "906",
+    "name": "Centrale Kredietverlening (C.K.V.)",
+    "short_name": "Centrale Kredietverlening (C.K.V.)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "907",
+    "name": "Mollie B.V.",
+    "short_name": "Mollie B.V."
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CEKVBE88",
+    "bank_code": "908",
+    "name": "Centrale Kredietverlening (C.K.V.)",
+    "short_name": "Centrale Kredietverlening (C.K.V.)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "910",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "TUNZBEB1",
+    "bank_code": "911",
+    "name": "Worldline Financial Solutions nv/SA",
+    "short_name": "Worldline Financial Solutions nv/SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "EPBFBEBB",
+    "bank_code": "913",
+    "name": "EPBF",
+    "short_name": "EPBF"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "FXBBBEBB",
+    "bank_code": "914",
+    "name": "Ibanfirst",
+    "short_name": "Ibanfirst"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "OONXBEBB",
+    "bank_code": "915",
+    "name": "Equals Money Europe SA",
+    "short_name": "Equals Money Europe SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "GOCFBEB1",
+    "bank_code": "916",
+    "name": "GOLD COMMODITIES FOREX (G.C.F.)",
+    "short_name": "GOLD COMMODITIES FOREX (G.C.F.)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "920",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "922",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "923",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "FMMSBEB1",
+    "bank_code": "924",
+    "name": "Fimaser",
+    "short_name": "Fimaser"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "EBPBBEB1",
+    "bank_code": "926",
+    "name": "Ebury Partners Belgium",
+    "short_name": "Ebury Partners Belgium"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "929",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "930",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "931",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "934",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "936",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "939",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CLIQBEB1",
+    "bank_code": "940",
+    "name": "Banque Centrale de Compensation (Clearnet)",
+    "short_name": "Banque Centrale de Compensation (Clearnet)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "DEGRBEBB",
+    "bank_code": "941",
+    "name": "Banque Degroof Petercam Luxembourg",
+    "short_name": "Banque Degroof Petercam Luxembourg"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PUILBEBB",
+    "bank_code": "942",
+    "name": "Puilaetco Branch of Quintet Private Bank SA",
+    "short_name": "Puilaetco Branch of Quintet Private Bank SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "943",
+    "name": "IC Financial Services SA \u2013 Belgian Branch",
+    "short_name": "IC Financial Services SA \u2013 Belgian Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "JPMGBEBB",
+    "bank_code": "945",
+    "name": "J.P. Morgan SE \u2013 Brussels Branch",
+    "short_name": "J.P. Morgan SE \u2013 Brussels Branch"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "HOMNBEB2",
+    "bank_code": "948",
+    "name": "Mastercard Transaction Services (Europe) NV/SA",
+    "short_name": "Mastercard Transaction Services (Europe) NV/SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "HSBCBEBB",
+    "bank_code": "949",
+    "name": "HSBC Continental Europe Belgium",
+    "short_name": "HSBC Continental Europe Belgium"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "950",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "951",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "952",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "953",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "954",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "955",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "956",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "957",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "958",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "CTBKBEBX",
+    "bank_code": "959",
+    "name": "Beobank",
+    "short_name": "Beobank"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ABNABE2AIPC",
+    "bank_code": "960",
+    "name": "ABN AMRO Bank N.V.",
+    "short_name": "ABN AMRO Bank N.V."
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "961",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "963",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "FPEBBEB2",
+    "bank_code": "964",
+    "name": "FINANCIERE DES PAIEMENTS ELECTRONIQUES SAS - NICKEL BELGIUM",
+    "short_name": "FINANCIERE DES PAIEMENTS ELECTRONIQUES SAS - NICKEL BELGIUM"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "TRWIBEB1",
+    "bank_code": "967",
+    "name": "Wise Europe SA",
+    "short_name": "Wise Europe SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ENIBBEBB",
+    "bank_code": "968",
+    "name": "Banque Eni",
+    "short_name": "Banque Eni"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PUILBEBB",
+    "bank_code": "969",
+    "name": "Puilaetco Branch of Quintet Private Bank SA",
+    "short_name": "Puilaetco Branch of Quintet Private Bank SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "971",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "972",
+    "name": "Onbeschikbaar",
+    "short_name": "Onbeschikbaar"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ARSPBE22",
+    "bank_code": "973",
+    "name": "Argenta Spaarbank (ASPA)",
+    "short_name": "Argenta Spaarbank (ASPA)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PESOBEB1",
+    "bank_code": "974",
+    "name": "PPS EU SA",
+    "short_name": "PPS EU SA"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "AXABBE22",
+    "bank_code": "975",
+    "name": "Crelan",
+    "short_name": "Crelan"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "BBRUBEBB",
+    "bank_code": "976",
+    "name": "ING Belgi\u00eb",
+    "short_name": "ING Belgi\u00eb"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PAYVBEB2",
+    "bank_code": "977",
+    "name": "Paynovate",
+    "short_name": "Paynovate"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ARSPBE22",
+    "bank_code": "978",
+    "name": "Argenta Spaarbank (ASPA)",
+    "short_name": "Argenta Spaarbank (ASPA)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ARSPBE22",
+    "bank_code": "979",
+    "name": "Argenta Spaarbank (ASPA)",
+    "short_name": "Argenta Spaarbank (ASPA)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "ARSPBE22",
+    "bank_code": "980",
+    "name": "Argenta Spaarbank (ASPA)",
+    "short_name": "Argenta Spaarbank (ASPA)"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PCHQBEBB",
+    "bank_code": "981",
+    "name": "bpost",
+    "short_name": "bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PCHQBEBB",
+    "bank_code": "982",
+    "name": "bpost",
+    "short_name": "bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PCHQBEBB",
+    "bank_code": "983",
+    "name": "bpost",
+    "short_name": "bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "PCHQBEBB",
+    "bank_code": "984",
+    "name": "bpost",
+    "short_name": "bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "989",
+    "name": "bpost",
+    "short_name": "bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "990",
+    "name": "Bpost",
+    "short_name": "Bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "991",
+    "name": "Bpost",
+    "short_name": "Bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "992",
+    "name": "Bpost",
+    "short_name": "Bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "993",
+    "name": "Bpost",
+    "short_name": "Bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "994",
+    "name": "Bpost",
+    "short_name": "Bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "995",
+    "name": "Bpost",
+    "short_name": "Bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "996",
+    "name": "Bpost",
+    "short_name": "Bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "997",
+    "name": "Bpost",
+    "short_name": "Bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "998",
+    "name": "Bpost",
+    "short_name": "Bpost"
+  },
+  {
+    "country_code": "BE",
+    "primary": true,
+    "bic": "",
+    "bank_code": "999",
+    "name": "Bpost",
+    "short_name": "Bpost"
+  }
+]

@@ -1,0 +1,28 @@
+Metadata-Version: 2.4
+Name: openinference-semantic-conventions
+Version: 0.1.26
+Summary: OpenInference Semantic Conventions
+Project-URL: Homepage, https://github.com/Arize-ai/openinference/tree/main/python/openinference-semantic-conventions
+Author-email: OpenInference Authors <oss@arize.com>
+License-Expression: Apache-2.0
+License-File: LICENSE
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Requires-Python: <3.15,>=3.9
+Provides-Extra: test
+Description-Content-Type: text/markdown
+
+# OpenInference Semantic Conventions
+
+[![pypi](https://badge.fury.io/py/openinference-semantic-conventions.svg)](https://pypi.org/project/openinference-semantic-conventions/)
+
+This library contains code for the OpenInference Semantic Conventions defined by the OpenInference specification.

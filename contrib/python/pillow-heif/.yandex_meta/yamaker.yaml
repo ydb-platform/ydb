@@ -1,0 +1,4 @@
+requirements:
+  - contrib/libs/libheif
+exclude:
+  - LICENSES_bundled.txt

@@ -1,0 +1,17 @@
+commit 525c20be2c363c34e8be01bc13b00c966d7adcaa (HEAD -> capture360)
+author: orphean
+date: 2021-10-20T18:20:05+03:00
+
+    issue17002-stitching-bundle-adjuster-ray-bug
+
+--- a/modules/stitching/src/motion_estimators.cpp
++++ b/modules/stitching/src/motion_estimators.cpp
+@@ -612,7 +612,7 @@ void BundleAdjusterRay::calcError(Mat &err)
+             len = std::sqrt(x2*x2 + y2*y2 + z2*z2);
+             x2 /= len; y2 /= len; z2 /= len;
+ 
+-            double mult = std::sqrt(f1 * f2);
++            double mult = std::sqrt(std::abs(f1 * f2))*(f1*f2 < 0.0 ? -1 : 1);
+             err.at<double>(3 * match_idx, 0) = mult * (x1 - x2);
+             err.at<double>(3 * match_idx + 1, 0) = mult * (y1 - y2);
+             err.at<double>(3 * match_idx + 2, 0) = mult * (z1 - z2);

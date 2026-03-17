@@ -1,0 +1,68 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2006 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2005 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for hostfile utilities.
+#
+
+[not-all-mapped-alloc]
+At least one of the requested hosts is not included in the current allocation.
+
+Missing requested host: %s
+
+Please check your allocation or your request.
+#
+[dash-host:relative-syntax]
+A relative host was specified, but no prior allocation has been made.
+Thus, there is no way to determine the proper host to be used.
+
+-host: %s
+
+Please see the orte_hosts man page for further information.
+#
+[dash-host:relative-node-not-found]
+A relative host was specified, but was not found. The requested host was
+specified with --host as:
+
+Index: %d
+Syntax given: %s
+
+Please see the orte_hosts man page for further information.
+#
+[dash-host:relative-node-out-of-bounds]
+A relative host was specified, but the index given is beyond the number
+of hosts in the current allocation:
+
+Index: %d
+#hosts: %d
+
+You could obtain a larger allocation or reduce the relative host index.
+Please see the orte_hosts man page for further information.
+#
+[dash-host:invalid-relative-node-syntax]
+A relative host was improperly specified - the value provided was.
+
+-host: %s
+
+You may have forgotten to preface a node with 'N' or 'n', or used the 'e' or 'E' to indicate
+empty nodes. Please see the orte_hosts man page for further information.
+#
+[dash-host:not-enough-empty]
+The requested number of empty hosts was not available - the system was short by %d hosts.
+
+Please recheck your allocation - further information is available on the
+orte_hosts man page.

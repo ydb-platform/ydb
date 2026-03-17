@@ -1,0 +1,581 @@
+Metadata-Version: 2.4
+Name: smart_open
+Version: 7.5.1
+Summary: Utils for streaming large files (S3, HDFS, GCS, SFTP, Azure Blob Storage, gzip, bz2, zst...)
+Author-email: Radim Rehurek <me@radimrehurek.com>
+Project-URL: Repository, https://github.com/piskvorky/smart_open
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: System :: Distributed Computing
+Classifier: Topic :: Database :: Front-Ends
+Requires-Python: <4.0,>=3.10
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: wrapt
+Provides-Extra: s3
+Requires-Dist: boto3>=1.9.17; extra == "s3"
+Provides-Extra: gcs
+Requires-Dist: google-cloud-storage>=2.6.0; extra == "gcs"
+Requires-Dist: google-api-core<2.28; python_version < "3.10" and extra == "gcs"
+Provides-Extra: azure
+Requires-Dist: azure-storage-blob; extra == "azure"
+Requires-Dist: azure-common; extra == "azure"
+Requires-Dist: azure-core; extra == "azure"
+Provides-Extra: http
+Requires-Dist: requests; extra == "http"
+Provides-Extra: webhdfs
+Requires-Dist: requests; extra == "webhdfs"
+Provides-Extra: ssh
+Requires-Dist: paramiko; extra == "ssh"
+Provides-Extra: zst
+Requires-Dist: backports.zstd>=1.0.0; python_version < "3.14" and extra == "zst"
+Provides-Extra: all
+Requires-Dist: smart_open[azure,gcs,http,s3,ssh,webhdfs,zst]; extra == "all"
+Provides-Extra: test
+Requires-Dist: smart_open[all]; extra == "test"
+Requires-Dist: moto[server]; extra == "test"
+Requires-Dist: responses; extra == "test"
+Requires-Dist: pytest; extra == "test"
+Requires-Dist: pytest-rerunfailures; extra == "test"
+Requires-Dist: pytest_benchmark; extra == "test"
+Requires-Dist: pytest-timeout; extra == "test"
+Requires-Dist: pytest-xdist[psutil]; extra == "test"
+Requires-Dist: awscli; extra == "test"
+Requires-Dist: pyopenssl; extra == "test"
+Requires-Dist: numpy; extra == "test"
+Requires-Dist: flake8; extra == "test"
+Dynamic: license-file
+
+======================================================
+smart_open — utils for streaming large files in Python
+======================================================
+
+
+|License|_ |CI|_ |Coveralls|_ |Version|_ |Python|_ |Downloads|_
+
+.. |License| image:: https://img.shields.io/pypi/l/smart_open.svg
+.. |CI| image:: https://github.com/piskvorky/smart_open/actions/workflows/python-package.yml/badge.svg?branch=develop&event=push
+.. |Coveralls| image:: https://coveralls.io/repos/github/RaRe-Technologies/smart_open/badge.svg?branch=develop
+.. |Version| image:: https://img.shields.io/pypi/v/smart-open.svg?logo=pypi&logoColor=white
+.. |Python| image:: https://img.shields.io/pypi/pyversions/smart-open.svg?logo=python&logoColor=white
+.. |Downloads| image:: https://pepy.tech/badge/smart-open/month
+.. _License: https://github.com/piskvorky/smart_open/blob/master/LICENSE
+.. _CI: https://github.com/piskvorky/smart_open/actions/workflows/python-package.yml
+.. _Coveralls: https://coveralls.io/github/RaRe-Technologies/smart_open?branch=HEAD
+.. _Version: https://pypi.org/project/smart-open/
+.. _Python: https://pypi.org/project/smart-open/
+.. _Downloads: https://pypistats.org/packages/smart-open
+
+
+What?
+=====
+
+``smart_open`` is a Python 3 library for **efficient streaming of very large files** from/to storages such as S3, GCS, Azure Blob Storage, HDFS, WebHDFS, HTTP, HTTPS, SFTP, or local filesystem. It supports transparent, on-the-fly (de-)compression for a variety of different formats.
+
+``smart_open`` is a drop-in replacement for Python's built-in ``open()``: it can do anything ``open`` can (100% compatible, falls back to native ``open`` wherever possible), plus lots of nifty extra stuff on top.
+
+Why?
+====
+
+Working with large remote files, for example using Amazon's `boto3 <https://boto3.amazonaws.com/v1/documentation/api/latest/index.html>`_ Python library, is a pain.
+``boto3``'s ``Object.upload_fileobj()`` and ``Object.download_fileobj()`` methods require gotcha-prone boilerplate to use successfully, such as constructing file-like object wrappers.
+``smart_open`` shields you from that. It builds on boto3 and other remote storage libraries, but offers a **clean unified Pythonic API**. The result is less code for you to write and fewer bugs to make.
+
+
+How?
+=====
+
+``smart_open`` is well-tested, well-documented, and has a simple Pythonic API:
+
+
+.. _doctools_before_examples:
+
+.. code-block:: python
+
+  >>> from smart_open import open
+  >>>
+  >>> # stream lines from an S3 object
+  >>> for line in open('s3://commoncrawl/robots.txt'):
+  ...    print(repr(line))
+  ...    break
+  'User-Agent: *\n'
+
+  >>> # stream from/to compressed files, with transparent (de)compression:
+  >>> for line in open('tests/test_data/1984.txt.gz', encoding='utf-8'):
+  ...    print(repr(line))
+  'It was a bright cold day in April, and the clocks were striking thirteen.\n'
+  'Winston Smith, his chin nuzzled into his breast in an effort to escape the vile\n'
+  'wind, slipped quickly through the glass doors of Victory Mansions, though not\n'
+  'quickly enough to prevent a swirl of gritty dust from entering along with him.\n'
+
+  >>> # can use context managers too:
+  >>> with open('tests/test_data/1984.txt.gz') as fin:
+  ...    with open('tests/test_data/1984.txt.bz2', 'w') as fout:
+  ...        for line in fin:
+  ...           fout.write(line)
+  74
+  80
+  78
+  79
+
+  >>> # can use any IOBase operations, like seek
+  >>> with open('s3://commoncrawl/robots.txt', 'rb') as fin:
+  ...     for line in fin:
+  ...         print(repr(line.decode('utf-8')))
+  ...         break
+  ...     offset = fin.seek(0)  # seek to the beginning
+  ...     print(fin.read(4))
+  'User-Agent: *\n'
+  b'User'
+
+  >>> # stream from HTTP
+  >>> for line in open('http://example.com'):
+  ...     print(repr(line[:15]))
+  ...     break
+  '<!doctype html>'
+
+.. _doctools_after_examples:
+
+For more examples of URIs that ``smart_open`` accepts, see `help.txt <https://github.com/piskvorky/smart_open/blob/master/help.txt>`__ or ``help('smart_open')``.
+Some examples::
+
+    s3://bucket/key
+    s3://access_key_id:secret_access_key@bucket/key
+    gs://bucket/blob
+    azure://bucket/blob
+    hdfs://path/file
+    ./local/path/file.gz
+    file:///home/user/file.bz2
+    [ssh|scp|sftp]://username:password@host/path/file
+
+
+Documentation
+=============
+
+The API reference can be viewed at `help.txt <https://github.com/piskvorky/smart_open/blob/master/help.txt>`__ or using ``help('smart_open')``.
+
+Installation
+------------
+
+``smart_open`` supports a wide range of storage solutions. For all options, see the API reference.
+Each individual solution has its own dependencies.
+By default, ``smart_open`` does not install any dependencies in order to keep the installation size small.
+You can install one or more of these dependencies explicitly using optional dependencies defined in
+`pyproject.toml <https://github.com/piskvorky/smart_open/blob/master/pyproject.toml>`__ :
+
+.. code-block:: sh
+
+    pip install 'smart_open[s3,gcs,azure,http,webhdfs,ssh,zst]'
+
+Or, if you don't mind installing a large number of third party libraries, you can install all dependencies using:
+
+.. code-block:: sh
+
+    pip install 'smart_open[all]'
+
+Built-in help
+-------------
+
+To view the API reference, use the ``help`` python builtin:
+
+.. code-block:: python
+
+    help('smart_open')
+
+or view `help.txt <https://github.com/piskvorky/smart_open/blob/master/help.txt>`__ in your browser.
+
+More examples
+-------------
+
+For the sake of simplicity, the examples below assume you have all the dependencies installed, i.e. you have done:
+
+.. code-block:: sh
+
+    pip install 'smart_open[all]'
+
+.. code-block:: python
+
+    import os, boto3, botocore
+    from smart_open import open
+
+    # stream content *into* S3 (write mode) using a custom client
+    # this client is thread-safe ref https://github.com/boto/boto3/blob/1.38.41/docs/source/guide/clients.rst?plain=1#L111
+    config = botocore.client.Config(
+        max_pool_connections=64,
+        tcp_keepalive=True,
+        retries={"max_attempts": 6, "mode": "adaptive"},
+    )
+    client = boto3.Session(
+        aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+        aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+    ).client("s3", config=config)
+    with open('s3://smart-open-py37-benchmark-results/test.txt', 'wb', transport_params={'client': client}) as fout:
+        bytes_written = fout.write(b'hello world!')
+        print(bytes_written)
+
+    # perform a single-part upload to S3 (saves billable API requests, and allows seek() before upload)
+    with open('s3://smart-open-py37-benchmark-results/test.txt', 'wb', transport_params={'multipart_upload': False}) as fout:
+        bytes_written = fout.write(b'hello world!')
+        print(bytes_written)
+    # now with tempfile.TemporaryFile instead of the default io.BytesIO (to reduce memory footprint)
+    import tempfile
+    with tempfile.TemporaryFile() as tmp, open('s3://smart-open-py37-benchmark-results/test.txt', 'wb', transport_params={'multipart_upload': False, 'writebuffer': tmp}) as fout:
+        bytes_written = fout.write(b'hello world!')
+        print(bytes_written)
+
+    # stream from HDFS
+    for line in open('hdfs://user/hadoop/my_file.txt', encoding='utf8'):
+        print(line)
+
+    # stream from WebHDFS
+    for line in open('webhdfs://host:port/user/hadoop/my_file.txt'):
+        print(line)
+
+    # stream content *into* HDFS (write mode):
+    with open('hdfs://host:port/user/hadoop/my_file.txt', 'wb') as fout:
+        fout.write(b'hello world')
+
+    # stream content *into* WebHDFS (write mode):
+    with open('webhdfs://host:port/user/hadoop/my_file.txt', 'wb') as fout:
+        fout.write(b'hello world')
+
+    # stream from a completely custom s3 server, like s3proxy:
+    for line in open('s3u://user:secret@host:port@mybucket/mykey.txt'):
+        print(line)
+
+    # Stream to Digital Ocean Spaces bucket providing credentials from boto3 profile
+    session = boto3.Session(profile_name='digitalocean')
+    client = session.client('s3', endpoint_url='https://ams3.digitaloceanspaces.com')
+    transport_params = {'client': client}
+    with open('s3://bucket/key.txt', 'wb', transport_params=transport_params) as fout:
+        fout.write(b'here we stand')
+
+    # stream from GCS
+    for line in open('gs://my_bucket/my_file.txt'):
+        print(line)
+
+    # stream content *into* GCS (write mode):
+    with open('gs://my_bucket/my_file.txt', 'wb') as fout:
+        fout.write(b'hello world')
+
+    # stream from Azure Blob Storage
+    connect_str = os.environ['AZURE_STORAGE_CONNECTION_STRING']
+    transport_params = {
+        'client': azure.storage.blob.BlobServiceClient.from_connection_string(connect_str),
+    }
+    for line in open('azure://mycontainer/myfile.txt', transport_params=transport_params):
+        print(line)
+
+    # stream content *into* Azure Blob Storage (write mode):
+    connect_str = os.environ['AZURE_STORAGE_CONNECTION_STRING']
+    transport_params = {
+        'client': azure.storage.blob.BlobServiceClient.from_connection_string(connect_str),
+    }
+    with open('azure://mycontainer/my_file.txt', 'wb', transport_params=transport_params) as fout:
+        fout.write(b'hello world')
+
+Compression Handling
+--------------------
+
+The top-level `compression` parameter controls compression/decompression behavior when reading and writing.
+The supported values for this parameter are:
+
+- ``infer_from_extension`` (default behavior)
+- ``disable``
+- ``.bz2``
+- ``.gz``
+- ``.xz``
+- ``.zst``
+
+By default, ``smart_open`` automatically (de)compresses the file if the filename ends with one of these extensions.
+`See also <https://github.com/piskvorky/smart_open/blob/master/smart_open/compression.py>`__
+``smart_open.compression.get_supported_compression_types`` and ``mart_open.compression.register_compressor``.
+
+.. code-block:: python
+
+    >>> from smart_open import open
+    >>> with open('tests/test_data/1984.txt.gz') as fin:
+    ...     print(fin.read(32))
+    It was a bright cold day in Apri
+
+You can override this behavior to either disable compression, or explicitly specify the algorithm to use.
+To disable compression:
+
+.. code-block:: python
+
+    >>> from smart_open import open
+    >>> with open('tests/test_data/1984.txt.gz', 'rb', compression='disable') as fin:
+    ...     print(fin.read(32))
+    b'\x1f\x8b\x08\x08\x85F\x94\\\x00\x031984.txt\x005\x8f=r\xc3@\x08\x85{\x9d\xe2\x1d@'
+
+
+To specify the algorithm explicitly (e.g. for non-standard file extensions):
+
+.. code-block:: python
+
+    >>> from smart_open import open
+    >>> with open('tests/test_data/1984.txt.gzip', compression='.gz') as fin:
+    ...     print(fin.read(32))
+    It was a bright cold day in Apri
+
+You can also easily add support for other file extensions and compression formats.
+For example, to open xz-compressed files:
+
+.. code-block:: python
+
+    >>> import lzma, os
+    >>> from smart_open import open, register_compressor
+
+    >>> def _handle_xz(file_obj, mode):
+    ...      return lzma.LZMAFile(filename=file_obj, mode=mode)
+
+    >>> register_compressor('.xz', _handle_xz)
+
+    >>> with open('tests/test_data/1984.txt.xz') as fin:
+    ...     print(fin.read(32))
+    It was a bright cold day in Apri
+
+This is just an example: ``lzma`` is in the standard library and is registered by default.
+
+Transport-specific Options
+--------------------------
+
+``smart_open`` supports a wide range of transport options out of the box.
+For the full list of supported URI schemes, see `help.txt <https://github.com/piskvorky/smart_open/blob/master/help.txt>`__ or ``help('smart_open')``.
+Some examples::
+
+- AWS S3 (and any S3-Compatible)
+- HTTP, HTTPS (read-only)
+- SSH, SCP and SFTP
+- HDFS / WebHDFS
+- Google Cloud Storage
+- Azure Blob Storage
+
+Each option involves setting up its own set of parameters.
+For example, for accessing S3, you often need to set up authentication, like API keys or a profile name.
+``smart_open``'s ``open`` function accepts a keyword argument ``transport_params`` which accepts additional parameters for the transport layer.
+Here are some examples of using this parameter:
+
+.. code-block:: python
+
+  >>> import boto3
+  >>> fin = open('s3://commoncrawl/robots.txt', transport_params=dict(client=boto3.client('s3')))
+  >>> fin = open('s3://commoncrawl/robots.txt', transport_params=dict(buffer_size=1024))
+
+For the full list of keyword arguments supported by each transport option, see `help.txt <https://github.com/piskvorky/smart_open/blob/master/help.txt>`__ or ``help('smart_open')``.
+
+.. code-block:: python
+
+  help('smart_open.open')
+
+S3 Credentials
+--------------
+
+``smart_open`` uses the ``boto3`` library to talk to S3.
+``boto3`` has several `mechanisms <https://boto3.amazonaws.com/v1/documentation/api/latest/guide/configuration.html>`__ for determining the credentials to use.
+By default, ``smart_open`` will defer to ``boto3`` and let the latter take care of the credentials.
+There are several ways to override this behavior.
+
+The first is to pass a ``boto3.Client`` object as a transport parameter to the ``open`` function.
+You can customize the credentials when constructing the session for the client.
+``smart_open`` will then use the session when talking to S3.
+
+.. code-block:: python
+
+    session = boto3.Session(
+        aws_access_key_id=ACCESS_KEY,
+        aws_secret_access_key=SECRET_KEY,
+        aws_session_token=SESSION_TOKEN,
+    )
+    client = session.client('s3', endpoint_url=..., config=...)
+    fin = open('s3://bucket/key', transport_params={'client': client})
+
+Your second option is to specify the credentials within the S3 URL itself:
+
+.. code-block:: python
+
+    fin = open('s3://aws_access_key_id:aws_secret_access_key@bucket/key', ...)
+
+*Important*: The two methods above are **mutually exclusive**. If you pass an AWS client *and* the URL contains credentials, ``smart_open`` will ignore the latter.
+
+*Important*: ``smart_open`` ignores configuration files from the older ``boto`` library.
+Port your old ``boto`` settings to ``boto3`` in order to use them with ``smart_open``.
+
+S3 Advanced Usage
+-----------------
+
+Additional keyword arguments can be propagated to the boto3 methods that are used by ``smart_open`` under the hood using the ``client_kwargs`` transport parameter.
+
+For instance, to upload a blob with Metadata, ACL, StorageClass, these keyword arguments can be passed to ``create_multipart_upload`` (`docs <https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3.html#S3.Client.create_multipart_upload>`__).
+
+.. code-block:: python
+
+    kwargs = {'Metadata': {'version': 2}, 'ACL': 'authenticated-read', 'StorageClass': 'STANDARD_IA'}
+    fout = open('s3://bucket/key', 'wb', transport_params={'client_kwargs': {'S3.Client.create_multipart_upload': kwargs}})
+
+Iterating Over an S3 Bucket's Contents
+--------------------------------------
+
+Since going over all (or select) keys in an S3 bucket is a very common operation, there's also an extra function ``smart_open.s3.iter_bucket()`` that does this efficiently, **processing the bucket keys in parallel** (using multiprocessing):
+
+.. code-block:: python
+
+  >>> from smart_open import s3
+  >>> # we use workers=1 for reproducibility; you should use as many workers as you have cores
+  >>> bucket = 'silo-open-data'
+  >>> prefix = 'Official/annual/monthly_rain/'
+  >>> for key, content in s3.iter_bucket(bucket, prefix=prefix, accept_key=lambda key: '/201' in key, workers=1, key_limit=3):
+  ...     print(key, round(len(content) / 2**20))
+  Official/annual/monthly_rain/2010.monthly_rain.nc 13
+  Official/annual/monthly_rain/2011.monthly_rain.nc 13
+  Official/annual/monthly_rain/2012.monthly_rain.nc 13
+
+GCS Credentials
+---------------
+``smart_open`` uses the ``google-cloud-storage`` library to talk to GCS.
+``google-cloud-storage`` uses the ``google-cloud`` package under the hood to handle authentication.
+There are several `options <https://googleapis.dev/python/google-api-core/latest/auth.html>`__ to provide
+credentials.
+By default, ``smart_open`` will defer to ``google-cloud-storage`` and let it take care of the credentials.
+
+To override this behavior, pass a ``google.cloud.storage.Client`` object as a transport parameter to the ``open`` function.
+You can `customize the credentials <https://googleapis.dev/python/storage/latest/client.html>`__
+when constructing the client. ``smart_open`` will then use the client when talking to GCS. To follow allow with
+the example below, `refer to Google's guide <https://cloud.google.com/storage/docs/reference/libraries#setting_up_authentication>`__
+to setting up GCS authentication with a service account.
+
+.. code-block:: python
+
+    import os
+    from google.cloud.storage import Client
+    service_account_path = os.environ['GOOGLE_APPLICATION_CREDENTIALS']
+    client = Client.from_service_account_json(service_account_path)
+    fin = open('gs://gcp-public-data-landsat/index.csv.gz', transport_params=dict(client=client))
+
+If you need more credential options, you can create an explicit ``google.auth.credentials.Credentials`` object
+and pass it to the Client. To create an API token for use in the example below, refer to the
+`GCS authentication guide <https://cloud.google.com/storage/docs/authentication#apiauth>`__.
+
+.. code-block:: python
+
+	import os
+	from google.auth.credentials import Credentials
+	from google.cloud.storage import Client
+	token = os.environ['GOOGLE_API_TOKEN']
+	credentials = Credentials(token=token)
+	client = Client(credentials=credentials)
+	fin = open('gs://gcp-public-data-landsat/index.csv.gz', transport_params={'client': client})
+
+GCS Advanced Usage
+------------------
+
+Additional keyword arguments can be propagated to the GCS open method (`docs <https://cloud.google.com/python/docs/reference/storage/latest/google.cloud.storage.blob.Blob#google_cloud_storage_blob_Blob_open>`__), which is used by ``smart_open`` under the hood, using the ``blob_open_kwargs`` transport parameter.
+
+Additionally keyword arguments can be propagated to the GCS ``get_blob`` method (`docs <https://cloud.google.com/python/docs/reference/storage/latest/google.cloud.storage.bucket.Bucket#google_cloud_storage_bucket_Bucket_get_blob>`__) when in a read-mode, using the ``get_blob_kwargs`` transport parameter.
+
+Additional blob properties (`docs <https://cloud.google.com/python/docs/reference/storage/latest/google.cloud.storage.blob.Blob#properties>`__) can be set before an upload, as long as they are not read-only, using the ``blob_properties`` transport parameter.
+
+.. code-block:: python
+
+    open_kwargs = {'predefined_acl': 'authenticated-read'}
+    properties = {'metadata': {'version': 2}, 'storage_class': 'COLDLINE'}
+    fout = open('gs://bucket/key', 'wb', transport_params={'blob_open_kwargs': open_kwargs, 'blob_properties': properties})
+
+Azure Credentials
+-----------------
+
+``smart_open`` uses the ``azure-storage-blob`` library to talk to Azure Blob Storage.
+By default, ``smart_open`` will defer to ``azure-storage-blob`` and let it take care of the credentials.
+
+Azure Blob Storage does not have any ways of inferring credentials therefore, passing a ``azure.storage.blob.BlobServiceClient``
+object as a transport parameter to the ``open`` function is required.
+You can `customize the credentials <https://docs.microsoft.com/en-us/azure/storage/common/storage-samples-python#authentication>`__
+when constructing the client. ``smart_open`` will then use the client when talking to. To follow allow with
+the example below, `refer to Azure's guide <https://docs.microsoft.com/en-us/azure/storage/blobs/storage-quickstart-blobs-python#copy-your-credentials-from-the-azure-portal>`__
+to setting up authentication.
+
+.. code-block:: python
+
+    import os
+    from azure.storage.blob import BlobServiceClient
+    azure_storage_connection_string = os.environ['AZURE_STORAGE_CONNECTION_STRING']
+    client = BlobServiceClient.from_connection_string(azure_storage_connection_string)
+    fin = open('azure://my_container/my_blob.txt', transport_params={'client': client})
+
+If you need more credential options, refer to the
+`Azure Storage authentication guide <https://docs.microsoft.com/en-us/azure/storage/common/storage-samples-python#authentication>`__.
+
+Azure Advanced Usage
+--------------------
+
+Additional keyword arguments can be propagated to the ``commit_block_list`` method (`docs <https://azuresdkdocs.blob.core.windows.net/$web/python/azure-storage-blob/12.14.1/azure.storage.blob.html#azure.storage.blob.BlobClient.commit_block_list>`__), which is used by ``smart_open`` under the hood for uploads, using the ``blob_kwargs`` transport parameter.
+
+.. code-block:: python
+
+    kwargs = {'metadata': {'version': 2}}
+    fout = open('azure://container/key', 'wb', transport_params={'blob_kwargs': kwargs})
+
+Drop-in replacement of ``pathlib.Path.open``
+--------------------------------------------
+
+``smart_open.open`` can also be used with ``Path`` objects.
+The built-in `Path.open()` is not able to read text from compressed files, so use ``patch_pathlib`` to replace it with `smart_open.open()` instead.
+This can be helpful when e.g. working with compressed files.
+
+.. code-block:: python
+
+    >>> from pathlib import Path
+    >>> from smart_open.smart_open_lib import patch_pathlib
+    >>>
+    >>> _ = patch_pathlib()  # replace `Path.open` with `smart_open.open`
+    >>>
+    >>> path = Path("tests/test_data/crime-and-punishment.txt.gz")
+    >>>
+    >>> with path.open("r") as infile:
+    ...     print(infile.readline()[:41])
+    В начале июля, в чрезвычайно жаркое время
+
+How do I ...?
+=============
+
+See `this document <howto.md>`__.
+
+Extending ``smart_open``
+========================
+
+See `this document <extending.md>`__.
+
+Testing ``smart_open``
+======================
+
+``smart_open`` comes with a comprehensive suite of unit tests.
+Before you can run the test suite, install the test dependencies::
+
+    pip install -e .[test]
+
+Now, you can run the unit tests::
+
+    pytest tests
+
+The tests are also run automatically with `GitHub Actions <https://github.com/piskvorky/smart_open/actions/workflows/python-package.yml>`_ on every commit push & pull request.
+
+Comments, bug reports
+=====================
+
+``smart_open`` lives on `Github <https://github.com/piskvorky/smart_open>`_. You can file
+issues or pull requests there. Suggestions, pull requests and improvements welcome!
+
+----------------
+
+``smart_open`` is open source software released under the `MIT license <https://github.com/piskvorky/smart_open/blob/master/LICENSE>`_.
+Copyright (c) 2015-now `Radim Řehůřek <https://radimrehurek.com>`_.

@@ -1,0 +1,60 @@
+--- contrib/python/lfx/lfx/components/chroma/chroma.py	(3ab9609c8d19f065e145878754800195002eebc9)
++++ contrib/python/lfx/lfx/components/chroma/chroma.py	(index)
+@@ -2,7 +2,11 @@ from copy import deepcopy
+ from typing import TYPE_CHECKING
+ 
+ from chromadb.config import Settings
+-from langchain_chroma import Chroma
++
++try:
++    from langchain_chroma import Chroma
++except ImportError:
++    Chroma = None
+ from typing_extensions import override
+ 
+ from lfx.base.vectorstores.model import LCVectorStoreComponent, check_cached_vector_store
+--- contrib/python/lfx/lfx/components/files_and_knowledge/ingestion.py	(3ab9609c8d19f065e145878754800195002eebc9)
++++ contrib/python/lfx/lfx/components/files_and_knowledge/ingestion.py	(index)
+@@ -13,7 +13,11 @@ from typing import TYPE_CHECKING, Any
+ 
+ import pandas as pd
+ from cryptography.fernet import InvalidToken
+-from langchain_chroma import Chroma
++
++try:
++    from langchain_chroma import Chroma
++except ImportError:
++    Chroma = None
+ from langflow.services.auth.utils import decrypt_api_key, encrypt_api_key
+ from langflow.services.database.models.user.crud import get_user_by_id
+ 
+--- contrib/python/lfx/lfx/components/files_and_knowledge/retrieval.py	(3ab9609c8d19f065e145878754800195002eebc9)
++++ contrib/python/lfx/lfx/components/files_and_knowledge/retrieval.py	(index)
+@@ -3,7 +3,11 @@ from pathlib import Path
+ from typing import Any
+ 
+ from cryptography.fernet import InvalidToken
+-from langchain_chroma import Chroma
++
++try:
++    from langchain_chroma import Chroma
++except ImportError:
++    Chroma = None
+ from langflow.services.auth.utils import decrypt_api_key
+ from langflow.services.database.models.user.crud import get_user_by_id
+ from pydantic import SecretStr
+--- contrib/python/lfx/lfx/components/vectorstores/local_db.py	(3ab9609c8d19f065e145878754800195002eebc9)
++++ contrib/python/lfx/lfx/components/vectorstores/local_db.py	(index)
+@@ -1,7 +1,11 @@
+ from copy import deepcopy
+ from pathlib import Path
+ 
+-from langchain_chroma import Chroma
++try:
++    from langchain_chroma import Chroma
++except ImportError:
++    Chroma = None
++
+ from typing_extensions import override
+ 
+ from lfx.base.vectorstores.model import LCVectorStoreComponent, check_cached_vector_store

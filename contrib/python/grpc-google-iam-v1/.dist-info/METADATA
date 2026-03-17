@@ -1,0 +1,102 @@
+Metadata-Version: 2.1
+Name: grpc-google-iam-v1
+Version: 0.14.0
+Summary: IAM API client library
+Home-page: https://github.com/googleapis/python-grpc-google-iam-v1
+Author: Google LLC
+Author-email: googleapis-packages@google.com
+License: Apache 2.0
+Platform: Posix; MacOS X; Windows
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Internet
+Requires-Python: >=3.7
+License-File: LICENSE
+Requires-Dist: grpcio<2.0.0dev,>=1.44.0
+Requires-Dist: googleapis-common-protos[grpc]<2.0.0dev,>=1.56.0
+Requires-Dist: protobuf!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0dev,>=3.20.2
+
+Python Client for IAM
+=====================
+
+|preview| |pypi| |versions|
+
+`IAM API`_:
+
+- `Client Library Documentation`_
+- `Product Documentation`_
+
+.. |preview| image:: https://img.shields.io/badge/support-preview-orange.svg
+   :target: https://github.com/googleapis/google-cloud-python/blob/main/README.rst#beta-support
+.. |pypi| image:: https://img.shields.io/pypi/v/grpc-google-iam-v1.svg
+   :target: https://pypi.org/project/grpc-google-iam-v1/
+.. |versions| image:: https://img.shields.io/pypi/pyversions/grpc-google-iam-v1.svg
+   :target: https://pypi.org/project/grpc-google-iam-v1/
+.. _IAM API: https://cloud.google.com/iam
+.. _Client Library Documentation: https://cloud.google.com/python/docs/reference/grpc-iam/latest
+.. _Product Documentation:  https://cloud.google.com/iam
+
+Installation
+^^^^^^^^^^^^
+
+Install this library in a `virtualenv`_ using pip. `virtualenv`_ is a tool to
+create isolated Python environments. The basic problem it addresses is one of
+dependencies and versions, and indirectly permissions.
+
+With `virtualenv`_, it's possible to install this library without needing system
+install permissions, and without clashing with the installed system
+dependencies.
+
+.. _`virtualenv`: https://virtualenv.pypa.io/en/latest/
+
+
+Supported Python Versions
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Python >= 3.7
+
+
+Mac/Linux
+^^^^^^^^^
+
+.. code-block:: console
+
+    pip install virtualenv
+    virtualenv <your-env>
+    source <your-env>/bin/activate
+    <your-env>/bin/pip install grpc-google-iam-v1
+
+
+Windows
+^^^^^^^
+
+.. code-block:: console
+
+    pip install virtualenv
+    virtualenv <your-env>
+    <your-env>\Scripts\activate
+    <your-env>\Scripts\pip.exe install grpc-google-iam-v1
+
+Next Steps
+~~~~~~~~~~
+
+-  Read the `Client Library Documentation`_ for IAM 
+   API to see other available methods on the client.
+-  Read the `IAM API Product documentation`_ to learn
+   more about the product and see How-to Guides.
+-  View this `README`_ to see the full list of Cloud
+   APIs that we cover.
+
+.. _IAM API Product documentation:  https://cloud.google.com/iam
+.. _README: https://github.com/googleapis/google-cloud-python/blob/main/README.rst

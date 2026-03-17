@@ -1,0 +1,16 @@
+#code|abbreviation|type|name|unit|scale|reference|width|crex_unit|crex_scale|crex_width
+010200|meanDynamicTopographyAccuracy|double|MEAN DYNAMIC TOPOGRAPHY ACCURACY|m|3|-131072|18|m|3|6
+025192|pressureCode|table|PRESSURE CODE|Code table|0|0|2
+025200|bandSpecificOceanQualityFlag|flag|BAND SPECIFIC OCEAN QUALITY FLAG|Flag table|0|0|9|Flag table|0|3
+025201|altimeterEchoProcessingMode|table|Altimeter Echo Processing Mode|Code table|0|0|8|CODE TABLE|0|3
+025202|altimeterTrackingMode|table|Altimeter Tracking Mode|CODE TABLE|0|0|8|Code table|0|3
+025203|seaIceFreeboard|double|Sea Ice Freeboard|m|3|-131072|18|m|3|6
+033192|psBiasCorrection|double|Surface Pressure Bias Correction|Numeric|2|-300000|19
+021192|cloudRadarReflectivity|double|Cloud Radar reflectivity|dbZ|2|-9000|15|NA|0|0
+021193|cloudRadarReflectivityUncertainty|double|Cloud Radar Reflectivity Uncertainty|dB|2|-9000|15|NA|0|0
+021194|dataClassificationType|long|Radar Data Classification Type|Numeric|0|0|8
+021195|cloudFraction|double|Cloud Fraction|Numeric|3|0|11
+021196|standardDeviationOfCloudReflectivity|double|Standard Deviation Of Cloud Reflectivity|dB|2|0|14
+021197|height|long|Hight|m|0|-5000|18
+021198|standardDeviationOfAttenuatedBackscatter|long|Standard Deviation Of Attenuated Backscatter|M-1SR-1|2|0|14
+021199|standardDeviationOfExtinctionCoefficient|long|Standard Deviation Of Extinction Coefficient|M-1|2|0|14

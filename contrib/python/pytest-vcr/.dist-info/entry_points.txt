@@ -1,0 +1,3 @@
+[pytest11]
+vcr = pytest_vcr
+

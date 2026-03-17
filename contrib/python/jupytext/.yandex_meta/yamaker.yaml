@@ -1,0 +1,2 @@
+exclude:
+  - jupyterlab_jupytext/labextension/schemas/jupyterlab-jupytext/package.json.orig

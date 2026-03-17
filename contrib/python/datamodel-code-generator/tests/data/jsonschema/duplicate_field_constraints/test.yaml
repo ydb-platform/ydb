@@ -1,0 +1,10 @@
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: test.yaml
+title: test
+required:
+  - uid
+properties:
+  uid:
+    description: ulid of this object
+    $ref: ./common.yaml#/definitions/ulid

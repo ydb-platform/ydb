@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package yandex.cloud.compute.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/compute/v1/instance.proto";
+import "yandex/cloud/compute/v1/instance_service.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1;compute";
+option java_package = "yandex.cloud.api.compute.v1";
+
+message ProductIDs {
+  // License IDs that indicate which licenses are attached to resource.
+  // License IDs are used to calculate additional charges for the use of the virtual machine.
+  repeated string product_ids = 1 [(length) = "<=50"];
+}
+
+// Specification used to determine required product_ids
+// You can specify product ids explicitly or use disk_id|image_id|snapshot_id to infer products ids from them.
+message BootDiskSpec {
+  oneof boot_source {
+    option (exactly_one) = true;
+
+    // Disk ID.
+    string disk_id = 1 [(length) = "<=50"];
+
+    // Image ID.
+    string image_id = 2 [(length) = "<=50"];
+
+    // Snapshot ID.
+    string snapshot_id = 3 [(length) = "<=50"];
+
+    // Product IDs.
+    ProductIDs product_ids = 4;
+  }
+}
+
+// A Reserved Instance Pool resource. 
+message ReservedInstancePool {
+  message SlotStats {
+    // Equals to pool size (and equals to the sum of the following fields)
+    int64 total = 1;
+    
+    // Number of slots used by running instances
+    int64 used = 2;
+
+    // Number of slots available for instances (but not currently used)
+    int64 available = 3;
+    
+    // Number of slots unavailable for some reason (for example because of underlying host failure)
+    int64 unavailable = 4;
+
+    // Number of slots requested for async update, but still waiting for resources and not yet available for usage
+    int64 pending = 5;
+  }
+
+  message InstanceStats {
+    // Total number of instances linked to the pool
+    int64 total = 1;
+  }
+
+  // ID of the pool.
+  string id = 1;
+
+  // ID of the availability zone where the pool resides.
+  string zone_id = 2;
+
+  // ID of the cloud that the pool belongs to.
+  string cloud_id = 3;
+
+  // ID of the folder that the pool belongs to.
+  string folder_id = 4;
+
+  // Name of the pool. 1-63 characters long.
+  string name = 5;
+
+  // Description of the pool. 0-256 characters long.
+  string description = 6;
+
+  // Resource labels as `key:value` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 7;
+
+  google.protobuf.Timestamp created_at = 8;
+
+  // ID of the hardware platform configuration for pool instances.
+  string platform_id = 9;
+
+  // Computing resources of pool instances, such as the amount of memory and number of cores.
+  ResourcesSpec resources_spec = 10;
+
+  // GPU settings.
+  GpuSettings gpu_settings = 11;
+  
+  // License IDs that indicate which licenses are attached to resource.
+  // License IDs are used to calculate additional charges for the use of the virtual machine.
+  repeated string product_ids = 12;
+
+  // Network Settings.
+  NetworkSettings network_settings = 13;
+
+  // Desired size of the pool (number of slots for instances in this pool).
+  int64 size = 14;
+
+  // Equals to the size field except when updates occur with allow_pending=true. In those cases, committed_size equals only the number of non-pending slots.
+  int64 committed_size = 15;
+
+  // Allows the pool to contain more linked instances than the number of available slots (size without pending or unavailable slots).
+  // While running instances are still limited by available slots, stopped instances can exceed this limit.
+  // Warning: When this option is enabled, attempting to start more instances than the number of available slots will result in a "Not Enough Resources" error.
+  bool allow_oversubscription = 16;
+
+  // Statuses of the pool slots
+  SlotStats slot_stats = 17;
+
+  // Stats for instances of the pool
+  InstanceStats instance_stats = 18;
+}

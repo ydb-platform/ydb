@@ -1,0 +1,18 @@
+# assert(16);
+alias mars.fcmonth = marsForecastMonth;
+unalias mars.step;
+
+alias mars.origin = centre;
+alias mars.method = methodNumber;
+
+if (class is "od" || class is "me" || class is "en" || class is "c3") {
+    alias mars.system = systemNumber;
+}
+
+# See ECC-624
+if (centre == 80 && subCentre == 98 && (class is "c3" || class is "ci")) {
+  constant cnmc_cmcc = 'cmcc';
+  alias mars.origin = cnmc_cmcc;
+}
+
+if (class is "ci") { unalias mars.method; }

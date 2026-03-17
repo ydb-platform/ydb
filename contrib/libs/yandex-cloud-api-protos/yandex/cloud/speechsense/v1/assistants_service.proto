@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1;
+
+option java_package = "yandex.cloud.api.speechsense.v1";
+option java_outer_classname = "AssistantsServiceProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1;speechsense";
+
+import "google/api/annotations.proto";
+import "yandex/cloud/speechsense/v1/assistant.proto";
+
+service AssistantsService {
+  // Rpc for listing assistants in a project
+  rpc List(ListAssistantsRequest) returns (ListAssistantsResponse) {
+    option (google.api.http) = { post: "/speechsense/v1/assistants/list" body: "*" };
+  }
+
+  // Rpc for listing available assistant models
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse) {
+    option (google.api.http) = { post: "/speechsense/v1/assistants/listModels" body: "*" };
+  }
+}
+
+message ListAssistantsRequest {
+  // Project id
+  string project_id = 1;
+}
+
+message ListAssistantsResponse {
+  // Assistants belonging to the given project
+  repeated Assistant assistants = 1;
+}
+
+message ListModelsRequest {
+  // No parameters
+}
+
+message ListModelsResponse {
+  repeated Model models = 1;
+}

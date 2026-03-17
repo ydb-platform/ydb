@@ -1,0 +1,104 @@
+{% load i18n fb_tags %}
+<thead>
+    <tr>
+        <!-- ACTIONS -->
+        {% comment %}{% if not query.pop %}<th><input type="checkbox" id="action-toggle"></th>{% endif %}{% endcomment %}
+        <!-- SELECT -->
+        {% if query.pop == "1" %}<th></th>{% endif %}
+        {% if query.pop == "2" %}<th></th>{% endif %}
+        {% if query.pop == "3" %}<th></th>{% endif %}
+        {% if query.pop == "4" %}<th></th>{% endif %}
+        {% if query.pop == "5" %}<th></th>{% endif %}
+        <!-- FILETYPE -->
+        {% if query.o == "filetype" %}
+        <th scope="col" class="sortable sorted {{ query.ot }}ending">
+            <div class="sortoptions">
+                <a href="{% query_string "" "o,ot,p" %}&amp;ot={% if query.ot == "desc" %}asc{% else %}desc{% endif %}&amp;o=filetype" class="toggle {{ query.ot }}ending" title="{% trans "Toggle sorting" %}"></a>
+            </div>
+            <div class="text"><a href="{% query_string "" "o,ot,p" %}&amp;ot={% if query.ot == "desc" %}asc{% else %}desc{% endif %}&amp;o=filetype">{% trans "Type" %}</a></div>
+            <div class="clear"></div>
+        </th>
+        {% endif %}
+        {% if query.o != "filetype" %}
+        <th scope="col" class="sortable">
+            <div class="text"><a href="{% query_string "" "o,ot,p" %}&amp;ot=asc&amp;o=filetype">{% trans "Type" %}</a></div>
+            <div class="clear"></div>
+        </th>
+        {% endif %}
+        <!-- THUMB -->
+        <th scope="col">
+            <div class="text"><span>{% trans "Thumbnail" %}</span></div>
+            <div class="clear"></div>
+        </th>
+        <!-- FILENAME / DIMENSIONS  -->
+        {% if query.o == "filename_lower" %}
+        <th scope="col" class="sortable sorted {{ query.ot }}ending">
+            <div class="sortoptions">
+                <a href="{% query_string "" "o,ot,p" %}&amp;ot={% if query.ot == "desc" %}asc{% else %}desc{% endif %}&amp;o=filename_lower" class="toggle {{ query.ot }}ending" title="{% trans "Toggle sorting" %}"></a>
+            </div>
+            <div class="text"><a href="{% query_string "" "o,ot,p" %}&amp;ot={% if query.ot == "desc" %}asc{% else %}desc{% endif %}&amp;o=filename_lower">{% trans "Filename" %}</a></div>
+            <div class="clear"></div>
+        </th>{% endif %}
+        {% if query.o != "filename_lower" %}
+        <th scope="col" class="sortable">
+            <div class="text"><a href="{% query_string "" "o,ot,p" %}&amp;ot=asc&amp;o=filename_lower">{% trans "Filename" %}</a></div>
+            <div class="clear"></div>
+        </th>{% endif %}
+        <!-- FOLDER -->
+        {% if query.q and settings_var.SEARCH_TRAVERSE %}
+            {% if query.o == 'folder' %}
+            <th scope="col" class="sortable sorted {{ query.ot }}ending">
+                <div class="sortoptions">
+                    <a href="{% query_string "" "o,ot,p" %}&amp;ot={% if query.ot == "desc" %}asc{% else %}desc{% endif %}&amp;o=folder" class="toggle {{ query.ot }}ending" title="{% trans "Toggle sorting" %}"></a>
+                </div>
+                <div class="text"><a href="{% query_string "" "o,ot,p" %}&amp;ot={% if query.ot == "desc" %}asc{% else %}desc{% endif %}&amp;o=folder">{% trans "Folder" %}</a></div>
+                <div class="clear"></div>
+            </th>
+            {% endif %}
+            {% if query.o != 'folder' %}
+            <th scope="col">
+                <div class="text"><a href="{% query_string "" "o,ot,p" %}&amp;ot=asc&amp;o=folder">{% trans 'Folder' %}</a></div>
+                <div class="clear"></div>
+            </th>
+            {% endif %}
+        {% endif %}
+        <!-- SIZE -->
+        {% if query.o == "filesize" %}
+        <th scope="col" class="sortable sorted {{ query.ot }}ending">
+            <div class="sortoptions">
+                <a href="{% query_string "" "o,ot,p" %}&amp;ot={% if query.ot == "desc" %}asc{% else %}desc{% endif %}&amp;o=filesize" class="toggle {{ query.ot }}ending" title="{% trans "Toggle sorting" %}"></a>
+            </div>
+            <div class="text"><a href="{% query_string "" "o,ot,p" %}&amp;ot={% if query.ot == "desc" %}asc{% else %}desc{% endif %}&amp;o=filesize">{% trans "Size" %}</a></div>
+            <div class="clear"></div>
+        </th>
+        {% endif %}
+        {% if query.o != "filesize" %}
+        <th scope="col" class="sortable">
+            <div class="text"><a href="{% query_string "" "o,ot,p" %}&amp;ot=asc&amp;o=filesize">{% trans "Size" %}</a></div>
+            <div class="clear"></div>
+        </th>
+        {% endif %}
+        <!-- DATE -->
+        {% if query.o == "date" %}
+        <th scope="col" class="sortable sorted {{ query.ot }}ending">
+            <div class="sortoptions">
+                <a href="{% query_string "" "o,ot,p" %}&amp;ot={% if query.ot == "desc" %}asc{% else %}desc{% endif %}&amp;o=date" class="toggle {{ query.ot }}ending" title="{% trans "Toggle sorting" %}"></a>
+            </div>
+            <div class="text"><a href="{% query_string "" "o,ot,p" %}&amp;ot={% if query.ot == "desc" %}asc{% else %}desc{% endif %}&amp;o=date">{% trans "Date" %}</a></div>
+            <div class="clear"></div>
+        </th>
+        {% endif %}
+        {% if query.o != "date" %}
+        <th scope="col" class="sortable">
+            <div class="text"><a href="{% query_string "" "o,ot,p" %}&amp;ot=asc&amp;o=date">{% trans "Date" %}</a></div>
+            <div class="clear"></div>
+        </th>
+        {% endif %}
+
+        <!-- EDIT -->
+        <th scope="col">
+            <div class="text">&nbsp;</div>
+            <div class="clear"></div>
+        </th>
+    </tr>
+</thead>

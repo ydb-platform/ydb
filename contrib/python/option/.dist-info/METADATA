@@ -1,0 +1,68 @@
+Metadata-Version: 2.1
+Name: option
+Version: 2.1.0
+Summary: Rust like Option and Result types in Python
+Home-page: https://mat1g3r.github.io/option/
+License: MIT
+Author: Peijun Ma
+Author-email: peijun.ma@protonmail.com
+Requires-Python: >=3.7,<4
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Topic :: Software Development :: Libraries
+Requires-Dist: typing-extensions (>=4.0); python_version < "3.8"
+Project-URL: Repository, https://github.com/MaT1g3R/option
+Description-Content-Type: text/markdown
+
+# Option
+[![CircleCI](https://circleci.com/gh/MaT1g3R/option/tree/master.svg?style=svg)](https://circleci.com/gh/MaT1g3R/option/tree/master)
+
+Rust-like [Option](https://doc.rust-lang.org/std/option/enum.Option.html) and [Result](https://doc.rust-lang.org/std/result/enum.Result.html) types in Python, slotted and fully typed.
+
+An `Option` type represents an optional value, every `Option` is either `Some` and contains Some value, or `NONE`
+
+A `Result` type represents a value that might be an error. Every `Result` is either `Ok` and contains a success value, or `Err` and contains an error value.
+
+Using an `Option` type forces you to deal with `None` values in your code and increase type safety.
+
+Using a `Result` type simplifies error handling and reduces `try` `except` blocks.
+
+## Quick Start
+```Python
+from option import Result, Option, Ok, Err
+from requests import get
+
+
+def call_api(url, params) -> Result[dict, int]:
+    result = get(url, params)
+    code = result.status_code
+    if code == 200:
+        return Ok(result.json())
+    return Err(code)
+
+
+def calculate(url, params) -> Option[int]:
+    return call_api(url, params).ok().map(len)
+
+
+dict_len = calculate('https://example.com', {})
+```
+
+## Install
+Option can be installed from PyPi:
+```bash
+pip install option
+```
+
+## Documentation
+The documentation lives at https://mat1g3r.github.io/option/
+
+## License
+MIT
+

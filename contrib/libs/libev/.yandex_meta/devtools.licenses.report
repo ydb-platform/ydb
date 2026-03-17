@@ -1,0 +1,90 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSD-2-Clause OR GPL-2.0-or-later 33c093e01abf38ad70c30bab111eb07d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        ev++.h [7:37]
+        ev.c [7:37]
+        ev.c [613:643]
+        ev.h [7:37]
+        ev_epoll.c [7:37]
+        ev_iouring.c [7:37]
+        ev_kqueue.c [7:37]
+        ev_poll.c [7:37]
+        ev_select.c [7:37]
+        ev_vars.h [7:37]
+        ev_win32.c [7:37]
+        event.c [7:37]
+        event.h [7:37]
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        ev++.h [7:37]
+        ev.c [7:37]
+        ev.c [613:643]
+        ev.h [7:37]
+        ev_epoll.c [7:37]
+        ev_iouring.c [7:37]
+        ev_kqueue.c [7:37]
+        ev_poll.c [7:37]
+        ev_select.c [7:37]
+        ev_vars.h [7:37]
+        ev_win32.c [7:37]
+        event.c [7:37]
+        event.h [7:37]
+
+KEEP     BSD-2-Clause OR GPL-2.0-or-later fa91671076e3bc3d30474f70fccec0dc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [4:37]
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        LICENSE [4:37]

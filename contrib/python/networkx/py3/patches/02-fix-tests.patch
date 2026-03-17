@@ -1,0 +1,50 @@
+--- contrib/python/networkx/py3/networkx/algorithms/bipartite/tests/test_generators.py	(index)
++++ contrib/python/networkx/py3/networkx/algorithms/bipartite/tests/test_generators.py	(working tree)
+@@ -7 +7 @@ import networkx as nx
+-from ..generators import (
++from networkx.algorithms.bipartite.generators import (
+--- contrib/python/networkx/py3/networkx/algorithms/flow/tests/test_maxflow_large_graph.py	(index)
++++ contrib/python/networkx/py3/networkx/algorithms/flow/tests/test_maxflow_large_graph.py	(working tree)
+@@ -53 +53 @@ def read_graph(name):
+-        importlib.resources.files("networkx.algorithms.flow.tests")
++        importlib.resources.files("__tests__.networkx.algorithms.flow.tests")
+@@ -57 +57 @@ def read_graph(name):
+-    with bz2.BZ2File(fname, "rb") as f:
++    with bz2.BZ2File(fname.open("rb")) as f:
+--- contrib/python/networkx/py3/networkx/algorithms/flow/tests/test_mincost.py	(index)
++++ contrib/python/networkx/py3/networkx/algorithms/flow/tests/test_mincost.py	(working tree)
+@@ -466 +466 @@ class TestMinCostFlow:
+-            importlib.resources.files("networkx.algorithms.flow.tests")
++            importlib.resources.files("__tests__.networkx.algorithms.flow.tests")
+@@ -469 +469 @@ class TestMinCostFlow:
+-        with bz2.BZ2File(fname, "rb") as f:
++        with bz2.BZ2File(fname.open("rb")) as f:
+--- contrib/python/networkx/py3/networkx/algorithms/flow/tests/test_networksimplex.py	(index)
++++ contrib/python/networkx/py3/networkx/algorithms/flow/tests/test_networksimplex.py	(working tree)
+@@ -146 +146 @@ def test_large():
+-        importlib.resources.files("networkx.algorithms.flow.tests")
++        importlib.resources.files("__tests__.networkx.algorithms.flow.tests")
+@@ -150 +150 @@ def test_large():
+-    with bz2.BZ2File(fname, "rb") as f:
++    with bz2.BZ2File(fname.open("rb")) as f:
+--- contrib/python/networkx/py3/networkx/algorithms/isomorphism/tests/test_isomorphvf2.py	(index)
++++ contrib/python/networkx/py3/networkx/algorithms/isomorphism/tests/test_isomorphvf2.py	(working tree)
+@@ -103 +103 @@ class TestVF2GraphDB:
+-        fh = open(filename, mode="rb")
++        fh = filename.open(mode="rb")
+@@ -122 +122 @@ class TestVF2GraphDB:
+-        head = importlib.resources.files("networkx.algorithms.isomorphism.tests")
++        head = importlib.resources.files("__tests__.networkx.algorithms.isomorphism.tests")
+@@ -131 +131 @@ class TestVF2GraphDB:
+-        head = importlib.resources.files("networkx.algorithms.isomorphism.tests")
++        head = importlib.resources.files("__tests__.networkx.algorithms.isomorphism.tests")
+--- contrib/python/networkx/py3/networkx/drawing/tests/test_pylab.py	(index)
++++ contrib/python/networkx/py3/networkx/drawing/tests/test_pylab.py	(working tree)
+@@ -442,7 +442,6 @@ def test_house_with_colors():
+     ax.margins(0.11)
+     plt.tight_layout()
+     plt.axis("off")
+-    return fig
+ 
+ 
+ def test_axes():

@@ -1,0 +1,4 @@
+requirements:
+  - setuptools
+mark_as_tests:
+  - greplin/scales/*_test.py

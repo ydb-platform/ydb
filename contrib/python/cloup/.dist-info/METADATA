@@ -1,0 +1,177 @@
+Metadata-Version: 2.4
+Name: cloup
+Version: 3.0.8
+Summary: Adds features to Click: option groups, constraints, subcommand sections and help themes.
+Home-page: https://github.com/janLuke/cloup
+Author: Gianluca Gippetto
+Author-email: gianluca.gippetto@gmail.com
+License: BSD 3-Clause
+Keywords: CLI,click,argument groups,option groups,constraints,help colors,help themes,help styles
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.9
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+Requires-Dist: click<9.0,>=8.0
+Requires-Dist: typing_extensions; python_version <= "3.10"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+.. docs-index-start
+
+.. |pypi-release| image:: https://img.shields.io/pypi/v/cloup.svg
+    :alt: Latest release on PyPI
+    :target: https://pypi.org/project/cloup/
+
+.. |tests-status| image:: https://github.com/janLuke/cloup/workflows/Tests/badge.svg
+    :alt: Tests status
+    :target: https://github.com/janLuke/cloup/actions?query=workflow%3ATests
+
+.. |coverage| image:: https://codecov.io/github/janLuke/cloup/coverage.svg?branch=master
+    :alt: Coverage Status
+    :target: https://app.codecov.io/github/janluke/cloup/tree/master
+
+.. |python-versions| image:: https://img.shields.io/pypi/pyversions/cloup.svg
+    :alt: Supported versions
+    :target: https://pypi.org/project/cloup
+
+.. |dev-docs| image:: https://readthedocs.org/projects/cloup/badge/?version=latest
+    :alt: Documentation Status (master branch)
+    :target: https://cloup.readthedocs.io/en/latest/
+
+.. |release-docs| image:: https://readthedocs.org/projects/cloup/badge/?version=stable
+    :alt: Documentation Status (latest release)
+    :target: https://cloup.readthedocs.io/en/stable/
+
+.. |downloads| image:: https://static.pepy.tech/personalized-badge/cloup?period=week&units=international_system&left_color=grey&right_color=blue&left_text=downloads%20/%20week
+    :alt: PyPI - Downloads
+    :target: https://pepy.tech/project/cloup
+
+========
+Overview
+========
+|pypi-release| |downloads| |tests-status| |coverage| |dev-docs|
+
+**Cloup** — originally from "**Cl**\ick + option gr\ **oup**\s" — enriches
+`Click <https://github.com/pallets/click>`_ with several features that make it
+more expressive and configurable:
+
+- **option groups** and an (optional) help section for positional arguments
+
+- **constraints**, like ``mutually_exclusive``, that can be applied to option groups
+  or to any group of parameters, even *conditionally*
+
+- **subcommand aliases**
+
+- **subcommands sections**, i.e. the possibility of organizing the subcommands of a
+  ``Group`` in multiple help sections
+
+- a **themeable HelpFormatter**  that:
+
+  - has more parameters for adjusting widths and spacing, which can be provided
+    at the context and command level
+  - use a different layout when the terminal width is below a certain threshold
+    in order to improve readability
+
+- suggestions like "did you mean <subcommand>?" when you mistype a subcommand.
+
+Moreover, Cloup improves on **IDE support** providing decorators with *detailed*
+type hints and adding the static methods ``Context.settings()`` and
+``HelpFormatter.settings()`` for creating dictionaries of settings.
+
+Cloup is **statically type-checked** with MyPy in strict mode and extensively **tested**
+against multiple versions of Python with nearly 100% coverage.
+
+
+A simple example
+================
+
+.. code-block:: python
+
+    from cloup import (
+        HelpFormatter, HelpTheme, Style,
+        command, option, option_group
+    )
+    from cloup.constraints import RequireAtLeast, mutually_exclusive
+
+    # Check the docs for all available arguments of HelpFormatter and HelpTheme.
+    formatter_settings = HelpFormatter.settings(
+        theme=HelpTheme(
+            invoked_command=Style(fg='bright_yellow'),
+            heading=Style(fg='bright_white', bold=True),
+            constraint=Style(fg='magenta'),
+            col1=Style(fg='bright_yellow'),
+        )
+    )
+
+    # In a multi-command app, you can pass formatter_settings as part
+    # of your context_settings so that they are propagated to subcommands.
+    @command(formatter_settings=formatter_settings)
+    @option_group(
+        "Cool options",
+        option('--foo', help='This text should describe the option --foo.'),
+        option('--bar', help='This text should describe the option --bar.'),
+        constraint=mutually_exclusive,
+    )
+    @option_group(
+        "Other cool options",
+        "This is the optional description of this option group.",
+        option('--pippo', help='This text should describe the option --pippo.'),
+        option('--pluto', help='This text should describe the option --pluto.'),
+        constraint=RequireAtLeast(1),
+    )
+    def cmd(**kwargs):
+        """This is the command description."""
+        pass
+
+    if __name__ == '__main__':
+        cmd(prog_name='invoked-command')
+
+
+.. image:: https://raw.githubusercontent.com/janLuke/cloup/master/docs/_static/basic-example.png
+    :alt: Basic example --help screenshot
+
+If you don't provide ``--pippo`` or ``--pluto``:
+
+.. code-block:: text
+
+    Usage: invoked-command [OPTIONS]
+    Try 'invoked-command --help' for help.
+
+    Error: at least 1 of the following parameters must be set:
+      --pippo
+      --pluto
+
+This simple example just scratches the surface. Read more in the documentation
+(links below).
+
+.. docs-index-end
+
+
+Links
+=====
+
+* Documentation (release_ | development_)
+* `Changelog <https://cloup.readthedocs.io/en/stable/pages/changelog.html>`_
+* `GitHub repository <https://github.com/janLuke/cloup>`_
+* `Q&A and discussions <https://github.com/janLuke/cloup/discussions>`_
+
+.. _release: https://cloup.readthedocs.io/en/stable/#user-guide
+.. _development: https://cloup.readthedocs.io/en/latest/#user-guide

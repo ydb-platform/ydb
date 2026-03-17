@@ -1,0 +1,78 @@
+<!-- 
+
+     File isomfrk.ent produced by the dsssl script ent.dsl
+     from input data in unicode.xml.
+
+     Please report any errors to 
+     David Carlisle <davidc@nag.co.uk>.
+
+     The numeric character values assigned to each entity
+     (should) match either official Unicode assignments
+     or assignments in the STIX proposal for characters
+     for Mathematics.
+
+     The STIX assignments are temporary and will change if
+     the proposal or some variant of it is adopted by the
+     Unicode Consortium.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+     (C) International Organization for Standardization 1991
+     Permission to copy in any form is granted for use with
+     conforming SGML systems and applications as defined in
+     ISO 8879, provided this notice is included in all copies.
+-->
+
+<!ENTITY afr        "&#58752;" ><!--UE580 /frak a, lower case a -->
+<!ENTITY Afr        "&#58720;" ><!--UE560 /frak A, upper case a -->
+<!ENTITY bfr        "&#58753;" ><!--UE581 /frak b, lower case b -->
+<!ENTITY Bfr        "&#58721;" ><!--UE561 /frak B, upper case b -->
+<!ENTITY cfr        "&#58754;" ><!--UE582 /frak c, lower case c -->
+<!ENTITY Cfr        "&#58722;" ><!--UE562 /frak C, upper case c -->
+<!ENTITY dfr        "&#58755;" ><!--UE583 /frak d, lower case d -->
+<!ENTITY Dfr        "&#58723;" ><!--UE563 /frak D, upper case d -->
+<!ENTITY efr        "&#58756;" ><!--UE584 /frak e, lower case e -->
+<!ENTITY Efr        "&#58724;" ><!--UE564 /frak E, upper case e -->
+<!ENTITY ffr        "&#58757;" ><!--UE585 /frak f, lower case f -->
+<!ENTITY Ffr        "&#58725;" ><!--UE565 /frak F, upper case f -->
+<!ENTITY gfr        "&#58758;" ><!--UE586 /frak g, lower case g -->
+<!ENTITY Gfr        "&#58726;" ><!--UE566 /frak G, upper case g -->
+<!ENTITY hfr        "&#58759;" ><!--UE587 /frak h, lower case h -->
+<!ENTITY Hfr        "&#8460;"  ><!--U210C /frak H, upper case h -->
+<!ENTITY ifr        "&#58760;" ><!--UE588 /frak i, lower case i -->
+<!ENTITY Ifr        "&#8465;"  ><!--U2111 /frak I, upper case i -->
+<!ENTITY jfr        "&#58761;" ><!--UE589 /frak j, lower case j -->
+<!ENTITY Jfr        "&#58729;" ><!--UE569 /frak J, upper case j -->
+<!ENTITY kfr        "&#58762;" ><!--UE58A /frak k, lower case k -->
+<!ENTITY Kfr        "&#58730;" ><!--UE56A /frak K, upper case k -->
+<!ENTITY lfr        "&#58763;" ><!--UE58B /frak l, lower case l -->
+<!ENTITY Lfr        "&#58731;" ><!--UE56B /frak L, upper case l -->
+<!ENTITY mfr        "&#58764;" ><!--UE58C /frak m, lower case m -->
+<!ENTITY Mfr        "&#58732;" ><!--UE56C /frak M, upper case m -->
+<!ENTITY nfr        "&#58765;" ><!--UE58D /frak n, lower case n -->
+<!ENTITY Nfr        "&#58733;" ><!--UE56D /frak N, upper case n -->
+<!ENTITY ofr        "&#58766;" ><!--UE58E /frak o, lower case o -->
+<!ENTITY Ofr        "&#58734;" ><!--UE56E /frak O, upper case o -->
+<!ENTITY pfr        "&#58767;" ><!--UE58F /frak p, lower case p -->
+<!ENTITY Pfr        "&#58735;" ><!--UE56F /frak P, upper case p -->
+<!ENTITY qfr        "&#58768;" ><!--UE590 /frak q, lower case q -->
+<!ENTITY Qfr        "&#58736;" ><!--UE570 /frak Q, upper case q -->
+<!ENTITY rfr        "&#58769;" ><!--UE591 /frak r, lower case r -->
+<!ENTITY Rfr        "&#8476;"  ><!--U211C /frak R, upper case r -->
+<!ENTITY sfr        "&#58770;" ><!--UE592 /frak s, lower case s -->
+<!ENTITY Sfr        "&#58738;" ><!--UE572 /frak S, upper case s -->
+<!ENTITY tfr        "&#58771;" ><!--UE593 /frak t, lower case t -->
+<!ENTITY Tfr        "&#58739;" ><!--UE573 /frak T, upper case t -->
+<!ENTITY ufr        "&#58772;" ><!--UE594 /frak u, lower case u -->
+<!ENTITY Ufr        "&#58740;" ><!--UE574 /frak U, upper case u -->
+<!ENTITY vfr        "&#58773;" ><!--UE595 /frak v, lower case v -->
+<!ENTITY Vfr        "&#58741;" ><!--UE575 /frak V, upper case v -->
+<!ENTITY wfr        "&#58774;" ><!--UE596 /frak w, lower case w -->
+<!ENTITY Wfr        "&#58742;" ><!--UE576 /frak W, upper case w -->
+<!ENTITY xfr        "&#58775;" ><!--UE597 /frak x, lower case x -->
+<!ENTITY Xfr        "&#58743;" ><!--UE577 /frak X, upper case x -->
+<!ENTITY yfr        "&#58776;" ><!--UE598 /frak y, lower case y -->
+<!ENTITY Yfr        "&#58744;" ><!--UE578 /frak Y, upper case y -->
+<!ENTITY zfr        "&#58777;" ><!--UE599 /frak z, lower case z -->
+<!ENTITY Zfr        "&#58745;" ><!--UE579 /frak Z, upper case z  -->

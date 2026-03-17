@@ -1,0 +1,5 @@
+--- contrib/python/spacy/spacy/tokenizer.pyx	(index)
++++ contrib/python/spacy/spacy/tokenizer.pyx	(working tree)
+@@ -850,1 +850,1 @@ def _get_regex_pattern(regex):
+-    void stdsort "sort"(vector[SpanC].iterator,
++    void stdsort "std::sort"(vector[SpanC].iterator,

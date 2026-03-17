@@ -1,0 +1,230 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.mcpgateway.v1;
+
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/serverless/mcpgateway/v1/mcp_gateway.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "google/api/annotations.proto";
+
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/mcpgateway/v1;mcpgateway";
+option java_package = "yandex.cloud.api.serverless.mcpgateway.v1";
+
+// A set of methods for managing MCP Gateway resources.
+service McpGatewayService {
+  // Retrieves the specified MCP Gateway.
+  rpc Get (GetMcpGatewayRequest) returns (McpGateway) {
+    option (google.api.http) = {get: "/mcpgateway/v1/mcpGateways/{mcp_gateway_id}"};
+  };
+
+  // Retrieves the list of MCP Gateways in the specified folder.
+  rpc List (ListMcpGatewayRequest) returns (ListMcpGatewayResponse) {
+    option (google.api.http) = {get: "/mcpgateway/v1/mcpGateways"};
+  };
+
+  // Creates an MCP Gateway in the specified folder.
+  rpc Create (CreateMcpGatewayRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/mcpgateway/v1/mcpGateways" body: "*"};
+
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateMcpGatewayMetadata"
+      response: "McpGateway"
+    };
+  };
+
+  // Updates the specified MCP Gateway.
+  rpc Update (UpdateMcpGatewayRequest) returns (operation.Operation) {
+    option (google.api.http) = {patch: "/mcpgateway/v1/mcpGateways/{mcp_gateway_id}" body: "*"};
+
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateMcpGatewayMetadata"
+      response: "McpGateway"
+    };
+  };
+
+  // Deletes the specified MCP Gateway.
+  rpc Delete (DeleteMcpGatewayRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/mcpgateway/v1/mcpGateways/{mcp_gateway_id}"};
+
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteMcpGatewayMetadata"
+      response: "google.protobuf.Empty"
+    };
+  };
+
+  // Lists operations for the specified MCP Gateway.
+  rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse) {
+    option (google.api.http) = {get: "/mcpgateway/v1/mcpGateways/{mcp_gateway_id}/operations"};
+  };
+
+  // Lists access bindings for the specified MCP Gateway.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/mcpgateway/v1/mcpGateways/{resource_id}:listAccessBindings" };
+  };
+
+  // Sets access bindings for the specified MCP Gateway.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/mcpgateway/v1/mcpGateways/{resource_id}:setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Updates access bindings for the specified MCP Gateway.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/mcpgateway/v1/mcpGateways/{resource_id}:updateAccessBindings" body: "*" };
+
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetMcpGatewayRequest {
+  // ID of the MCP Gateway.
+  string mcp_gateway_id = 1 [(required) = true];
+}
+
+message ListMcpGatewayRequest {
+  // ID of the folder to list MCP Gateways in.
+  string folder_id = 1 [(required) = true];
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `pageSize`, the service returns a [ListWorkflowsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2;
+  // Page token. To get the next page of results, set `pageToken` to the
+  // [ListWorkflowsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3;
+  // A filter expression that filters functions listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can only be applied to following fields: name, created_at.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z]([-a-z0-9]{0,61}[a-z0-9])?`.
+  // Example of a filter: `name=my-mcp-gateway`.
+  string filter = 4;
+}
+
+message ListMcpGatewayResponse {
+  // List of MCP Gateways.
+  repeated McpGatewayPreview gateways = 1;
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListMcpGatewayRequest.page_size], use `next_page_token` as the value
+  // for the [ListMcpGatewayRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateMcpGatewayRequest {
+  // ID of the folder to create the MCP Gateway in.
+  string folder_id = 1 [(required) = true];
+  // Name of the MCP Gateway.
+  string name = 2 [(required) = true, (length) = "<=128", (pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  // Description of the MCP Gateway.
+  string description = 3 [(length) = "<=65536"];
+  // MCP Gateway labels as `key:value` pairs.
+  map<string, string> labels = 4 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  // List of MCP tools.
+  repeated McpTool tools = 5;
+  // Logging options for the MCP Gateway.
+  LogOptions log_options = 6;
+  // Service account ID for the MCP Gateway.
+  string service_account_id = 7;
+  // Network ID for the MCP Gateway.
+  string network_id = 8;
+  // Flag indicating if the MCP Gateway is publicly accessible.
+  bool public = 9;
+}
+
+message CreateMcpGatewayMetadata {
+  // ID of the MCP Gateway being created.
+  string mcp_gateway_id = 1 [(required) = true];
+  // ID of the folder containing the MCP Gateway.
+  string folder_id = 2 [(required) = true];
+}
+
+message UpdateMcpGatewayRequest {
+  // ID of the MCP Gateway to update.
+  string mcp_gateway_id = 1 [(required) = true];
+  // Updated name of the MCP Gateway.
+  string name = 2 [(length) = "<=128", (pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  // Updated description of the MCP Gateway.
+  string description = 3 [(length) = "<=65536"];
+  // Updated MCP Gateway labels as `key:value` pairs.
+  map<string, string> labels = 4 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  // Updated list of MCP tools associated with the gateway.
+  repeated McpTool tools = 5;
+  // Updated logging options for the MCP Gateway.
+  LogOptions log_options = 6;
+  // Updated service account ID for the MCP Gateway.
+  string service_account_id = 7;
+  // Updated network ID for the MCP Gateway.
+  string network_id = 8;
+  // Field mask specifying which fields to update.
+  google.protobuf.FieldMask update_mask = 9;
+  // Updated flag indicating if the MCP Gateway is publicly accessible.
+  bool public = 10;
+}
+
+message UpdateMcpGatewayMetadata {
+  // ID of the MCP Gateway being updated.
+  string mcp_gateway_id = 1 [(required) = true];
+  // ID of the folder containing the MCP Gateway.
+  string folder_id = 2 [(required) = true];
+}
+
+message DeleteMcpGatewayRequest {
+  // ID of the MCP Gateway to delete.
+  string mcp_gateway_id = 1 [(required) = true];
+}
+
+message DeleteMcpGatewayMetadata {
+  // ID of the MCP Gateway being deleted.
+  string mcp_gateway_id = 1 [(required) = true];
+}
+
+message ListOperationsRequest {
+  // ID of the MCP Gateway to list operations for.
+  string mcp_gateway_id = 1 [(required) = true];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `pageSize`, the service returns a [ListOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  //
+  // Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. To get the next page of results, set `pageToken` to the
+  // [ListOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  //
+  // The expression must specify:
+  // 1. The field name. Currently filtering can be applied to the [operation.Operation.done], [operation.Operation.created_by] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  // Examples of a filter: `done=false`, `created_by='John.Doe'`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListOperationsResponse {
+  // List of operations for the specified MCP Gateway.
+  repeated operation.Operation operations = 1;
+
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListOperationsRequest.page_size], use `next_page_token` as the value
+  // for the [ListOperationsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

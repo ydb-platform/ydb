@@ -1,0 +1,17 @@
+cython_directive:
+  - language_level=3
+mark_as_cython_c:
+  - asyncpg/pgproto/pgproto.pyx
+  - asyncpg/protocol/protocol.pyx
+exclude_from_macros:
+  - asyncpg/protocol/codecs/*.pyx
+  - asyncpg/protocol/coreproto.pyx
+  - asyncpg/protocol/encodings.pyx
+  - asyncpg/protocol/prepared_stmt.pyx
+  - asyncpg/protocol/scram.pyx
+  - asyncpg/protocol/settings.pyx
+  - asyncpg/codecs/*.pyx
+  - asyncpg/pgproto/buffer.pyx
+  - asyncpg/pgproto/codecs/*.pyx
+  - asyncpg/pgproto/frb.pyx
+  - asyncpg/pgproto/uuid.pyx

@@ -1,0 +1,4 @@
+requirements:
+  - library/python/django
+keep:
+  - tests/*

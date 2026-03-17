@@ -1,0 +1,162 @@
+Metadata-Version: 2.4
+Name: PyVISA-py
+Version: 0.8.1
+Summary: Pure Python implementation of a VISA library.
+Author-email: "Hernan E. Grecco" <hernan.grecco@gmail.com>
+Maintainer-email: "Matthieu C. Dartiailh" <m.dartiailh@gmail.com>
+License: The MIT License
+        
+        Copyright (c) 2014 PyVISA-py Authors and contributors. See AUTHORS
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy of
+        this software and associated documentation files (the "Software"), to deal in
+        the Software without restriction, including without limitation the rights to
+        use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+        of the Software, and to permit persons to whom the Software is furnished to do
+        so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: homepage, https://github.com/pyvisa/pyvisa-py
+Project-URL: documentation, https://pyvisa-py.readthedocs.io/en/latest/
+Project-URL: repository, https://github.com/pyvisa/pyvisa-py
+Project-URL: changelog, https://github.com/pyvisa/pyvisa-py/blob/main/CHANGES
+Keywords: VISA,GPIB,USB,serial,RS232,measurement,acquisition
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Programming Language :: Python
+Classifier: Topic :: Scientific/Engineering :: Interface Engine/Protocol Translator
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.10
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+License-File: AUTHORS
+Requires-Dist: pyvisa>=1.15.0
+Requires-Dist: typing_extensions
+Provides-Extra: gpib-ctypes
+Requires-Dist: gpib-ctypes>=0.3.0; extra == "gpib-ctypes"
+Provides-Extra: serial
+Requires-Dist: pyserial>=3.0; extra == "serial"
+Provides-Extra: usb
+Requires-Dist: pyusb; extra == "usb"
+Provides-Extra: usb-full
+Requires-Dist: pyusb; extra == "usb-full"
+Requires-Dist: libusb-package; extra == "usb-full"
+Provides-Extra: psutil
+Requires-Dist: psutil; extra == "psutil"
+Provides-Extra: hislip-discovery
+Requires-Dist: zeroconf; extra == "hislip-discovery"
+Provides-Extra: vicp
+Requires-Dist: pyvicp; extra == "vicp"
+Requires-Dist: zeroconf; extra == "vicp"
+Dynamic: license-file
+
+PyVISA-py
+=========
+
+.. image:: https://github.com/pyvisa/pyvisa-py/workflows/Continuous%20Integration/badge.svg
+    :target: https://github.com/pyvisa/pyvisa-py/actions
+    :alt: Continuous integration
+.. image:: https://github.com/pyvisa/pyvisa-py/workflows/Documentation%20building/badge.svg
+    :target: https://github.com/pyvisa/pyvisa-py/actions
+    :alt: Documentation building
+.. image:: https://dev.azure.com/pyvisa/pyvisa-py/_apis/build/status/pyvisa.pyvisa-py.keysight-assisted?branchName=main
+    :target: https://dev.azure.com/pyvisa/pyvisa-py/_build
+    :alt: Keysight assisted testing
+.. image:: https://codecov.io/gh/pyvisa/pyvisa-py/branch/main/graph/badge.svg
+    :target: https://codecov.io/gh/pyvisa/pyvisa-py
+    :alt: Code Coverage
+.. image:: https://readthedocs.org/projects/pyvisa-py/badge/?version=latest
+    :target: https://pyvisa.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
+.. image:: https://img.shields.io/pypi/l/PyVISA-py
+    :target: https://pypi.python.org/pypi/pyvisa-py
+    :alt: PyPI - License
+.. image:: https://img.shields.io/pypi/v/PyVISA-py
+    :target: https://pypi.python.org/pypi/pyvisa-py
+    :alt: PyPI
+
+A PyVISA backend that implements a large part of the "Virtual Instrument Software
+Architecture" (VISA_) in pure Python (with the help of some nice cross platform
+libraries python packages!).
+
+Description
+-----------
+
+PyVISA started as wrapper for the IVI-VISA library and therefore you need to install
+a VISA library in your system (National Instruments, Keysight, etc). This works
+most of the time, for most people. But IVI-VISA implementations are proprietary
+libraries that only works on certain systems. That is when PyVISA-py jumps in.
+
+Starting from version 1.6, PyVISA allows to use different backends. These
+backends can be dynamically loaded. PyVISA-py is one of such backends. It
+implements most of the methods for Message Based communication
+(Serial/USB/GPIB/Ethernet) using Python and some well developed, easy to deploy
+and cross platform libraries
+
+.. _VISA: https://www.ivifoundation.org/specifications/default.html#visa-specifications
+
+
+VISA and Python
+---------------
+
+Python has a couple of features that make it very interesting for measurement
+controlling:
+
+- Python is an easy-to-learn scripting language with short development cycles.
+- It represents a high abstraction level, which perfectly blends with the
+  abstraction level of measurement programs.
+- It has a very rich set of native libraries, including numerical and plotting
+  modules for data analysis and visualisation.
+- A large set of books (in many languages) and on-line publications is available.
+
+
+Requirements
+------------
+
+- Python 3
+- PyVISA
+
+Optionally:
+
+- PySerial (to interface with Serial instruments)
+- PyUSB (to interface with USB instruments)
+- linux-gpib (to interface with gpib instruments, only on linux)
+- gpib-ctypes (to interface with GPIB instruments on Windows and Linux)
+- psutil (to discover TCPIP devices across multiple interfaces)
+- zeroconf (for HiSLIP and VICP devices discovery)
+- pyvicp (to enable the Teledyne LeCroy proprietary VICP protocol)
+
+Please refer to `pyproject.toml <./pyproject.toml>`_ for the specific version
+requirements.
+
+Installation
+--------------
+
+Using pip::
+
+    $ pip install pyvisa-py
+
+
+Documentation
+--------------
+
+The documentation can be read online at https://pyvisa-py.readthedocs.org

@@ -1,0 +1,16 @@
+--- contrib/python/argon2-cffi-bindings/ya.make	(index)
++++ contrib/python/argon2-cffi-bindings/ya.make	(working tree)
+@@ -28,6 +28,13 @@ PY_SRCS(
+     _argon2_cffi_bindings/__init__.py
+ )
+ 
++RUN_PROGRAM(
++    contrib/python/cffi/py3/gen _argon2_cffi_bindings/_ffi_build.py:ffi _argon2_cffi_bindings._ffi.cffi.py3.c
++    IN _argon2_cffi_bindings/_ffi_build.py
++    OUT _argon2_cffi_bindings._ffi.cffi.py3.c
++    OUTPUT_INCLUDES argon2.h
++)
++
+ RESOURCE_FILES(
+     PREFIX contrib/python/argon2-cffi-bindings/
+     .dist-info/METADATA

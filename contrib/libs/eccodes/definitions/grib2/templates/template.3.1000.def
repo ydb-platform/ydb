@@ -1,0 +1,56 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.1000, Cross-section grid, with points equally spaced on the horizontal
+
+# This template is simply experimental, was not validated at the time of publication
+# and should be used only for bilateral previously agreed tests
+transient template_is_experimental = 1 : hidden ;
+
+include "grib2/templates/template.3.shape_of_the_earth.def"
+
+constant isGridded = true;
+
+# Number of horizontal points
+unsigned[4] numberOfHorizontalPoints : dump ;
+
+# Basic angle of the initial production domain
+unsigned[4] basicAngleOfTheInitialProductionDomain = 0;
+
+# Subdivisions of basic angle used to define extreme longitudes and latitudes
+unsigned[4] subdivisionsOfBasicAngle = missing() : can_be_missing;
+
+# Latitude of first grid point
+signed[4] latitudeOfFirstGridPoint : edition_specific ;
+alias La1 = latitudeOfFirstGridPoint;
+
+# Longitude of first grid point
+unsigned[4] longitudeOfFirstGridPoint : edition_specific;
+alias Lo1 = longitudeOfFirstGridPoint;
+
+include "grib2/templates/template.3.scanning_mode.def"
+
+# Latitude of last grid point
+signed[4] latitudeOfLastGridPoint : edition_specific;
+alias La2  = latitudeOfLastGridPoint;
+
+# Longitude of last grid point
+unsigned[4] longitudeOfLastGridPoint: edition_specific ;
+alias Lo2 =  longitudeOfLastGridPoint;
+
+# Type of horizontal line
+codetable[1] typeOfHorizontalLine ('3.20.table',masterDir,localDir) : dump ;
+
+# Number of vertical points
+unsigned[2] numberOfVerticalPoints : dump ;
+
+# Physical meaning of vertical coordinate
+codetable[1] meaningOfVerticalCoordinate ('3.15.table',masterDir,localDir) : dump ;
+
+# Vertical dimension coordinate values definition
+codetable[1] verticalCoordinate ('3.21.table',masterDir,localDir) : dump ;
+
+# Number of coefficients or values used to specify vertical coordinates
+unsigned[2] NC : dump ;
+
+# Octets 67-(66+NC*4): Coefficients to define vertical dimension coordinate values in functional form, or the explicit coordinate values
+# (IEEE 32-bit floating-point values)

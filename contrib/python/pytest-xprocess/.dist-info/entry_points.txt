@@ -1,0 +1,2 @@
+[pytest11]
+xprocess = xprocess.pytest_xprocess

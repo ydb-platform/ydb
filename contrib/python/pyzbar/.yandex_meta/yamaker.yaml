@@ -1,0 +1,9 @@
+requirements:
+  - contrib/libs/zbar
+  - library/python/symbols/registry
+exclude_from_macros:
+  - zbar/*
+keep:
+  - syms.cpp
+mark_as_sources:
+  - syms.cpp

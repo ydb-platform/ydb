@@ -1,0 +1,21 @@
+{
+  "$id": "https://example.com/external_files_in_directory/definitions/machine/robot.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Robot",
+  "type": "object",
+  "allOf": [{ "$ref": "../relative/animal/pet/pet.json"}],
+  "properties": {
+    "friends": {
+     "$ref": "../../person.json"
+    },
+    "drink": {
+      "$ref": "../drink/coffee.json#"
+    },
+    "food": {
+      "$ref": "../food.json#/definitions/noodle"
+    },
+    "pet": {
+      "$ref": "../relative/animal/pet/pet.json"
+    }
+  }
+}

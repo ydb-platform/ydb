@@ -1,0 +1,2 @@
+exclude:
+  - apscheduler/executors/base_py3.py

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package yandex.cloud.serverless.apigateway.websocket.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/serverless/apigateway/websocket/v1;websocket";
+option java_package = "yandex.cloud.api.serverless.apigateway.websocket.v1";
+
+message Connection {
+  // ID of the connection.
+  string id = 1;
+  // ID of the API Gateway.
+  string gateway_id = 2;
+  // The information about the caller making the request to API Gateway.
+  Identity identity = 3;
+  // The timestamp at which connection was established.
+  google.protobuf.Timestamp connected_at = 4;
+  // The timestamp at which connection was last accessed.
+  google.protobuf.Timestamp last_active_at = 5;
+}
+
+message Identity {
+  // The source IP address of the caller making the request to API Gateway.
+  string source_ip = 1;
+  // The User Agent of the caller making the request to API Gateway.
+  string user_agent = 2;
+}

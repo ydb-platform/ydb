@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/baremetal/v1alpha;baremetal";
+option java_package = "yandex.cloud.api.baremetal.v1alpha";
+
+package yandex.cloud.baremetal.v1alpha;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+
+message PublicPrefixPool {
+  // Reserved for future use.
+  reserved 8 to 99, 101 to 199;
+
+  // ID of the public prefix pool.
+  string id = 1;
+
+  // ID of the cloud that the public prefix pool belongs to.
+  string cloud_id = 2;
+
+  // ID of the folder that the public prefix pool belongs to.
+  string folder_id = 3;
+
+  // Name of the public prefix pool.
+  string name = 4;
+
+  // Description of the public prefix pool.
+  string description = 5;
+
+  // CIDR block of the public prefix pool.
+  string cidr = 6;
+
+  // Minimal prefix that could be used for subnet creation
+  //
+  // Read only.
+  google.protobuf.Int64Value min_available_prefix = 7;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 100;
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 200;
+}

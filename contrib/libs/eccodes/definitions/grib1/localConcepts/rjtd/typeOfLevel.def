@@ -1,0 +1,43 @@
+# Concepts for JMA levels
+#
+'surface'       = {indicatorOfTypeOfLevel=1;}
+'cloudBase'     = {indicatorOfTypeOfLevel=2;}
+'cloudTop'      = {indicatorOfTypeOfLevel=3;}
+'isothermZero'  = {indicatorOfTypeOfLevel=4;}
+'adiabaticCondensation' = {indicatorOfTypeOfLevel=5;}
+'maxWind' = {indicatorOfTypeOfLevel=6;}
+'tropopause' = {indicatorOfTypeOfLevel=7;}
+'nominalTop' = {indicatorOfTypeOfLevel=8;}
+'seaBottom' = {indicatorOfTypeOfLevel=9;}
+'isobaricInhPa' = {indicatorOfTypeOfLevel=100;}
+'isobaricInPa' = {indicatorOfTypeOfLevel=210;}
+'isobaricLayer' = {indicatorOfTypeOfLevel=101;}
+'meanSea' = {indicatorOfTypeOfLevel=102;}
+'isobaricLayerHighPrecision' = {indicatorOfTypeOfLevel=121;}
+'isobaricLayerMixedPrecision' = {indicatorOfTypeOfLevel=141;}
+'heightAboveSea' = {indicatorOfTypeOfLevel=103;}
+'heightAboveSeaLayer' = {indicatorOfTypeOfLevel=104;}
+'heightAboveGroundHighPrecision' = {indicatorOfTypeOfLevel=125;}
+'heightAboveGround' = {indicatorOfTypeOfLevel=105;}
+'heightAboveGroundLayer' = {indicatorOfTypeOfLevel=106;}
+'sigma' = {indicatorOfTypeOfLevel=107;}
+'sigmaLayer' = {indicatorOfTypeOfLevel=108;}
+'sigmaLayerHighPrecision' = {indicatorOfTypeOfLevel=128;}
+'hybrid' = {indicatorOfTypeOfLevel=109;}
+'hybridLayer' = {indicatorOfTypeOfLevel=110;}
+'depthBelowLand' = {indicatorOfTypeOfLevel=111;}
+'depthBelowLandLayer' = {indicatorOfTypeOfLevel=112;}
+'theta' = {indicatorOfTypeOfLevel=113;}
+'thetaLayer' = {indicatorOfTypeOfLevel=114;}
+'pressureFromGround' = {indicatorOfTypeOfLevel=115;}
+'pressureFromGroundLayer' = {indicatorOfTypeOfLevel=116;}
+'potentialVorticity' = {indicatorOfTypeOfLevel=117;}
+'depthBelowSea' = {indicatorOfTypeOfLevel=160;}
+'entireAtmosphere' = {indicatorOfTypeOfLevel=200;level=0;}
+'entireOcean' = {indicatorOfTypeOfLevel=201;level=0;}
+#
+# The following are specific to JMA
+#
+'deepSoil'    = {indicatorOfTypeOfLevel=211;}
+'subSurface'  = {indicatorOfTypeOfLevel=212;}
+'threeLayers' = {indicatorOfTypeOfLevel=213;}

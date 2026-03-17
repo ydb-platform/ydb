@@ -1,0 +1,51 @@
+{% extends 'admin/change_list.html' %}
+{% load i18n admin_list static javascript_value %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <script type="text/javascript" src="{{ jsi18n_url }}"></script>
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    {% if django_major_version >= 4 %}
+        <script src="{% static 'admin/js/filters.js' %}" defer></script>
+    {% endif %}
+{% endblock %}
+
+{% block search %}{% endblock %}
+
+{% block result_list %}
+    <div
+        id="tree"
+        class="block-style"
+        data-auto_open="{{ tree_auto_open|javascript_value }}"
+        data-autoescape="{{ autoescape|javascript_value }}"
+        data-csrf-cookie-name="{{ csrf_cookie_name }}"
+        data-insert_at_url="{{ insert_at_url }}"
+        data-drag-and-drop="{{ drag_and_drop|javascript_value }}"
+        data-has-add-permission="{{ has_add_permission|javascript_value }}"
+        data-has-change-permission="{{ has_change_permission|javascript_value }}"
+        {% if LANGUAGE_BIDI %}
+            data-rtl
+        {% endif %}
+        data-save_state="{{ app_label }}_{{ model_name }}"
+        {% if tree_animation_speed is not None %}
+            data-tree-animation-speed="{{ tree_animation_speed|javascript_value }}"
+        {% endif %}
+        {% if tree_mouse_delay is not None %}
+            data-tree-mouse-delay="{{ tree_mouse_delay|javascript_value }}"
+        {% endif %}
+        data-url="{{ tree_json_url }}"
+        data-use_context_menu="{{ use_context_menu|javascript_value }}"
+    ></div>
+{% endblock %}
+
+{% block pagination %}{% endblock %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <li>
+        <a href="{{ grid_url }}">{% trans "Grid view" %}</a>
+    </li>
+{% endblock %}

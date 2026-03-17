@@ -1,0 +1,16 @@
+# stepUnits table used for both grib 1 and 2     
+0 m  Minute
+1 h  Hour
+2 D  Day
+3 M  Month
+4 Y  Year
+5 10Y  Decade (10 years)
+6 30Y  Normal (30 years)
+7 C  Century (100 years)
+10 3h  3 hours
+11 6h  6 hours
+12 12h  12 hours
+13 s  Second
+14 15m  15 minutes
+15 30m  30 minutes
+255 255  Missing

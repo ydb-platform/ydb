@@ -1,0 +1,530 @@
+syntax = "proto3";
+
+package yandex.cloud.storage.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/storage/v1;storage";
+option java_package = "yandex.cloud.api.storage.v1";
+
+// Represents a response of the get object request to S3.
+message S3APIGetObjectResponse {
+  // MD5 hash of the object.
+  string etag = 1;
+
+  // Unique request ID.
+  string request_id = 2;
+
+  // Indicates that a range of bytes was specified in the request.
+  string accept_ranges = 3;
+
+  // Specifies caching behavior along the request/reply chain.
+  string cache_control = 4;
+
+  // Specifies presentational information for the object.
+  string content_disposition = 5;
+
+  // Indicates what content encodings have been applied to the object.
+  string content_encoding = 6;
+
+  // The language the content is in.
+  string content_language = 7;
+
+  // Size of the body in bytes.
+  int64 content_length = 8;
+
+  // The portion of the object returned in the response.
+  string content_range = 9;
+
+  // A standard MIME type describing the format of the object data.
+  string content_type = 10;
+
+  // Version ID of the object.
+  string version_id = 11;
+
+  // The date and time at which the object is no longer cacheable.
+  google.protobuf.Timestamp expires_at = 12;
+
+  // Date and time when the object was last modified.
+  google.protobuf.Timestamp last_modified_at = 13;
+
+  // Object user-defined metadata.
+  map<string, string> metadata = 14;
+
+  // Provides storage class information of the object.
+  string storage_class = 15;
+
+  // Encryption algorithm used to encrypt the object.
+  string server_side_encryption = 16;
+
+  // ID of the key KMS.
+  string sse_kms_key_id = 17;
+
+  // Type of retention put on the object.
+  string object_lock_mode = 18;
+
+  // Date and time until which the object is retained
+  google.protobuf.Timestamp object_lock_retain_until_date = 19;
+
+  // Type of legal hold put on the object
+  string object_lock_legal_hold_status = 20;
+}
+
+// Represents a response of the put object request to S3.
+message S3APIPutObjectResponse {
+  // MD5 hash of the object.
+  string etag = 1;
+
+  // Unique request ID.
+  string request_id = 2;
+
+  // Version ID of the object.
+  string version_id = 3;
+}
+
+// Represents a response of the delete object request to S3.
+message S3APIDeleteObjectResponse {
+  // Unique request ID.
+  string request_id = 1;
+
+  // Version ID of the object.
+  string version_id = 2;
+}
+
+message CopyObjectResult {
+  // Returns the ETag of the new object.
+  string etag = 1;
+
+  // Creation date of the object.
+  google.protobuf.Timestamp last_modified_at = 2;
+}
+
+// Represents a response of the copy object request to S3.
+message S3APICopyObjectResponse {
+  // Container for all response elements.
+  CopyObjectResult copy_object_result = 1;
+
+  // Unique request ID.
+  string request_id = 2;
+
+  // Version ID of the source object that was copied.
+  string copy_source_version_id = 3;
+
+  // Version ID of the newly created copy.
+  string version_id = 4;
+}
+
+message SuccessfullyDeletedObject {
+  // The name of the deleted object.
+  string key = 1;
+
+  // The version ID of the deleted object.
+  string version_id = 2;
+
+  // Specifies whether the versioned object that was permanently deleted was (true) or was not (false) a delete marker.
+  bool delete_marker = 3;
+
+  // The version ID of the delete marker created as a result of the DELETE operation.
+  string delete_marker_version_id = 4;
+}
+
+message DeleteObjectError {
+  // The error key.
+  string key = 1;
+
+  // The version ID of the error.
+  string version_id = 2;
+
+  // The error code is a string that uniquely identifies an error condition.
+  string code = 3;
+
+  // The error message contains a generic description of the error condition in English.
+  string msg = 4;
+}
+
+// Represents a response of the delete objects request to S3.
+message S3APIDeleteObjectsResponse {
+  // List of successfully deleted objects
+  repeated SuccessfullyDeletedObject deleted = 1;
+
+  // List of objects that attempted to be deleted but encountered an error
+  repeated DeleteObjectError errors = 2;
+
+  // Unique request ID.
+  string request_id = 3;
+}
+
+// Represents a response of the put object retention request to S3.
+message S3APIPutObjectRetentionResponse {
+  // Unique request ID.
+  string request_id = 1;
+}
+
+message ObjectLockRetention {
+  // Indicates the Retention mode for the specified object.
+  string mode = 1;
+
+  // The date on which this object lock retention will expire.
+  google.protobuf.Timestamp retain_until_date = 2;
+}
+
+// Represents a response of the get object retention request to S3.
+message S3APIGetObjectRetentionResponse {
+  // Unique request ID.
+  string request_id = 1;
+
+  // An object retention settings.
+  ObjectLockRetention retention = 2;
+}
+
+// Represents a response of the put object retention request to S3.
+message S3APIPutObjectLegalHoldResponse {
+  // Unique request ID.
+  string request_id = 1;
+}
+
+message ObjectLockLegalHold {
+  // Indicates whether the specified object has a legal hold in place.
+  string status = 1;
+}
+
+// Represents a response of the get object legal hold request to S3.
+message S3APIGetObjectLegalHoldResponse {
+  // Unique request ID.
+  string request_id = 1;
+
+  // The current legal hold status for the specified object.
+  ObjectLockLegalHold legal_hold = 2;
+}
+
+// Represents a response of put object tagging request to S3.
+message S3APIPutObjectTaggingResponse {
+  // Unique request ID.
+  string request_id = 1;
+
+  // The versionId of the object the tag-set was added to.
+  string version_id = 2;
+}
+
+message ObjectTag {
+  // Key of the object tag.
+  string key = 1;
+
+  // Value of the object tag.
+  string value = 2;
+}
+
+// Represents a response of get object tagging request to S3.
+message S3APIGetObjectTaggingResponse {
+  // Unique request ID.
+  string request_id = 1;
+
+  // The versionId of the object for which you got the tagging information.
+  string version_id = 2;
+
+  // Contains the tag set.
+  repeated ObjectTag tag_set = 3;
+}
+
+// Represents a response of delete object tagging request to S3.
+message S3APIDeleteObjectTaggingResponse {
+  // Unique request ID.
+  string request_id = 1;
+
+  // The versionId of the object the tag-set was removed from.
+  string version_id = 2;
+}
+
+// Represents a response of start multipart upload request to S3.
+message S3APIStartMultipartUploadResponse {
+  // Unique request ID.
+  string request_id = 1;
+
+  // The name of the bucket in which the initiated multipart upload was initiated.
+  string bucket = 2;
+
+  // Object key for which the multipart upload was initiated.
+  string key = 3;
+
+  // The ID of the initiated multipart upload.
+  string upload_id = 4;
+}
+
+// Represents a response of upload part request to S3.
+message S3APIUploadPartResponse {
+  // Unique request ID.
+  string request_id = 1;
+
+  // MD5 hash of the object.
+  string etag = 2;
+}
+
+// Represents a response of list parts request to S3.
+message S3APIListPartsResponse {
+  // The name of the bucket to which the multipart upload was initiated.
+  string bucket = 1;
+
+  // Object key for which the multipart upload was initiated.
+  string key = 2;
+
+  // Upload ID identifying the multipart upload whose parts are being listed.
+  string upload_id = 3;
+
+  // When a list is truncated, this element specifies the last part in the list, as
+  // well as the value to use for the part-number-marker request parameter in a
+  // subsequent request.
+  string part_number_marker = 4;
+
+  // When a list is truncated, this element specifies the last part in the list, as
+  // well as the value to use for the part-number-marker request parameter in a
+  // subsequent request.
+  string next_part_number_marker = 5;
+
+  // Maximum number of parts that were allowed in the response.
+  int64 max_parts = 6;
+
+  // Indicates whether the returned list of parts is truncated.
+  bool is_truncated = 7;
+
+  // Container for elements related to a particular part.
+  repeated S3APIPart parts = 8;
+
+  // Container element that identifies who initiated the multipart upload.
+  S3APIOwner initiator = 9;
+
+  // Container element that identifies who initiated the multipart upload.
+  S3APIOwner owner = 10;
+
+  // Class of storage used to store the uploaded object.
+  string storage_class = 11;
+
+  // Unique request ID.
+  string request_id = 12;
+}
+
+// Container for elements related to a part.
+message S3APIPart {
+  // Part number identifying the part. This is a positive integer between 1 and
+  // 10,000.
+  int64 part_number = 1;
+
+  // Date and time at which the part was uploaded.
+  google.protobuf.Timestamp last_modified_at = 2;
+
+  // Size in bytes of the uploaded part data.
+  int64 size = 3;
+
+  // Entity tag returned when the part was uploaded.
+  string etag = 4;
+}
+
+// Represents a response of abort multipart upload request to S3.
+message S3APIAbortMultipartUploadResponse {
+  // Unique request ID.
+  string request_id = 1;
+}
+
+// Represents a response of complete multipart upload request to S3.
+message S3APICompleteMultipartUploadResponse {
+  // Unique request ID.
+  string request_id = 1;
+
+  // The name of the bucket that contains the newly created object.
+  string bucket = 2;
+
+  // The object key of the newly created object.
+  string key = 3;
+
+  // Entity tag that identifies the newly created object's data.
+  string etag = 4;
+
+  // The URI that identifies the newly created object.
+  string location = 5;
+
+  // Version ID of the newly created object, in case the bucket has versioning
+  // turned on.
+  string version_id = 6;
+}
+
+// Represents a response of list multipart uploads request to S3.
+message S3APIListMultipartUploadsResponse {
+  // The name of the bucket to which the multipart upload was initiated.
+  string bucket = 1;
+
+  // The key at or after which the listing began.
+  string key_marker = 2;
+
+  // Upload ID after which listing began.
+  string upload_id_marker = 3;
+
+  // When a list is truncated, this element specifies the value that should be used
+  // for the key-marker request parameter in a subsequent request.
+  string next_key_marker = 4;
+
+  // When a list is truncated, this element specifies the value that should be used
+  // for the upload-id-marker request parameter in a subsequent request.
+  string next_upload_id_marker = 5;
+
+  // Contains the delimiter you specified in the request.
+  string delimiter = 6;
+
+  // When a prefix is provided in the request, this field contains the specified
+  // prefix.
+  string prefix = 7;
+
+  // Maximum number of multipart uploads that could have been included in the
+  // response.
+  int64 max_uploads = 8;
+
+  // Indicates whether the returned list of multipart uploads is truncated.
+  bool is_truncated = 9;
+
+  // Container for elements related to a particular multipart upload.
+  repeated S3APIMultipartUpload uploads = 10;
+
+  // If you specify a delimiter in the request, then the result returns each
+  // distinct key prefix containing the delimiter in a CommonPrefixes element.
+  repeated string common_prefixes = 11;
+
+  // Unique request ID.
+  string request_id = 12;
+}
+
+// Container for the MultipartUpload for the S3 object.
+message S3APIMultipartUpload {
+  // Key of the object for which the multipart upload was initiated.
+  string key = 1;
+
+  // Upload ID that identifies the multipart upload.
+  string upload_id = 2;
+
+  // Identifies who initiated the multipart upload.
+  S3APIOwner initiator = 3;
+
+  // Specifies the owner of the object that is part of the multipart upload.
+  S3APIOwner owner = 4;
+
+  // The class of storage used to store the object.
+  string storage_class = 5;
+
+  // Date and time at which the multipart upload was initiated.
+  google.protobuf.Timestamp initiated_at = 6;
+}
+
+// Container for the owner/initiator display name and ID.
+message S3APIOwner {
+  // Container for the ID of the owner/initiator.
+  string id = 1;
+
+  // Container for the display name of the owner/initiator.
+  string display_name = 2;
+}
+
+// Response message for UploadPartCopy operation
+message S3APIUploadPartCopyResponse {
+  // Entity tag of the object.
+  string etag = 1;
+
+  // Date and time at which the object was uploaded.
+  google.protobuf.Timestamp last_modified_at = 2;
+
+  // Unique request ID.
+  string request_id = 3;
+}
+
+// Represents a response of list objects v2 request to S3.
+message S3APIListObjectsV2Response {
+  // A flag that indicates whether S3 returned all of the results that satisfied the search criteria.
+  bool is_truncated = 1;
+
+  // Metadata about each object returned.
+  repeated S3APIObject contents = 2;
+
+  // The bucket name.
+  string name = 3;
+
+  // Keys that begin with the indicated prefix.
+  string prefix = 4;
+
+  // Causes keys that contain the same string between the prefix and the first occurrence of the delimiter to be rolled up into a single result element in the CommonPrefixes collection.
+  string delimiter = 5;
+
+  // The maximum number of keys returned in the response body.
+  int64 max_keys = 6;
+
+  // All of the keys rolled up into a common prefix count as a single return when calculating the number of returns.
+  repeated S3APICommonPrefix common_prefixes = 7;
+
+  // The number of keys returned with this request.
+  int64 key_count = 8;
+
+  // Indicates where in the bucket listing begins. This is only returned if a continuation token was used in the request.
+  string continuation_token = 9;
+
+  // If the response is truncated, S3 returns this continuation token, which you can use in the next request to fetch the next set of keys.
+  string next_continuation_token = 10;
+
+  // StartAfter is where you want S3 to start listing from. This is only returned if a start-after was used in the request.
+  string start_after = 11;
+
+  // Unique request ID.
+  string request_id = 12;
+}
+
+// Container for object metadata.
+message S3APIObject {
+  // The object key.
+  string key = 1;
+
+  // Date and time the object was last modified.
+  google.protobuf.Timestamp last_modified = 2;
+
+  // The entity tag is a hash of the object.
+  string etag = 3;
+
+  // Size in bytes of the object.
+  int64 size = 4;
+
+  // The owner of the object.
+  S3APIOwner owner = 5;
+
+  // The class of storage used to store the object.
+  string storage_class = 6;
+}
+
+// Container for common prefix information.
+message S3APICommonPrefix {
+  // Container for the specified common prefix.
+  string prefix = 1;
+}
+
+// Represents a response of the get bucket acl or get object acl requests to S3.
+message S3APIGetAclResponse {
+  message Owner {
+    string id = 1;
+    string display_name = 2;
+  }
+
+  message Grant {
+    message Grantee {
+      string id = 1;
+      string type = 2;
+      string uri = 3;
+      string display_name = 4;
+      string email_address = 5;
+    }
+    
+    Grantee grantee = 1;
+    string permission = 2;
+  }
+
+  string request_id = 1;
+  Owner owner = 2;
+  repeated Grant grants = 3;
+}
+
+// Represents a response of the put bucket acl or put object acl requests to S3.
+message S3APIPutAclResponse {
+  // Unique request ID.
+  string request_id = 1;
+}

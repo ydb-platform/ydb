@@ -1,0 +1,6 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 5.41, Grid point data - PNG  Code Stream Format
+
+include "grib2/templates/template.5.packing.def"
+include "grib2/templates/template.5.original_values.def"

@@ -1,0 +1,99 @@
+Metadata-Version: 2.4
+Name: tablib
+Version: 3.9.0
+Summary: Format agnostic tabular data library (XLS, JSON, YAML, CSV, etc.)
+Author-email: Kenneth Reitz <me@kennethreitz.org>
+Maintainer: Hugo van Kemenade
+Maintainer-email: Jazzband Team <roadies@jazzband.co>, Claude Paroz <claude@2xlibre.net>
+License: MIT License
+Project-URL: homepage, https://tablib.readthedocs.io
+Project-URL: documentation, https://tablib.readthedocs.io
+Project-URL: repository, https://github.com/jazzband/tablib
+Project-URL: changelog, https://github.com/jazzband/tablib/blob/master/HISTORY.md
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: English
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: AUTHORS
+Provides-Extra: all
+Requires-Dist: odfpy; extra == "all"
+Requires-Dist: openpyxl>=2.6.0; extra == "all"
+Requires-Dist: pandas; extra == "all"
+Requires-Dist: pyyaml; extra == "all"
+Requires-Dist: tabulate; extra == "all"
+Requires-Dist: xlrd; extra == "all"
+Requires-Dist: xlwt; extra == "all"
+Provides-Extra: cli
+Requires-Dist: tabulate; extra == "cli"
+Provides-Extra: html
+Provides-Extra: ods
+Requires-Dist: odfpy; extra == "ods"
+Provides-Extra: pandas
+Requires-Dist: pandas; extra == "pandas"
+Provides-Extra: xls
+Requires-Dist: xlrd; extra == "xls"
+Requires-Dist: xlwt; extra == "xls"
+Provides-Extra: xlsx
+Requires-Dist: openpyxl>=2.6.0; extra == "xlsx"
+Provides-Extra: yaml
+Requires-Dist: pyyaml; extra == "yaml"
+Dynamic: license-file
+
+# Tablib: format-agnostic tabular dataset library
+
+[![Jazzband](https://jazzband.co/static/img/badge.svg)](https://jazzband.co/)
+[![PyPI version](https://img.shields.io/pypi/v/tablib.svg)](https://pypi.org/project/tablib/)
+[![Supported Python versions](https://img.shields.io/pypi/pyversions/tablib.svg)](https://pypi.org/project/tablib/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/tablib.svg)](https://pypistats.org/packages/tablib)
+[![GitHub Actions status](https://github.com/jazzband/tablib/workflows/Test/badge.svg)](https://github.com/jazzband/tablib/actions)
+[![codecov](https://codecov.io/gh/jazzband/tablib/branch/master/graph/badge.svg)](https://codecov.io/gh/jazzband/tablib)
+[![GitHub](https://img.shields.io/github/license/jazzband/tablib.svg)](LICENSE)
+
+    _____         ______  ___________ ______
+    __  /_______ ____  /_ ___  /___(_)___  /_
+    _  __/_  __ `/__  __ \__  / __  / __  __ \
+    / /_  / /_/ / _  /_/ /_  /  _  /  _  /_/ /
+    \__/  \__,_/  /_.___/ /_/   /_/   /_.___/
+
+
+Tablib is a format-agnostic tabular dataset library, written in Python.
+
+Output formats supported:
+
+- Excel (Sets + Books)
+- JSON (Sets + Books)
+- YAML (Sets + Books)
+- Pandas DataFrames (Sets)
+- HTML (Sets)
+- Jira (Sets)
+- LaTeX (Sets)
+- TSV (Sets)
+- ODS (Sets)
+- CSV (Sets)
+- DBF (Sets)
+- SQL (Sets)
+
+Note that tablib *purposefully* excludes XML support. It always will. (Note: This is a
+joke. Pull requests are welcome.)
+
+Tablib documentation is graciously hosted on https://tablib.readthedocs.io
+
+It is also available in the ``docs`` directory of the source distribution.
+
+Make sure to check out [Tablib on PyPI](https://pypi.org/project/tablib/)!
+
+## Contribute
+
+Please see the [contributing guide](https://github.com/jazzband/tablib/blob/master/.github/CONTRIBUTING.md).

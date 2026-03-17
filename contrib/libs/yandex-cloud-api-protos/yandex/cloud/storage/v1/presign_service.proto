@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package yandex.cloud.storage.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/storage/v1;storage";
+option java_package = "yandex.cloud.api.storage.v1";
+
+// PresignObjectRequest represents a single object presign request
+message PresignObjectRequest {
+  // Expiration time in seconds
+  int64 expires = 1;
+
+  // Object name/key
+  string name = 2;
+
+  // HTTP method (GET, PUT, HEAD)
+  string method = 3;
+
+  // Additional HTTP headers
+  map<string, string> headers = 4;
+
+  // Object version ID (optional)
+  string version_id = 5;
+
+  // Whether to force download as attachment
+  bool as_attachment = 6;
+}
+
+// PresignURLsRequest represents the request for presigning URLs
+message PresignURLsRequest {
+  // Bucket name
+  string bucket_name = 1;
+
+  // Custom presign host (optional)
+  string presign_host = 2;
+
+  // List of objects to presign
+  repeated PresignObjectRequest objects = 3;
+}
+
+// PresignURLsResponse represents the response with presigned URLs
+message PresignURLsResponse {
+  // List of presigned URLs corresponding to the requested objects
+  repeated string urls = 1;
+}
+
+// PresignService provides URL presigning functionality
+service PresignService {
+  // Create generates presigned URLs for the specified objects
+  rpc Create(PresignURLsRequest) returns (PresignURLsResponse);
+}

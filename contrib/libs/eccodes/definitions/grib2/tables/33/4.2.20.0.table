@@ -1,0 +1,13 @@
+# Product discipline 20 - Health and socioeconomic impacts, parameter category 0: health indicators
+0 0 Universal thermal climate index (K)
+1 1 Mean radiant temperature (K)
+2 2 Wet-bulb globe temperature (K)
+3 3 Globe temperature (K)
+4 4 Humidex (K)
+5 5 Effective temperature (K)
+6 6 Normal effective temperature (K)
+7 7 Standard effective temperature (K)
+8 8 Physiological equivalent temperature (K)
+# 9-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,33 @@
+# Product discipline 0 - Meteorological products, parameter category 4: short-wave radiation
+0 0 Net short-wave radiation flux (surface) (W m-2)
+1 1 Net short-wave radiation flux (top of atmosphere) (W m-2)
+2 2 Short-wave radiation flux (W m-2)
+3 3 Global radiation flux (W m-2)
+4 4 Brightness temperature (K)
+5 5 Radiance (with respect to wave number) (W m-1 sr-1)
+6 6 Radiance (with respect to wavelength) (W m-3 sr-1)
+7 7 Downward short-wave radiation flux (W m-2)
+8 8 Upward short-wave radiation flux (W m-2)
+9 9 Net short wave radiation flux (W m-2)
+10 10 Photosynthetically active radiation (W m-2)
+11 11 Net short-wave radiation flux, clear sky (W m-2)
+12 12 Downward UV radiation (W m-2)
+13 13 Direct short-wave radiation flux (W m-2)
+14 14 Diffuse short-wave radiation flux (W m-2)
+15 15 Upward UV radiation emitted/reflected from the Earth's surface (W m-2)
+# 16-49 Reserved
+50 50 UV index (under clear sky) (Numeric)
+51 51 UV index (Numeric)
+52 52 Downward short-wave radiation flux, clear sky (W m-2)
+53 53 Upward short-wave radiation flux, clear sky (W m-2)
+54 54 Direct normal short-wave radiation flux (W m-2)
+55 55 UV visible albedo for diffuse radiation (%)
+56 56 UV visible albedo for direct radiation (%)
+57 57 UV visible albedo for direct radiation, geometric component (%)
+58 58 UV visible albedo for direct radiation, isotropic component (%)
+59 59 UV visible albedo for direct radiation, volumetric component (%)
+60 60 Photosynthetically active radiation flux, clear sky (W m-2)
+61 61 Direct short-wave radiation flux, clear sky (W m-2)
+# 62-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

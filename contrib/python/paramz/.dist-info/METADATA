@@ -1,0 +1,44 @@
+Metadata-Version: 2.1
+Name: paramz
+Version: 0.9.6
+Summary: The Parameterization Framework
+Home-page: https://github.com/sods/paramz
+Author: Max Zwiessele
+Author-email: ibinbei@gmail.com
+License: BSD 3-clause
+Keywords: machine-learning gaussian-processes kernels
+Platform: UNKNOWN
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Natural Language :: English
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+License-File: LICENSE
+Requires-Dist: numpy >=1.7
+Requires-Dist: scipy
+Requires-Dist: six
+Requires-Dist: decorator >=4.0.10
+Provides-Extra: docs
+Requires-Dist: sphinx ; extra == 'docs'
+Provides-Extra: notebook
+Requires-Dist: jupyter-client >=4.0.6 ; extra == 'notebook'
+Requires-Dist: ipywidgets >=4.0.3 ; extra == 'notebook'
+Requires-Dist: ipykernel >=4.1.0 ; extra == 'notebook'
+Requires-Dist: notebook >=4.0.5 ; extra == 'notebook'
+Provides-Extra: optimization
+Requires-Dist: climin ; extra == 'optimization'
+
+paramz
+
+======
+
+
+
+Please refer to the github homepage for detailed instructions on installation and usage.
+
+
+

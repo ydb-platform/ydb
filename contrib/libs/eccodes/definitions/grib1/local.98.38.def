@@ -1,0 +1,25 @@
+# (C) Copyright 2005- ECMWF.
+# 4D variational increments for long window 4Dvar system
+
+constant GRIBEXSection1Problem = 56 - section1Length ;
+
+# 1 -> 2
+alias grib2LocalSectionPresent=present;
+constant grib2LocalSectionNumber=38;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] iterationNumber  : dump;
+unsigned[1] totalNumberOfIterations  : dump;
+alias iteration = iterationNumber;
+
+alias local.iterationNumber=iterationNumber;
+alias local.totalNumberOfIterations=totalNumberOfIterations;
+
+# Hours
+unsigned[2] offsetToEndOf4DvarWindow : dump;
+unsigned[2] lengthOf4DvarWindow : dump;
+alias anoffset=offsetToEndOf4DvarWindow;
+
+# spareSetToZero
+pad padding_loc38_1(1);

@@ -1,0 +1,45 @@
+# (C) Copyright 2005- ECMWF.
+# COSMO clustering information
+
+constant GRIBEXSection1Problem = 960 - section1Length;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1]  clusterNumber : dump;
+alias number=clusterNumber;
+
+unsigned[1]  totalNumberOfClusters  : dump;
+alias totalNumber=totalNumberOfClusters;
+pad  padding_loc29_1(1);
+unsigned[1]  clusteringMethod  : dump;
+signed[3]  northernLatitudeOfDomain  : dump;
+signed[3]  westernLongitudeOfDomain   : dump;
+signed[3]  southernLatitudeOfDomain   : dump;
+signed[3]  easternLongitudeOfDomain  : dump;
+unsigned[1] numberOfForecastsInCluster   : dump;
+unsigned[1] numberOfParametersUsedForClustering  : dump;
+unsigned[1] numberOfPressureLevelsUsedForClustering : dump;
+unsigned[1] numberOfStepsUsedForClustering : dump;
+
+pad padding_loc29_2(10);
+
+listOfEnsembleForecastNumbers list(numberOfForecastsInCluster){
+  unsigned[4] baseDateEPS : dump;
+  unsigned[2] baseTimeEPS : dump;
+  unsigned[1] number : dump;
+}
+
+listOfParametersUsedForClustering list(numberOfParametersUsedForClustering){
+  unsigned[1] parameterCode;
+  unsigned[1] tableCode;
+}
+
+unsigned[2] pressureLevel[numberOfPressureLevelsUsedForClustering] : dump;
+
+# Name_change old=step new=stepForClustering
+unsigned[2] stepForClustering[numberOfStepsUsedForClustering] : dump;
+
+#spareToEnsureFixedLength - PADTO   n/a 960
+padto padding_loc29_3(offsetSection1 + 960);
+
+alias number = clusterNumber;

@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.foundation_models.v1.text_classification;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/ai/foundation_models/v1/text_classification/text_classification.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/foundation_models/v1/text_classification;text_classification";
+option java_package = "yandex.cloud.api.ai.foundation_models.v1.text_classification";
+
+
+// Request for the service to classify text with tuned model.
+//
+// The names of the classes between which the model will be distributing requests must be specified during model tuning;
+// therefore, they are not provided in the request.
+//
+// For examples of usage, see [step-by-step guides](/docs/foundation-models/operations/classifier/additionally-trained).
+message TextClassificationRequest {
+
+  // The [URI](/docs/foundation-models/concepts/classifier/models) of your tuned classifier model.
+  string model_uri = 1;
+  // Text for classification.
+  string text = 2;
+}
+
+// Response with classifier predictions.
+message TextClassificationResponse {
+
+  // The classification results with the `confidence`` values
+  // for the probability of classifying the request text into each class.
+  repeated ClassificationLabel predictions = 1;
+  // The model version changes with each new releases.
+  string model_version = 2;
+  // Number of input tokens
+  int64 input_tokens = 3;
+}
+
+// Request for the service to classify text.
+// For examples of usage, see [step-by-step guides](/docs/foundation-models/operations/classifier/readymade).
+message FewShotTextClassificationRequest {
+
+  // The [URI](/docs/foundation-models/concepts/classifier/models) of the classifier model.
+  string model_uri = 1;
+  // Text description of the classification task.
+  string task_description = 2;
+  // List of available labels for the classification result.
+  // Give meaningful names to label classes: this is essential for correct classification results.
+  // For example, use ``chemistry`` and ``physics`` rather than ``chm`` and ``phs`` for class names.
+  repeated string labels = 3;
+  // Text for classification.
+  string text = 4;
+  // Optional set of text samples with expected labels that may be used as an additional hint for the classifier.
+  repeated ClassificationSample samples = 5;
+}
+
+// Response containing classifier predictions.
+message FewShotTextClassificationResponse {
+
+  // The classification results with the `confidence`` values
+  // for the probability of classifying the request text into each class.
+  repeated ClassificationLabel predictions = 1;
+  // The model version changes with each new releases.
+  string model_version = 2;
+  // Number of input tokens
+  int64 input_tokens = 3;
+}
+
+// Service for classifying the text requests provided in prompts.
+service TextClassificationService {
+
+  // RPC method to classify text with tuned model.
+  //
+  // The names of the classes between which the model will be distributing requests
+  // must be specified during model tuning and are not provided in the request.
+  rpc Classify (TextClassificationRequest) returns (TextClassificationResponse) {
+    option (google.api.http) = {post: "/foundationModels/v1/textClassification" body: "*"};
+  }
+
+  // RPC method for binary and multi-class classification.
+  //
+  // You can provide up to 20 classes for few-shot text classification
+  // with optional examples.
+  rpc FewShotClassify (FewShotTextClassificationRequest) returns (FewShotTextClassificationResponse) {
+    option (google.api.http) = {post: "/foundationModels/v1/fewShotTextClassification" body: "*"};
+  }
+}

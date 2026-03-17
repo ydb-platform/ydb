@@ -1,0 +1,125 @@
+Metadata-Version: 2.1
+Name: lunardate
+Version: 0.2.2
+Summary: A Chinese Calendar Library in Pure Python
+Home-page: https://github.com/lidaobing/python-lunardate
+Author: LI Daobing
+Author-email: lidaobing@gmail.com
+License: GPLv3
+Classifier: Development Status :: 4 - Beta
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: License :: OSI Approved :: GNU General Public License (GPL)
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+License-File: LICENSE.txt
+
+
+A Chinese Calendar Library in Pure Python
+=========================================
+
+Chinese Calendar: http://en.wikipedia.org/wiki/Chinese_calendar
+
+Usage
+-----
+        >>> LunarDate.fromSolarDate(1976, 10, 1)
+        LunarDate(1976, 8, 8, 1)
+        >>> LunarDate(1976, 8, 8, 1).toSolarDate()
+        datetime.date(1976, 10, 1)
+        >>> LunarDate(1976, 8, 8, 1).year
+        1976
+        >>> LunarDate(1976, 8, 8, 1).month
+        8
+        >>> LunarDate(1976, 8, 8, 1).day
+        8
+        >>> LunarDate(1976, 8, 8, 1).isLeapMonth
+        True
+
+        >>> today = LunarDate.today()
+        >>> type(today).__name__
+        'LunarDate'
+
+        >>> # support '+' and '-' between datetime.date and datetime.timedelta
+        >>> ld = LunarDate(1976,8,8)
+        >>> sd = datetime.date(2008,1,1)
+        >>> td = datetime.timedelta(days=10)
+        >>> ld-ld
+        datetime.timedelta(0)
+        >>> (ld-sd).days
+        -11444
+        >>> ld-td
+        LunarDate(1976, 7, 27, 0)
+        >>> (sd-ld).days
+        11444
+        >>> ld+td
+        LunarDate(1976, 8, 18, 0)
+        >>> td+ld
+        LunarDate(1976, 8, 18, 0)
+        >>> ld2 = LunarDate.today()
+        >>> ld < ld2
+        True
+        >>> ld <= ld2
+        True
+        >>> ld > ld2
+        False
+        >>> ld >= ld2
+        False
+        >>> ld == ld2
+        False
+        >>> ld != ld2
+        True
+        >>> ld == ld
+        True
+        >>> LunarDate.today() == LunarDate.today()
+        True
+        >>> before_leap_month = LunarDate.fromSolarDate(2088, 5, 17)
+        >>> before_leap_month.year
+        2088
+        >>> before_leap_month.month
+        4
+        >>> before_leap_month.day
+        27
+        >>> before_leap_month.isLeapMonth
+        False
+        >>> leap_month = LunarDate.fromSolarDate(2088, 6, 17)
+        >>> leap_month.year
+        2088
+        >>> leap_month.month
+        4
+        >>> leap_month.day
+        28
+        >>> leap_month.isLeapMonth
+        True
+        >>> after_leap_month = LunarDate.fromSolarDate(2088, 7, 17)
+        >>> after_leap_month.year
+        2088
+        >>> after_leap_month.month
+        5
+        >>> after_leap_month.day
+        29
+        >>> after_leap_month.isLeapMonth
+        False
+
+        >>> LunarDate.leapMonthForYear(2023)
+        2
+        >>> LunarDate.leapMonthForYear(2022)
+        None        
+
+Limits
+------
+
+this library can only deal with year from 1900 to 2099 (in chinese calendar).
+
+See also
+--------
+
+* lunar: http://packages.qa.debian.org/l/lunar.html,
+  A converter written in C, this program is derived from it.
+* python-lunar: http://code.google.com/p/liblunar/
+  Another library written in C, including a python binding.

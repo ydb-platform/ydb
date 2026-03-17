@@ -1,0 +1,11 @@
+--- contrib/python/lxml/py2/lxml/includes/etreepublic.pxd	(502aadc17beaa30f07a6c6d1cda57d0b76e36dc4)
++++ contrib/python/lxml/py2/lxml/includes/etreepublic.pxd	(working tree)
+@@ -19,7 +19,7 @@ cdef extern from "etree_defs.h":
+                                           int start_node_inclusive) noexcept nogil
+     cdef void END_FOR_EACH_ELEMENT_FROM(tree.xmlNode* start_node) noexcept nogil
+ 
+-cdef extern from "etree_api.h":
++cdef extern from "etree.py2_api.h":
+ 
+     # first function to call!
+     cdef int import_lxml__etree() except -1

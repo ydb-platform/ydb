@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package yandex.cloud.baremetal.v1alpha;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/baremetal/v1alpha;baremetal";
+option java_package = "yandex.cloud.api.baremetal.v1alpha";
+
+
+// A Private cloud connection resource.
+message PrivateCloudConnection {
+    reserved 2, 3, 10 to 99, 101 to 200;
+    // ID of the private cloud connection.
+    string id = 1;
+    
+    // ID of the folder that the private cloud connection belongs to.
+    string folder_id = 4;
+    
+    // ID of the cloud that the private cloud connection belongs to.
+    string cloud_id = 5;
+  
+    // ID of Cloud Router Routing Instance.
+    string routing_instance_id = 6;
+  
+    // ID of VRF that is connected to routing Instance.
+    string vrf_id = 7;
+  
+    // Status of the private cloud connection.
+    Status status = 8;
+
+    // Name of the private cloud connection.
+    string name = 9;
+  
+    // Creation timestamp.
+    google.protobuf.Timestamp created_at = 100;
+  
+    // Private cloud connection status.
+    enum Status {
+      // Unspecified private cloud connection status.
+      STATUS_UNSPECIFIED = 0;
+  
+      // Private cloud connection is waiting for network resources to be allocated.
+      CREATING = 1;
+      
+      // Private cloud connection is ready to use.
+      READY = 2;
+      
+      // Private cloud connection encountered a problem and cannot operate.
+      ERROR = 3;
+      
+      // Private cloud connection is being deleted.
+      DELETING = 4;
+      
+      // Private cloud connection is being updated.
+      UPDATING = 5;
+    }
+  }

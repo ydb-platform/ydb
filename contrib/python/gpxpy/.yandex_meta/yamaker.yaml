@@ -1,0 +1,4 @@
+exclude_from_macros:
+  - test_files/*
+keep:
+  - test_files/*

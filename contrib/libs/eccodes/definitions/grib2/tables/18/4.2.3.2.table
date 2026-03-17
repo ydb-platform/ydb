@@ -1,0 +1,13 @@
+# Code table 4.2 - Parameter number by product discipline and parameter category
+0 0 Clear sky probability (%)
+1 1 Cloud top temperature (K)
+2 2 Cloud top pressure (Pa)
+3 3 Cloud type (Code table 4.218)
+4 4 Cloud phase (Code table 4.218)
+5 5 Cloud optical depth (Numeric)
+6 6 Cloud particle effective radius (m)
+7 7 Cloud liquid water path (kg m-2)
+8 8 Cloud ice water path (kg m-2)
+9 9 Cloud albedo (Numeric)
+10 10 Cloud emissivity (Numeric)
+11 11 Effective absorption optical depth ratio (Numeric)

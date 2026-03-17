@@ -1,0 +1,13 @@
+# (C) Copyright 2005- ECMWF.
+
+# Statistical process used to calculate the processed field from the field at each time increment during the time range
+codetable[1] typeOfStatisticalProcessing ('4.10.table',masterDir,localDir) : edition_specific;
+
+# Indicator of unit of time for time range over which statistical processing is done
+codetable[1] indicatorOfUnitForTimeRange ('4.4.table',masterDir,localDir) =1;
+
+# Length of the time range over which statistical processing is done, in units defined by the previous octet
+unsigned[4] lengthOfTimeRange=0;
+
+# Number of statistically processed fields used in the local time composite field == number of stripes
+unsigned[1] numberOfStatisticallyProcessedFieldsForLocalTime;

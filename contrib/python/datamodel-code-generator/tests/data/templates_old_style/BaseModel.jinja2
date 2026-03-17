@@ -1,0 +1,19 @@
+{% for decorator in decorators -%}
+{{ decorator }}
+{% endfor -%}
+class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comment }}{% endif %}
+{%- if not fields %}
+    pass
+{%- endif %}
+{%- for field in fields -%}
+    {%- if field.required %}
+    {{ field.name }}: {{ field.type_hint }}
+    {%- else %}
+    {{ field.name }}: {{ field.type_hint }} = {{ field.default }}
+    {%- endif %}
+    {%- if field.docstring %}
+    """
+    {{ field.docstring }}
+    """
+    {%- endif %}
+{%- endfor -%}

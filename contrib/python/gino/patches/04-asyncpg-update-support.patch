@@ -1,0 +1,11 @@
+--- contrib/python/gino/gino/dialects/asyncpg.py	(index)
++++ contrib/python/gino/gino/dialects/asyncpg.py	(working tree)
+@@ -177,7 +177,7 @@ class DBAPICursor(base.DBAPICursor):
+ 
+         def executor(state, timeout_):
+             if many:
+-                return _protocol.bind_execute_many(state, args, "", timeout_)
++                return _protocol.bind_execute_many(state, args, "", timeout_, return_rows=False)
+             else:
+                 return _protocol.bind_execute(state, args, "", limit, True, timeout_)
+ 

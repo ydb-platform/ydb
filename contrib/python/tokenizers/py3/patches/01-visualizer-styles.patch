@@ -1,0 +1,19 @@
+diff --git a/bindings/python/py_src/tokenizers/tools/visualizer.py b/bindings/python/py_src/tokenizers/tools/visualizer.py
+index 791de49..f2d9884 100644
+--- a/bindings/python/py_src/tokenizers/tools/visualizer.py
++++ b/bindings/python/py_src/tokenizers/tools/visualizer.py
+@@ -6,12 +6,8 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
+ 
+ from tokenizers import Encoding, Tokenizer
+ 
+-
+-dirname = os.path.dirname(__file__)
+-css_filename = os.path.join(dirname, "visualizer-styles.css")
+-with open(css_filename) as f:
+-    css = f.read()
+-
++from library.python import resource
++css = resource.find("/visualizer-styles.css").decode()
+ 
+ class Annotation:
+     start: int

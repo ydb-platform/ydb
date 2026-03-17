@@ -1,0 +1,83 @@
+# В этом файле определяется порядок команд, в котором их следует подавать на устройство.
+# - Если порядок команды не важен - ее можно не писать сюда совсем.
+# - Если команда начинается с undo и прописан параметр %order_reverse - команда считается
+#   обратной, но занимает место между прямыми там, где указано.
+
+
+hostname
+ip-address
+iap-master
+iap-conductor
+zone
+dot11a-radio-disable
+dot11g-radio-disable
+ap-installation
+a-channel
+g-channel
+a-external-antenna
+g-external-antenna
+a-ant-pol
+g-ant-pol
+
+
+virtual-controller-country *
+virtual-controller-key *
+name *
+virtual-controller-ip *
+ip-mode *
+syslog-server *
+terminal-access
+telnet-server
+loginsession timeout *
+ntp-server *
+clock timezone ~
+rf-band *
+
+
+allow-new-aps
+allowed-ap *
+
+
+snmp-server
+
+
+arm
+    ~
+
+
+rf
+    ~
+
+
+syslog-level
+
+
+iot ~
+
+
+wlan ~
+    ~
+
+
+wired-port-profile *
+    ~
+
+
+uplink
+    ~
+
+
+airgroup
+    ~
+
+
+airgroupservice *
+    ~
+
+
+ipm
+    ~
+
+
+cluster-security
+    ~

@@ -1,0 +1,21 @@
+From 062ccf74eeb0e8a8d2e720161a36b97ec57b1224 Mon Sep 17 00:00:00 2001
+From: Pascal F <pfouque@users.noreply.github.com>
+Date: Mon, 27 Jan 2025 09:40:25 +0100
+Subject: [PATCH] Fix is_composite_pk on Django 5.2
+
+---
+ constance/admin.py | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/constance/admin.py b/constance/admin.py
+index 6187193a..862759ad 100644
+--- a/constance/admin.py
++++ b/constance/admin.py
+@@ -169,6 +169,7 @@ class Meta:
+         verbose_name_plural = _('config')
+         abstract = False
+         swapped = False
++        is_composite_pk = False
+ 
+         def get_ordered_objects(self):
+             return False

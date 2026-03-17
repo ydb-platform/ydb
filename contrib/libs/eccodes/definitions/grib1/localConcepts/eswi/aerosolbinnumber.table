@@ -1,0 +1,24 @@
+#########################
+##
+## author: Sebastien Villaume
+## created: 6 Oct 2011
+## modified: 13 May 2013
+##
+#
+# Model 50 (MATCH) SMHI local definitions aerosol bin number
+#
+#  Aerosol bin number parameter in local extension
+#
+0 0 none
+1 1 Aerosol Binary number 1
+2 2 Aerosol Binary number 2
+3 3 Aerosol Binary number 3
+4 4 Aerosol Binary number 4
+5 5 Aerosol Binary number 5
+6 6 Aerosol Binary number 6
+7 7 Aerosol Binary number 7
+8 8 Aerosol Binary number 8
+9 9 Aerosol Binary number 9
+10 10 Aerosol Binary number 10
+100 100 All binary number
+255 255 missing value

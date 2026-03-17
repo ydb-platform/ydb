@@ -1,0 +1,11 @@
+# Product discipline 0 - Meteorological products, parameter category 22: drought indices
+0 0 Standard Precipitation Index (SPI) (dimensionless)
+1 1 Standardized Precipitation Evapotranspiration Index (SPEI) (dimensionless)
+2 2 Standardized Streamflow index (SSFI) (dimensionless)
+3 3 Standardized Reservoir Supply Index (SRSI) (dimensionless)
+4 4 Standardized Water-level Index (SWI) (dimensionless)
+5 5 Standardized Snowmelt and Rain Index (SMRI) (dimensionless)
+6 6 Streamflow Drought Index (SDI) (dimensionless)
+# 7-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

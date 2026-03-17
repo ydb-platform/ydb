@@ -1,0 +1,184 @@
+<div markdown="1">_foo_</div>
+
+<div markdown=1 class="baz">
+_bar_
+</div>
+
+<div markdown>
+
+_blah_
+
+</div>
+ 
+<div markdown="1" name="Example">
+
+The text of the `Example` element.
+
+<div markdown="1" name="DefaultBlockMode">
+This text gets wrapped in `p` tags.
+</div>
+
+The tail of the `DefaultBlockMode` subelement.
+
+<p markdown="1" name="DefaultSpanMode">
+This text *is not* wrapped in additional `p` tags.
+</p>
+
+The tail of the `DefaultSpanMode` subelement.
+
+<div markdown="span" name="SpanModeOverride">
+This `div` block is not wrapped in paragraph tags.
+Note: Subelements are not required to have tail text.
+</div>
+
+<p markdown="block" name="BlockModeOverride">
+This `p` block *is* foolishly wrapped in further paragraph tags.
+</p>
+
+The tail of the `BlockModeOverride` subelement.
+
+<div name="RawHtml">
+Raw html blocks may also be nested.
+</div>
+
+</div>
+
+This text is after the markdown in html.
+
+<div markdown="1" name="issue308">
+
+<span>1</span>
+<span>2</span>
+
+</div>
+
+<div markdown="1" name="issue368">
+
+Markdown is *active* here.
+
+<div name="RawHtml">
+Raw html blocks may also be nested.
+</div>
+
+Markdown is *still* active here.
+
+</div>
+
+Markdown is *active again* here.
+
+<div markdown=1>
+foo bar
+
+<em>bar</em>
+</div>
+
+<div markdown="1" name="issue584">
+
+[link]: http://example.com
+
+<div markdown="1">
+[link][link]
+</div>
+
+</div>
+
+<div markdown="1" name="issue584">
+
+*[abbr]: Abbreviation
+
+<div markdown="1">
+abbr
+</div>
+
+</div>
+
+<div markdown="1" name="issue584">
+
+[^1]: 
+    1.  The top couple half figure, contrary sides and hands across with bottom couple,
+
+        Half figure back on your own sides, and turn partner to places,
+
+        Swing partners with right hands into straight line long-ways, as in a reel, and
+
+        Set,
+
+        Hey and return to places,
+
+        The other three couples do the same.
+
+    2.  Top and bottom couples meet and set,
+
+        Then each gentleman leas the opposite lady to the couple on his left, and set,
+
+        Aach four right and left,
+
+        Swing side couples to places, and turn partners all eight,
+
+        The other two couple o the same.
+
+<div markdown="1">
+footnote[^1]
+</div>
+
+</div>
+
+<div markdown="1" name="issue584">
+
+[link]: http://example.com
+
+
+
+
+<div markdown="1">
+[link][link]
+</div>
+
+</div>
+
+<div markdown="1" name="issue584">
+
+*[abbr]: Abbreviation
+
+
+
+
+<div markdown="1">
+abbr
+</div>
+
+</div>
+
+<div markdown="1" name="issue584">
+
+[^2]: 
+    1.  The top couple half figure, contrary sides and hands across with bottom couple,
+
+        Half figure back on your own sides, and turn partner to places,
+
+        Swing partners with right hands into straight line long-ways, as in a reel, and
+
+        Set,
+
+        Hey and return to places,
+
+        The other three couples do the same.
+
+    2.  Top and bottom couples meet and set,
+
+        Then each gentleman leas the opposite lady to the couple on his left, and set,
+
+        Aach four right and left,
+
+        Swing side couples to places, and turn partners all eight,
+
+        The other two couple o the same.
+
+
+
+
+<div markdown="1">
+footnote[^2]
+</div>
+
+</div>

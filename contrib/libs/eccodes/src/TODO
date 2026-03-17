@@ -1,0 +1,24 @@
+geography
+grib1 words = grib2 words
+        gridType -> dataRepresentationType (grib1)
+                    ??? (grib2)
+  
+
+why if(a->offset%2) buflen++;
+lat/lon is not in 0..180
+
+constness
+
+reparse on unsigned[size]
+reparse lists
+
+expression: persitemy malloc
+tidy errors
+iterator and scanning mode
+gribex and missing local definition
+
+SST dats
+Don't repack unecessary values in packers
+grid 90
+
+GRIB_LOG_WARNING: does not work unless ctx.debug>=2

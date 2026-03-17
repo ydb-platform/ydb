@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<gpx>
+  <wpt lat="43.309634" lon="3.515386">
+    <ele>-14.6</ele>
+    <time>2016-05-27T10:08:47.8Z</time>
+    <geoidheight>0</geoidheight>
+    <name>test</name>
+    <cmt>69.26474016</cmt>
+    <desc>test desc</desc>
+    <fix></fix>
+    <sat>4</sat>
+    <hdop>16.2</hdop>
+    <vdop>9.3</vdop>
+    <pdop>18.7</pdop>
+    <extensions>
+      <security>Open</security>
+    </extensions>
+  </wpt>
+</gpx>

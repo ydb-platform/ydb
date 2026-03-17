@@ -1,0 +1,49 @@
+<div id="{{ field.id }}"
+     class="field-list {% if error | is_str %}is-invalid{% endif %}">
+    <input id="{{ field.id }}-next-index"
+           value="{{ (data or []) | length +1 }}"
+           hidden>
+    <div class="template d-none">
+        {% filter forceescape %}
+            <div class="mb-3 field-list-item">
+                <div class="d-flex">
+                    <div class="flex-grow-1">
+                        {% with data=None, error=False, field=field._field_at(None) %}
+                            {% include field.form_template %}
+                        {% endwith %}
+                    </div>
+                    <button type="button"
+                            class="field-list-btn-remove btn btn-ghost-danger btn-icon mx-2">
+                        <i class="fa fa-close"></i>
+                    </button>
+                </div>
+            </div>
+        {% endfilter %}
+    </div>
+    <div class="list-container d-flex flex-column">
+        {% if (data or []) | length > 0 %}
+            {% for value in data %}
+                <div class="mb-3 field-list-item">
+                    <div class="d-flex">
+                        <div class="flex-grow-1">
+                            {% with data=value, field=field._field_at(loop.index), error=error.get(loop.index0, None) if (error | is_dict) else None %}
+                                {% include field.form_template %}
+                            {% endwith %}
+                        </div>
+                        <button type="button"
+                                class="field-list-btn-remove btn btn-ghost-danger btn-icon mx-2">
+                            <i class="fa fa-close"></i>
+                        </button>
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <a type="button" class="field-list-btn-add mt-2">
+        <i class="fa fa-add me-2"></i>
+        {{ _("Add item") }}
+    </a>
+</div>
+{% if error | is_str %}
+    {% include "forms/_error.html" %}
+{% endif %}

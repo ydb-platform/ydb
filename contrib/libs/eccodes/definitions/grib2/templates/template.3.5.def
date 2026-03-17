@@ -1,0 +1,7 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.5, Variable resolution rotated latitude/longitude
+
+include "grib2/templates/template.3.shape_of_the_earth.def"
+include "grib2/templates/template.3.latlon_vares.def"
+include "grib2/templates/template.3.rotation.def"

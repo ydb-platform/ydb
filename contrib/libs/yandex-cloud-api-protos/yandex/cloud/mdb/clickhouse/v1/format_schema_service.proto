@@ -1,0 +1,158 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.clickhouse.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/clickhouse/v1/format_schema.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/clickhouse/v1;clickhouse";
+option java_package = "yandex.cloud.api.mdb.clickhouse.v1";
+
+// A set of methods for managing [format schemas](https://clickhouse.com/docs/en/interfaces/formats) for input and output data.
+service FormatSchemaService {
+  // Returns detailed information about a given format schema.
+  rpc Get (GetFormatSchemaRequest) returns (FormatSchema) {
+    option (google.api.http) = { get: "/managed-clickhouse/v1/clusters/{cluster_id}/formatSchemas/{format_schema_name}" };
+  }
+
+  // Returns a list of format schemas in a cluster.
+  rpc List (ListFormatSchemasRequest) returns (ListFormatSchemasResponse) {
+    option (google.api.http) = { get: "/managed-clickhouse/v1/clusters/{cluster_id}/formatSchemas" };
+  }
+
+  // Adds a format schema to a cluster.
+  rpc Create (CreateFormatSchemaRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/managed-clickhouse/v1/clusters/{cluster_id}/formatSchemas" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateFormatSchemaMetadata"
+      response: "FormatSchema"
+    };
+  }
+
+  // Changes a format schema.
+  rpc Update (UpdateFormatSchemaRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/managed-clickhouse/v1/clusters/{cluster_id}/formatSchemas/{format_schema_name}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateFormatSchemaMetadata"
+      response: "FormatSchema"
+    };
+  }
+
+  // Deletes a format schema from a cluster.
+  rpc Delete (DeleteFormatSchemaRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/managed-clickhouse/v1/clusters/{cluster_id}/formatSchemas/{format_schema_name}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteFormatSchemaMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetFormatSchemaRequest {
+  // ClickHouse cluster ID.
+  //
+  // To get a ClickHouse cluster ID, use the [ClusterService.List] method.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Format schema name.
+  //
+  // To get a format schema name, use the [FormatSchemaService.List] method.
+  string format_schema_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message ListFormatSchemasRequest {
+  // ClickHouse cluster ID.
+  //
+  // To get a ClickHouse cluster ID, use the [ClusterService.List] method.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of the results is larger than [page_size], the service returns [ListFormatSchemasResponse.next_page_token]. You can use it to get the next page of the results in subsequent requests of a format schema list.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the [ListFormatSchemasResponse.next_page_token] returned by the previous format schema list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListFormatSchemasResponse {
+  // List of format schemas.
+  repeated FormatSchema format_schemas = 1;
+
+  // This token allows you to get the next page of results when requesting the format schema list. If the number of the results is larger than [ListFormatSchemasRequest.page_size], use the [next_page_token] as the value for the [ListFormatSchemasRequest.page_token] parameter in the next request. Each subsequent request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateFormatSchemaRequest {
+  // ClickHouse cluster ID.
+  //
+  // To get a ClickHouse cluster ID, use the [ClusterService.List] method.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Format schema name.
+  string format_schema_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+
+  // Schema type. Possible values are the following:
+  //
+  // * FORMAT_SCHEMA_TYPE_PROTOBUF - [Protobuf](https://protobuf.dev/) data format (including [ProtobufSingle](https://clickhouse.com/docs/en/interfaces/formats#protobufsingle)).
+  // * FORMAT_SCHEMA_TYPE_CAPNPROTO - [Cap'n Proto](https://capnproto.org/) data format.
+  FormatSchemaType type = 3 [(required) = true];
+
+  // [Link to the file](/docs/managed-clickhouse/operations/s3-access#get-link-to-object) of a format schema in Yandex Object Storage. Managed Service for ClickHouse works only with format schemas imported to Object Storage.
+  string uri = 4 [(required) = true];
+}
+
+message CreateFormatSchemaMetadata {
+  // ClickHouse cluster ID.
+  string cluster_id = 1;
+
+  // Format schema name.
+  string format_schema_name = 2;
+}
+
+message UpdateFormatSchemaRequest {
+  // ClickHouse cluster ID.
+  //
+  // To get a ClickHouse cluster ID, use the [ClusterService.List] method.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Format schema name.
+  //
+  // To get a format schema name, use the [FormatSchemaService.List] method.
+  string format_schema_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+
+  google.protobuf.FieldMask update_mask = 3;
+
+  // [Link to the file](/docs/managed-clickhouse/operations/s3-access#get-link-to-object) of a format schema in Yandex Object Storage. Managed Service for ClickHouse works only with format schemas imported to Object Storage.
+  string uri = 4;
+}
+
+message UpdateFormatSchemaMetadata {
+  // ClickHouse cluster ID.
+  string cluster_id = 1;
+
+  // Format schema name.
+  string format_schema_name = 2;
+}
+
+message DeleteFormatSchemaRequest {
+  // ClickHouse cluster ID.
+  //
+  // To get a ClickHouse cluster ID, use the [ClusterService.List] method.
+  string cluster_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Format schema name.
+  //
+  // To get a format schema name, use the [FormatSchemaService.List] method.
+  string format_schema_name = 2 [(required) = true, (length) = "<=63", (pattern) = "[a-zA-Z0-9_-]*"];
+}
+
+message DeleteFormatSchemaMetadata {
+  // ClickHouse cluster ID.
+  string cluster_id = 1;
+
+  // Format schema name.
+  string format_schema_name = 2;
+}

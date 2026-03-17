@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package yandex.cloud.connectionmanager.v1;
+
+import "yandex/cloud/connectionmanager/v1/common.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/connectionmanager/v1;connectionmanager";
+option java_package = "yandex.cloud.api.connectionmanager.v1";
+
+message GreenplumAuth {
+    oneof security {
+        UserPasswordAuth user_password = 1;
+    }
+}
+
+message GreenplumCluster {
+    message Host {
+        enum Role {
+            ROLE_UNSPECIFIED = 0;
+            MASTER = 1;
+            REPLICA = 2;
+        }
+        enum Health {
+            HEALTH_UNSPECIFIED = 0;
+            ALIVE = 1;
+            DEAD = 2;
+            DEGRADED = 3;
+            UNBALANCED = 4;
+        }
+
+        string host = 1;
+        int64 port = 2;
+        Role role = 3;
+        Health health = 4;
+    }
+
+    repeated Host coordinator_hosts = 1;
+    TLSParams tls_params = 2;
+}
+
+message GreenplumConnection {
+    // When creating/updating Connection, the field "cluster" is mutually
+    // exclusive with "managed_cluster_id".
+    GreenplumCluster cluster = 1;
+
+    // When creating/updating Connection, the field "managed_cluster_id" is
+    // mutually exclusive with "cluster".
+    string managed_cluster_id = 2;
+
+    GreenplumAuth auth = 3;
+    repeated string databases = 4;
+}

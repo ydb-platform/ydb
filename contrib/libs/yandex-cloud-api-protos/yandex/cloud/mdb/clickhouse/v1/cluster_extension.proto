@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.clickhouse.v1;
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/clickhouse/v1;clickhouse";
+option java_package = "yandex.cloud.api.mdb.clickhouse.v1";
+
+message ClusterExtension {
+  // Required. Extension name.
+  string name = 1 [(required) = true, (length) = "<=63"];
+
+  // Required. ID of the ClickHouse cluster.
+  string cluster_id = 2 [(required) = true, (length) = "<=50"];
+
+  // Required. Extension version.
+  string version = 3 [(required) = true];
+}
+
+message ClusterExtensions {
+  repeated ClusterExtension extensions = 1;
+}

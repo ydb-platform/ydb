@@ -1,0 +1,383 @@
+syntax = "proto3";
+
+package yandex.cloud.airflow.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/airflow/v1/cluster.proto";
+import "yandex/cloud/airflow/v1/maintenance.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/api/operation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/airflow/v1;airflow";
+option java_package = "yandex.cloud.api.airflow.v1";
+
+
+// A set of methods for managing Apache Airflow Cluster resources.
+service ClusterService {
+  // Returns the specified Apache Airflow Cluster resource.
+  rpc Get (GetClusterRequest) returns (Cluster) {
+    option (google.api.http) = {get: "/managed-airflow/v1/clusters/{cluster_id}"};
+  }
+
+  // Retrieves a list of Apache Airflow Cluster resources.
+  rpc List (ListClustersRequest) returns (ListClustersResponse) {
+    option (google.api.http) = {get: "/managed-airflow/v1/clusters"};
+  }
+
+
+  // Creates an Apache Airflow cluster.
+  rpc Create (CreateClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/managed-airflow/v1/clusters"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateClusterMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Updates the specified Apache Airflow cluster.
+  rpc Update (UpdateClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/managed-airflow/v1/clusters/{cluster_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateClusterMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Deletes the specified Apache Airflow cluster.
+  rpc Delete (DeleteClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/managed-airflow/v1/clusters/{cluster_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteClusterMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Starts the specified Apache Airflow cluster.
+  rpc Start (StartClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/managed-airflow/v1/clusters/{cluster_id}:start"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "StartClusterMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Stops the specified Apache Airflow cluster.
+  rpc Stop (StopClusterRequest) returns (operation.Operation) {
+    option (google.api.http) = {post: "/managed-airflow/v1/clusters/{cluster_id}:stop"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "StopClusterMetadata"
+      response: "Cluster"
+    };
+  }
+
+  // Retrieves the list of Operation resources for the specified cluster.
+  rpc ListOperations (ListClusterOperationsRequest) returns (ListClusterOperationsResponse) {
+    option (google.api.http) = {get: "/managed-airflow/v1/clusters/{cluster_id}/operations"};
+  }
+
+  // Retrieves a list of access bindings for the specified Apache Airflow cluster.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/managed-airflow/v1/clusters/{resource_id}:listAccessBindings" };
+  }
+
+  // Sets access bindings for the specified Apache Airflow cluster.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/managed-airflow/v1/clusters/{resource_id}:setAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+        metadata: "access.SetAccessBindingsMetadata"
+        response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  // Updates access bindings for the specified Apache Airflow cluster.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/managed-airflow/v1/clusters/{resource_id}:updateAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+        metadata: "access.UpdateAccessBindingsMetadata"
+        response: "access.AccessBindingsOperationResult"
+    };
+  }
+}
+
+message GetClusterRequest {
+  // ID of the Apache Airflow Cluster resource to return.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListClustersRequest {
+  // ID of the folder to list Apache Airflow clusters in.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListClustersResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the [ListClustersResponse.next_page_token]
+  // returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression must specify:
+  // 1. The field name. Currently you can only use filtering with the [Cluster.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 1-63 characters long and match the regular expression `[a-zA-Z0-9_-]+`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListClustersResponse {
+  // List of Apache Airflow Cluster resources.
+  repeated Cluster clusters = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListClustersRequest.page_size], use the [next_page_token] as the value
+  // for the [ListClustersRequest.page_token] parameter in the next list request. Each subsequent
+  // list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateClusterRequest {
+  // ID of the folder to create Apache Airflow cluster in.
+  string folder_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Name of the Apache Airflow cluster. The name must be unique within the folder.
+  string name = 2 [
+    (required) = true,
+    (length) = "<=63",
+    (pattern) = "[a-zA-Z0-9_-]*"
+  ];
+
+  // Description of the Apache Airflow cluster.
+  string description = 3 [(length) = "<=256"];
+
+  // Custom labels for the Apache Airflow cluster as `` key:value `` pairs. For example, "env": "prod".
+  map<string, string> labels = 4 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "<=63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  reserved 5;
+
+  // Configuration of Apache Airflow components.
+  ClusterConfig config = 6 [(required) = true];
+
+  // Network related configuration options.
+  NetworkConfig network = 7;
+
+  // Parameters of the location and access to the code that will be executed in the cluster.
+  CodeSyncConfig code_sync = 8;
+
+  // Deletion Protection inhibits deletion of the cluster.
+  bool deletion_protection = 9;
+
+  // Service account used to access Cloud resources.
+  // For more information, see [documentation](/docs/managed-airflow/concepts/impersonation).
+  string service_account_id = 10 [(length) = "<=50"];
+
+  // Cloud Logging configuration.
+  LoggingConfig logging = 11;
+
+  // Password of user `admin`.
+  string admin_password = 12 [
+    (required) = true,
+    (length) = "8-128"
+  ];
+
+  // Window of maintenance operations.
+  MaintenanceWindow maintenance_window = 13;
+}
+
+message CreateClusterMetadata {
+  // ID of the Apache Airflow cluster that is being created.
+  string cluster_id = 1;
+}
+
+message UpdateClusterConfigSpec {
+  reserved 1;
+
+  // Configuration of the Apache Airflow application itself.
+  AirflowConfig airflow = 2;
+
+  // Configuration of webserver instances.
+  WebserverConfig webserver = 3;
+
+  // Configuration of scheduler instances.
+  SchedulerConfig scheduler = 4;
+
+  // Configuration of triggerer instances.
+  TriggererConfig triggerer = 5;
+
+  // Configuration of worker instances.
+  WorkerConfig worker = 6;
+
+  // The list of additional packages installed in the cluster.
+  Dependencies dependencies = 7;
+
+  // Configuration of Lockbox Secret Backend.
+  LockboxConfig lockbox = 8;
+
+  // Apache Airflow version. Format: "Major.Minor"
+  string airflow_version = 9;
+
+  // Python version. Format: "Major.Minor"
+  string python_version = 10;
+
+  // Configuration of dag-processor instances.
+  DagProcessorConfig dag_processor = 11;
+}
+
+message UpdateNetworkConfigSpec {
+  // User security groups.
+  repeated string security_group_ids = 1;
+}
+
+message UpdateClusterRequest {
+  // ID of the Apache Airflow Cluster resource to update.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Field mask that specifies which fields of the Apache Airflow Cluster resource should be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // New name of the cluster.
+  string name = 3 [(pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+
+  // New description of the Apache Airflow cluster.
+  string description = 4 [(length) = "<=256"];
+
+  // Custom labels for the Apache Airflow cluster as `` key:value `` pairs. For example, "env": "prod".
+  //
+  // The new set of labels will completely replace the old ones. To add a label, request the current
+  // set with the [ClusterService.Get] method, then send an [ClusterService.Update] request with the new label added to the set.
+  map<string, string> labels = 5 [
+    (yandex.cloud.size) = "<=64",
+    (length) = "<=63",
+    (pattern) = "[-_0-9a-z]*",
+    (map_key).length = "1-63",
+    (map_key).pattern = "[a-z][-_0-9a-z]*"
+  ];
+
+  // Configuration of Apache Airflow components.
+  UpdateClusterConfigSpec config_spec = 6;
+
+  // Parameters of the location and access to the code that will be executed in the cluster.
+  CodeSyncConfig code_sync = 7;
+
+  // Network related configuration options.
+  UpdateNetworkConfigSpec network_spec = 8;
+
+  // Deletion Protection inhibits deletion of the cluster
+  bool deletion_protection = 9;
+
+  // Service account used to access Cloud resources.
+  // For more information, see [documentation](/docs/managed-airflow/concepts/impersonation).
+  string service_account_id = 10 [(length) = "<=50"];
+
+  // Cloud Logging configuration.
+  LoggingConfig logging = 11;
+
+  // Window of maintenance operations.
+  MaintenanceWindow maintenance_window = 12;
+}
+
+message UpdateClusterMetadata {
+  // ID of the Apache Airflow Cluster resource that is being updated.
+  string cluster_id = 1;
+}
+
+
+message DeleteClusterRequest {
+  // ID of the Apache Airflow cluster to delete.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteClusterMetadata {
+  // ID of the Apache Airflow cluster that is being deleted.
+  string cluster_id = 1;
+}
+
+message StartClusterRequest {
+  // ID of the Apache Airflow cluster to start.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message StartClusterMetadata {
+  // ID of the Apache Airflow cluster that is being started.
+  string cluster_id = 1;
+}
+
+message StopClusterRequest {
+  // ID of the Apache Airflow cluster to stop.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message StopClusterMetadata {
+  // ID of the Apache Airflow cluster that is being stopped.
+  string cluster_id = 1;
+}
+
+message ListClusterOperationsRequest {
+  // ID of the Apache Airflow Cluster resource to list operations for.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListClusterOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token.  To get the next page of results, set [page_token] to the [ListClusterOperationsResponse.next_page_token]
+  // returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListClusterOperationsResponse {
+  // List of Operation resources for the specified Apache Airflow cluster.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListClusterOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListClusterOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}

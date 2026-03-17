@@ -1,0 +1,5 @@
+# Code table 5.40 - Type of compression
+0 0 Lossless
+1 1 Lossy
+# 2-254 Reserved
+255 255 Missing

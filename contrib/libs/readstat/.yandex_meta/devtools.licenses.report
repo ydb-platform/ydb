@@ -1,0 +1,98 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     LicenseRef-scancode-unknown-license-reference 11aa86a143e482176b6cc254ecaa931c
+BELONGS ya.make
+FILE_IGNORE LICENSE found in files: src/CKHashTable.c at line 2, src/CKHashTable.h at line 2
+FILE_IGNORE src/bin/read_csv/LICENSE found in files: src/CKHashTable.c at line 2, src/CKHashTable.h at line 2
+    License text:
+        // Copyright 2010-2020 Evan Miller (see LICENSE)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        src/CKHashTable.c [2:2]
+        src/CKHashTable.h [2:2]
+
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [3:19]
+        src/bin/read_csv/LICENSE [5:21]
+
+KEEP     LicenseRef-scancode-unknown-license-reference 67d8d0270b887cac5d0ced7e70a6f27c
+BELONGS ya.make
+FILE_IGNORE LICENSE found in files: src/readstat.h at line 4
+FILE_IGNORE src/bin/read_csv/LICENSE found in files: src/readstat.h at line 4
+    License text:
+        //  Copyright Evan Miller and ReadStat authors (see LICENSE)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        src/readstat.h [4:4]
+
+KEEP     MIT                  ca3bf5bf279402f2a13925c6cf7e23d3
+BELONGS ya.make
+    License text:
+        command-line tool and MIT-licensed C library for reading files from popular
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [10:10]
+
+KEEP     CC0-1.0              da902bf4825ff90b178dd7486499e529
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        src/CKHashTable.c [12:17]

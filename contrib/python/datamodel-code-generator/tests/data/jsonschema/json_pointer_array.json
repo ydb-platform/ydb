@@ -1,0 +1,62 @@
+
+ {
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "oneOf": [
+    {
+      "definitions": {
+        "email": {
+          "properties": {
+            "email": {
+              "format": "email",
+              "type": "string"
+            }
+          },
+          "required": [
+            "email"
+          ],
+          "type": "object"
+        }
+      },
+      "properties": {
+        "emails": {
+          "items": {
+            "$ref": "#/oneOf/0/definitions/email"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "emails"
+      ],
+      "type": "object"
+    },
+    {
+      "definitions": {
+        "error": {
+          "properties": {
+            "code": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code"
+          ],
+          "type": "object"
+        }
+      },
+      "properties": {
+        "errors": {
+          "items": {
+            "$ref": "#/oneOf/1/definitions/error"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "errors"
+      ],
+      "type": "object"
+    }
+  ],
+  "type": "object"
+}

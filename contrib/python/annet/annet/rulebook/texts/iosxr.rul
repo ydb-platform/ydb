@@ -1,0 +1,110 @@
+# Операторы:
+#   *  Один аргумент в undo
+#   ~  Несколько аргументов (минимум один) в undo
+#
+# Параметры:
+#   %global         Команда действует на любом уровне ниже
+#   %logic=...      Кастомная функция обработки правила
+#   %diff_logic=... Кастомная функция построения диффа.
+#                   данная функция работает для подблоков (в отличие от %logic)
+#   %comment=...    Добавить коммент после строки который будет видно с опцией patch --add-comments
+#                   Сделано в основном для того чтобы генерировать специальные команды для наливки
+# -----
+
+ip domain-name *
+hostname *
+
+banner * %logic=cisco.misc.banner_any
+
+ip community-list standard ~
+
+!vrf context management
+vrf context *
+
+vlan group * vlan-list %logic=cisco.vlandb.simple
+vlan */[^\d].*/
+vlan %logic=cisco.vlandb.simple
+    name
+
+ip ssh version 2 %logic=cisco.misc.ssh_key
+
+# ordering of SNMP blocks
+ip access-list ~
+snmp-server view ~
+snmp-server community ~
+snmp-server host ~
+# Deleting a user using either SNMP or the CLI results in the user being deleted for both SNMP and the CLI.
+# User-role mapping changes are synchronized in SNMP and the CLI.
+!snmp-server user admin ~
+!snmp-server user *
+# Disabling this SNMP option throws WARNING which stops mpdaemon set-up process
+no snmp-server sysobjectid type stack-oid
+
+!interface */(mgmt|ipmi|Vlan1$)/
+
+interface Loopback
+    ipv6 address *
+    ip address ~
+    ! no ip address
+
+# SVI/Subifs/Lagg
+interface */(Vlan|Ethernet.*\.|port-channel.*\.?)\d+$/ %diff_logic=cisco.iface.diff
+    vrf member
+    ipv6 link-local
+    ipv6 address *
+    ipv6 nd ~                      %logic=cisco.misc.no_ipv6_nd_suppress_ra
+    ip address ~
+    ! no ip address
+    mtu
+
+# Physical
+interface */\w*Ethernet[0-9\/]+$/     %logic=common.permanent %diff_logic=cisco.iface.diff
+    switchport mode
+    switchport trunk native vlan
+    switchport access vlan
+    switchport trunk allowed vlan %logic=cisco.vlandb.swtrunk
+    vrf member
+    ipv6 link-local
+    ipv6 address *
+    ip address ~
+    ! no ip address
+    channel-group
+    mtu
+    storm-control * level
+    spanning-tree portfast
+
+router bgp
+    router-id
+    vrf *
+        router-id
+        address-family ~
+            maximum-paths
+        neighbor ~
+            update-source
+
+policy-map type qos *
+    class *            %ordered
+        ~
+
+prefix-set *
+    ~              %rewrite %global
+
+as-path-set *
+    ~              %rewrite %global
+
+community-set *
+    ~              %rewrite %global
+
+route-policy *
+    ~              %rewrite %global
+
+line ~
+    exec-timeout
+    transport input
+
+description %global
+
+no ~ %global
+~ %global
+
+# vim: set syntax=annrulebook:

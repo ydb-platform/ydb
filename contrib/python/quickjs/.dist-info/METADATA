@@ -1,0 +1,19 @@
+Metadata-Version: 2.1
+Name: quickjs
+Version: 1.19.4
+Summary: Wrapping the quickjs C library.
+Home-page: https://github.com/PetterS/quickjs
+Author: Petter Strandmark
+Author-email: petter.strandmark@gmail.com
+Maintainer: Quentin Wenger
+Maintainer-email: matpi@protonmail.ch
+License-File: LICENSE
+
+
+Python wrapper around https://bellard.org/quickjs/ .
+
+Translates types like `str`, `float`, `bool`, `list`, `dict` and combinations
+thereof to and from Javascript.
+
+QuickJS is currently thread-hostile, so this wrapper makes sure that all calls
+to the same JS runtime comes from the same thead.

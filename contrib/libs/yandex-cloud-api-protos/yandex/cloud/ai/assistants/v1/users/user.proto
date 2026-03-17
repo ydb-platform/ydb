@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.assistants.v1.users;
+
+import "yandex/cloud/ai/common/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/assistants/v1/users;users";
+option java_package = "yandex.cloud.api.ai.assistants.v1.users";
+
+message User {
+  // Unique identifier of the user.
+  string id = 1;
+
+  // ID of the folder that the user belongs to.
+  string folder_id = 2;
+
+  // Name of the user.
+  string name = 3;
+
+  // Description of the user.
+  string description = 4;
+
+  string source = 5;
+
+  // Identifier of the subject who created this user.
+  string created_by = 6;
+
+  // Timestamp representing when the user was created.
+  google.protobuf.Timestamp created_at = 7;
+
+  // Identifier of the subject who last updated this user.
+  string updated_by = 8;
+
+  // Timestamp representing the last time this user was updated.
+  google.protobuf.Timestamp updated_at = 9;
+
+  // Configuration for the expiration of the user, defining when and how the user will expire.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 10;
+
+  // Timestamp representing when the user will expire.
+  google.protobuf.Timestamp expires_at = 11;
+
+  // Set of key-value pairs that can be used to organize and categorize the user.
+  map<string, string> labels = 12;
+}

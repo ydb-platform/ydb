@@ -1,0 +1,136 @@
+{% extends "base/base.html" %}
+
+{% block custom_css %}
+<style>
+:root {
+  --header-background: {{ header_background or "var(--design-primary-color, var(--panel-primary-color))" }};
+  --header-color: {{ header_color or "var(--design-primary-text-color, var(--panel-on-primary-color))" }};
+  --sidebar-width: {{ sidebar_width }}px;
+}
+#header {
+  --mdc-theme-background: var(--header-background);
+  --mdc-theme-on-background: var(--header-color);
+  --design-background-text-color: var(--header-color);
+  --design-background-color: var(--header-background);
+  background-color: var(--header-background);
+  color: var(--header-color);
+}
+.mdc-drawer {
+  width: var(--sidebar-width) !important;
+}
+.mdc-drawer.mdc-drawer--open:not(.mdc-drawer--closing)+.mdc-drawer-app-content {
+  margin-left: var(--sidebar-width) !important;
+}
+</style>
+{% endblock %}
+
+<!-- goes in body -->
+{% block contents %}
+<div class="mdc-typography" id="container">
+  <header class="mdc-top-app-bar app-bar mdc-top-app-bar--fixed" id="header">
+    <div class="mdc-top-app-bar__row">
+      <section class="mdc-top-app-bar__section mdc-top-app-bar__section--align-start">
+	{% if nav %}
+	<button class="material-icons mdc-top-app-bar__navigation-icon mdc-icon-button">menu</button>
+	{% endif %}
+	<div class="title-bar">
+          <span class="mdc-top-app-bar__title app-header">
+            {% if app_logo %}<a href="{{ site_url }}"><img src="{{ app_logo }}" class="app-logo"></a>{% endif %}
+            {% if site_title %}<a class="title" href="{{ site_url }}" >&nbsp;{{ site_title }}</a>{% endif %}
+            {% if site_title and app_title%}<span class="title">&nbsp;-</span>{% endif %}
+            {% if app_title %}<a class="title" href="" >&nbsp;{{ app_title }}</a>{% endif %}
+          </span>
+          <div id="header-items">
+            {% for doc in docs %}
+            {% for root in doc.roots %}
+            {% if "header" in root.tags %}
+            {{ embed(root) | indent(8) }}
+            {% endif %}
+            {% endfor %}
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+      {% if busy %}
+      <div class="pn-busy-container">
+	{{ embed(roots.busy_indicator) | indent(6) }}
+      </div>
+      {% endif %}
+    </div>
+  </header>
+
+  {% if nav %}
+  <aside class="mdc-drawer mdc-top-app-bar--fixed-adjust mdc-drawer--dismissible {{ '' if collapsed_sidebar else 'mdc-drawer--open' }}" id="sidebar">
+    <div class="mdc-drawer__content">
+      <div class="mdc-list">
+	{% for doc in docs %}
+	{% for root in doc.roots %}
+	{% if "nav" in root.tags %}
+	{{ embed(root) | indent(8) }}
+	{% endif %}
+	{% endfor %}
+	{% endfor %}
+      </div>
+    </div>
+  </aside>
+  {% endif %}
+
+  <div class="mdc-drawer-app-content mdc-top-app-bar--fixed-adjust">
+    <main class="main-content" id="main">
+      {% if main_max_width %}
+      <div style="margin-left: auto; margin-right: auto;max-width: {{main_max_width}}">
+      {% endif %}
+      {% for doc in docs %}
+      {% for root in doc.roots %}
+      {% if "main" in root.tags %}
+      {{ embed(root) | indent(4) }}
+      {% endif %}
+      {% endfor %}
+      {% endfor %}
+      {% if main_max_width %}
+      </div>
+      {% endif %}
+    </main>
+
+    <div id="pn-Modal" class="mdc-dialog">
+      <div class="mdc-dialog__container">
+	<div class="mdc-dialog__surface" role="alertdialog" aria-modal="true">
+	  <div class="mdc-dialog__content" id="my-dialog-content">
+	    {% for doc in docs %}
+	    {% for root in doc.roots %}
+	    {% if "modal" in root.tags %}
+	    {{ embed(root) | indent(4) }}
+	    {% endif %}
+	    {% endfor %}
+	    {% endfor %}
+	  </div>
+	</div>
+      </div>
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    {% if nav %}
+    var drawer = mdc.drawer.MDCDrawer.attachTo(document.querySelector('.mdc-drawer'));
+    var topAppBar = mdc.topAppBar.MDCTopAppBar.attachTo(document.getElementById('header'));
+    topAppBar.setScrollTarget(document.getElementById('main'));
+    topAppBar.listen('MDCTopAppBar:nav', function() {
+      drawer.open = !drawer.open;
+    });
+    {% endif %}
+
+    var modal_el = document.getElementById("pn-Modal");
+    var modal = new mdc.dialog.MDCDialog(modal_el);
+
+    window.onclick = function(event) {
+      if (event.target == modal_el) {
+	modal.close();
+      }
+    }
+  </script>
+
+  {% block state_roots %}
+  {{ super() }}
+  {% endblock %}
+</div>
+{% endblock %}

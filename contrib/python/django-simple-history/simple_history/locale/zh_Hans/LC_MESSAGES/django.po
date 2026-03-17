@@ -1,0 +1,132 @@
+# Simplified Chinese translation for django-simple-history
+# Copyright (C) 2023
+# This file is distributed under the same license as the django-simple-history package.
+# Peihao Ren <peihao.ren@outlook.com>, 2023.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-simple-history\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2023-11-30 22:12+0800\n"
+"PO-Revision-Date: 2023-11-30 22:12+0800\n"
+"Last-Translator: Peihao Ren <peihao.ren@outlook.com>\n"
+"Language-Team: Simplified Chinese <placeholder@example.org>\n"
+"Language: zh_Hans\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: simple_history/admin.py:102
+#, python-format
+msgid "View history: %s"
+msgstr "查看历史记录: %s"
+
+#: simple_history/admin.py:104
+#, python-format
+msgid "Change history: %s"
+msgstr "修改历史记录: %s"
+
+#: simple_history/admin.py:110
+#, python-format
+msgid "The %(name)s \"%(obj)s\" was changed successfully."
+msgstr "%(name)s \"%(obj)s\" 已成功修改。"
+
+#: simple_history/admin.py:116
+msgid "You may edit it again below"
+msgstr "你可在下方再次编辑"
+
+#: simple_history/admin.py:217
+#, python-format
+msgid "View %s"
+msgstr "查看 %s"
+
+#: simple_history/admin.py:219
+#, python-format
+msgid "Revert %s"
+msgstr "还原 %s"
+
+#: simple_history/models.py:552
+msgid "Created"
+msgstr "已创建"
+
+#: simple_history/models.py:552
+msgid "Changed"
+msgstr "已修改"
+
+#: simple_history/models.py:552
+msgid "Deleted"
+msgstr "已删除"
+
+#: simple_history/templates/simple_history/object_history.html:11
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr "从下面的列表中选择一个日期以还原到该记录对象的先前版本"
+
+#: simple_history/templates/simple_history/object_history.html:16
+msgid "This object doesn't have a change history."
+msgstr "该记录对象没有修改的记录"
+
+#: simple_history/templates/simple_history/object_history_form.html:7
+msgid "Home"
+msgstr "主页"
+
+#: simple_history/templates/simple_history/object_history_form.html:11
+msgid "History"
+msgstr "历史记录"
+
+#: simple_history/templates/simple_history/object_history_form.html:12
+#, python-format
+msgid "View %(verbose_name)s"
+msgstr "查看 %(verbose_name)s"
+
+#: simple_history/templates/simple_history/object_history_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "还原 %(verbose_name)s"
+
+#: simple_history/templates/simple_history/object_history_form.html:25
+msgid ""
+"Press the 'Revert' button below to revert to this version of the object."
+msgstr "按下面的“还原”按钮还原记录到当前版本。"
+
+#: simple_history/templates/simple_history/object_history_form.html:25
+msgid "Press the 'Change History' button below to edit the history."
+msgstr "按下面的“修改历史记录”按钮编辑历史记录。"
+
+#: simple_history/templates/simple_history/object_history_list.html:9
+msgid "Object"
+msgstr "记录对象"
+
+#: simple_history/templates/simple_history/object_history_list.html:13
+msgid "Date/time"
+msgstr "日期/时间"
+
+#: simple_history/templates/simple_history/object_history_list.html:14
+msgid "Comment"
+msgstr "备注"
+
+#: simple_history/templates/simple_history/object_history_list.html:15
+msgid "Changed by"
+msgstr "修改人"
+
+#: simple_history/templates/simple_history/object_history_list.html:16
+msgid "Change reason"
+msgstr "修改原因"
+
+#: simple_history/templates/simple_history/object_history_list.html:42
+msgid "None"
+msgstr "无"
+
+#: simple_history/templates/simple_history/submit_line.html:4
+msgid "Revert"
+msgstr "还原"
+
+#: simple_history/templates/simple_history/submit_line.html:6
+msgid "Change History"
+msgstr "修改历史记录"
+
+#: simple_history/templates/simple_history/submit_line.html:7
+msgid "Close"
+msgstr "关闭"

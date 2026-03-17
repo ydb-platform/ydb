@@ -1,0 +1,7 @@
+# FLAG TABLE 3.10, Scanning mode for one diamond
+1 0 Points scan in +i direction, i.e. from pole to equator
+1 1 Points scan in -i direction, i.e. from equator to pole
+2 0 Points scan in +j direction, i.e. from west to east
+2 1 Points scan in -j direction, i.e. from east to west
+3 0 Adjacent points in i direction are consecutive
+3 1 Adjacent points in j direction is consecutive

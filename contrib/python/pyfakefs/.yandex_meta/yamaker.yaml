@@ -1,0 +1,2 @@
+mark_as_tests:
+  - pyfakefs/pytest_tests/*

@@ -1,0 +1,19 @@
+{% load i18n fb_tags %}
+
+<p class="paginator">
+    {% if page_range %}
+        {% for i in page_range %}
+            {% if i == "." %}
+                <span>...</span>
+            {% else %}
+                {% if i == page_num %}
+                    <span class="this-page">{{ i|add:"1" }}</span>
+                {% else %}
+                    <a href="{% query_string "" "p" %}&amp;p={{ i|add:"1" }}"{% if forloop.last %} class="end"{% endif %}>{{ i|add:"1" }}</a>
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+    {{ filelisting.results_total }} {% trans 'total' %}
+    {% if query.q or filelisting.results_total != filelisting.results_current %}&nbsp;&nbsp;<a href="{% query_string "" "filter_date,filter_type,p,q" %}" class="showall">{% trans 'Show all' %}</a>{% endif %}
+</p>

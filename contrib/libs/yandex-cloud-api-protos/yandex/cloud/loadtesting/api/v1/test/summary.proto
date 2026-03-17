@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.test;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/test;test";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.test";
+
+import "yandex/cloud/loadtesting/api/v1/test/file_pointer.proto";
+import "yandex/cloud/loadtesting/api/v1/test/imbalance_point.proto";
+import "yandex/cloud/loadtesting/api/v1/test/status.proto";
+import "google/protobuf/timestamp.proto";
+
+// Process of test and some results
+message Summary {
+  // Status of the test.
+  Status status = 1;
+  
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 2;
+  
+  // UA or SA that created the test.
+  string created_by = 3;
+  
+  // Test start timestamp.
+  //
+  // Empty if the test has not been started yet.
+  google.protobuf.Timestamp started_at = 4;
+  
+  // Test finish timestamp.
+  //
+  // Empty if the test has not been finished yet.
+  google.protobuf.Timestamp finished_at = 5;
+
+  // Indicates whether the test is finished.
+  bool is_finished = 6;
+  
+  // Error message.
+  string error = 7;
+  
+  // Detected imbalance point.
+  //
+  // Contains information about a state at the moment it has been
+  // [auto-stopped](/docs/load-testing/concepts/auto-stop).
+  //
+  // Empty if no auto-stop occured.
+  ImbalancePoint imbalance_point = 8;
+  
+  // ID of the agent that executed the test.
+  string assigned_agent_id = 9;
+  
+  // Test output artifacts.
+  //
+  // Link to the artifacts output target containing `.log` and other files collected
+  // during test execution.
+  FilePointer artifacts = 10;
+}

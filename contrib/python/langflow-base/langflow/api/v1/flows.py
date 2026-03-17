@@ -1,0 +1,691 @@
+from __future__ import annotations
+
+import io
+import json
+import re
+import zipfile
+from datetime import datetime, timezone
+from pathlib import Path as StdlibPath
+from typing import Annotated
+from uuid import UUID
+
+import orjson
+from aiofile import async_open
+from anyio import Path
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
+from fastapi_pagination import Page, Params
+from fastapi_pagination.ext.sqlmodel import apaginate
+from lfx.log import logger
+from sqlmodel import and_, col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from langflow.api.utils import CurrentActiveUser, DbSession, cascade_delete_flow, remove_api_keys, validate_is_component
+from langflow.api.v1.schemas import FlowListCreate
+from langflow.helpers.user import get_user_by_flow_id_or_endpoint_name
+from langflow.initial_setup.constants import STARTER_FOLDER_NAME
+from langflow.services.database.models.flow.model import (
+    AccessTypeEnum,
+    Flow,
+    FlowCreate,
+    FlowHeader,
+    FlowRead,
+    FlowUpdate,
+)
+from langflow.services.database.models.flow.utils import get_webhook_component_in_flow
+from langflow.services.database.models.folder.constants import DEFAULT_FOLDER_NAME
+from langflow.services.database.models.folder.model import Folder
+from langflow.services.deps import get_settings_service, get_storage_service
+from langflow.services.storage.service import StorageService
+from langflow.utils.compression import compress_response
+
+# build router
+router = APIRouter(prefix="/flows", tags=["Flows"])
+
+
+def _get_safe_flow_path(fs_path: str, user_id: UUID, storage_service: StorageService) -> Path:
+    """Get a safe filesystem path for flow storage, restricted to user's flows directory.
+
+    Allows both absolute and relative paths, but ensures they're within the user's flows directory.
+    """
+    if not fs_path:
+        raise HTTPException(status_code=400, detail="fs_path cannot be empty")
+
+    # Normalize path separators first (before security checks to prevent backslash bypass)
+    normalized_path = fs_path.replace("\\", "/")
+
+    # Reject directory traversal and null bytes (check normalized path)
+    if ".." in normalized_path:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid fs_path: directory traversal (..) is not allowed",
+        )
+    if "\x00" in normalized_path:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid fs_path: null bytes are not allowed",
+        )
+
+    # Build the safe base directory path
+    base_dir = storage_service.data_dir / "flows" / str(user_id)
+    base_dir_str = str(base_dir)
+
+    # Normalize base directory path (resolve to absolute, handle symlinks)
+    # resolve() doesn't require the path to exist, it just resolves symlinks
+    try:
+        base_dir_stdlib = StdlibPath(base_dir_str).resolve()
+        base_dir_resolved = str(base_dir_stdlib)
+    except (OSError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base directory: {e}") from e
+
+    # Determine if path is absolute (Unix or Windows style)
+    is_absolute = normalized_path.startswith("/") or (len(normalized_path) > 1 and normalized_path[1] == ":")
+
+    if is_absolute:
+        # Absolute path - resolve and validate it's within base directory
+        try:
+            requested_path = StdlibPath(normalized_path).resolve()
+            requested_resolved = str(requested_path)
+            try:
+                # Ensure it's a subpath of the base directory
+                requested_path.relative_to(base_dir_stdlib)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(f"Absolute path must be within your flows directory: {base_dir_resolved}"),
+                ) from None
+            return Path(requested_resolved)
+        except (OSError, ValueError) as e:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invalid file save path: {e}. "
+                    f"Verify that the path is within your flows directory: {base_dir_resolved}"
+                ),
+            ) from e
+    else:
+        # Relative path - validate that it's within the base directory
+        relative_part = normalized_path.lstrip("/")
+        safe_path = base_dir / relative_part if relative_part else base_dir
+        safe_path_stdlib = base_dir_stdlib / relative_part if relative_part else base_dir_stdlib
+        try:
+            final_resolved_str = str(safe_path_stdlib.resolve())
+
+            # Ensure resolved path stays within base (prevent symlink attacks)
+            if not final_resolved_str.startswith(base_dir_resolved):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid path: resolves outside allowed directory",
+                )
+        except (OSError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=f"Invalid path: {e}") from e
+
+        return safe_path
+
+
+async def _verify_fs_path(path: str | None, user_id: UUID, storage_service: StorageService) -> None:
+    """Verify and prepare the filesystem path for flow storage."""
+    if path is not None:
+        # Empty strings should be rejected (None is allowed, empty string is not)
+        if path == "":
+            raise HTTPException(status_code=400, detail="fs_path cannot be empty")
+        safe_path = _get_safe_flow_path(path, user_id, storage_service)
+        await safe_path.parent.mkdir(parents=True, exist_ok=True)
+        if not await safe_path.exists():
+            await safe_path.touch()
+
+
+async def _save_flow_to_fs(flow: Flow, user_id: UUID, storage_service: StorageService) -> None:
+    """Save flow data to the filesystem at the validated path."""
+    if not flow.fs_path:
+        return
+
+    try:
+        safe_path = _get_safe_flow_path(flow.fs_path, user_id, storage_service)
+        await safe_path.parent.mkdir(parents=True, exist_ok=True)
+        # async_open expects a string path, not a Path object
+        async with async_open(str(safe_path), "w") as f:
+            await f.write(flow.model_dump_json())
+    except HTTPException:
+        raise
+    except OSError as e:
+        await logger.aexception("Failed to write flow %s to path %s", flow.name, flow.fs_path)
+        raise HTTPException(status_code=500, detail=f"Failed to write flow to filesystem: {e}") from e
+
+
+async def _new_flow(
+    *,
+    session: AsyncSession,
+    flow: FlowCreate,
+    user_id: UUID,
+    storage_service: StorageService,
+):
+    try:
+        # Validate fs_path if provided (will raise HTTPException if invalid)
+        await _verify_fs_path(flow.fs_path, user_id, storage_service)
+
+        """Create a new flow."""
+        if flow.user_id is None:
+            flow.user_id = user_id
+
+        # First check if the flow.name is unique
+        # there might be flows with name like: "MyFlow", "MyFlow (1)", "MyFlow (2)"
+        # so we need to check if the name is unique with `like` operator
+        # if we find a flow with the same name, we add a number to the end of the name
+        # based on the highest number found
+        if (await session.exec(select(Flow).where(Flow.name == flow.name).where(Flow.user_id == user_id))).first():
+            flows = (
+                await session.exec(
+                    select(Flow).where(Flow.name.like(f"{flow.name} (%")).where(Flow.user_id == user_id)  # type: ignore[attr-defined]
+                )
+            ).all()
+            if flows:
+                # Use regex to extract numbers only from flows that follow the copy naming pattern:
+                # "{original_name} ({number})"
+                # This avoids extracting numbers from the original flow name if it naturally contains parentheses
+                #
+                # Examples:
+                # - For flow "My Flow": matches "My Flow (1)", "My Flow (2)" → extracts 1, 2
+                # - For flow "Analytics (Q1)": matches "Analytics (Q1) (1)" → extracts 1
+                #   but does NOT match "Analytics (Q1)" → avoids extracting the original "1"
+                extract_number = re.compile(rf"^{re.escape(flow.name)} \((\d+)\)$")
+                numbers = []
+                for _flow in flows:
+                    result = extract_number.search(_flow.name)
+                    if result:
+                        numbers.append(int(result.groups(1)[0]))
+                if numbers:
+                    flow.name = f"{flow.name} ({max(numbers) + 1})"
+                else:
+                    flow.name = f"{flow.name} (1)"
+            else:
+                flow.name = f"{flow.name} (1)"
+        # Now check if the endpoint is unique
+        if (
+            flow.endpoint_name
+            and (
+                await session.exec(
+                    select(Flow).where(Flow.endpoint_name == flow.endpoint_name).where(Flow.user_id == user_id)
+                )
+            ).first()
+        ):
+            flows = (
+                await session.exec(
+                    select(Flow)
+                    .where(Flow.endpoint_name.like(f"{flow.endpoint_name}-%"))  # type: ignore[union-attr]
+                    .where(Flow.user_id == user_id)
+                )
+            ).all()
+            if flows:
+                # The endpoint name is like "my-endpoint","my-endpoint-1", "my-endpoint-2"
+                # so we need to get the highest number and add 1
+                # we need to get the last part of the endpoint name
+                numbers = [int(flow.endpoint_name.split("-")[-1]) for flow in flows]
+                flow.endpoint_name = f"{flow.endpoint_name}-{max(numbers) + 1}"
+            else:
+                flow.endpoint_name = f"{flow.endpoint_name}-1"
+
+        db_flow = Flow.model_validate(flow, from_attributes=True)
+        db_flow.updated_at = datetime.now(timezone.utc)
+
+        if db_flow.folder_id is None:
+            # Make sure flows always have a folder
+            default_folder = (
+                await session.exec(select(Folder).where(Folder.name == DEFAULT_FOLDER_NAME, Folder.user_id == user_id))
+            ).first()
+            if default_folder:
+                db_flow.folder_id = default_folder.id
+
+        session.add(db_flow)
+    except Exception as e:
+        # If it is a validation error, return the error message
+        if hasattr(e, "errors"):
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return db_flow
+
+
+@router.post("/", response_model=FlowRead, status_code=201)
+async def create_flow(
+    *,
+    session: DbSession,
+    flow: FlowCreate,
+    current_user: CurrentActiveUser,
+    storage_service: Annotated[StorageService, Depends(get_storage_service)],
+):
+    try:
+        db_flow = await _new_flow(session=session, flow=flow, user_id=current_user.id, storage_service=storage_service)
+        await session.flush()
+        await session.refresh(db_flow)
+        await _save_flow_to_fs(db_flow, current_user.id, storage_service)
+
+        # Convert to FlowRead while session is still active to avoid detached instance errors
+        flow_read = FlowRead.model_validate(db_flow, from_attributes=True)
+    except Exception as e:
+        if "UNIQUE constraint failed" in str(e):
+            # Get the name of the column that failed
+            columns = str(e).split("UNIQUE constraint failed: ")[1].split(".")[1].split("\n")[0]
+            # UNIQUE constraint failed: flow.user_id, flow.name
+            # or UNIQUE constraint failed: flow.name
+            # if the column has id in it, we want the other column
+            column = columns.split(",")[1] if "id" in columns.split(",")[0] else columns.split(",")[0]
+
+            raise HTTPException(
+                status_code=400, detail=f"{column.capitalize().replace('_', ' ')} must be unique"
+            ) from e
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return flow_read
+
+
+@router.get("/", response_model=list[FlowRead] | Page[FlowRead] | list[FlowHeader], status_code=200)
+async def read_flows(
+    *,
+    current_user: CurrentActiveUser,
+    session: DbSession,
+    remove_example_flows: bool = False,
+    components_only: bool = False,
+    get_all: bool = True,
+    folder_id: UUID | None = None,
+    params: Annotated[Params, Depends()],
+    header_flows: bool = False,
+):
+    """Retrieve a list of flows with pagination support.
+
+    Args:
+        current_user (User): The current authenticated user.
+        session (Session): The database session.
+        settings_service (SettingsService): The settings service.
+        components_only (bool, optional): Whether to return only components. Defaults to False.
+
+        get_all (bool, optional): Whether to return all flows without pagination. Defaults to True.
+        **This field must be True because of backward compatibility with the frontend - Release: 1.0.20**
+
+        folder_id (UUID, optional): The project ID. Defaults to None.
+        params (Params): Pagination parameters.
+        remove_example_flows (bool, optional): Whether to remove example flows. Defaults to False.
+        header_flows (bool, optional): Whether to return only specific headers of the flows. Defaults to False.
+
+    Returns:
+        list[FlowRead] | Page[FlowRead] | list[FlowHeader]
+        A list of flows or a paginated response containing the list of flows or a list of flow headers.
+    """
+    try:
+        auth_settings = get_settings_service().auth_settings
+
+        default_folder = (await session.exec(select(Folder).where(Folder.name == DEFAULT_FOLDER_NAME))).first()
+        default_folder_id = default_folder.id if default_folder else None
+
+        starter_folder = (await session.exec(select(Folder).where(Folder.name == STARTER_FOLDER_NAME))).first()
+        starter_folder_id = starter_folder.id if starter_folder else None
+
+        if not starter_folder and not default_folder:
+            raise HTTPException(
+                status_code=404,
+                detail="Starter project and default project not found. Please create a project and add flows to it.",
+            )
+
+        if not folder_id:
+            folder_id = default_folder_id
+
+        if auth_settings.AUTO_LOGIN:
+            stmt = select(Flow).where(
+                (Flow.user_id == None) | (Flow.user_id == current_user.id)  # noqa: E711
+            )
+        else:
+            stmt = select(Flow).where(Flow.user_id == current_user.id)
+
+        if remove_example_flows:
+            stmt = stmt.where(Flow.folder_id != starter_folder_id)
+
+        if components_only:
+            stmt = stmt.where(Flow.is_component == True)  # noqa: E712
+
+        if get_all:
+            flows = (await session.exec(stmt)).all()
+            flows = validate_is_component(flows)
+            if components_only:
+                flows = [flow for flow in flows if flow.is_component]
+            if remove_example_flows and starter_folder_id:
+                flows = [flow for flow in flows if flow.folder_id != starter_folder_id]
+            if header_flows:
+                # Convert to FlowHeader objects and compress the response
+                flow_headers = [FlowHeader.model_validate(flow, from_attributes=True) for flow in flows]
+                return compress_response(flow_headers)
+
+            # Convert to FlowRead while session is still active to avoid detached instance errors
+            flow_reads = [FlowRead.model_validate(flow, from_attributes=True) for flow in flows]
+            return compress_response(flow_reads)
+
+        stmt = stmt.where(Flow.folder_id == folder_id)
+
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", category=DeprecationWarning, module=r"fastapi_pagination\.ext\.sqlalchemy"
+            )
+            return await apaginate(session, stmt, params=params)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+async def _read_flow(
+    session: AsyncSession,
+    flow_id: UUID,
+    user_id: UUID,
+):
+    """Read a flow."""
+    stmt = select(Flow).where(Flow.id == flow_id).where(Flow.user_id == user_id)
+
+    return (await session.exec(stmt)).first()
+
+
+@router.get("/{flow_id}", response_model=FlowRead, status_code=200)
+async def read_flow(
+    *,
+    session: DbSession,
+    flow_id: UUID,
+    current_user: CurrentActiveUser,
+):
+    """Read a flow."""
+    if user_flow := await _read_flow(session, flow_id, current_user.id):
+        # Convert to FlowRead while session is still active to avoid detached instance errors
+        return FlowRead.model_validate(user_flow, from_attributes=True)
+    raise HTTPException(status_code=404, detail="Flow not found")
+
+
+@router.get("/public_flow/{flow_id}", response_model=FlowRead, status_code=200)
+async def read_public_flow(
+    *,
+    session: DbSession,
+    flow_id: UUID,
+):
+    """Read a public flow."""
+    access_type = (await session.exec(select(Flow.access_type).where(Flow.id == flow_id))).first()
+    if access_type is not AccessTypeEnum.PUBLIC:
+        raise HTTPException(status_code=403, detail="Flow is not public")
+
+    current_user = await get_user_by_flow_id_or_endpoint_name(str(flow_id))
+    return await read_flow(session=session, flow_id=flow_id, current_user=current_user)
+
+
+@router.patch("/{flow_id}", response_model=FlowRead, status_code=200)
+async def update_flow(
+    *,
+    session: DbSession,
+    flow_id: UUID,
+    flow: FlowUpdate,
+    current_user: CurrentActiveUser,
+    storage_service: Annotated[StorageService, Depends(get_storage_service)],
+):
+    """Update a flow."""
+    settings_service = get_settings_service()
+    try:
+        db_flow = await _read_flow(
+            session=session,
+            flow_id=flow_id,
+            user_id=current_user.id,
+        )
+
+        if not db_flow:
+            raise HTTPException(status_code=404, detail="Flow not found")
+
+        update_data = flow.model_dump(exclude_unset=True, exclude_none=True)
+
+        # Specifically handle endpoint_name when it's explicitly set to null or empty string
+        if flow.endpoint_name is None or flow.endpoint_name == "":
+            update_data["endpoint_name"] = None
+
+        if settings_service.settings.remove_api_keys:
+            update_data = remove_api_keys(update_data)
+
+        for key, value in update_data.items():
+            setattr(db_flow, key, value)
+
+        # Validate fs_path if it was changed (will raise HTTPException if invalid)
+        if "fs_path" in update_data:
+            await _verify_fs_path(db_flow.fs_path, current_user.id, storage_service)
+
+        webhook_component = get_webhook_component_in_flow(db_flow.data)
+        db_flow.webhook = webhook_component is not None
+        db_flow.updated_at = datetime.now(timezone.utc)
+
+        if db_flow.folder_id is None:
+            default_folder = (await session.exec(select(Folder).where(Folder.name == DEFAULT_FOLDER_NAME))).first()
+            if default_folder:
+                db_flow.folder_id = default_folder.id
+
+        session.add(db_flow)
+        await session.flush()
+        await session.refresh(db_flow)
+        await _save_flow_to_fs(db_flow, current_user.id, storage_service)
+
+        # Convert to FlowRead while session is still active to avoid detached instance errors
+        flow_read = FlowRead.model_validate(db_flow, from_attributes=True)
+
+    except Exception as e:
+        if "UNIQUE constraint failed" in str(e):
+            # Get the name of the column that failed
+            columns = str(e).split("UNIQUE constraint failed: ")[1].split(".")[1].split("\n")[0]
+            # UNIQUE constraint failed: flow.user_id, flow.name
+            # or UNIQUE constraint failed: flow.name
+            # if the column has id in it, we want the other column
+            column = columns.split(",")[1] if "id" in columns.split(",")[0] else columns.split(",")[0]
+            raise HTTPException(
+                status_code=400, detail=f"{column.capitalize().replace('_', ' ')} must be unique"
+            ) from e
+
+        if hasattr(e, "status_code"):
+            raise HTTPException(status_code=e.status_code, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return flow_read
+
+
+@router.delete("/{flow_id}", status_code=200)
+async def delete_flow(
+    *,
+    session: DbSession,
+    flow_id: UUID,
+    current_user: CurrentActiveUser,
+):
+    """Delete a flow."""
+    flow = await _read_flow(
+        session=session,
+        flow_id=flow_id,
+        user_id=current_user.id,
+    )
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    await cascade_delete_flow(session, flow.id)
+    return {"message": "Flow deleted successfully"}
+
+
+@router.post("/batch/", response_model=list[FlowRead], status_code=201)
+async def create_flows(
+    *,
+    session: DbSession,
+    flow_list: FlowListCreate,
+    current_user: CurrentActiveUser,
+):
+    """Create multiple new flows."""
+    db_flows = []
+    for flow in flow_list.flows:
+        flow.user_id = current_user.id
+        db_flow = Flow.model_validate(flow, from_attributes=True)
+        session.add(db_flow)
+        db_flows.append(db_flow)
+
+    await session.flush()
+    for db_flow in db_flows:
+        await session.refresh(db_flow)
+
+    return [FlowRead.model_validate(db_flow, from_attributes=True) for db_flow in db_flows]
+
+
+@router.post("/upload/", response_model=list[FlowRead], status_code=201)
+async def upload_file(
+    *,
+    session: DbSession,
+    file: Annotated[UploadFile, File(...)],
+    current_user: CurrentActiveUser,
+    folder_id: UUID | None = None,
+    storage_service: Annotated[StorageService, Depends(get_storage_service)],
+):
+    """Upload flows from a file."""
+    contents = await file.read()
+    data = orjson.loads(contents)
+    response_list = []
+    flow_list = FlowListCreate(**data) if "flows" in data else FlowListCreate(flows=[FlowCreate(**data)])
+    # Now we set the user_id for all flows
+    for flow in flow_list.flows:
+        flow.user_id = current_user.id
+        if folder_id:
+            flow.folder_id = folder_id
+        response = await _new_flow(session=session, flow=flow, user_id=current_user.id, storage_service=storage_service)
+        response_list.append(response)
+
+    try:
+        await session.flush()
+        for db_flow in response_list:
+            await session.refresh(db_flow)
+            await _save_flow_to_fs(db_flow, current_user.id, storage_service)
+
+        # Convert to FlowRead while session is still active to avoid detached instance errors
+        flow_reads = [FlowRead.model_validate(db_flow, from_attributes=True) for db_flow in response_list]
+    except Exception as e:
+        if "UNIQUE constraint failed" in str(e):
+            # Get the name of the column that failed
+            columns = str(e).split("UNIQUE constraint failed: ")[1].split(".")[1].split("\n")[0]
+            # UNIQUE constraint failed: flow.user_id, flow.name
+            # or UNIQUE constraint failed: flow.name
+            # if the column has id in it, we want the other column
+            column = columns.split(",")[1] if "id" in columns.split(",")[0] else columns.split(",")[0]
+
+            raise HTTPException(
+                status_code=400, detail=f"{column.capitalize().replace('_', ' ')} must be unique"
+            ) from e
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return flow_reads
+
+
+@router.delete("/")
+async def delete_multiple_flows(
+    flow_ids: list[UUID],
+    user: CurrentActiveUser,
+    db: DbSession,
+):
+    """Delete multiple flows by their IDs.
+
+    Args:
+        flow_ids (List[str]): The list of flow IDs to delete.
+        user (User, optional): The user making the request. Defaults to the current active user.
+        db (Session, optional): The database session.
+
+    Returns:
+        dict: A dictionary containing the number of flows deleted.
+
+    """
+    try:
+        flows_to_delete = (
+            await db.exec(select(Flow).where(col(Flow.id).in_(flow_ids)).where(Flow.user_id == user.id))
+        ).all()
+        for flow in flows_to_delete:
+            await cascade_delete_flow(db, flow.id)
+
+        await db.flush()
+        return {"deleted": len(flows_to_delete)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/download/", status_code=200)
+async def download_multiple_file(
+    flow_ids: list[UUID],
+    user: CurrentActiveUser,
+    db: DbSession,
+):
+    """Download all flows as a zip file."""
+    flows = (await db.exec(select(Flow).where(and_(Flow.user_id == user.id, Flow.id.in_(flow_ids))))).all()  # type: ignore[attr-defined]
+
+    if not flows:
+        raise HTTPException(status_code=404, detail="No flows found.")
+
+    flows_without_api_keys = [remove_api_keys(flow.model_dump()) for flow in flows]
+
+    if len(flows_without_api_keys) > 1:
+        # Create a byte stream to hold the ZIP file
+        zip_stream = io.BytesIO()
+
+        # Create a ZIP file
+        with zipfile.ZipFile(zip_stream, "w") as zip_file:
+            for flow in flows_without_api_keys:
+                # Convert the flow object to JSON
+                flow_json = json.dumps(jsonable_encoder(flow))
+
+                # Write the JSON to the ZIP file
+                zip_file.writestr(f"{flow['name']}.json", flow_json)
+
+        # Seek to the beginning of the byte stream
+        zip_stream.seek(0)
+
+        # Generate the filename with the current datetime
+        current_time = datetime.now(tz=timezone.utc).astimezone().strftime("%Y%m%d_%H%M%S")
+        filename = f"{current_time}_langflow_flows.zip"
+
+        return StreamingResponse(
+            zip_stream,
+            media_type="application/x-zip-compressed",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    return flows_without_api_keys[0]
+
+
+all_starter_folder_flows_response: Response | None = None
+
+
+@router.get("/basic_examples/", response_model=list[FlowRead], status_code=200)
+async def read_basic_examples(
+    *,
+    session: DbSession,
+):
+    """Retrieve a list of basic example flows.
+
+    Args:
+        session (Session): The database session.
+
+    Returns:
+        list[FlowRead]: A list of basic example flows.
+    """
+    try:
+        global all_starter_folder_flows_response  # noqa: PLW0603
+
+        if all_starter_folder_flows_response:
+            return all_starter_folder_flows_response
+        # Get the starter folder
+        starter_folder = (await session.exec(select(Folder).where(Folder.name == STARTER_FOLDER_NAME))).first()
+
+        if not starter_folder:
+            return []
+
+        # Get all flows in the starter folder
+        all_starter_folder_flows = (await session.exec(select(Flow).where(Flow.folder_id == starter_folder.id))).all()
+
+        flow_reads = [FlowRead.model_validate(flow, from_attributes=True) for flow in all_starter_folder_flows]
+        all_starter_folder_flows_response = compress_response(flow_reads)
+
+        # Return compressed response using our utility function
+        return all_starter_folder_flows_response  # noqa: TRY300
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e

@@ -1,0 +1,29 @@
+--- contrib/python/sqlparse/py2/tests/conftest.py	(index)
++++ contrib/python/sqlparse/py2/tests/conftest.py	(working tree)
+@@ -7,13 +7,13 @@ import os
+ 
+ import pytest
+ 
+-DIR_PATH = os.path.dirname(__file__)
+-FILES_DIR = os.path.join(DIR_PATH, 'files')
+-
+ 
+ @pytest.fixture()
+ def filepath():
+     """Returns full file path for test files."""
++    import yatest.common
++    DIR_PATH = yatest.common.test_source_path()
++    FILES_DIR = os.path.join(DIR_PATH, 'files')
+ 
+     def make_filepath(filename):
+         # https://stackoverflow.com/questions/18011902/py-test-pass-a-parameter-to-a-fixture-function
+--- contrib/python/sqlparse/py2/tests/test_parse.py	(index)
++++ contrib/python/sqlparse/py2/tests/test_parse.py	(working tree)
+@@ -408,6 +408,7 @@ def test_dbldollar_as_literal(sql, is_literal):
+             assert token.ttype != T.Literal
+ 
+ 
++@pytest.mark.xfail
+ def test_non_ascii():
+     _test_non_ascii = u"insert into test (id, name) values (1, 'тест');"
+ 

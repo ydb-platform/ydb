@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.mysql.v1alpha;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/mdb/mysql/v1alpha/backup.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/mysql/v1alpha;mysql";
+option java_package = "yandex.cloud.api.mdb.mysql.v1alpha";
+
+// A set of methods for managing MySQL backups.
+service BackupService {
+  // Returns the specified MySQL backup.
+  //
+  // To get the list of available MySQL backups, make a [List] request.
+  rpc Get (GetBackupRequest) returns (Backup) {
+    option (google.api.http) = { get: "/managed-mysql/v1alpha/backups/{backup_id}" };
+  }
+
+  // Retrieves the list of MySQL backups available for the specified folder.
+  rpc List (ListBackupsRequest) returns (ListBackupsResponse) {
+    option (google.api.http) = { get: "/managed-mysql/v1alpha/backups" };
+  }
+}
+
+message GetBackupRequest {
+  // ID of the backup to return information about.
+  // To get the backup ID, use a [ClusterService.ListBackups] request.
+  string backup_id = 1 [(required) = true];
+}
+
+message ListBackupsRequest {
+  // ID of the folder to list backups in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListBackupsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token.  To get the next page of results, Set [page_token] to the [ListBackupsResponse.next_page_token]
+  // returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListBackupsResponse {
+  // List of MySQL backups.
+  repeated Backup backups = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListBackupsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListBackupsRequest.page_token] parameter in the next list request. Each subsequent
+  // list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2 [(length) = "<=100"];
+}

@@ -1,0 +1,278 @@
+Metadata-Version: 2.4
+Name: sanic
+Version: 25.12.0
+Summary: A web server and web framework that's written to go fast. Build fast. Run fast.
+Home-page: http://github.com/sanic-org/sanic/
+Author: Sanic Community
+Author-email: admhpkns@gmail.com
+License: MIT
+Platform: any
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Web Environment
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Requires-Python: >=3.10
+License-File: LICENSE
+Requires-Dist: sanic-routing>=23.12.0
+Requires-Dist: httptools>=0.0.10
+Requires-Dist: uvloop>=0.15.0; sys_platform != "win32" and implementation_name == "cpython"
+Requires-Dist: ujson>=1.35; sys_platform != "win32" and implementation_name == "cpython"
+Requires-Dist: aiofiles>=0.6.0
+Requires-Dist: websockets>=10.0
+Requires-Dist: multidict<7.0,>=5.0
+Requires-Dist: html5tagger>=1.2.1
+Requires-Dist: tracerite>=2.2.0
+Requires-Dist: typing-extensions>=4.4.0
+Requires-Dist: setuptools>=70.1.0
+Provides-Extra: test
+Requires-Dist: sanic-testing>=23.6.0; extra == "test"
+Requires-Dist: pytest>=8.2.2; extra == "test"
+Requires-Dist: pytest-xdist>=3.5.0; extra == "test"
+Requires-Dist: pytest-cov>=4.0.0; extra == "test"
+Requires-Dist: coverage; extra == "test"
+Requires-Dist: beautifulsoup4; extra == "test"
+Requires-Dist: pytest-sanic; extra == "test"
+Requires-Dist: pytest-benchmark; extra == "test"
+Requires-Dist: chardet==3.*; extra == "test"
+Requires-Dist: ruff; extra == "test"
+Requires-Dist: bandit; extra == "test"
+Requires-Dist: mypy; extra == "test"
+Requires-Dist: docutils; extra == "test"
+Requires-Dist: pygments; extra == "test"
+Requires-Dist: uvicorn; extra == "test"
+Requires-Dist: slotscheck<1,>=0.8.0; extra == "test"
+Requires-Dist: types-ujson; (sys_platform != "win32" and implementation_name == "cpython") and extra == "test"
+Provides-Extra: dev
+Requires-Dist: sanic-testing>=23.6.0; extra == "dev"
+Requires-Dist: pytest>=8.2.2; extra == "dev"
+Requires-Dist: pytest-xdist>=3.5.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: coverage; extra == "dev"
+Requires-Dist: beautifulsoup4; extra == "dev"
+Requires-Dist: pytest-sanic; extra == "dev"
+Requires-Dist: pytest-benchmark; extra == "dev"
+Requires-Dist: chardet==3.*; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: bandit; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: docutils; extra == "dev"
+Requires-Dist: pygments; extra == "dev"
+Requires-Dist: uvicorn; extra == "dev"
+Requires-Dist: slotscheck<1,>=0.8.0; extra == "dev"
+Requires-Dist: types-ujson; (sys_platform != "win32" and implementation_name == "cpython") and extra == "dev"
+Requires-Dist: cryptography; extra == "dev"
+Requires-Dist: tox; extra == "dev"
+Requires-Dist: towncrier; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: sphinx>=2.1.2; extra == "docs"
+Requires-Dist: sphinx_rtd_theme>=0.4.3; extra == "docs"
+Requires-Dist: docutils; extra == "docs"
+Requires-Dist: pygments; extra == "docs"
+Requires-Dist: m2r2; extra == "docs"
+Requires-Dist: enum-tools[sphinx]; extra == "docs"
+Requires-Dist: mistune>=2.0.0; extra == "docs"
+Requires-Dist: autodocsumm>=0.2.11; extra == "docs"
+Requires-Dist: msgspec; extra == "docs"
+Requires-Dist: python-frontmatter; extra == "docs"
+Requires-Dist: docstring-parser; extra == "docs"
+Requires-Dist: libsass; extra == "docs"
+Provides-Extra: all
+Requires-Dist: mypy; extra == "all"
+Requires-Dist: msgspec; extra == "all"
+Requires-Dist: bandit; extra == "all"
+Requires-Dist: chardet==3.*; extra == "all"
+Requires-Dist: slotscheck<1,>=0.8.0; extra == "all"
+Requires-Dist: sphinx_rtd_theme>=0.4.3; extra == "all"
+Requires-Dist: docstring-parser; extra == "all"
+Requires-Dist: mistune>=2.0.0; extra == "all"
+Requires-Dist: tox; extra == "all"
+Requires-Dist: pytest-xdist>=3.5.0; extra == "all"
+Requires-Dist: beautifulsoup4; extra == "all"
+Requires-Dist: enum-tools[sphinx]; extra == "all"
+Requires-Dist: coverage; extra == "all"
+Requires-Dist: sphinx>=2.1.2; extra == "all"
+Requires-Dist: libsass; extra == "all"
+Requires-Dist: cryptography; extra == "all"
+Requires-Dist: uvicorn; extra == "all"
+Requires-Dist: m2r2; extra == "all"
+Requires-Dist: pytest>=8.2.2; extra == "all"
+Requires-Dist: autodocsumm>=0.2.11; extra == "all"
+Requires-Dist: ruff; extra == "all"
+Requires-Dist: types-ujson; (sys_platform != "win32" and implementation_name == "cpython") and extra == "all"
+Requires-Dist: sanic-testing>=23.6.0; extra == "all"
+Requires-Dist: python-frontmatter; extra == "all"
+Requires-Dist: pytest-benchmark; extra == "all"
+Requires-Dist: towncrier; extra == "all"
+Requires-Dist: pytest-cov>=4.0.0; extra == "all"
+Requires-Dist: pytest-sanic; extra == "all"
+Requires-Dist: docutils; extra == "all"
+Requires-Dist: pygments; extra == "all"
+Provides-Extra: ext
+Requires-Dist: sanic-ext; extra == "ext"
+Provides-Extra: http3
+Requires-Dist: aioquic; extra == "http3"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: platform
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+.. image:: https://raw.githubusercontent.com/sanic-org/sanic-assets/master/png/sanic-framework-logo-400x97.png
+    :alt: Sanic | Build fast. Run fast.
+
+Sanic | Build fast. Run fast.
+=============================
+
+.. start-badges
+
+.. list-table::
+    :widths: 15 85
+    :stub-columns: 1
+
+    * - Build
+      - | |Tests|
+    * - Docs
+      - | |UserGuide| |Documentation|
+    * - Package
+      - | |PyPI| |PyPI version| |Wheel| |Supported implementations| |Code style ruff|
+    * - Support
+      - | |Forums| |Discord| |Awesome|
+    * - Stats
+      - | |Monthly Downloads| |Weekly Downloads| |Conda downloads|
+
+.. |UserGuide| image:: https://img.shields.io/badge/user%20guide-sanic-ff0068
+   :target: https://sanic.dev/
+.. |Forums| image:: https://img.shields.io/badge/forums-community-ff0068.svg
+   :target: https://community.sanicframework.org/
+.. |Discord| image:: https://img.shields.io/discord/812221182594121728?logo=discord&label=Discord&color=5865F2
+   :target: https://discord.gg/FARQzAEMAA
+.. |Tests| image:: https://github.com/sanic-org/sanic/actions/workflows/tests.yml/badge.svg?branch=main
+   :target: https://github.com/sanic-org/sanic/actions/workflows/tests.yml
+.. |Documentation| image:: https://readthedocs.org/projects/sanic/badge/?version=latest
+   :target: http://sanic.readthedocs.io/en/latest/?badge=latest
+.. |PyPI| image:: https://img.shields.io/pypi/v/sanic.svg
+   :target: https://pypi.python.org/pypi/sanic/
+.. |PyPI version| image:: https://img.shields.io/pypi/pyversions/sanic.svg
+   :target: https://pypi.python.org/pypi/sanic/
+.. |Code style ruff| image:: https://img.shields.io/badge/code%20style-ruff-000000.svg
+    :target: https://docs.astral.sh/ruff/
+.. |Wheel| image:: https://img.shields.io/pypi/wheel/sanic.svg
+    :alt: PyPI Wheel
+    :target: https://pypi.python.org/pypi/sanic
+.. |Supported implementations| image:: https://img.shields.io/pypi/implementation/sanic.svg
+    :alt: Supported implementations
+    :target: https://pypi.python.org/pypi/sanic
+.. |Awesome| image:: https://cdn.rawgit.com/sindresorhus/awesome/d7305f38d29fed78fa85652e3a63e154dd8e8829/media/badge.svg
+    :alt: Awesome Sanic List
+    :target: https://github.com/mekicha/awesome-sanic
+.. |Monthly Downloads| image:: https://img.shields.io/pypi/dm/sanic.svg
+    :alt: Downloads
+    :target: https://pepy.tech/project/sanic
+.. |Weekly Downloads| image:: https://img.shields.io/pypi/dw/sanic.svg
+    :alt: Downloads
+    :target: https://pepy.tech/project/sanic
+.. |Conda downloads| image:: https://img.shields.io/conda/dn/conda-forge/sanic.svg
+    :alt: Downloads
+    :target: https://anaconda.org/conda-forge/sanic
+
+.. end-badges
+
+Sanic is a **Python 3.10+** web server and web framework that's written to go fast. It allows the usage of the ``async/await`` syntax added in Python 3.5, which makes your code non-blocking and speedy.
+
+Sanic is also ASGI compliant, so you can deploy it with an `alternative ASGI webserver <https://sanicframework.org/en/guide/deployment/running.html#asgi>`_.
+
+`Source code on GitHub <https://github.com/sanic-org/sanic/>`_ | `Help and discussion board <https://community.sanicframework.org/>`_ | `User Guide <https://sanicframework.org>`_ | `Chat on Discord <https://discord.gg/FARQzAEMAA>`_
+
+The project is maintained by the community, for the community. **Contributions are welcome!**
+
+The goal of the project is to provide a simple way to get up and running a highly performant HTTP server that is easy to build, to expand, and ultimately to scale.
+
+Sponsor
+-------
+
+Check out `open collective <https://opencollective.com/sanic-org>`_ to learn more about helping to fund Sanic.
+
+
+Installation
+------------
+
+``pip install sanic``
+
+    Sanic makes use of ``uvloop`` and ``ujson`` to help with performance. If you do not want to use those packages, simply add an environmental variable ``SANIC_NO_UVLOOP=true`` or ``SANIC_NO_UJSON=true`` at install time.
+
+    .. code:: shell
+
+       $ export SANIC_NO_UVLOOP=true
+       $ export SANIC_NO_UJSON=true
+       $ pip install --no-binary :all: sanic
+
+
+.. note::
+
+  If you are running on a clean install of Fedora 28 or above, please make sure you have the ``redhat-rpm-config`` package installed in case if you want to
+  use ``sanic`` with ``ujson`` dependency.
+
+
+Hello World Example
+-------------------
+
+.. code:: python
+
+    from sanic import Sanic
+    from sanic.response import json
+
+    app = Sanic("my-hello-world-app")
+
+    @app.route('/')
+    async def test(request):
+        return json({'hello': 'world'})
+
+Sanic can now be easily run from CLI using ``sanic hello.app``.
+
+.. code::
+
+    [2018-12-30 11:37:41 +0200] [13564] [INFO] Goin' Fast @ http://127.0.0.1:8000
+    [2018-12-30 11:37:41 +0200] [13564] [INFO] Starting worker [13564]
+
+And, we can verify it is working: ``curl localhost:8000 -i``
+
+.. code::
+
+    HTTP/1.1 200 OK
+    Connection: keep-alive
+    Keep-Alive: 5
+    Content-Length: 17
+    Content-Type: application/json
+
+    {"hello":"world"}
+
+**Now, let's go build something fast!**
+
+Minimum Python version is 3.10.
+
+Documentation
+-------------
+
+User Guide, Changelog, and API Documentation can be found at `sanic.dev <https://sanic.dev>`__.
+
+
+Questions and Discussion
+------------------------
+
+`Ask a question or join the conversation <https://community.sanicframework.org/>`__.
+
+Contribution
+------------
+
+We are always happy to have new contributions. We have `marked issues good for anyone looking to get started <https://github.com/sanic-org/sanic/issues?q=is%3Aopen+is%3Aissue+label%3Abeginner>`_, and welcome `questions on the forums <https://community.sanicframework.org/>`_. Please take a look at our `Contribution guidelines <https://github.com/sanic-org/sanic/blob/master/CONTRIBUTING.md>`_.

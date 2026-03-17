@@ -1,0 +1,38 @@
+# -*- text -*-
+#
+# Copyright (c) 2007-2009 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2015      Los Alamos National Security, LLC. All rights
+#                         reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+[leave pinned failed]
+A process attempted to use the "leave pinned" MPI feature, but no
+memory registration hooks were found on the system at run time.  This
+may be the result of running on a system that does not support memory
+hooks or having some other software subvert Open MPI's use of the
+memory hooks.  You can disable Open MPI's use of memory hooks by
+setting both the mpi_leave_pinned and mpi_leave_pinned_pipeline MCA
+parameters to 0.
+
+Open MPI will disable any transports that are attempting to use the
+leave pinned functionality; your job may still run, but may fall back
+to a slower network transport (such as TCP).
+
+  rcache name: %s
+  Process:     %s
+  Local host:  %s
+#
+[cannot deregister in-use memory]
+Open MPI intercepted a call to free memory that is still being used by
+an ongoing MPI communication.  This usually reflects an error in the
+MPI application; it may signify memory corruption.  Open MPI will now
+abort your job.
+
+  rcache name:    %s
+  Local host:     %s
+  Buffer address: %p
+  Buffer size:    %lu

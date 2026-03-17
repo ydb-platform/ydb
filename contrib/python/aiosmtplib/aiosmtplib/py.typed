@@ -1,0 +1,1 @@
+This file exists to help mypy (and other tools) find inline type hints. See PR #141 and PEP 561.

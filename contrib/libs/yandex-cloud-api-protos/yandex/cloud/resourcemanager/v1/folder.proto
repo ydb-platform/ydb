@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package yandex.cloud.resourcemanager.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/resourcemanager/v1;resourcemanager";
+option java_package = "yandex.cloud.api.resourcemanager.v1";
+
+// A Folder resource. For more information, see [Folder](/docs/resource-manager/concepts/resources-hierarchy#folder).
+message Folder {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // The folder is active.
+    ACTIVE = 1;
+
+    // The folder is being deleted.
+    DELETING = 2;
+
+    // Stopping folder resources and waiting for the deletion start timestamp.
+    PENDING_DELETION = 3;
+  }
+
+  // ID of the folder.
+  string id = 1;
+
+  // ID of the cloud that the folder belongs to.
+  string cloud_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the folder.
+  // The name is unique within the cloud. 3-63 characters long.
+  string name = 4;
+
+  // Description of the folder. 0-256 characters long.
+  string description = 5;
+
+  // Resource labels as `` key:value `` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 6;
+
+  // Status of the folder.
+  Status status = 7;
+}

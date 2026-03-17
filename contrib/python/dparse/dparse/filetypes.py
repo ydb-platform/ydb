@@ -1,0 +1,8 @@
+requirements_txt = "requirements.txt"
+conda_yml = "conda.yml"
+setup_cfg = "setup.cfg"
+tox_ini = "tox.ini"
+pipfile = "Pipfile"
+pipfile_lock = "Pipfile.lock"
+poetry_lock = "poetry.lock"
+pyproject_toml = "pyproject.toml"

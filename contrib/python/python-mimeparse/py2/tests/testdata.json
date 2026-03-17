@@ -1,0 +1,234 @@
+{
+    "parse_media_range": [
+        ["application/xml;q=1", ["application", "xml", {"q": "1"}]],
+        ["application/xml", ["application", "xml", {"q": "1"}]],
+        ["application/xml;q=",["application", "xml", {"q": "1"}]],
+        ["application/xml ;q=",["application", "xml", {"q": "1"}]],
+        ["application/xml ;q=-1",["application", "xml", {"q": "1"}]],
+        ["application/xml ; q=1;b=other",["application", "xml", {"q": "1", "b":"other"}]],
+        ["application/xml ; q=2;b=other",["application", "xml", {"q": "1", "b":"other"}]],
+        ["application/xml ; q=0",["application", "xml", {"q": "0"}]],
+        ["application/xml ; q=foo", ["application", "xml", {"q": "1"}]],
+        ["application/xml ; Q=0.6", ["application", "xml", {"q": "0.6"}]],
+        [" *; q=.2", ["*", "*", {"q": ".2"}]]
+    ],
+
+    "quality": [
+        [
+            [
+                "text/html;level=1",
+                "text/*;q=0.3, text/html;q=0.7, text/html;level=1, text/html;level=2;q=0.4, */*;q=0.5"
+            ],
+            1
+        ],
+        [
+            [
+                "text/html",
+                "text/*;q=0.3, text/html;q=0.7, text/html;level=1, text/html;level=2;q=0.4, */*;q=0.5"
+            ],
+            0.7
+        ],
+        [
+            [
+                "text/plain",
+                "text/*;q=0.3, text/html;q=0.7, text/html;level=1, text/html;level=2;q=0.4, */*;q=0.5"
+            ],
+            0.3
+        ],
+        [
+            [
+                "image/jpeg",
+                "text/*;q=0.3, text/html;q=0.7, text/html;level=1, text/html;level=2;q=0.4, */*;q=0.5"
+            ],
+            0.5
+        ],
+        [
+            [
+                "text/html;level=2",
+                "text/*;q=0.3, text/html;q=0.7, text/html;level=1, text/html;level=2;q=0.4, */*;q=0.5"
+            ],
+            0.4
+        ],
+        [
+            [
+                "text/html;level=3",
+                "text/*;q=0.3, text/html;q=0.7, text/html;level=1, text/html;level=2;q=0.4, */*;q=0.5"
+            ],
+            0.7
+        ],
+        [
+            [
+                "text/plain",
+                "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"
+            ],
+            0.2
+        ]
+    ],
+
+    "best_match": [
+        [
+            [
+                ["application/json", "text/html"],
+                "application/json, text/javascript, */*"
+            ],
+            "application/json",
+            "common AJAX scenario"
+        ],
+        [
+            [
+                ["application/xbel+xml", "application/xml"],
+                "application/xbel+xml"
+            ],
+            "application/xbel+xml",
+            "direct match"
+        ],
+        [
+            [
+                ["application/xbel+xml", "application/xml"],
+                "application/xbel+xml; q=1"
+            ],
+            "application/xbel+xml",
+            "direct match with a q parameter"
+        ],
+        [
+            [
+                ["application/xbel+xml", "application/xml"],
+                "application/xml; q=1"
+            ],
+            "application/xml",
+            "direct match of our second choice with a q parameter"
+        ],
+        [
+            [
+                ["application/xbel+xml", "application/xml"],
+                "application/*; q=1"
+            ],
+            "application/xml",
+            "match using a subtype wildcard"
+        ],
+        [
+            [
+                ["application/xbel+xml", "application/xml"],
+                "*/*"
+            ],
+            "application/xml",
+            "match using a type wildcard"
+        ],
+        [
+            [
+                ["application/xbel+xml", "text/xml"],
+                "text/*;q=0.5,*/*; q=0.1"
+            ],
+            "text/xml",
+            "match using a type versus a lower weighted subtype"
+        ],
+        [
+            [
+                ["application/xbel+xml", "text/xml"],
+                "text/html,application/atom+xml; q=0.9"
+            ],
+            "",
+            "fail to match anything"
+        ],
+        [
+            [
+                ["application/json", "text/html"],
+                "application/json, text/html;q=0.9"
+            ],
+            "application/json",
+            "verify fitness ordering"
+        ],
+        [
+            [
+                ["image/*", "application/xml"],
+                "image/png"
+            ],
+            "image/*",
+            "match using a type wildcard"
+        ],
+        [
+            [
+                ["image/*", "application/xml"],
+                "image/*"
+            ],
+            "image/*",
+            "match using a wildcard for both requested and supported"
+        ],
+        [
+            [
+                ["image/jpeg", "text/plain"],
+                "text/*;q=0.3, text/html;q=0.7, text/html;level=1, text/html;level=2;q=0.4, */*;q=0.5"
+            ],
+            "image/jpeg",
+            "media type with highest associated quality factor should win, not necessarily most specific"
+        ],
+        [
+            [
+                ["text/html", "application/rdf+xml"],
+                "text/html, application/rdf+xml"
+            ],
+            "application/rdf+xml",
+            "match should use highest order of supported when there is a tie"
+        ],
+        [
+            [
+                ["text/plain", "text/plain;format=flowed", "text/html"],
+                "text/*, text/plain, text/plain;format=flowed, */*"
+            ],
+            "text/plain;format=flowed",
+            "most specific reference has precedence"
+        ],
+        [
+            [
+                ["application/rdf+xml", "text/html"],
+                "text/html, application/rdf+xml"
+            ],
+            "text/html",
+            "match should use highest order of supported when there is a tie"
+        ],
+        [
+            [
+                ["application/json;q=1.0", "text/html;q=0.9", "text/plain;q=0.1"],
+                "*/*"
+            ],
+            "application/json;q=1.0",
+            "*/* match should pick an acceptable type with the highest quality"
+        ],
+        [
+            [
+                ["text/html;q=0.9", "application/json", "text/plain;q=0.1"],
+                "*/*"
+            ],
+            "application/json",
+            "*/* match should pick an acceptable type with the highest quality, even if it's implicit"
+        ],
+        [
+            [
+                ["application/json", "text/html"],
+                "text"
+            ],
+            null,
+            "match should use the default if an invalid Accept header is passed"
+        ]
+    ],
+
+    "parse_mime_type": [
+        [
+            "application/xhtml;q=0.5",
+            ["application", "xhtml", {"q": "0.5"}]
+        ],
+        [
+            "application/xhtml;q=0.5;ver=1.2",
+            ["application", "xhtml", {"q": "0.5", "ver": "1.2"}]
+        ],
+        [
+            "application/xhtml;q=0.5;foo=\"bar quux\"",
+            ["application", "xhtml", {"q": "0.5", "foo": "bar quux"}]],
+        [
+            "text", null
+        ],
+        [
+            "text/something/invalid", null
+        ]
+    ]
+}

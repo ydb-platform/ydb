@@ -1,0 +1,16 @@
+#Provided by Inger-Lise Frogner (Norwegian Meteorological Institute)
+#Total precipitation
+'tp' = {
+     table2Version = 1 ;
+     indicatorOfParameter = 61 ;
+    }
+#Convective available potential energy
+'cape' = {
+	 table2Version = 1 ;
+	 indicatorOfParameter = 225 ;
+}
+#10 metre wind gust
+'gust' = {
+     table2Version = 1 ;
+     indicatorOfParameter = 228 ;
+    }

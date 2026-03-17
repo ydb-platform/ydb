@@ -1,0 +1,204 @@
+/******************************************************************************
+ *
+ * Project:  GDAL Core
+ * Purpose:  Read metadata from Resurs-DK1 imagery.
+ * Author:   Alexander Lisovenko
+ * Author:   Dmitry Baryshnikov, polimax@mail.ru
+ *
+ ******************************************************************************
+ * Copyright (c) 2014-2015 NextGIS <info@nextgis.ru>
+ *
+ * SPDX-License-Identifier: MIT
+ ****************************************************************************/
+
+#include "cpl_port.h"
+#include "reader_rdk1.h"
+
+#include <cstdio>
+
+#include "cpl_error.h"
+#include "cpl_minixml.h"
+#include "cpl_string.h"
+#include "cpl_time.h"
+
+#include "gdal_priv.h"
+
+/**
+ * GDALMDReaderResursDK1()
+ */
+GDALMDReaderResursDK1::GDALMDReaderResursDK1(const char *pszPath,
+                                             char **papszSiblingFiles)
+    : GDALMDReaderBase(pszPath, papszSiblingFiles),
+      m_osXMLSourceFilename(
+          GDALFindAssociatedFile(pszPath, "XML", papszSiblingFiles, 0))
+{
+    if (!m_osXMLSourceFilename.empty())
+        CPLDebug("MDReaderResursDK1", "XML Filename: %s",
+                 m_osXMLSourceFilename.c_str());
+}
+
+/**
+ * ~GDALMDReaderResursDK1()
+ */
+GDALMDReaderResursDK1::~GDALMDReaderResursDK1()
+{
+}
+
+/**
+ * HasRequiredFiles()
+ */
+bool GDALMDReaderResursDK1::HasRequiredFiles() const
+{
+    // check <MSP_ROOT>
+    if (!m_osXMLSourceFilename.empty() &&
+        GDALCheckFileHeader(m_osXMLSourceFilename, "<MSP_ROOT>"))
+        return true;
+
+    return false;
+}
+
+/**
+ * GetMetadataFiles()
+ */
+char **GDALMDReaderResursDK1::GetMetadataFiles() const
+{
+    char **papszFileList = nullptr;
+    if (!m_osXMLSourceFilename.empty())
+        papszFileList = CSLAddString(papszFileList, m_osXMLSourceFilename);
+
+    return papszFileList;
+}
+
+/**
+ * LoadMetadata()
+ */
+void GDALMDReaderResursDK1::LoadMetadata()
+{
+    if (m_bIsMetadataLoad)
+        return;
+
+    if (!m_osXMLSourceFilename.empty())
+    {
+        CPLXMLNode *psNode = CPLParseXMLFile(m_osXMLSourceFilename);
+
+        if (psNode != nullptr)
+        {
+            CPLXMLNode *pMSPRootNode = CPLSearchXMLNode(psNode, "=MSP_ROOT");
+
+            if (pMSPRootNode != nullptr)
+            {
+                m_papszIMDMD =
+                    ReadXMLToList(pMSPRootNode, m_papszIMDMD, "MSP_ROOT");
+            }
+            CPLDestroyXMLNode(psNode);
+        }
+    }
+
+    m_papszDEFAULTMD = CSLAddNameValue(m_papszDEFAULTMD, MD_NAME_MDTYPE, "MSP");
+
+    m_bIsMetadataLoad = true;
+
+    if (nullptr == m_papszIMDMD)
+    {
+        return;
+    }
+
+    // extract imagery metadata
+    const char *pszSatId = CSLFetchNameValue(m_papszIMDMD, "MSP_ROOT.cCodeKA");
+    if (nullptr != pszSatId)
+    {
+        m_papszIMAGERYMD = CSLAddNameValue(m_papszIMAGERYMD, MD_NAME_SATELLITE,
+                                           CPLStripQuotes(pszSatId));
+    }
+
+    const char *pszDate =
+        CSLFetchNameValue(m_papszIMDMD, "MSP_ROOT.Normal.dSceneDate");
+
+    if (nullptr != pszDate)
+    {
+        const char *pszTime =
+            CSLFetchNameValue(m_papszIMDMD, "MSP_ROOT.Normal.tSceneTime");
+        if (nullptr == pszTime)
+            pszTime = "00:00:00.000000";
+
+        char buffer[80];
+        GIntBig timeMid =
+            GetAcquisitionTimeFromString(CPLSPrintf("%s %s", pszDate, pszTime));
+        struct tm tmBuf;
+        strftime(buffer, 80, MD_DATETIMEFORMAT,
+                 CPLUnixTimeToYMDHMS(timeMid, &tmBuf));
+        m_papszIMAGERYMD =
+            CSLAddNameValue(m_papszIMAGERYMD, MD_NAME_ACQDATETIME, buffer);
+    }
+
+    m_papszIMAGERYMD =
+        CSLAddNameValue(m_papszIMAGERYMD, MD_NAME_CLOUDCOVER, MD_CLOUDCOVER_NA);
+}
+
+/**
+ * GetAcqisitionTimeFromString()
+ */
+GIntBig
+GDALMDReaderResursDK1::GetAcquisitionTimeFromString(const char *pszDateTime)
+{
+    if (nullptr == pszDateTime)
+        return 0;
+
+    int iYear;
+    int iMonth;
+    int iDay;
+    int iHours;
+    int iMin;
+    int iSec;
+
+    // string example <Normal>
+    //                  tSceneTime = 10:21:36.000000
+    //                  dSceneDate = 16/9/2008
+    //                </Normal>
+
+    int r = sscanf(pszDateTime, "%d/%d/%d %d:%d:%d.%*s", &iDay, &iMonth, &iYear,
+                   &iHours, &iMin, &iSec);
+
+    if (r != 6)
+        return 0;
+
+    struct tm tmDateTime;
+    tmDateTime.tm_sec = iSec;
+    tmDateTime.tm_min = iMin;
+    tmDateTime.tm_hour = iHours;
+    tmDateTime.tm_mday = iDay;
+    tmDateTime.tm_mon = iMonth - 1;
+    tmDateTime.tm_year = iYear - 1900;
+    tmDateTime.tm_isdst = -1;
+
+    return CPLYMDHMSToUnixTime(&tmDateTime) - 10800;  // int UTC+3 MSK
+}
+
+char **GDALMDReaderResursDK1::AddXMLNameValueToList(char **papszList,
+                                                    const char *pszName,
+                                                    const char *pszValue)
+{
+    char **papszTokens = CSLTokenizeString2(
+        pszValue, "\n", CSLT_STRIPLEADSPACES | CSLT_STRIPENDSPACES);
+
+    for (int i = 0; papszTokens[i] != nullptr; i++)
+    {
+
+        char **papszSubTokens = CSLTokenizeString2(
+            papszTokens[i], "=", CSLT_STRIPLEADSPACES | CSLT_STRIPENDSPACES);
+        if (CSLCount(papszSubTokens) < 2)
+        {
+            CSLDestroy(papszSubTokens);
+            continue;
+        }
+
+        papszList = CSLAddNameValue(
+            papszList, CPLSPrintf("%s.%s", pszName, papszSubTokens[0]),
+            papszSubTokens[1]);
+        CSLDestroy(papszSubTokens);
+    }
+
+    CSLDestroy(papszTokens);
+
+    return papszList;
+}

@@ -1,0 +1,3 @@
+requirements:
+  - amqp: contrib/deprecated/python/amqp
+  - pycurl

@@ -1,0 +1,25 @@
+{% extends "layout.main.html" %}
+{% load i18n %}
+
+
+{% block content %}
+
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            Create repository
+        </div>
+        <div class="panel-body">
+            <form method="post" action="" class="form-stacked">
+                <fieldset>
+                    {% include "partial/_form_fields.html" %}
+                </fieldset>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary"><span class="icon-ok icon-white"></span> Save</button>
+                    <a href="{% url 'dashboard:index' %}" class="btn">Cancel</a>
+                </div>
+                {% csrf_token %}
+            </form>
+        </div>
+    </div>
+{% endblock %}

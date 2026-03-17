@@ -1,0 +1,201 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-mptt\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2016-08-24 12:25+0200\n"
+"PO-Revision-Date: 2016-08-24 12:32+0200\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Last-Translator: Cihad GUNDOGDU <cihadgundogdu@gmail.com>\n"
+"Language-Team: Turkish team <cihadgundogdu@gmail.com>\n"
+"X-Generator: Poedit 1.8.7\n"
+"X-Poedit-SourceCharset: UTF-8\n"
+
+#: admin.py:87
+#, python-format
+msgid "Successfully deleted %(count)d items."
+msgstr "%(count)d eleman başarıyla silindi."
+
+#: admin.py:100
+#, python-format
+msgid "Delete selected %(verbose_name_plural)s"
+msgstr "Seçili %(verbose_name_plural)s sil"
+
+#: admin.py:182
+msgid "title"
+msgstr "başlık"
+
+#: admin.py:212
+msgid "Did not understand moving instruction."
+msgstr "Taşıma talimatını anlamadım"
+
+#: admin.py:220
+msgid "Objects have disappeared, try again."
+msgstr "Nesneler kayboldu, tekrar deneyin."
+
+#: admin.py:224
+msgid "No permission"
+msgstr "İzin yok"
+
+#: admin.py:233
+#, python-format
+msgid "Database error: %s"
+msgstr "Veritabanı hatası: %s"
+
+#: admin.py:238
+#, python-format
+msgid "%s has been successfully moved."
+msgstr "%s başarıyla taşındı."
+
+#: admin.py:249
+msgid "move node before node"
+msgstr "düğümü düğümün önüne taşı"
+
+#: admin.py:250
+msgid "move node to child position"
+msgstr "düğümü alt konuma taşı"
+
+#: admin.py:251
+msgid "move node after node"
+msgstr "düğümü düğümün sonrasına taşı"
+
+#: admin.py:252
+msgid "Collapse tree"
+msgstr "Hepsini kapat"
+
+#: admin.py:253
+msgid "Expand tree"
+msgstr "Hepsini aç"
+
+#: admin.py:364
+msgid "All"
+msgstr "Hepsi"
+
+#: forms.py:63
+msgid "First child"
+msgstr "İlk alt eleman"
+
+#: forms.py:64
+msgid "Last child"
+msgstr "Son alt eleman"
+
+#: forms.py:65
+msgid "Left sibling"
+msgstr "Sol kardeş"
+
+#: forms.py:66
+msgid "Right sibling"
+msgstr "Sağ kardeş"
+
+#: forms.py:184
+msgid "Invalid parent"
+msgstr "Geçersiz üst"
+
+#: managers.py:521
+msgid "Cannot insert a node which has already been saved."
+msgstr "Daha önce kaydedilmiş bir düğüm eklenemez."
+
+#: managers.py:739 managers.py:912 managers.py:948 managers.py:1114
+#, python-format
+msgid "An invalid position was given: %s."
+msgstr "Geçersiz bir konum verildi: %s."
+
+#: managers.py:898 managers.py:1094
+msgid "A node may not be made a sibling of itself."
+msgstr "Bir düğüm kendisinin kardeşi olamaz."
+
+#: managers.py:1073 managers.py:1199
+msgid "A node may not be made a child of itself."
+msgstr "Bir düğüm kendisinin alt elemanı olamaz."
+
+#: managers.py:1075 managers.py:1201
+msgid "A node may not be made a child of any of its descendants."
+msgstr "Bir düğüm, alt düğümlerinden herhangi birinin alt elemanı yapılamaz."
+
+#: managers.py:1096
+msgid "A node may not be made a sibling of any of its descendants."
+msgstr "Bir düğüm, alt düğümlerinden herhangi birinin kardeşi yapılamaz."
+
+#: models.py:292
+msgid "register() expects a Django model class argument"
+msgstr "register() bir Django model sınıfı argümanı bekliyor"
+
+#: templates/admin/mptt_filter.html:3
+#, python-format
+msgid " By %(filter_title)s "
+msgstr " %(filter_title)s ile "
+
+#: templatetags/mptt_tags.py:31
+#, python-format
+msgid "full_tree_for_model tag was given an invalid model: %s"
+msgstr "full_tree_for_model etiketine geçersiz bir model verildi: %s"
+
+#: templatetags/mptt_tags.py:55
+#, python-format
+msgid "drilldown_tree_for_node tag was given an invalid model: %s"
+msgstr "drilldown_tree_for_node etiketine geçersiz bir model verildi: %s"
+
+#: templatetags/mptt_tags.py:62
+#, python-format
+msgid "drilldown_tree_for_node tag was given an invalid model field: %s"
+msgstr "drilldown_tree_for_node etiketine geçersiz bir model alanı verildi: %s"
+
+#: templatetags/mptt_tags.py:89
+#, python-format
+msgid "%s tag requires three arguments"
+msgstr "%s etiketi üç argüman gerektirir"
+
+#: templatetags/mptt_tags.py:91 templatetags/mptt_tags.py:146
+#, python-format
+msgid "second argument to %s tag must be 'as'"
+msgstr "%s etiketinin ikinci argümanı 'as' olmalı"
+
+#: templatetags/mptt_tags.py:143
+#, python-format
+msgid "%s tag requires either three, seven or eight arguments"
+msgstr "%s etiketi üç, yedi veya sekiz argüman gerektirir"
+
+#: templatetags/mptt_tags.py:150
+#, python-format
+msgid "if seven arguments are given, fourth argument to %s tag must be 'with'"
+msgstr "yedi argüman verildiyse, %s etiketinin dördüncü argümanı 'with' olmalı"
+
+#: templatetags/mptt_tags.py:154
+#, python-format
+msgid "if seven arguments are given, sixth argument to %s tag must be 'in'"
+msgstr "yedi argüman verildiyse, %s etiketinin altıncı argümanı 'in' olmalı"
+
+#: templatetags/mptt_tags.py:160
+#, python-format
+msgid "if eight arguments are given, fourth argument to %s tag must be 'cumulative'"
+msgstr "sekiz argüman verilmişse, %s etiketinin dördüncü argümanı 'cumulative' olmalıdır"
+
+#: templatetags/mptt_tags.py:164
+#, python-format
+msgid "if eight arguments are given, fifth argument to %s tag must be 'count'"
+msgstr "sekiz argüman verilmişse, %s etiketinin beşinci argümanı 'count' olmalıdır"
+
+#: templatetags/mptt_tags.py:168
+#, python-format
+msgid "if eight arguments are given, seventh argument to %s tag must be 'in'"
+msgstr "sekiz argüman verilmişse, %s etiketinin yedinci argümanı 'in' olmalıdır"
+
+#: templatetags/mptt_tags.py:287
+#, python-format
+msgid "%s tag requires a queryset"
+msgstr "%s etiketi bir queryset(sorgu kümesi) gerektirir"
+
+#: utils.py:240
+#, python-format
+msgid "Node %s not in depth-first order"
+msgstr "Düğüm %s derinlik-öncelikli sıraya göre değil"
+
+#~ msgid "The model %s has already been registered."
+#~ msgstr "%s wurde schon registriert."

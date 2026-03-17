@@ -1,0 +1,432 @@
+# Операторы:
+#   *  Один аргумент в undo
+#   ~  Несколько аргументов (минимум один) в undo
+#
+# Параметры:
+#   %global         Команда действует на любом уровне ниже
+#   %logic=...      Кастомная функция обработки правила
+#   %diff_logic=... Кастомная функция построения диффа.
+#                   данная функция работает для подблоков (в отличие от %logic)
+#   %comment=...    Добавить коммент после строки который будет видно с опцией patch --add-comments
+#                   Сделано в основном для того чтобы генерировать специальные команды для наливки
+# -----
+
+clock daylight-saving-time
+clock timezone
+
+header login
+header shell
+sysname
+
+info-center filter-id bymodule-alias * *
+info-center loghost source
+info-center loghost ipv6 * vpn-instance *
+info-center loghost ipv6 *
+info-center loghost * vpn-instance *
+info-center loghost *
+info-center source * channel *
+info-center * channel
+info-center max-logfile-number
+info-center * size
+info-center timestamp log
+
+rsa local-key-pair create
+
+ecc local-key-pair create
+
+port split mode mode3 slot 1
+
+
+assign forward ipv6 longer-mask resource *
+
+port mode 200GE interface *
+
+undo hardware-resource firmware-mode *
+hardware-resource firmware-mode *   %logic=h3c.misc.hardware_resource_bfd
+
+undo dhcp enable
+
+dhcp enable
+dhcp snooping enable
+dhcp snooping user-bind http
+
+ntp server disable
+ntp ipv6 server disable
+ntp unicast-server domain *
+ntp unicast-server ipv6 *
+ntp unicast-server *
+ntp-service unicast-server ipv6 *
+ntp-service unicast-server *
+ntp ~
+dns snooping ttl delay-time
+dns ~
+
+bfd peer-ip ~   %logic=generic.misc.remove_last_param
+
+observe-port *
+
+qos local-precedence-queue-map *
+
+qos group %logic=h3c.misc.undo_children
+    ~
+
+diffserv domain *
+    8021p-inbound *
+    ip-dscp-inbound *
+    ip-dscp-outbound * *
+    mpls-exp-inbound *
+    mpls-exp-outbound *
+
+system tcam acl template * all
+system tcam acl template *
+    ~ %global
+system tcam acl
+
+vlan reserved ~
+
+vlan batch  %diff_logic=h3c.vlandb.vlan_diff %logic=h3c.vlandb.multi
+
+vlan */\d+/ %diff_logic=h3c.vlandb.vlan_diff
+    name
+
+vlan pool *
+    vlan * %logic=h3c.vlandb.multi
+
+stp mode
+stp bpdu-protection
+stp enable
+stp region-configuration
+    region-name
+    instance * %logic=h3c.vlandb.single
+
+acl port-pool *
+    ~ %global
+acl ip-pool *
+    ~ %global
+acl ipv6-pool *
+    ~ %global
+
+acl */(name|number)/ *
+    rule * description
+    rule * %logic=h3c.misc.undo_redo
+acl ipv6 */(name|number)/ *
+    rule * description
+    rule * %logic=h3c.misc.undo_redo
+
+*/(ftp|FTP|ssh|telnet)/ server acl
+*/(ftp|FTP|ssh|telnet)/ ipv6 server acl
+*/(ftp|FTP)/ acl
+*/(ftp|FTP)/ ipv6 acl
+*/(ftp|FTP)/ server enable
+*/(ftp|FTP)/ server source all-interface
+*/(ftp|FTP)/ server-source
+*/(ftp|FTP)/ server
+*/(ftp|FTP)/ ipv6 server enable
+*/(ftp|FTP)/ ipv6 server source all-interface
+*/(ftp|FTP)/ ipv6 server-source
+*/(ftp|FTP)/ ipv6 server
+ssh client key-exchange
+ssh client hmac
+ssh client cipher
+ssh server key-exchange
+ssh server dh-exchange
+ssh server cipher
+ssh server hmac
+ssh server publickey
+
+ftp client source %logic=h3c.misc.undo_redo
+
+ip vpn-instance *
+    ipv6-family
+        route-distinguisher *
+        export route-policy
+
+ip */(ip|ipv6)/-prefix * %logic=h3c.misc.prefix_list
+ip as-path-filter * index *
+ip community-filter * * index *
+ip extcommunity-filter * * index *
+
+mpls lsr-id
+mpls ldp remote-peer *
+
+explicit-path *
+    next hop * %ordered
+
+traffic classifier *        %logic=h3c.misc.classifier
+    if-match mpls-exp
+    if-match dscp
+    if-match ipv6 acl name *
+    if-match acl name *
+
+traffic behavior *
+    remark 8021p
+    remark dscp
+    car *
+
+traffic policy *
+
+*/[rd]sa/ peer-public-key * %multiline
+
+local-user ~
+    password hash *  %logic=h3c.aaa.user
+    service-type ~   
+    ~ %global
+
+hwtacacs-server template *
+    hwtacacs-server shared-key
+
+hwtacacs server template *
+    hwtacacs server shared-key
+
+!radius-server template default
+
+radius-server template *
+    radius-server accounting * *
+    radius-server authentication * *
+
+ssh authentication-type default password
+
+ssh server rsa-key min-length
+undo ssh server rsa-key min-length
+ssh user * authentication-type
+ssh user * service-type
+ssh user * assign *
+ssh user *
+
+snmp-agent protocol source-status all-interface
+snmp-agent protocol ipv6 *
+
+ipv6 icmp * send disable %logic=h3c.misc.clear_instead_undo
+
+# this is not a block
+user-interface maximum-vty
+
+user-interface ~
+    protocol inbound
+    idle-timeout
+    acl ~           %logic=h3c.misc.vty_acl_undo
+    screen-length
+    user privilege level
+    authentication-mode
+
+tunnel-policy *
+    tunnel select-seq
+
+sflow collector *
+
+*/(ip|ipv6)/ netstream timeout active
+*/(ip|ipv6)/ netstream timeout inactive
+*/(ip|ipv6)/ netstream export index-switch
+*/(ip|ipv6)/ netstream mpls-aware
+*/(ip|ipv6)/ netstream sampler ~		%logic=h3c.misc.netstream_undo
+*/(ip|ipv6)/ netstream export source ipv6
+*/(ip|ipv6)/ netstream export source
+*/(ip|ipv6)/ netstream export version
+*/(ip|ipv6)/ netstream export template timeout-rate
+*/(ip|ipv6)/ netstream export template option timeout-rate
+
+
+!interface */(Vlanif1$|NULL)/
+interface */Tunnel.+/
+    mpls te igp metric
+    ip address unnumbered
+    tunnel-protocol
+    destination
+    mpls te signalled tunnel-name
+    mpls te reserved-for-binding
+    mpls te path metric-type
+    mpls te path
+    mpls te tunnel-id
+
+interface *
+    mtu                                 %logic=h3c.misc.undo_redo
+    undo port link-mode *
+    port link-mode *                    %logic=h3c.misc.undo_port_link_mode
+    ip binding ~                        %diff_logic=h3c.iface.binding_change
+    ip ~                                %diff_logic=h3c.iface.binding_change
+    jumboframe enable
+    stp bpdu-filter
+    port-isolate enable ~
+    port default vlan
+    ipv6 enable                         %diff_logic=h3c.iface.binding_change
+    ipv6 mtu                            %logic=h3c.misc.undo_redo %diff_logic=h3c.iface.binding_change
+    ipv6 nd ra prefix *                 %diff_logic=h3c.iface.binding_change
+    ipv6 nd ra min-interval             %ignore_case %diff_logic=h3c.iface.binding_change
+    ipv6 nd ra max-interval             %ignore_case %diff_logic=h3c.iface.binding_change
+    ipv6 nd ra router-lifetime          %ignore_case %diff_logic=h3c.iface.binding_change
+    ipv6 neighbor *                     %diff_logic=h3c.iface.binding_change
+    ipv6 ~                              %diff_logic=h3c.iface.binding_change
+    dhcpv6 ~
+    port link-type
+    port trunk pvid vlan                %logic=h3c.misc.remove_trunk_pvid
+    port trunk allow-pass vlan %logic=h3c.vlandb.multi_all
+    undo port trunk allow-pass ~
+    port hybrid pvid vlan
+    port hybrid tagged vlan %logic=h3c.vlandb.multi_all
+    port hybrid untagged vlan %logic=h3c.vlandb.multi_all
+    undo port hybrid vlan ~
+    port mode *
+    eth-trunk                  %logic=h3c.misc.undo_redo
+    mode
+    lldp admin-status
+    qos queue * drr weight
+    qos queue * drr wred
+    qos queue * wfq weight
+    qos queue * wred
+    qos queue * shaping
+    qos schedule-profile
+    port-queue ~                %logic=h3c.misc.port_queue
+    sflow sampling ~
+    damping time
+    isis enable
+    isis circuit-level
+    isis circuit-type
+    isis timer lsp-throttle
+    isis cost
+    ospf cost
+    ospf network-type
+    authentication-profile
+    set flow-stat interval
+    least active-linknumber
+    lacp timeout
+    storm-control enable ~
+    storm control enable ~
+    storm-control *
+    storm control *
+    mpls ldp transport-address
+    trust upstream
+    dhcp snooping check dhcp-rate enable
+    dhcp snooping check dhcp-rate
+    poe legacy enable
+    mac-address notification learning
+    mac-address
+
+
+bridge-domain *
+        vxlan vni *
+
+route-policy * (?:permit|deny) node * %logic=h3c.misc.rp_node
+    if-match cost
+    if-match protocol
+    apply community
+    apply as-path
+    apply as-path
+    apply cost
+    apply cost-type
+    apply local-preference
+    goto next-node
+
+# xpl объекты можно только перезаписать полностью
+xpl ~
+    ~              %rewrite %global
+
+bgp path-attribute attr-set *
+bgp path-attribute * 
+
+bgp 
+    router-id
+
+    # эти команды могут быть как в top-level, так и внутри family
+    # здесь нужен copy-paste, т.к. %global почему-то не работает
+    group *
+
+    # Опции для пиров
+    peer * description
+    peer * tcp-mss
+    peer * bfd enable
+    peer * bfd %logic=h3c.bgp.bfd
+    # Правило 'peer *' должно быть в самом низу
+    # Чтобы не матчится на опции пира
+    # На порядок команд в патче это не влияет
+    # Только на логику. Порядок задается в h3c.order
+    peer *  %logic=h3c.bgp.peer
+
+    balance */eibgp|ebgp|ibgp|ingress-lsp/
+    balance
+
+    */address-family ipv[46]/ ~
+        group *
+        additional-paths
+        pic
+        # Опции для пиров
+        peer * description
+        peer * tcp-mss
+        peer * bfd enable
+        peer * route-limit
+        peer * advertise add-path
+        peer * bfd %logic=h3c.bgp.bfd
+        # Правило 'peer *' должно быть в самом низу
+        # Чтобы не матчится на опции пира
+        # На порядок команд в патче это не влияет
+        # Только на логику. Порядок задается в h3c.order
+        peer *  %logic=h3c.bgp.peer
+
+        balance */eibgp|ebgp|ibgp|ingress-lsp|transit-lsp/
+        balance 
+        import-route direct
+        import-route static
+
+
+ip community-filter ~
+ospf *
+    stub-router     %logic=h3c.misc.undo_redo
+    area *
+        mpls-te
+
+isis *
+    set-overload *
+
+error-down auto-recovery cause link-flap
+
+
+ip route-static default-bfd
+ipv6 route-static default-bfd
+
+ip route-static ~    %logic=h3c.misc.static
+ipv6 route-static ~  %logic=h3c.misc.static
+
+# Should be after acl definition
+!snmp-agent local-engineid *
+snmp-agent protocol vpn-instance
+snmp-agent protocol get-bulk timeout
+snmp-agent sys-info version %logic=h3c.misc.snmpagent_sysinfo_version
+snmp-agent sys-info *
+snmp-agent mib-view ~
+snmp-agent community complexity-check ~
+snmp-agent community * cipher *
+snmp-agent community read ~
+
+snmp-agent target-host host-name *
+snmp-agent target-host trap address udp-domain * params securityname cipher *
+snmp-agent target-host trap address udp-domain * vpn-instance (?:.+) params securityname cipher *
+snmp-agent target-host trap ipv6 address udp-domain * params securityname cipher *
+snmp-agent target-host trap ipv6 address udp-domain * vpn-instance * params securityname cipher *
+
+# на старых хуавеях community не зашифрован и команда по другому отменяется
+snmp-agent target-host trap address udp-domain * params securityname *
+snmp-agent trap source
+snmp-agent packet max-size
+snmp-agent ~
+ifindex constant
+
+grpc
+    grpc server %logic=h3c.misc.undo_children
+    grpc server ipv6 %logic=h3c.misc.undo_children
+
+pce-client
+    connect-server *
+        preference
+    timer state-timeout *
+
+cpu-defend policy *
+cpu-defend-policy * global
+cpu-defend-policy
+slot *
+    cpu-defend-policy
+
+description %global
+
+undo ~ %global
+~ %global
+
+# vim: set syntax=annrulebook:

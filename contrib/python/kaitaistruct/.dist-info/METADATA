@@ -1,0 +1,58 @@
+Metadata-Version: 2.4
+Name: kaitaistruct
+Version: 0.11
+Summary: Kaitai Struct declarative parser generator for binary data: runtime library for Python
+Home-page: https://kaitai.io
+Author: Kaitai Project
+Author-email: greycat@kaitai.io
+License: MIT
+Project-URL: Documentation, https://doc.kaitai.io/
+Project-URL: Code, https://github.com/kaitai-io/kaitai_struct_python_runtime
+Project-URL: Issues, https://github.com/kaitai-io/kaitai_struct_python_runtime/issues
+Project-URL: Gitter, https://gitter.im/kaitai_struct/Lobby
+Keywords: kaitai,struct,construct,ksy,declarative,data structure,data format,file format,packet format,binary,parser,parsing,unpack,development
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Build Tools
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Requires-Python: !=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,>=2.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: enum34; python_version < "3.4"
+Dynamic: license-file
+
+# Kaitai Struct: runtime library for Python
+
+[![PyPI](https://img.shields.io/pypi/v/kaitaistruct)](https://pypi.org/project/kaitaistruct/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/kaitaistruct)](https://pypi.org/project/kaitaistruct/#:~:text=Programming%20Language)
+
+This library implements Kaitai Struct API for Python.
+
+[Kaitai Struct](https://kaitai.io/) is a declarative language used for
+describe various binary data structures, laid out in files or in memory:
+i.e. binary file formats, network stream packet formats, etc.
+
+It is similar to [Python's Construct 2.10](https://construct.readthedocs.io/en/latest/)
+but it is language-agnostic. The format description is done in YAML-based .ksy
+format, which then can be compiled into a wide range of target languages.
+
+Further reading:
+
+* [About Kaitai Struct](https://kaitai.io/)
+* [About API implemented in this library](https://doc.kaitai.io/stream_api.html)
+* [Python-specific notes](https://doc.kaitai.io/lang_python.html) in KS
+  documentation discuss installation and usage of this runtime

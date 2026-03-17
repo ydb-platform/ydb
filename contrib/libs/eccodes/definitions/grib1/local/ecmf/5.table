@@ -1,0 +1,25 @@
+# CODE TABLE 5 Time Range Indicator
+0 0 Forecast product valid at reference time + P1 (P1>0)
+1 1 Initialized analysis product for reference time (P1=0).
+2 2 Product with a valid time ranging between reference time + P1 and reference time + P2
+3 3 Average (reference time + P1 to reference time + P2)
+4 4 Accumulation (reference time + P1 to reference time + P2) product considered valid at reference time + P2
+5 5 Difference (reference time + P2 minus reference time + P1) product considered valid at reference time + P2
+6 6 Average (reference time - P1 to reference time - P2)
+7 7 Average (reference time - P1 to reference time + P2)
+10 10   P1 occupies octets 19 and 20; product valid at reference time + P1
+51 51   Climatological Mean Value:
+113 113 Average of N forecasts (or initialized analyses); each product has forecast period of P1 (P1=0 for initialized analyses); products have reference times at intervals of P2, beginning at the given reference time.
+114 114 Accumulation of N forecasts (or initialized analyses); each product has forecast period of P1 (P1=0 for initialized analyses); products have reference times at intervals of P2, beginning at the given reference time.
+115 115 Average of N forecasts, all with the same reference time; the first has a forecast period of P1, the remaining forecasts follow at intervals of P2.
+116 116 Accumulation of N forecasts, all with the same reference time; the first has a forecast period of P1, the remaining follow at intervals of P2.
+117 117 Average of N forecasts, the first has a period of P1, the subsequent ones have forecast periods reduced from the previous one by an interval of P2; the reference time for the first is given in octets 13- 17, the subsequent ones have reference times increased from the previous one by an interval of P2. Thus all the forecasts have the same valid time, given by the initial reference time + P1.
+118 118 Temporal variance, or covariance, of N initialized analyses; each product has forecast period P1=0; products have reference times at intervals of P2, beginning at the given reference time.
+119 119 Standard deviation of N forecasts, all with the same reference time with respect to the time average of forecasts; the first forecast has a forecast period of P1, the remaining forecasts follow at intervals of P2
+123 123 Average of N uninitialized analyses, starting at the reference time, at intervals of P2.
+124 124 Accumulation of N uninitialized analyses, starting at the reference time, at intervals of P2.
+125 125 Standard deviation of N forecasts, all with the same reference time with respect to time average of the time tendency of forecasts; the first forecast has a forecast period of P1, the remaining forecasts follow at intervals of P2
+# For ECMWF
+128 128 Average of N forecast products with a valid time ranging between reference time + P1 and reference time + P2; products have reference times at Intervals of 24 hours, beginning at the given reference time
+130 130 Average of N forecast products; each product has a forecast period from P1 to P2; products have reference times at intervals of P2 - P1, beginning at the given reference time; thus the N products cover a continuous time span
+133 133 Average of N forecast products with valid times at intervals given by the remainder of P1/24, from reference time + P1 to reference time + P2; beginning at the given reference time, the reference times are also incremented, at intervals of P2 unless P2 > 24, in which case the interval is 24; thus the N products cover a time span with a regular time interval, given by the remainder of P1/24.

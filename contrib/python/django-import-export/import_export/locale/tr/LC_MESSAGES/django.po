@@ -1,0 +1,209 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# Cihad GÜNDOĞDU <cihadgundogdu@gmail.com>, 2025.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-08-30 17:56+0300\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Cihad GÜNDOĞDU <cihadgundogdu@gmail.com>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: admin.py templates/admin/import_export/change_list_import_item.html
+#: templates/admin/import_export/import.html
+msgid "Import"
+msgstr "İçe aktar"
+
+#: admin.py
+#, python-format
+msgid "%s through import_export"
+msgstr "%s vasıtasıyla import_export"
+
+#: admin.py
+msgid "Import finished: {} new, {} updated, {} deleted and {} skipped {}."
+msgstr "{} yeni ve {} güncellenen {} ile içe aktarma bitti"
+
+#: admin.py
+#, python-format
+msgid ""
+"%(exc_name)s encountered while trying to read file. Ensure you have chosen "
+"the correct format for the file."
+msgstr ""
+"%(exc_name)s dosyayı okumaya çalışırken karşılaşıldı. Dosya için doğru "
+"biçimi seçtiğinizden emin olun."
+
+#: admin.py
+msgid ""
+"No valid data to import. Ensure your file has the correct headers or data "
+"for import."
+msgstr ""
+"Geçerli içe aktarılacak veri yok. Dosyanızın doğru başlıkları veya içe "
+"aktarım için verileri olduğundan emin olun."
+
+#: admin.py templates/admin/import_export/change_form.html
+#: templates/admin/import_export/change_list_export_item.html
+#: templates/admin/import_export/export.html
+msgid "Export"
+msgstr "Dışa aktar"
+
+#: admin.py
+#, python-format
+msgid "Export selected %(verbose_name_plural)s"
+msgstr "Seçililenleri dışa aktar %(verbose_name_plural)s"
+
+#: formats/base_formats.py
+msgid "export failed due to IllegalCharacterError"
+msgstr "dışa aktarma, IllegalCharacterError nedeniyle başarısız oldu"
+
+#: forms.py
+msgid "Resource"
+msgstr "Kaynak"
+
+#: forms.py
+msgid "Format"
+msgstr "Dosya biçimi"
+
+#: forms.py
+msgid "File to import"
+msgstr "İçe alınacak dosya"
+
+#: forms.py
+msgid "Form is not validated, call `is_valid` first"
+msgstr "Form doğrulanmadı, önce `is_valid` çağırın"
+
+#: forms.py
+#, python-format
+msgid "Select at least 1 field for \"%(resource_name)s\" to export"
+msgstr "\"%(resource_name)s\" için en az 1 alan seçin"
+
+#: resources.py
+#, python-format
+msgid ""
+"The following fields are declared in 'import_id_fields' but are not present "
+"in the resource fields: %s"
+msgstr ""
+"Aşağıdaki alanlar 'import_id_fields' içinde belirtilmiş ancak kaynak "
+"alanlarında bulunmamaktadır: %s"
+
+#: resources.py
+#, python-format
+msgid ""
+"The following fields are declared in 'import_id_fields' but are not present "
+"in the file headers: %s"
+msgstr ""
+"Aşağıdaki alanlar 'import_id_fields' içinde belirtilmiş ancak dosya "
+"başlıklarında bulunmamaktadır: %s"
+
+#: results.py
+#, python-format
+msgid "call to force_str() on instance failed: %s"
+msgstr "force_str() çağrısı örnekte başarısız oldu: %s"
+
+#: templates/admin/import_export/base.html
+msgid "Home"
+msgstr "Ana sayfa"
+
+#: templates/admin/import_export/export.html
+#, python-format
+msgid "Export %(len)s selected item."
+msgid_plural "Export %(len)s selected items."
+msgstr[0] "Dışa aktar %(len)s seçilen öğe."
+msgstr[1] "Dışa aktar %(len)s seçilen öğeler."
+
+#: templates/admin/import_export/export.html
+#: templates/admin/import_export/resource_fields_list.html
+msgid "This exporter will export the following fields: "
+msgstr "Bu içe aktarıcı aşağıdaki alanları içe aktaracaktır: "
+
+#: templates/admin/import_export/export.html
+msgid "Select all"
+msgstr "Tümünü seç"
+
+#: templates/admin/import_export/export.html
+#: templates/admin/import_export/import.html
+msgid "Submit"
+msgstr "Kaydet"
+
+#: templates/admin/import_export/import.html
+msgid ""
+"Below is a preview of data to be imported. If you are satisfied with the "
+"results, click 'Confirm import'"
+msgstr ""
+"Aşağıda içe aktarılacak verilerin önizlemesi verilmiştir. Sonuçlardan "
+"memnunsanız 'İçe aktarmayı onayla'yı tıklayın."
+
+#: templates/admin/import_export/import.html
+msgid "Confirm import"
+msgstr "İçe aktarmayı onayla"
+
+#: templates/admin/import_export/import.html
+msgid "Errors"
+msgstr "Hatalar"
+
+#: templates/admin/import_export/import.html
+msgid "Line number"
+msgstr "Satır numarası"
+
+#: templates/admin/import_export/import.html
+msgid "Some rows failed to validate"
+msgstr "Bazı satırlar doğrulanamadı"
+
+#: templates/admin/import_export/import.html
+msgid ""
+"Please correct these errors in your data where possible, then reupload it "
+"using the form above."
+msgstr ""
+"Lütfen verilerinizdeki bu hataları olabildiğince düzeltin, sonra yukarıdaki "
+"formu kullanarak tekrar yükleyin."
+
+#: templates/admin/import_export/import.html
+msgid "Row"
+msgstr "Satır"
+
+#: templates/admin/import_export/import.html
+msgid "Non field specific"
+msgstr "Alan olmayana özgü"
+
+#: templates/admin/import_export/import.html
+msgid "Preview"
+msgstr "Ön izleme"
+
+#: templates/admin/import_export/import.html
+msgid "New"
+msgstr "Yeni"
+
+#: templates/admin/import_export/import.html
+msgid "Skipped"
+msgstr "Atlandı"
+
+#: templates/admin/import_export/import.html
+msgid "Delete"
+msgstr "Sil"
+
+#: templates/admin/import_export/import.html
+msgid "Update"
+msgstr "Güncelle"
+
+#: templates/admin/import_export/resource_fields_list.html
+msgid "This importer will import the following fields: "
+msgstr "Bu içe aktarıcı aşağıdaki alanları içe aktaracaktır: "
+
+#: widgets.py
+msgid "Value could not be parsed."
+msgstr "Değer ayrıştırılamadı."
+
+#: widgets.py
+msgid "use_natural_foreign_keys and key_is_id cannot both be True"
+msgstr "use_natural_foreign_keys ve key_is_id aynı anda True olamaz"
+
+#~ msgid "You must select an export format."
+#~ msgstr "Bir dosya biçimi seçmelisiniz"

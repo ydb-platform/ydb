@@ -1,0 +1,18 @@
+'IFS' = {
+    backgroundProcess = 255;
+}
+'AIFS' = {
+    backgroundProcess = 1;
+}
+'ICON' = {
+    backgroundProcess = 2;
+}
+'ALARO' = {
+    backgroundProcess = 3;
+}
+'AROME' = {
+    backgroundProcess = 4;
+}
+'HARMONIE-AROME' = {
+    backgroundProcess = 5;
+}

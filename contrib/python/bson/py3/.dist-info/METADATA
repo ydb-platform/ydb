@@ -1,0 +1,22 @@
+Metadata-Version: 2.1
+Name: bson
+Version: 0.5.10
+Summary: BSON codec for Python
+Home-page: http://github.com/py-bson/bson
+Author: Ayun Park
+Author-email: iamparkayun@gmail.com
+License: BSD
+Keywords: BSON codec
+Platform: Any
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Requires-Dist: python-dateutil>=2.4.0
+Requires-Dist: six>=1.9.0
+
+Independent BSON codec for Python that doesn't depend on MongoDB.
+
+

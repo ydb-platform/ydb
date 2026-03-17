@@ -1,0 +1,258 @@
+syntax = "proto3";
+
+package yandex.cloud.baremetal.v1alpha;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/baremetal/v1alpha/disk.proto";
+import "yandex/cloud/baremetal/v1alpha/storage.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/baremetal/v1alpha;baremetal";
+option java_package = "yandex.cloud.api.baremetal.v1alpha";
+
+// A Server resource.
+message Server {
+  reserved 8, 11, 12, 15 to 17, 19, 22, 23;
+
+  // Reserved for future use.
+  reserved 13, 14, 24 to 99, 101 to 199;
+
+  // ID of the server.
+  string id = 1;
+
+  // ID of the cloud that the server belongs to.
+  string cloud_id = 2;
+
+  // ID of the folder that the server belongs to.
+  string folder_id = 3;
+
+  // Name of the server.
+  // The name is unique within the folder.
+  string name = 4;
+
+  // Description of the server.
+  string description = 5;
+
+  // ID of the availability zone where the server is resides.
+  string zone_id = 6;
+
+  // ID of the hardware pool that the server belongs to.
+  string hardware_pool_id = 7;
+
+  // Status of the server.
+  Status status = 9;
+
+  // Operating system specific settings of the server. Optional, will be empty if the server is
+  // provisioned without an operating system.
+  OsSettings os_settings = 10;
+
+  // Array of network interfaces that are attached to the instance.
+  repeated NetworkInterface network_interfaces = 18;
+
+  // ID of the configuration that was used to create the server.
+  string configuration_id = 20;
+
+  // Array of disks that are attached to the server.
+  repeated Disk disks = 21;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 100;
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 200;
+
+  // Server status.
+  enum Status {
+    reserved 2, 11, 13;
+
+    // Unspecified server status.
+    STATUS_UNSPECIFIED = 0;
+
+    // Server is waiting for to be allocated from the hardware pool.
+    PROVISIONING = 1;
+
+    // Server is being stopped.
+    STOPPING = 3;
+
+    // Server has been stopped.
+    STOPPED = 4;
+
+    // Server is being started.
+    STARTING = 5;
+
+    // Server is being restarted.
+    RESTARTING = 6;
+
+    // Server encountered a problem and cannot operate.
+    ERROR = 7;
+
+    // Server is being deleted.
+    DELETING = 8 [deprecated=true];
+
+    // Server operating system is being reinstalled.
+    REINSTALLING = 9;
+
+    // Server is being updated.
+    UPDATING = 10;
+
+    // Server has been quarantined
+    QUARANTINED = 12;
+
+    // Server is running normaly
+    RUNNING = 14;
+  }
+}
+
+message NetworkInterface {
+  reserved 4 to 6;
+  
+  // Reserved for future use from private API.
+  reserved 9, 10, 11;
+
+  // ID of the network interface.
+  string id = 1;
+
+  // MAC address that is assigned to the network interface.
+  //
+  // Read only field.
+  string mac_address = 2;
+
+  // @deprecated. Use `interface.ipaddress` instead.
+  // IPv4 address that is assigned to the server for this network interface.
+  //
+  // Read only field.
+  string ip_address = 3 [deprecated = true];
+
+  // @deprecated. Use `interface` instead.
+  // Subnet that the network interface belongs to.
+  oneof subnet {
+    // @deprecated Private subnet.
+    PrivateSubnetNetworkInterface private_subnet = 7 [deprecated = true];
+
+    // @deprecated Public subnet.
+    PublicSubnetNetworkInterface public_subnet = 8 [deprecated = true];
+  }
+
+  oneof interface {
+    // Private interface.
+    PrivateNetworkInterface private_interface = 12;
+
+    // Public interface.
+    PublicNetworkInterface public_interface = 13;
+  }
+}
+
+message PrivateNetworkInterface {
+  // ID of the private subnet which is used as native subnet for interface.
+  string native_subnet_id = 1;
+
+  // IPv4 address that is assigned to the server for this network interface.
+  //
+  // Read only field.
+  string ip_address = 2;
+
+  // Limit of MAC addresses in the native subnet.
+  //
+  // Read only field.
+  int64 mac_limit = 3;
+
+  // Array of VLAN subinterfaces. Additional tagged subnets for the interface.
+  repeated VLANSubinterface vlan_subinterfaces = 4;
+
+}
+
+message VLANSubinterface {
+  // ID of the private subnet which is used as tagged subnet for interface.
+  string tagged_subnet_id = 1;
+
+  // IPv4 address that is assigned to the VLAN subinterface.
+  //
+  // Read only field.
+  string ip_address = 2;
+
+  // Limit of MAC addresses in the tagged subnet.
+  //
+  // Read only field.
+  int64 mac_limit = 3;
+}
+
+message PublicNetworkInterface {
+  // Reserved for future use from private API.
+  reserved 4, 5;
+
+  // IPv4 address that is assigned to the server for this network interface.
+  //
+  // Read only field.
+  string ip_address = 1;
+
+  // ID of the public subnet which is used as native subnet for interface.
+  //
+  // Read only field.
+  string native_subnet_id = 2;
+
+  // Limit of MAC addresses in the native subnet.
+  //
+  // Read only field.
+  int64 mac_limit = 3;
+
+  // Native subnet configuration.
+  //
+  // Input only field.
+  oneof native_subnet_config {
+    // Use existing native subnet.
+    //
+    // Input only field.
+    NativeSubnet native_subnet = 6;
+
+    // Create new native subnet.
+    //
+    // Input only field.
+    NewNativeSubnet new_native_subnet = 7;
+  }
+
+  // Configuration for using existing native subnet.
+  message NativeSubnet {
+    // ID of the existing public subnet.
+    string subnet_id = 1;
+  }
+
+  // Configuration for creating new native subnet.
+  message NewNativeSubnet {
+    // Addressing type (DHCP | Static).
+    AddressingType addressing_type = 1;
+
+    // Addressing type for public subnet.
+    enum AddressingType {
+      // Unspecified public subnet addressing type.
+      ADDRESSING_TYPE_UNSPECIFIED = 0;
+
+      // DHCP addressing.
+      DHCP = 1;
+
+      // Static addressing.
+      STATIC = 2;
+    }
+  }
+}
+
+message PrivateSubnetNetworkInterface {
+  // ID of the private subnet.
+  string private_subnet_id = 1;
+}
+
+message PublicSubnetNetworkInterface {
+  // ID of the public subnet.
+  //
+  // A new ephemeral public subnet will be created if not specified.
+  string public_subnet_id = 1;
+}
+
+message OsSettings {
+  // ID of the image that the server was created from.
+  string image_id = 1;
+
+  // Public SSH key of the server.
+  string ssh_public_key = 2;
+
+  // List of storages.
+  repeated Storage storages = 3;
+}

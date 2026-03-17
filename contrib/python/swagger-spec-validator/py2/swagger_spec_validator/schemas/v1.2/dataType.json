@@ -1,0 +1,229 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "definitions": {
+        "arrayType": {
+            "additionalProperties": false,
+            "properties": {
+                "items": {
+                    "items": {
+                        "$ref": "#/definitions/itemsObject"
+                    },
+                    "type": "array"
+                },
+                "type": {
+                    "enum": [
+                        "array"
+                    ]
+                },
+                "uniqueItems": {
+                    "type": "boolean"
+                }
+            },
+            "required": [
+                "type",
+                "items"
+            ]
+        },
+        "itemsObject": {
+            "oneOf": [
+                {
+                    "$ref": "#/definitions/refType"
+                },
+                {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/primitiveType"
+                        },
+                        {
+                            "additionalProperties": false,
+                            "properties": {
+                                "format": {},
+                                "type": {}
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        "modelType": {
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "not": {
+                        "enum": [
+                            "boolean",
+                            "integer",
+                            "number",
+                            "string",
+                            "array"
+                        ]
+                    },
+                    "type": "string"
+                }
+            },
+            "required": [
+                "type"
+            ]
+        },
+        "primitiveType": {
+            "additionalProperties": false,
+            "dependencies": {
+                "enum": {
+                    "properties": {
+                        "type": {
+                            "enum": [
+                                "string"
+                            ]
+                        }
+                    }
+                },
+                "format": {
+                    "oneOf": [
+                        {
+                            "properties": {
+                                "format": {
+                                    "enum": [
+                                        "int32",
+                                        "int64"
+                                    ]
+                                },
+                                "type": {
+                                    "enum": [
+                                        "integer"
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            "properties": {
+                                "format": {
+                                    "enum": [
+                                        "float",
+                                        "double"
+                                    ]
+                                },
+                                "type": {
+                                    "enum": [
+                                        "number"
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            "properties": {
+                                "format": {
+                                    "enum": [
+                                        "byte",
+                                        "date",
+                                        "date-time"
+                                    ]
+                                },
+                                "type": {
+                                    "enum": [
+                                        "string"
+                                    ]
+                                }
+                            }
+                        }
+                    ]
+                },
+                "maximum": {
+                    "properties": {
+                        "type": {
+                            "enum": [
+                                "integer",
+                                "number"
+                            ]
+                        }
+                    }
+                },
+                "minimum": {
+                    "properties": {
+                        "type": {
+                            "enum": [
+                                "integer",
+                                "number"
+                            ]
+                        }
+                    }
+                }
+            },
+            "properties": {
+                "defaultValue": {
+                    "not": {
+                        "type": [
+                            "array",
+                            "object",
+                            "null"
+                        ]
+                    }
+                },
+                "enum": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                },
+                "format": {
+                    "type": "string"
+                },
+                "maximum": {
+                    "type": "string"
+                },
+                "minimum": {
+                    "type": "string"
+                },
+                "type": {
+                    "enum": [
+                        "boolean",
+                        "integer",
+                        "number",
+                        "string"
+                    ]
+                }
+            },
+            "required": [
+                "type"
+            ]
+        },
+        "refType": {
+            "additionalProperties": false,
+            "properties": {
+                "$ref": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "$ref"
+            ]
+        },
+        "voidType": {
+            "enum": [
+                {
+                    "type": "void"
+                }
+            ]
+        }
+    },
+    "description": "Data type as described by the specification (version 1.2)",
+    "oneOf": [
+        {
+            "$ref": "#/definitions/refType"
+        },
+        {
+            "$ref": "#/definitions/voidType"
+        },
+        {
+            "$ref": "#/definitions/primitiveType"
+        },
+        {
+            "$ref": "#/definitions/modelType"
+        },
+        {
+            "$ref": "#/definitions/arrayType"
+        }
+    ],
+    "type": "object"
+}

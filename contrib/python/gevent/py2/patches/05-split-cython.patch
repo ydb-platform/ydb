@@ -1,0 +1,11 @@
+--- contrib/python/gevent/py2/gevent/libev/callbacks.c	(502aadc17beaa30f07a6c6d1cda57d0b76e36dc4)
++++ contrib/python/gevent/py2/gevent/libev/callbacks.c	(working tree)
+@@ -2,7 +2,7 @@
+ #include <stddef.h>
+ #include "Python.h"
+ #include "ev.h"
+-#include "corecext.h"
++#include "corecext.py2.h"
+ #include "callbacks.h"
+ 
+ #ifdef __clang__

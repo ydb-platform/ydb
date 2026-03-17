@@ -1,0 +1,10 @@
+title: Animal
+type: object
+additionalProperties: false
+properties:
+  kind:
+    type: string
+    description: The kind of the animal
+    enum:
+      - CAT
+      - DOG

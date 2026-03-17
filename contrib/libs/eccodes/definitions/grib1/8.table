@@ -1,0 +1,7 @@
+# CODE TABLE 8, Scanning Mode Flag
+1 0	Points scan in +i direction
+1 1	Points scan in -i direction
+2 0	Points scan in -j direction
+2 1	Points scan in +j direction
+3 0	Adjacent points in i direction are consecutive 
+3 1	Adjacent points in j direction are consecutive 

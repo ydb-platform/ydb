@@ -1,0 +1,17 @@
+    Windows Build
+    -------------
+
+Most of the notes in the README apply on Windows as well; however, to 
+configure and build follow the following steps:
+
+ o Make sure you have the required environment variables set for VC++.  Often
+   this is accomplished by running the VCVARS32.BAT file from the VC++ bin
+   directory.
+
+ o Edit makefile.vc, updating the TIFF_DIR (or TIFF_LIB and TIFF_INC) variable
+   to point to the location of the tiff build tree.
+
+ o Build using the command ``nmake -f makefile.vc''
+
+If you don't use makefile.vc, you will need to copy geo_config.h.vc to
+geo_config.h by hand. 

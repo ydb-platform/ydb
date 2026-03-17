@@ -1,0 +1,7 @@
+# CARRA/CERRA suite names
+0 unknown Unknown
+1 no-ar-ce HARMONIE-AROME reanalysis by MetNorway on CARRA-East domain (CARRA project)
+2 no-ar-cw HARMONIE-AROME reanalysis by MetNorway on CARRA-West domain (CARRA project)
+3 no-ar-pa HARMONIE-AROME reanalysis by MetNorway on Pan-Arctic domain (CARRA project)
+4 se-al-ec HARMONIE-ALADIN reanalysis by SMHI on EURO-CORDEX domain (CERRA project)
+5 fr-ms-ec MESCAN-SURFEX surface reanalysis by Meteo-France on EURO-CORDEX domain (CERRA project)

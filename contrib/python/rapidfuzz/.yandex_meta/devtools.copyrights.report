@@ -1,0 +1,272 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 012123cc40ba5b305d1f81d16119631e
+BELONGS ya.make
+    License text:
+        //   Copyright 2006 Andy Tompkins.
+        //   Distributed under the Boost Software License, Version 1.0. (See
+        //   accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        extern/taskflow/taskflow/utility/uuid.hpp [25:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0293e8223d69aab67388b5007cc256fb
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2022 Max Bachmann */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        extern/rapidfuzz-cpp/rapidfuzz/details/CharSet.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/GrowingHashmap.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/Matrix.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/PatternMatchVector.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/Range.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/distance.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/simd.hpp [3:4]
+        extern/rapidfuzz-cpp/rapidfuzz/details/simd_avx2.hpp [2:3]
+        extern/rapidfuzz-cpp/rapidfuzz/details/simd_sse2.hpp [2:3]
+        rapidfuzz/_feature_detector.py [2:3]
+        rapidfuzz/_utils.py [2:2]
+        rapidfuzz/distance/DamerauLevenshtein.pyi [2:2]
+        rapidfuzz/distance/DamerauLevenshtein_py.py [2:3]
+        rapidfuzz/distance/Hamming.pyi [2:2]
+        rapidfuzz/distance/Hamming_py.py [2:3]
+        rapidfuzz/distance/Indel.pyi [2:2]
+        rapidfuzz/distance/Indel_py.py [2:3]
+        rapidfuzz/distance/Jaro.pyi [2:2]
+        rapidfuzz/distance/JaroWinkler.pyi [2:2]
+        rapidfuzz/distance/JaroWinkler_py.py [2:3]
+        rapidfuzz/distance/Jaro_py.py [2:3]
+        rapidfuzz/distance/LCSseq.pyi [2:2]
+        rapidfuzz/distance/LCSseq_py.py [2:3]
+        rapidfuzz/distance/Levenshtein.pyi [2:2]
+        rapidfuzz/distance/Levenshtein_py.py [2:3]
+        rapidfuzz/distance/OSA.pyi [2:2]
+        rapidfuzz/distance/OSA_py.py [2:3]
+        rapidfuzz/distance/Postfix.pyi [2:2]
+        rapidfuzz/distance/Postfix_py.py [2:3]
+        rapidfuzz/distance/Prefix.pyi [2:2]
+        rapidfuzz/distance/Prefix_py.py [2:3]
+        rapidfuzz/distance/__init__.py [2:2]
+        rapidfuzz/distance/__init__.pyi [2:2]
+        rapidfuzz/distance/_initialize.pyi [2:2]
+        rapidfuzz/distance/_initialize_py.py [2:3]
+        rapidfuzz/distance/metrics_py.py [2:2]
+        rapidfuzz/fuzz_py.py [2:3]
+        rapidfuzz/process_cpp.py [2:3]
+        rapidfuzz/process_py.py [2:3]
+        rapidfuzz/utils.pyi [2:2]
+        rapidfuzz/utils_py.py [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1273fb564280fb8db0b85e69c7a22740
+BELONGS ya.make
+    License text:
+        Copyright © 2020-present Max Bachmann
+        Copyright © 2011 Adam Cohen
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1:2]
+        extern/rapidfuzz-cpp/LICENSE [1:2]
+        extern/rapidfuzz-cpp/rapidfuzz/fuzz.hpp [2:3]
+        extern/rapidfuzz-cpp/rapidfuzz/fuzz_impl.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 28460fe457050fce54f9c78c1c6561fe
+BELONGS ya.make
+    License text:
+        \# Copyright (C) 2023 Max Bachmann
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        rapidfuzz/_common_py.py [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 28b60a3e2ca556599b23618f746c1b9d
+BELONGS ya.make
+    License text:
+        Copyright © 2020-present Max Bachmann
+        Copyright © 2011 Adam Cohen
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1:2]
+        rapidfuzz/utils.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 393ca0950944436c322fe36d0fa8c891
+BELONGS ya.make
+    License text:
+        /* Copyright © 2021-present Max Bachmann */
+        /* Copyright © 2011 Adam Cohen */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        extern/rapidfuzz-cpp/rapidfuzz/fuzz_impl.hpp [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 59be2d761cf6e9e6c1f1bb16bcbaa1fd
+BELONGS ya.make
+    License text:
+        Copyright (c) 2003-2018 University of Illinois at Urbana-Champaign. All rights
+        reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        extern/taskflow/LICENSE [30:31]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7176bc34aa924ebcc98b7d228b57ffbf
+BELONGS ya.make
+    License text:
+        /* Copyright © 2022-present Max Bachmann */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        extern/rapidfuzz-cpp/rapidfuzz/distance.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/DamerauLevenshtein.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/DamerauLevenshtein_impl.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Indel.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Indel_impl.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Jaro.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/JaroWinkler.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/JaroWinkler_impl.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Jaro_impl.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/LCSseq.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/LCSseq_impl.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Levenshtein.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Levenshtein_impl.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/OSA_impl.hpp [3:3]
+        extern/rapidfuzz-cpp/rapidfuzz/rapidfuzz_all.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 766f73546ade0bd206108847b1bcc133
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2016 Dmitry Vyukov <dvyukov@google.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        extern/taskflow/taskflow/core/nonblocking_notifier.hpp [20:20]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ab5f6d9cc54d09ba76cd7c5c0884f4c5
+BELONGS ya.make
+    License text:
+        \# Copyright (C) 2025 Max Bachmann
+        \# This file is generated by tools/generate_python.py
+        from __future__ import annotations
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        rapidfuzz/distance/DamerauLevenshtein.py [2:4]
+        rapidfuzz/distance/Hamming.py [2:4]
+        rapidfuzz/distance/Indel.py [2:4]
+        rapidfuzz/distance/Jaro.py [2:4]
+        rapidfuzz/distance/JaroWinkler.py [2:4]
+        rapidfuzz/distance/LCSseq.py [2:4]
+        rapidfuzz/distance/Levenshtein.py [2:4]
+        rapidfuzz/distance/OSA.py [2:4]
+        rapidfuzz/distance/Postfix.py [2:4]
+        rapidfuzz/distance/Prefix.py [2:4]
+        rapidfuzz/distance/_initialize.py [2:4]
+        rapidfuzz/fuzz.py [2:4]
+        rapidfuzz/process.py [2:4]
+        rapidfuzz/utils.py [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b6df46d797085b276ebd9c6f7fde2a75
+BELONGS ya.make
+    License text:
+        /* Copyright © 2021 Max Bachmann */
+        /* Copyright © 2011 Adam Cohen */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        extern/rapidfuzz-cpp/rapidfuzz/details/common.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/intrinsics.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Hamming.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Hamming_impl.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/OSA.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Postfix.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Postfix_impl.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Prefix.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/distance/Prefix_impl.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/fuzz.hpp [2:3]
+        rapidfuzz/fuzz.pyi [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cf30382e2fe4fc62780ee47797fe45b2
+BELONGS ya.make
+    License text:
+        Copyright © 2020 Max Bachmann
+        Copyright © 2011 Adam Cohen
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        extern/rapidfuzz-cpp/LICENSE [1:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/common_impl.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/config.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/type_traits.hpp [2:2]
+        extern/rapidfuzz-cpp/rapidfuzz/details/types.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d7f70c9912122d29c39f12319dcf75e6
+BELONGS ya.make
+    License text:
+        Copyright (c) 2018-2024 Dr. Tsung-Wei Huang
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        extern/taskflow/LICENSE [3:3]

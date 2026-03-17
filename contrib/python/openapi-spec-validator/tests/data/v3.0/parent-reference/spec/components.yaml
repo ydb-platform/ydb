@@ -1,0 +1,12 @@
+schemas:
+  Pet:
+    type: object
+    allOf:
+      - $ref: "../common.yaml#/schemas/Model"
+    required:
+      - name
+    properties:
+      name:
+        type: string
+      tag:
+        type: string

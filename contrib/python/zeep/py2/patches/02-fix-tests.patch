@@ -1,0 +1,572 @@
+--- contrib/python/zeep/py2/tests/integration/test_hello_world_recursive.py	(index)
++++ contrib/python/zeep/py2/tests/integration/test_hello_world_recursive.py	(working tree)
+@@ -2,10 +2,10 @@ import os
+ 
+ import zeep
+ 
++import yatest.common
++
+ 
+ def test_hello_world():
+-    path = os.path.join(
+-        os.path.dirname(os.path.realpath(__file__)), "hello_world_recursive.wsdl"
+-    )
++    path = yatest.common.test_source_path("integration/hello_world_recursive.wsdl")
+     client = zeep.Client(path)
+     client.wsdl.dump()
+--- contrib/python/zeep/py2/tests/integration/test_http_post.py	(index)
++++ contrib/python/zeep/py2/tests/integration/test_http_post.py	(working tree)
+@@ -5,7 +5,8 @@ import requests_mock
+ 
+ import zeep
+ 
+-WSDL = os.path.join(os.path.dirname(__file__), "test_http_post.wsdl")
++import yatest.common
++WSDL = yatest.common.test_source_path("integration/test_http_post.wsdl")
+ 
+ 
+ @pytest.mark.requests
+--- contrib/python/zeep/py2/tests/integration/test_recursive_schema.py	(index)
++++ contrib/python/zeep/py2/tests/integration/test_recursive_schema.py	(working tree)
+@@ -2,10 +2,10 @@ import os
+ 
+ import zeep
+ 
++import yatest.common
++
+ 
+ def test_hello_world():
+-    path = os.path.join(
+-        os.path.dirname(os.path.realpath(__file__)), "recursive_schema_main.wsdl"
+-    )
++    path = yatest.common.test_source_path("integration/recursive_schema_main.wsdl")
+     client = zeep.Client(path)
+     client.wsdl.dump()
+--- contrib/python/zeep/py2/tests/test_client.py	(index)
++++ contrib/python/zeep/py2/tests/test_client.py	(working tree)
+@@ -7,50 +7,52 @@ from tests.utils import load_xml
+ from zeep import client, xsd
+ from zeep.exceptions import Error
+ 
++import yatest.common
++
+ 
+ def test_bind():
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     service = client_obj.bind()
+     assert service
+ 
+ 
+ def test_unknown_transport():
+-    client_obj = client.Client("tests/wsdl_files/soap_transport_err.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap_transport_err.wsdl"))
+     service = client_obj.bind()
+     assert service
+ 
+ 
+ def test_bind_service():
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     service = client_obj.bind("StockQuoteService")
+     assert service
+ 
+ 
+ def test_bind_service_port():
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     service = client_obj.bind("StockQuoteService", "StockQuotePort")
+     assert service
+ 
+ 
+ def test_service_proxy_ok():
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     assert client_obj.service.GetLastTradePrice
+ 
+ 
+ def test_service_proxy_non_existing():
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     with pytest.raises(AttributeError):
+         assert client_obj.service.NonExisting
+ 
+ 
+ def test_service_proxy_dir_operations():
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     operations = [op for op in dir(client_obj.service) if not op.startswith("_")]
+     assert set(operations) == set(["GetLastTradePrice", "GetLastTradePriceNoOutput"])
+ 
+ 
+ def test_operation_proxy_doc():
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     assert (
+         client_obj.service.GetLastTradePrice.__doc__
+         == "GetLastTradePrice(tickerSymbol: xsd:string, "
+@@ -60,7 +62,7 @@ def test_operation_proxy_doc():
+ 
+ 
+ def test_open_from_file_object():
+-    with open("tests/wsdl_files/soap_transport_err.wsdl", "rb") as fh:
++    with open(yatest.common.test_source_path("wsdl_files/soap_transport_err.wsdl"), "rb") as fh:
+         client_obj = client.Client(fh)
+         service = client_obj.bind()
+         assert service
+@@ -72,13 +74,13 @@ def test_client_no_wsdl():
+ 
+ 
+ def test_client_cache_service():
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     assert client_obj.service.GetLastTradePrice
+     assert client_obj.service.GetLastTradePrice
+ 
+ 
+ def test_force_https():
+-    with open("tests/wsdl_files/soap.wsdl") as fh:
++    with open(yatest.common.test_source_path("wsdl_files/soap.wsdl")) as fh:
+         response = fh.read()
+ 
+     with requests_mock.mock() as m:
+@@ -94,7 +96,7 @@ def test_force_https():
+ 
+ @pytest.mark.requests
+ def test_create_service():
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     service = client_obj.create_service(
+         "{http://example.com/stockquote.wsdl}StockQuoteBinding",
+         "http://test.python-zeep.org/x",
+@@ -125,7 +127,7 @@ def test_create_service():
+ 
+ 
+ def test_create_message():
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     data = client_obj.create_message(
+         client_obj.service, "GetLastTradePrice", tickerSymbol="ZEEP"
+     )
+@@ -133,13 +135,13 @@ def test_create_message():
+ 
+ 
+ def test_load_wsdl_with_file_prefix():
+-    cwd = os.path.dirname(__file__)
++    cwd = yatest.common.test_source_path()
+     client.Client("file://" + os.path.join(cwd, "wsdl_files/soap.wsdl"))
+ 
+ 
+ @pytest.mark.requests
+ def test_service_proxy():
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+ 
+     response = """
+     <?xml version="1.0"?>
+@@ -163,7 +165,7 @@ def test_service_proxy():
+ 
+ @pytest.mark.requests
+ def test_call_method_fault():
+-    obj = client.Client("tests/wsdl_files/soap.wsdl")
++    obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+ 
+     response = """
+         <?xml version="1.0" encoding="utf-8"?>
+@@ -207,7 +209,7 @@ def test_default_soap_headers():
+     )
+     header_value = header(name="ik", password="foo")
+ 
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     client_obj.set_default_soapheaders([header_value])
+ 
+     response = """
+@@ -256,7 +258,7 @@ def test_default_soap_headers_extra():
+     )
+     extra_header_value = extra_header(name="ik", password="geheim")
+ 
+-    client_obj = client.Client("tests/wsdl_files/soap.wsdl")
++    client_obj = client.Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     client_obj.set_default_soapheaders([header_value])
+ 
+     response = """
+--- contrib/python/zeep/py2/tests/test_client_factory.py	(index)
++++ contrib/python/zeep/py2/tests/test_client_factory.py	(working tree)
+@@ -2,9 +2,11 @@ import pytest
+ 
+ from zeep import Client
+ 
++import yatest.common
++
+ 
+ def test_factory_namespace():
+-    client = Client("tests/wsdl_files/soap.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     factory = client.type_factory("http://example.com/stockquote.xsd")
+     obj = factory.Address(NameFirst="Michael", NameLast="van Tellingen")
+     assert obj.NameFirst == "Michael"
+@@ -12,7 +14,7 @@ def test_factory_namespace():
+ 
+ 
+ def test_factory_no_reference():
+-    client = Client("tests/wsdl_files/soap.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+ 
+     obj_1 = client.get_type("ns0:ArrayOfAddress")()
+     obj_1.Address.append({"NameFirst": "J", "NameLast": "Doe"})
+@@ -21,7 +23,7 @@ def test_factory_no_reference():
+ 
+ 
+ def test_factory_ns_auto_prefix():
+-    client = Client("tests/wsdl_files/soap.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     factory = client.type_factory("ns0")
+     obj = factory.Address(NameFirst="Michael", NameLast="van Tellingen")
+     assert obj.NameFirst == "Michael"
+@@ -29,7 +31,7 @@ def test_factory_ns_auto_prefix():
+ 
+ 
+ def test_factory_ns_custom_prefix():
+-    client = Client("tests/wsdl_files/soap.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     client.set_ns_prefix("sq", "http://example.com/stockquote.xsd")
+     factory = client.type_factory("sq")
+     obj = factory.Address(NameFirst="Michael", NameLast="van Tellingen")
+@@ -38,7 +40,7 @@ def test_factory_ns_custom_prefix():
+ 
+ 
+ def test_factory_ns_unknown_prefix():
+-    client = Client("tests/wsdl_files/soap.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+ 
+     with pytest.raises(ValueError):
+         client.type_factory("bla")
+--- contrib/python/zeep/py2/tests/test_main.py	(index)
++++ contrib/python/zeep/py2/tests/test_main.py	(working tree)
+@@ -10,7 +10,7 @@ def test_main_no_args(monkeypatch):
+ 
+     monkeypatch.setattr(client.Client, "__init__", mock_init)
+     args = __main__.parse_arguments(["foo.wsdl"])
+-    __main__.main(args)
++    __main__._main(args)
+ 
+ 
+ def test_main_extract_auth(monkeypatch):
+@@ -24,7 +24,7 @@ def test_main_extract_auth(monkeypatch):
+             ["http://user:secret@tests.python-zeep.org/foo.wsdl"]
+         )
+ 
+-        __main__.main(args)
++        __main__._main(args)
+ 
+         assert mock_transport.call_count == 1
+ 
+--- contrib/python/zeep/py2/tests/test_transports.py	(index)
++++ contrib/python/zeep/py2/tests/test_transports.py	(working tree)
+@@ -12,8 +12,8 @@ def test_no_cache():
+ 
+ 
+ @pytest.mark.requests
+-def test_custom_cache():
+-    transport = transports.Transport(cache=cache.SqliteCache())
++def test_custom_cache(tmpdir):
++    transport = transports.Transport(cache=cache.SqliteCache(path=tmpdir.join('sqlite.cache.db').strpath))
+     assert isinstance(transport.cache, cache.SqliteCache)
+ 
+ 
+--- contrib/python/zeep/py2/tests/test_wsdl.py	(index)
++++ contrib/python/zeep/py2/tests/test_wsdl.py	(working tree)
+@@ -11,10 +11,12 @@ from tests.utils import DummyTransport, assert_nodes_equal
+ from zeep import Client, Settings, wsdl
+ from zeep.transports import Transport
+ 
++import yatest.common
++
+ 
+ @pytest.mark.requests
+ def test_parse_soap_wsdl():
+-    client = Client("tests/wsdl_files/soap.wsdl", transport=Transport())
++    client = Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"), transport=Transport())
+ 
+     response = """
+         <?xml version="1.0"?>
+@@ -73,7 +75,7 @@ def test_parse_soap_wsdl():
+ 
+ @pytest.mark.requests
+ def test_parse_soap_header_wsdl():
+-    client = Client("tests/wsdl_files/soap_header.wsdl", transport=Transport())
++    client = Client(yatest.common.test_source_path("wsdl_files/soap_header.wsdl"), transport=Transport())
+ 
+     response = """
+     <?xml version="1.0"?>
+@@ -199,13 +201,13 @@ def test_parse_types_nsmap_issues():
+ @pytest.mark.requests
+ def test_parse_soap_import_wsdl():
+     client = stub(transport=Transport(), wsse=None)
+-    content = io.open("tests/wsdl_files/soap-enc.xsd", "r", encoding="utf-8").read()
++    content = io.open(yatest.common.test_source_path("wsdl_files/soap-enc.xsd"), "r", encoding="utf-8").read()
+ 
+     with requests_mock.mock() as m:
+         m.get("http://schemas.xmlsoap.org/soap/encoding/", text=content)
+ 
+         obj = wsdl.Document(
+-            "tests/wsdl_files/soap_import_main.wsdl", transport=client.transport
++            yatest.common.test_source_path("wsdl_files/soap_import_main.wsdl"), transport=client.transport
+         )
+         assert len(obj.services) == 1
+         assert obj.types.is_empty is False
+--- contrib/python/zeep/py2/tests/test_wsdl_arrays.py	(index)
++++ contrib/python/zeep/py2/tests/test_wsdl_arrays.py	(working tree)
+@@ -7,13 +7,15 @@ from tests.utils import (
+     DummyTransport, assert_nodes_equal, load_xml, render_node)
+ from zeep import xsd
+ 
++import yatest.common
++
+ 
+ @pytest.fixture(scope="function")
+ def transport():
+     transport = DummyTransport()
+     transport.bind(
+         "http://schemas.xmlsoap.org/soap/encoding/",
+-        load_xml(io.open("tests/wsdl_files/soap-enc.xsd", "r").read().encode("utf-8")),
++        load_xml(io.open(yatest.common.test_source_path("wsdl_files/soap-enc.xsd"), "r").read().encode("utf-8")),
+     )
+     return transport
+ 
+@@ -323,7 +325,7 @@ def test_soap_array_parse_remote_ns():
+     transport = DummyTransport()
+     transport.bind(
+         "http://schemas.xmlsoap.org/soap/encoding/",
+-        load_xml(io.open("tests/wsdl_files/soap-enc.xsd", "r").read().encode("utf-8")),
++        load_xml(io.open(yatest.common.test_source_path("wsdl_files/soap-enc.xsd"), "r").read().encode("utf-8")),
+     )
+ 
+     schema = xsd.Schema(
+@@ -393,7 +395,7 @@ def test_wsdl_array_type():
+     transport = DummyTransport()
+     transport.bind(
+         "http://schemas.xmlsoap.org/soap/encoding/",
+-        load_xml(io.open("tests/wsdl_files/soap-enc.xsd", "r").read().encode("utf-8")),
++        load_xml(io.open(yatest.common.test_source_path("wsdl_files/soap-enc.xsd"), "r").read().encode("utf-8")),
+     )
+ 
+     schema = xsd.Schema(
+@@ -467,7 +469,7 @@ def test_soap_array_parse():
+     transport = DummyTransport()
+     transport.bind(
+         "http://schemas.xmlsoap.org/soap/encoding/",
+-        load_xml(io.open("tests/wsdl_files/soap-enc.xsd", "r").read().encode("utf-8")),
++        load_xml(io.open(yatest.common.test_source_path("wsdl_files/soap-enc.xsd"), "r").read().encode("utf-8")),
+     )
+ 
+     schema = xsd.Schema(
+--- contrib/python/zeep/py2/tests/test_wsdl_messages_rpc.py	(index)
++++ contrib/python/zeep/py2/tests/test_wsdl_messages_rpc.py	(working tree)
+@@ -5,6 +5,8 @@ from six import StringIO
+ from tests.utils import DummyTransport, assert_nodes_equal, load_xml
+ from zeep.wsdl import wsdl
+ 
++import yatest.common
++
+ 
+ def test_serialize():
+     wsdl_content = StringIO(
+@@ -217,7 +219,7 @@ def test_wsdl_array_of_simple_types():
+     transport = DummyTransport()
+     transport.bind(
+         "http://schemas.xmlsoap.org/soap/encoding/",
+-        load_xml(io.open("tests/wsdl_files/soap-enc.xsd", "r").read().encode("utf-8")),
++        load_xml(io.open(yatest.common.test_source_path("wsdl_files/soap-enc.xsd"), "r").read().encode("utf-8")),
+     )
+     root = wsdl.Document(wsdl_content, transport)
+ 
+--- contrib/python/zeep/py2/tests/test_wsdl_soap.py	(index)
++++ contrib/python/zeep/py2/tests/test_wsdl_soap.py	(working tree)
+@@ -10,9 +10,11 @@ from zeep import Client
+ from zeep.exceptions import Fault, TransportError
+ from zeep.wsdl import bindings
+ 
++import yatest.common
++
+ 
+ def test_soap11_no_output():
+-    client = Client("tests/wsdl_files/soap.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     content = """
+         <soapenv:Envelope
+             xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+@@ -155,7 +157,7 @@ def test_no_content_type():
+         </soapenv:Envelope>
+     """.strip()
+ 
+-    client = Client("tests/wsdl_files/soap.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     binding = client.service._binding
+ 
+     response = stub(status_code=200, content=data, encoding="utf-8", headers={})
+@@ -172,7 +174,7 @@ def test_wrong_content():
+         like an html page or a raw internal stack trace
+     """.strip()
+ 
+-    client = Client("tests/wsdl_files/soap.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     binding = client.service._binding
+ 
+     response = stub(status_code=200, content=data, encoding="utf-8", headers={})
+@@ -190,7 +192,7 @@ def test_wrong_no_unicode_content():
+         and the content charset is beyond unicode òñÇÿ
+     """.strip()
+ 
+-    client = Client("tests/wsdl_files/soap.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     binding = client.service._binding
+ 
+     response = stub(status_code=200, content=data, encoding="utf-8", headers={})
+@@ -208,7 +210,7 @@ def test_http_error():
+         Unauthorized!
+     """.strip()
+ 
+-    client = Client("tests/wsdl_files/soap.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap.wsdl"))
+     binding = client.service._binding
+ 
+     response = stub(status_code=401, content=data, encoding="utf-8", headers={})
+@@ -258,7 +260,7 @@ def test_mime_multipart():
+     """.splitlines()
+     ).encode("utf-8")
+ 
+-    client = Client("tests/wsdl_files/claim.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/claim.wsdl"))
+     binding = client.service._binding
+ 
+     response = stub(
+@@ -317,7 +319,7 @@ def test_mime_multipart_no_encoding():
+     """.splitlines()
+     ).encode("utf-8")
+ 
+-    client = Client("tests/wsdl_files/claim.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/claim.wsdl"))
+     binding = client.service._binding
+ 
+     response = stub(
+@@ -355,7 +357,7 @@ def test_unexpected_headers():
+         </soapenv:Envelope>
+     """.strip()
+ 
+-    client = Client("tests/wsdl_files/soap_header.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap_header.wsdl"))
+     binding = client.service._binding
+ 
+     response = stub(status_code=200, content=data, encoding="utf-8", headers={})
+@@ -368,7 +370,7 @@ def test_unexpected_headers():
+ 
+ 
+ def test_response_201():
+-    client = Client("tests/wsdl_files/soap_header.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap_header.wsdl"))
+     binding = client.service._binding
+ 
+     response = stub(status_code=201, content="", encoding="utf-8", headers={})
+@@ -378,7 +380,7 @@ def test_response_201():
+ 
+ 
+ def test_response_202():
+-    client = Client("tests/wsdl_files/soap_header.wsdl")
++    client = Client(yatest.common.test_source_path("wsdl_files/soap_header.wsdl"))
+     binding = client.service._binding
+ 
+     response = stub(status_code=202, content="", encoding="utf-8", headers={})
+--- contrib/python/zeep/py2/tests/test_wsse_signature.py	(index)
++++ contrib/python/zeep/py2/tests/test_wsse_signature.py	(working tree)
+@@ -11,10 +11,9 @@ from zeep.exceptions import SignatureVerificationFailed
+ from zeep.wsse import signature
+ from zeep.wsse.signature import xmlsec as xmlsec_installed
+ 
+-KEY_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "cert_valid.pem")
+-KEY_FILE_PW = os.path.join(
+-    os.path.dirname(os.path.realpath(__file__)), "cert_valid_pw.pem"
+-)
++import yatest.common
++KEY_FILE = yatest.common.test_source_path("cert_valid.pem")
++KEY_FILE_PW = yatest.common.test_source_path("cert_valid_pw.pem")
+ 
+ SIGNATURE_METHODS_TESTDATA = (
+     ("RSA_SHA1", "http://www.w3.org/2000/09/xmldsig#rsa-sha1"),
+@@ -192,6 +191,7 @@ def test_signature():
+ @pytest.mark.parametrize(
+     "signature_method,expected_signature_href", SIGNATURE_METHODS_TESTDATA
+ )
++@skip_if_no_xmlsec
+ def test_signature_binary(
+     digest_method, signature_method, expected_digest_href, expected_signature_href
+ ):
+--- contrib/python/zeep/py2/tests/test_wsse_username.py	(index)
++++ contrib/python/zeep/py2/tests/test_wsse_username.py	(working tree)
+@@ -10,11 +10,13 @@ from zeep import client
+ from zeep.wsse import UsernameToken
+ from zeep.wsse.utils import WSU
+ 
++import yatest.common
++
+ 
+ @pytest.mark.requests
+ def test_integration():
+     client_obj = client.Client(
+-        "tests/wsdl_files/soap.wsdl", wsse=UsernameToken("username", "password")
++        yatest.common.test_source_path("wsdl_files/soap.wsdl"), wsse=UsernameToken("username", "password")
+     )
+ 
+     response = """
+--- contrib/python/zeep/py2/tests/test_xsd_extension.py	(index)
++++ contrib/python/zeep/py2/tests/test_xsd_extension.py	(working tree)
+@@ -7,6 +7,8 @@ from tests.utils import (
+     DummyTransport, assert_nodes_equal, load_xml, render_node)
+ from zeep import xsd
+ 
++import yatest.common
++
+ 
+ def test_simple_content_extension():
+     schema = xsd.Schema(
+@@ -438,7 +440,7 @@ def test_issue_221():
+     transport.bind(
+         "https://www.w3.org/TR/xmldsig-core/xmldsig-core-schema.xsd",
+         load_xml(
+-            io.open("tests/wsdl_files/xmldsig-core-schema.xsd", "r")
++            io.open(yatest.common.test_source_path("wsdl_files/xmldsig-core-schema.xsd"), "r")
+             .read()
+             .encode("utf-8")
+         ),
+--- contrib/python/zeep/py2/tests/test_xsd_schemas.py	(index)
++++ contrib/python/zeep/py2/tests/test_xsd_schemas.py	(working tree)
+@@ -9,6 +9,8 @@ from zeep import exceptions, xsd
+ from zeep.xsd import Schema
+ from zeep.xsd.types.unresolved import UnresolvedType
+ 
++import yatest.common
++
+ 
+ def test_default_types():
+     schema = xsd.Schema()
+@@ -1022,7 +1024,7 @@ def test_xml_namespace():
+ 
+ 
+ def test_auto_import_known_schema():
+-    content = io.open("tests/wsdl_files/soap-enc.xsd", "rb").read()
++    content = io.open(yatest.common.test_source_path("wsdl_files/soap-enc.xsd"), "rb").read()
+ 
+     transport = DummyTransport()
+     transport.bind("http://schemas.xmlsoap.org/soap/encoding/", content)
+--- contrib/python/zeep/py2/tests/conftest.py	(index)
++++ contrib/python/zeep/py2/tests/conftest.py	(working tree)
+@@ -11,7 +11,7 @@ pytest.register_assert_rewrite("tests.utils")
+ 
+ @pytest.fixture(autouse=True)
+ def no_requests(request, monkeypatch):
+-    if request.node.get_marker("requests"):
++    if request.node.get_closest_marker("requests"):
+         return
+ 
+     def func(*args, **kwargs):

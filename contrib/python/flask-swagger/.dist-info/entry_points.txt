@@ -1,0 +1,4 @@
+
+      [console_scripts]
+      flaskswagger = build_swagger_spec:run
+      

@@ -1,0 +1,46 @@
+openapi: 3.0.1
+components:
+  schemas:
+    CustomContextVariable:
+      oneOf:
+        - $ref: '#/components/schemas/UserContextVariable'
+        - $ref: '#/components/schemas/IssueContextVariable'
+      properties:
+        "@type":
+          description: Type of custom context variable.
+          type: string
+      discriminator:
+        mapping:
+          user: '#/components/schemas/UserContextVariable'
+          issue: '#/components/schemas/IssueContextVariable'
+        propertyName: "@type"
+      required:
+        - "@type"
+      type: object
+    UserContextVariable:
+      properties:
+        accountId:
+          description: The account ID of the user.
+          type: string
+        "@type":
+          description: Type of custom context variable.
+          type: string
+      required:
+        - accountId
+        - "@type"
+      type: object
+    IssueContextVariable:
+      properties:
+        id:
+          description: The issue ID.
+          format: int64
+          type: integer
+        key:
+          description: The issue key.
+          type: string
+        "@type":
+          description: Type of custom context variable.
+          type: string
+      required:
+        - "@type"
+      type: object

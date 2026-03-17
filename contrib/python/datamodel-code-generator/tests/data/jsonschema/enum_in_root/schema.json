@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "$defs": {
+    "brand": {
+      "type": "string",
+      "enum": [
+        "OPUS",
+        "someday"
+      ],
+      "description": "purchased brand"
+    }
+  }
+}
+

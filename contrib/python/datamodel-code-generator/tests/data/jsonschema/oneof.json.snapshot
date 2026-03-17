@@ -1,0 +1,6 @@
+class Item(BaseModel):
+    timeout: Optional[Union[str, int]] = None
+
+
+class OnOfObject(BaseModel):
+    item: Optional[Item] = None

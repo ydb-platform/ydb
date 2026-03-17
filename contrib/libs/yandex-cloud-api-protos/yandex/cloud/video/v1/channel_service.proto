@@ -1,0 +1,269 @@
+syntax = "proto3";
+
+package yandex.cloud.video.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/access/access.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/video/v1/channel.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/video/v1;video";
+option java_package = "yandex.cloud.api.video.v1";
+
+// Channel management service.
+// Provides methods for creating, retrieving, updating, and deleting channels,
+// as well as managing channel-related operations such as access control.
+// Channels serve as containers for videos and streams in an organization.
+service ChannelService {
+  // Retrieves detailed information about a specific channel by its ID.
+  // Returns all channel metadata, settings, and related information.
+  rpc Get(GetChannelRequest) returns (Channel) {
+    option (google.api.http) = {
+      get: "/video/v1/channels/{channel_id}"
+    };
+  }
+
+  // Lists all channels in a specific organization with pagination support.
+  // Results can be filtered and sorted using the provided parameters.
+  rpc List(ListChannelsRequest) returns (ListChannelsResponse) {
+    option (google.api.http) = {
+      get: "/video/v1/channels"
+    };
+  }
+
+  // Creates a new channel in the specified organization.
+  rpc Create(CreateChannelRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/video/v1/channels"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateChannelMetadata"
+      response: "Channel"
+    };
+  }
+
+  // Updates an existing channel's metadata and settings.
+  // Only fields specified in the field_mask will be updated.
+  rpc Update(UpdateChannelRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/video/v1/channels/{channel_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateChannelMetadata"
+      response: "Channel"
+    };
+  }
+
+  // Deletes a specific channel by its ID.
+  rpc Delete(DeleteChannelRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      delete: "/video/v1/channels/{channel_id}"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteChannelMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Deletes multiple channels in a specific organization in a single request.
+  // This is more efficient than making multiple Delete requests when removing several channels.
+  rpc BatchDelete(BatchDeleteChannelsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/video/v1/channels:batchDelete"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "BatchDeleteChannelsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists all access bindings for a specific channel.
+  // Access bindings define which users or service accounts have access to the channel
+  // and what actions they can perform.
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = {get: "/video/v1/channels/{resource_id}:listAccessBindings"};
+  }
+
+  // Sets all access bindings for a specific channel.
+  // This operation completely replaces any existing access bindings.
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/video/v1/channels/{resource_id}:setAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+        metadata: "access.SetAccessBindingsMetadata"
+        response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  // Updates access bindings for a specific channel by adding or removing individual bindings.
+  // This operation modifies existing access bindings without replacing them completely.
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/video/v1/channels/{resource_id}:updateAccessBindings"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+}
+
+message GetChannelRequest {
+  // ID of the channel to retrieve.
+  string channel_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListChannelsRequest {
+  // Reserved for future use.
+  reserved 2 to 99;
+
+  // ID of the organization containing the channels to list.
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of channels to return per page.
+  int64 page_size = 100 [(value) = "<=100"];
+
+  // Page token for retrieving the next page of results.
+  // This token is obtained from the next_page_token field in the previous ListChannelsResponse.
+  string page_token = 101 [(length) = "<=15000"];
+
+  // Specifies the ordering of results.
+  // Format is "<field> <order>" (e.g., "createdAt desc").
+  // Default: "id asc".
+  // Supported fields: ["id", "title", "createdAt", "updatedAt"].
+  // Both snake_case and camelCase field names are supported.
+  string order_by = 102 [(length) = "<=50"];
+
+  // Filter expression to narrow down the list of returned channels.
+  // Expressions consist of terms connected by logical operators.
+  // Values containing spaces or quotes must be enclosed in quotes (`'` or `"`)
+  // with inner quotes being backslash-escaped.
+  //
+  // Supported logical operators: ["AND", "OR"].
+  // Supported comparison operators: ["=", "!=", ":"] where ":" enables substring matching.
+  // Parentheses can be used to group logical expressions.
+  //
+  // Example: `title:'news' AND id!='channel-123'`
+  //
+  // Filterable fields: ["id", "title"].
+  // Both snake_case and camelCase field names are supported.
+  string filter = 103 [(length) = "<=1000"];
+}
+
+message ListChannelsResponse {
+  // Reserved for future use.
+  reserved 2 to 99;
+
+  // List of channels matching the request criteria.
+  // May be empty if no channels match the criteria or if the organization has no channels.
+  repeated Channel channels = 1;
+
+  // Token for retrieving the next page of results.
+  // Empty if there are no more results available.
+  string next_page_token = 100;
+}
+
+message CreateChannelRequest {
+  // Reserved for future use.
+  reserved 4 to 199;
+
+  // ID of the organization where the channel will be created.
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Title of the channel to be displayed in interfaces.
+  string title = 2 [(required) = true, (length) = "<=300"];
+
+  // Detailed description of the channel's purpose and content.
+  string description = 3 [(length) = "<=4000"];
+
+  // Custom user-defined labels as key:value pairs.
+  // Maximum 64 labels per channel.
+  // Keys must be lowercase alphanumeric strings with optional hyphens/underscores.
+  // Values can contain alphanumeric characters and various symbols.
+  map<string, string> labels = 200 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_.@:/0-9a-zA-Z]*", (map_key).length = "<=63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // Configuration settings for the channel's behavior and features.
+  // Includes settings for advertisements, content cleanup, and Referer verification.
+  ChannelSettings settings = 201;
+}
+
+message CreateChannelMetadata {
+  // ID of the channel being created.
+  string channel_id = 1;
+}
+
+message UpdateChannelRequest {
+  // Reserved for future use.
+  reserved 6 to 199;
+
+  // ID of the channel to update.
+  string channel_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask specifying which fields of the channel should be updated.
+  // Only fields specified in this mask will be modified;
+  // all other fields will retain their current values.
+  // This allows for partial updates.
+  google.protobuf.FieldMask field_mask = 2 [(required) = true];
+
+  // New title for the channel.
+  string title = 3 [(length) = "<=300"];
+
+  // New description for the channel.
+  string description = 4 [(length) = "<=4000"];
+
+  // New default style preset ID for the channel.
+  // This preset will be applied to new videos created in this channel unless explicitly overridden.
+  string default_style_preset_id = 5;
+
+  // New custom labels for the channel as `key:value` pairs.
+  // Maximum 64 labels per channel.
+  // If provided, replaces all existing labels.
+  map<string, string> labels = 200 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_.@:/0-9a-zA-Z]*", (map_key).length = "<=63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  // New configuration settings for the channel's behavior and features.
+  ChannelSettings settings = 201;
+}
+
+message UpdateChannelMetadata {
+  // ID of the channel being updated.
+  string channel_id = 1;
+}
+
+message DeleteChannelRequest {
+  // ID of the channel to delete.
+  // Deleting a channel will also delete all its content,
+  // including videos, streams, and related resources.
+  string channel_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteChannelMetadata {
+  // ID of the channel being deleted.
+  // This identifier can be used to track the channel deletion operation.
+  string channel_id = 1;
+}
+
+message BatchDeleteChannelsRequest {
+  // ID of the organization containing the channels to delete.
+  string organization_id = 1 [(required) = true, (length) = "<=50"];
+
+  // List of channel IDs to delete.
+  // Deleting channels will also delete all their content,
+  // including videos, streams, and related resources.
+  repeated string channel_ids = 2 [(size) = "1-100", (length) = "<=50"];
+}
+
+message BatchDeleteChannelsMetadata {
+  // List of channel IDs being deleted.
+  // This list can be used to track which channels are included
+  // in the batch deletion operation.
+  repeated string channel_ids = 1;
+}

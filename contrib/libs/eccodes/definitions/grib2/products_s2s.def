@@ -1,0 +1,111 @@
+# (C) Copyright 2005- ECMWF.
+
+# S2S
+constant marsClass  = 's2';
+constant marsModel  = 'glob';
+
+alias parameter.paramId=paramId;
+alias parameter.shortName=shortName;
+alias parameter.units=units;
+alias parameter.name=name;
+
+alias mars.expver = marsExpver;
+alias mars.class  = marsClass;
+alias mars.param = paramId;
+alias mars.model = marsModel;
+
+# See GRIB-761. For Italy, subCentre 102 is ISAC-CNR
+if (centre is "cnmc" && subCentre == 102) {
+    constant cnmc_isac = 'isac';
+    alias mars.origin = cnmc_isac;
+} else {
+    alias mars.origin = centre;
+}
+
+unalias mars.domain;
+
+concept marsType(unknown) {
+   fc = {
+     typeOfProcessedData = 2;
+   }
+   "9" = {
+     typeOfProcessedData = 2;
+   }
+
+   cf = {
+     typeOfProcessedData = 3;
+   }
+   "10" = {
+     typeOfProcessedData = 3;
+   }
+
+   pf = {
+     typeOfProcessedData = 4;
+   }
+   "11" = {
+     typeOfProcessedData = 4;
+   }
+}
+
+# See GRIB-205 re no_copy
+concept marsStream(unknown) {
+    oper = {
+      typeOfProcessedData = 0;
+    }
+    oper = {
+      typeOfProcessedData = 2;
+    }
+
+    enfo = {
+      typeOfProcessedData = 3;
+    }
+    enfo = {
+      typeOfProcessedData = 4;
+    }
+    enfo = {
+      typeOfProcessedData = 8;
+    }
+} : no_copy;
+
+alias mars.stream = marsStream;
+alias mars.type   = marsType;
+
+# Normally MARS step is endStep but for monthly means we want stepRange
+if (stepType is "avg") {
+   alias mars.step = stepRange;
+}
+
+if (isHindcast == 1) {
+   # S2S reforecasts
+   constant theHindcastMarsStream = "enfh";
+   alias mars.stream = theHindcastMarsStream;
+   alias mars.hdate = dataDate;
+   alias mars.date  = modelVersionDate;
+   alias mars.time  = modelVersionTime;
+}
+
+# ECC-891, ECC-1013
+concept is_ocean2d_param(zero) {
+   '1' = { discipline=10; typeOfFirstFixedSurface=160; scaleFactorOfFirstFixedSurface=0; scaledValueOfFirstFixedSurface=0; typeOfSecondFixedSurface=255; }
+   '1' = { discipline=10; typeOfFirstFixedSurface=20;  scaleFactorOfFirstFixedSurface=2; scaledValueOfFirstFixedSurface=29315; typeOfSecondFixedSurface=255; }
+   '1' = { discipline=10; typeOfFirstFixedSurface=169; scaleFactorOfFirstFixedSurface=2; scaledValueOfFirstFixedSurface=1; typeOfSecondFixedSurface=255; }
+   '1' = { discipline=10; typeOfFirstFixedSurface=160; scaleFactorOfFirstFixedSurface=0; scaledValueOfFirstFixedSurface=0; typeOfSecondFixedSurface=160; scaleFactorOfSecondFixedSurface=0; scaledValueOfSecondFixedSurface=300; }
+   '0' = { dummy=1; }
+} : no_copy;
+concept is_ocean3d_param(zero) {
+   '1' = { discipline=10; typeOfFirstFixedSurface=160; typeOfSecondFixedSurface=160; }
+   '0' = { discipline=10; typeOfFirstFixedSurface=160; scaleFactorOfFirstFixedSurface=0; scaledValueOfFirstFixedSurface=0; typeOfSecondFixedSurface=160; scaleFactorOfSecondFixedSurface=0; scaledValueOfSecondFixedSurface=300; }
+   '0' = { dummy=1; }
+}: no_copy;
+
+if (is_ocean2d_param) {
+   constant oceanLevName = 'o2d';
+   alias mars.levtype = oceanLevName;
+   unalias mars.levelist;
+}
+
+if (is_ocean3d_param) {
+   constant oceanLevName = 'o3d';
+   alias mars.levtype = oceanLevName;
+   unalias mars.levelist;
+}

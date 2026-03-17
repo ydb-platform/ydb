@@ -1,0 +1,28 @@
+# author: Sebastien Villaume
+# created: 14 Feb 2014
+#########################
+constant conceptsMasterMarsDir="mars" : hidden;
+constant conceptsLocalMarsDirAll="mars/[centre:s]" : hidden;
+
+#  Base MARS keywors     #
+alias mars.class    = marsClass;
+alias mars.type     = marsType;
+alias mars.stream   = marsStream;
+alias mars.model    = marsModel;
+alias mars.expver   = experimentVersionNumber;
+alias mars.domain   = globalDomain;
+
+# local section 82      #
+### nothing needed here...
+
+# local section 83      #
+if ( localDefinitionNumber == 83 ) {
+  alias mars.sort             = matchSort;
+  alias mars.timerepres       = matchTimeRepres;
+  alias mars.landtype         = matchLandType;
+  alias mars.aerosolbinnumber = matchAerosolBinNumber;
+
+  concept matchAerosolPacking (unknown,"aerosolPackingConcept.def",conceptsLocalMarsDirAll,conceptsMasterMarsDir);
+  alias mars.aerosolpacking   = matchAerosolPacking; 
+}
+

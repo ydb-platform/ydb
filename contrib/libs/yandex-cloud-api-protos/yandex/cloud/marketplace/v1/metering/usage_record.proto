@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package yandex.cloud.marketplace.v1.metering;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/marketplace/v1/metering;metering";
+option java_package = "yandex.cloud.api.marketplace.v1.metering";
+
+message UsageRecord {
+    // Unique identifier of the usage record (UUID format).
+    string uuid = 1 [(required) = true, (length) = "<=36"];
+    // Consumed Marketplace SKU ID, linked to `UsageRecord.product_id`.
+    string sku_id = 2 [(required) = true, (length) = "<=50"];
+    // Quantity of SKU consumed, measured in `sku.usage_unit` units (e.g. bytes).
+    int64 quantity = 3 [(value) = ">0"];
+    // Timestamp in UTC for which the usage is being reported.
+    google.protobuf.Timestamp timestamp = 4 [(required) = true];
+}
+
+message AcceptedUsageRecord{
+    // Unique identifier of the usage record (UUID format).
+    string uuid = 1;
+}
+
+message RejectedUsageRecord{
+
+  enum Reason {
+    REASON_UNSPECIFIED = 0;
+    DUPLICATE = 1;
+    EXPIRED = 2;
+    INVALID_TIMESTAMP = 3;
+    INVALID_SKU_ID = 4;
+    INVALID_PRODUCT_ID = 5;
+    INVALID_QUANTITY = 6;
+    INVALID_ID = 7;
+  }
+
+    // Unique identifier of the usage record (UUID format).
+    string uuid = 1;
+    // The reason of rejection.
+    Reason reason = 2;
+}

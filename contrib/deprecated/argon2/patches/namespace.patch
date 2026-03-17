@@ -1,0 +1,54 @@
+--- a/src/blake2/blake2-impl.h
++++ b/src/blake2/blake2-impl.h
+@@ -21,4 +21,6 @@
+ #include <string.h>
+ 
++#define clear_internal_memory argon2__clear_internal_memory
++
+ #if defined(_MSC_VER)
+ #define BLAKE2_INLINE __inline
+--- a/src/core.h
++++ b/src/core.h
+@@ -21,4 +21,21 @@
+ #include "argon2.h"
+ 
++#define FLAG_clear_internal_memory argon2__FLAG_clear_internal_memory
++#define allocate_memory argon2__allocate_memory
++#define clear_internal_memory argon2__clear_internal_memory
++#define copy_block argon2__copy_block
++#define fill_first_blocks argon2__fill_first_blocks
++#define fill_memory_blocks argon2__fill_memory_blocks
++#define fill_segment argon2__fill_segment
++#define finalize argon2__finalize
++#define free_memory argon2__free_memory
++#define index_alpha argon2__index_alpha
++#define init_block_value argon2__init_block_value
++#define initial_hash argon2__initial_hash
++#define initialize argon2__initialize
++#define secure_wipe_memory argon2__secure_wipe_memory
++#define validate_inputs argon2__validate_inputs
++#define xor_block argon2__xor_block
++
+ #define CONST_CAST(x) (x)(uintptr_t)
+ 
+--- a/src/encoding.h
++++ b/src/encoding.h
+@@ -20,4 +20,9 @@
+ #include "argon2.h"
+ 
++#define encode_string argon2__encode_string
++#define decode_string argon2__decode_string
++#define b64len argon2__b64len
++#define numlen argon2__numlen
++
+ #define ARGON2_MAX_DECODED_LANES UINT32_C(255)
+ #define ARGON2_MIN_DECODED_SALT_LEN UINT32_C(8)
+--- a/src/opt.c
++++ b/src/opt.c
+@@ -26,4 +26,6 @@
+ #include "blake2/blamka-round-opt.h"
+ 
++#define fill_segment argon2__fill_segment
++
+ /*
+  * Function fills a new memory block and optionally XORs the old block over the new one.

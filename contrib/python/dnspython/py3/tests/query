@@ -1,0 +1,12 @@
+id 1234
+opcode QUERY
+rcode NOERROR
+flags RD
+edns 0
+eflags DO
+payload 4096
+;QUESTION
+wwww.dnspython.org. IN A
+;ANSWER
+;AUTHORITY
+;ADDITIONAL

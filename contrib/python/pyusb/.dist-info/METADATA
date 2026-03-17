@@ -1,0 +1,49 @@
+Metadata-Version: 2.1
+Name: pyusb
+Version: 1.3.1
+Summary: Easy USB access for Python
+Home-page: https://pyusb.github.io/pyusb
+Author: Jonas Malaco
+Author-email: me@jonasmalaco.com
+Project-URL: docs/Tutorial, https://github.com/pyusb/pyusb/blob/master/docs/tutorial.rst
+Project-URL: docs/FAQ, https://github.com/pyusb/pyusb/blob/master/docs/faq.rst
+Project-URL: Source, https://github.com/pyusb/pyusb
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: Manufacturing
+Classifier: Intended Audience :: Science/Research
+Classifier: Intended Audience :: System Administrators
+Classifier: Intended Audience :: Telecommunications Industry
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Natural Language :: English
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows :: Windows Vista
+Classifier: Operating System :: Microsoft :: Windows :: Windows 7
+Classifier: Operating System :: Microsoft :: Windows :: Windows 10
+Classifier: Operating System :: POSIX :: BSD :: FreeBSD
+Classifier: Operating System :: POSIX :: BSD :: NetBSD
+Classifier: Operating System :: POSIX :: BSD :: OpenBSD
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: POSIX :: SunOS/Solaris
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: IronPython
+Classifier: Programming Language :: Python :: Implementation :: Jython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Scientific/Engineering :: Interface Engine/Protocol Translator
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Hardware :: Hardware Drivers
+Requires-Python: >=3.9.0
+License-File: LICENSE
+
+
+PyUSB offers easy USB devices communication in Python.
+It should work without additional code in any environment with
+Python >= 3.9, ctypes and a pre-built USB backend library
+(currently: libusb 1.x, libusb 0.1.x or OpenUSB).

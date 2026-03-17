@@ -1,0 +1,6 @@
+{
+  "$defs": {
+    "customArray": { "type": "array" }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

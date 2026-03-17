@@ -1,0 +1,34 @@
+[
+  {
+    "country_code": "IS",
+    "bic": "ESJAISRE",
+    "bank_code": "03",
+    "name": "Arion Banki",
+    "short_name": "Arion Banki",
+    "primary": true
+  },
+  {
+    "country_code": "IS",
+    "bic": "NBIIISRE",
+    "bank_code": "01",
+    "name": "Landsbankinn",
+    "short_name": "Landsbankinn",
+    "primary": true
+  },
+  {
+    "country_code": "IS",
+    "bic": "GLITISRE",
+    "bank_code": "05",
+    "name": "Íslandsbanki",
+    "short_name": "Íslandsbanki",
+    "primary": true
+  },
+  {
+    "country_code": "IS",
+    "bic": "MPBAISRE",
+    "bank_code": "07",
+    "name": "Kvika",
+    "short_name": "Kvika",
+    "primary": true
+  }
+]

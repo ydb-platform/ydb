@@ -1,0 +1,57 @@
+Metadata-Version: 2.4
+Name: pymorphy3
+Version: 2.0.6
+Summary: Morphological analyzer (POS tagger + inflection engine) for Russian language.
+Home-page: https://github.com/no-plagiarism/pymorphy3
+Author: Danylo Halaiko
+Author-email: d9nich@pm.me
+License: MIT license
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Natural Language :: Russian
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Topic :: Text Processing :: Linguistic
+License-File: LICENSE.txt
+License-File: AUTHORS.rst
+Requires-Dist: dawg2-python>=0.8.0
+Requires-Dist: pymorphy3-dicts-ru
+Requires-Dist: setuptools>=68.2.2; python_version >= "3.12"
+Provides-Extra: cli
+Requires-Dist: click; extra == "cli"
+Provides-Extra: fast
+Requires-Dist: DAWG2<1.0.0,>=0.9.0; platform_python_implementation == "CPython" and extra == "fast"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: summary
+
+pymorphy3
+=========
+
+pymorphy3 is the continuation of the unmaintained project [pymorphy2](https://github.com/kmike/pymorphy2) which is an morphological analyzer (POS tagger + inflection engine) for Russian and Ukrainian languages.
+
+pymorphy3 officially supports Python 3.9 ~ 3.14.
+
+* Documentation: https://pymorphy2.readthedocs.io
+* Bug tracker: https://github.com/no-plagiarism/pymorphy3/issues
+* Changelog: https://github.com/no-plagiarism/pymorphy3/blob/master/CHANGES.rst
+* License: https://github.com/no-plagiarism/pymorphy3/blob/master/LICENSE.txt
+* Contributors: https://github.com/no-plagiarism/pymorphy3/blob/master/AUTHORS.rst

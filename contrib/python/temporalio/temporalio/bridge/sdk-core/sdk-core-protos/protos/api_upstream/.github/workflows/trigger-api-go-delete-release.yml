@@ -1,0 +1,13 @@
+name: "Trigger api-go delete release"
+
+on:
+  release:
+    types: [deleted]
+
+jobs:
+  trigger-api-go-delete-release:
+    uses: temporalio/api-go/.github/workflows/delete-release.yml@master
+    with:
+      tag: ${{ github.event.release.tag_name }}
+      api_commit_sha: ${{ github.event.release.target_commitish }}
+    secrets: inherit

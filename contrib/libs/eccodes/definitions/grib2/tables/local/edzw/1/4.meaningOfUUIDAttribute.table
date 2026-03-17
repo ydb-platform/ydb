@@ -1,0 +1,5 @@
+# Local table for meaning of universally unique identifier (UUID) attribute
+#0 0 Reserved
+1 1 Matching UUIDs mean that corresponding products (most probably) originate from one and the same realization of the generating process
+255 255 Conforms to Missing
+65535 65535 Missing

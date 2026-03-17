@@ -1,0 +1,23 @@
+# (C) Copyright 2005- ECMWF.
+# Template for wave parameters
+
+# Direction part
+unsigned[2] waveDirectionNumber : dump;
+alias mars.direction = waveDirectionNumber;
+alias directionNumber = waveDirectionNumber;
+
+unsigned[2] numberOfWaveDirections = 0 : dump;
+alias totalNumberOfWaveDirections = numberOfWaveDirections;
+alias numberOfDirections = totalNumberOfWaveDirections;
+
+# Frequency part
+unsigned[2] waveFrequencyNumber : dump;
+alias mars.frequency = waveFrequencyNumber;
+alias frequencyNumber = waveFrequencyNumber;
+
+unsigned[2] numberOfWaveFrequencies = 0 : dump;
+alias totalNumberOfWaveFrequencies = numberOfWaveFrequencies;
+alias numberOfFrequencies = totalNumberOfWaveFrequencies;
+
+constant waveLevType="sfc";
+alias mars.levtype = waveLevType;

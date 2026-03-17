@@ -1,0 +1,5 @@
+[console_scripts]
+echo_supervisord_conf = supervisor.confecho:main
+pidproxy = supervisor.pidproxy:main
+supervisorctl = supervisor.supervisorctl:main
+supervisord = supervisor.supervisord:main

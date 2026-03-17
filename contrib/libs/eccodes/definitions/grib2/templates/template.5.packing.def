@@ -1,0 +1,23 @@
+# (C) Copyright 2005- ECMWF.
+
+#  Reference value (R)
+# The copy_ok means that the value is copied when changing the representation
+# e.g. from jpeg to simple packing.
+ieeefloat referenceValue : read_only, copy_ok;
+meta referenceValueError reference_value_error(referenceValue,ieee);
+
+# Binary scale factor (E)
+signed[2] binaryScaleFactor : read_only, copy_ok;
+
+# Decimal scale factor (D)
+signed[2] decimalScaleFactor ;
+
+# Try different values of binaryScaleFactor and decimalScaleFactor to reduce packing error
+transient optimizeScaleFactor = 0;
+
+
+# Number of bits used for each packed value for simple packing, or for each group reference value for complex packing or spatial differencing
+unsigned[1] bitsPerValue;
+alias numberOfBits = bitsPerValue;
+alias numberOfBitsContainingEachPackedValue = bitsPerValue;
+alias accuracy = bitsPerValue;

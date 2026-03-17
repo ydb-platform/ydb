@@ -1,0 +1,716 @@
+syntax = "proto3";
+
+package speechkit.stt.v3;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/stt/v3;stt";
+option java_package = "yandex.cloud.api.ai.stt.v3";
+
+import "google/protobuf/struct.proto";
+
+// Options for post-processing text results. The normalization levels depend on the settings and the language.
+// For detailed information, see [documentation](/docs/speechkit/stt/normalization).
+message TextNormalizationOptions {
+
+  // Base-level normalization.
+  enum TextNormalization {
+    TEXT_NORMALIZATION_UNSPECIFIED = 0;
+    // Enable converting numbers, dates and time from text to numeric format.
+    TEXT_NORMALIZATION_ENABLED = 1;
+    // Disable all normalization. Default value.
+    TEXT_NORMALIZATION_DISABLED = 2;
+  }
+  enum PhoneFormattingMode {
+    PHONE_FORMATTING_MODE_UNSPECIFIED = 0;
+    // Disable phone formatting
+    PHONE_FORMATTING_MODE_DISABLED = 1;
+  }
+  TextNormalization text_normalization = 1;
+  // Profanity filter (default: false).
+  bool profanity_filter = 2;
+  // Rewrite text in literature style (default: false).
+  bool literature_text = 3;
+  // Define phone formatting mode
+  PhoneFormattingMode phone_formatting_mode = 4;
+}
+
+
+message DefaultEouClassifier {
+  enum EouSensitivity {
+    EOU_SENSITIVITY_UNSPECIFIED = 0;
+    // Default and more conservative EOU detector.
+    DEFAULT = 1;
+    // A high-sensitive and fast EOU detector, which may produce more false positives.
+    HIGH = 2;
+  }
+  // EOU sensitivity.
+  EouSensitivity type = 1;
+  // Hint for max pause between words. SpeechKit EOU detector could use this information to adjust the speed of the EOU detection.
+  // For example, a long pause between words will help distinguish between the end of utterance from slow speech like `One <long pause> two <long pause> three`.
+  // A short pause can be helpful if the speaker is speaking quickly and does not emphasize pauses between sentences.
+  int64 max_pause_between_words_hint_ms = 2;
+}
+
+// Use EOU provided by user.
+message ExternalEouClassifier {
+
+}
+
+message EouClassifierOptions {
+  oneof Classifier {
+    // Default EOU classifier provided by SpeechKit.
+    DefaultEouClassifier default_classifier = 1;
+    // EOU classifier enforced by external messages from user.
+    ExternalEouClassifier external_classifier = 2;
+  }
+}
+
+message RecognitionClassifier {
+  // Type of recognition classifier trigger.
+  enum TriggerType {
+    TRIGGER_TYPE_UNSPECIFIED = 0 [deprecated = true];
+    // Apply classifier to utterance responses.
+    ON_UTTERANCE = 1;
+    // Apply classifier to final responses.
+    ON_FINAL = 2;
+    // Apply classifier to partial responses.
+    ON_PARTIAL = 3;
+  }
+
+  // Classifier name
+  string classifier = 1;
+  // Describes the types of responses to which the classification results will come. Classification responses will follow the responses of the specified types.
+  repeated TriggerType triggers = 2;
+}
+
+message RecognitionClassifierOptions {
+  // List of classifiers to use. For detailed information and usage example, see [documentation](/docs/speechkit/stt/analysis).
+  repeated RecognitionClassifier classifiers = 1;
+}
+
+message SpeechAnalysisOptions {
+  // Analyse speech for every speaker
+  bool enable_speaker_analysis = 1;
+  // Analyse conversation of two speakers
+  bool enable_conversation_analysis = 2;
+  // Quantile levels in range (0, 1) for descriptive statistics
+  repeated double descriptive_statistics_quantiles = 3;
+}
+
+// RAW Audio format spec (no container to infer type). Used in AudioFormat options.
+message RawAudio {
+  enum AudioEncoding {
+    AUDIO_ENCODING_UNSPECIFIED = 0;
+    // Audio bit depth 16-bit signed little-endian (Linear PCM).
+    LINEAR16_PCM = 1;
+  }
+
+  // Type of audio encoding.
+  AudioEncoding audio_encoding = 1;
+  // PCM sample rate.
+  int64 sample_rate_hertz = 2;
+  // PCM channel count. Currently only single channel audio is supported in real-time recognition.
+  int64 audio_channel_count = 3;
+}
+
+// Audio with fixed type in container. Used in AudioFormat options.
+message ContainerAudio {
+  enum ContainerAudioType {
+    CONTAINER_AUDIO_TYPE_UNSPECIFIED = 0;
+
+    // Audio bit depth 16-bit signed little-endian (Linear PCM).
+    WAV = 1;
+
+    // Data is encoded using the OPUS audio codec and compressed using the OGG container format.
+    OGG_OPUS = 2;
+
+    // Data is encoded using MPEG-1/2 Layer III and compressed using the MP3 container format.
+    MP3 = 3;
+  }
+  // Type of audio container.
+  ContainerAudioType container_audio_type = 1;
+}
+
+// Audio format options.
+message AudioFormatOptions {
+  oneof AudioFormat {
+
+    // RAW audio without container.
+    RawAudio raw_audio = 1;
+
+    // Audio is wrapped in container.
+    ContainerAudio container_audio = 2;
+  }
+}
+
+// Type of restriction for the list of languages expected in the incoming audio.
+message LanguageRestrictionOptions {
+  enum LanguageRestrictionType {
+    LANGUAGE_RESTRICTION_TYPE_UNSPECIFIED = 0;
+    // The list of most possible languages in the incoming audio.
+    WHITELIST = 1;
+    // The list of languages that are likely not to be included in the incoming audio.
+    BLACKLIST = 2;
+  }
+  // Language restriction type.
+  // All of these restrictions are used by the model as guidelines, not as strict rules.
+  // The language is recognized for each sentence. If a sentence has phrases in different languages, all of them will be transcribed in the most probable language.
+  LanguageRestrictionType restriction_type = 1;
+  // The list of [language codes](/docs/speechkit/stt/models) to restrict recognition in the case of an auto model.
+  repeated string language_code = 2;
+}
+
+// Represents the expected structure of the model's response using a JSON Schema.
+message JsonSchema {
+  // The JSON Schema that the model's output must conform to.
+  google.protobuf.Struct schema = 1;
+}
+
+// Represents summarization entry for transcription. 
+message SummarizationProperty {
+  // Summarization instruction for model.
+  string instruction = 1;
+
+  // Specifies the format of the model's response.
+  oneof ResponseFormat {
+    // When set to true, the model will return a valid JSON object.
+    // Be sure to ask the model explicitly for JSON.
+    // Otherwise, it may produce excessive whitespace and run indefinitely until it reaches the token limit.
+    bool json_object = 2;
+    // Enforces a specific JSON structure for the model's response based on a provided schema.
+    JsonSchema json_schema = 3;
+  }
+}
+
+// Represents transcription summarization options. 
+message SummarizationOptions {
+  // The [ID of the model](/docs/foundation-models/concepts/yandexgpt/models) to be used for completion generation.
+  string model_uri = 1;
+
+  // A list of suimmarizations to perform with transcription.
+  repeated SummarizationProperty properties = 2;
+}
+
+// Represents summarization response entry for transcription. 
+message SummarizationPropertyResult {
+  // Summarization response text.
+  string response = 1;
+}
+
+message RecognitionModelOptions {
+  enum AudioProcessingType {
+    AUDIO_PROCESSING_TYPE_UNSPECIFIED = 0;
+    // Process audio in mode optimized for real-time recognition, i.e. send partials and final responses as soon as possible.
+    REAL_TIME = 1;
+    // Process audio after all data was received.
+    FULL_DATA = 2;
+  }
+  // Sets the recognition model for the cloud version of SpeechKit. 
+  // For `Recognizer.RecognizeStreaming`, possible values are `general`, `general:rc`, `general:deprecated`.
+  // For `AsyncRecognizer.RecognizeFile`, possible values are `general`, `general:rc`, `general:deprecated`, `deferred-general`, `deferred-general:rc`, and `deferred-general:deprecated`. 
+  // The model is ignored for SpeechKit Hybrid.
+  string model = 1;
+
+  // Specified input audio.
+  AudioFormatOptions audio_format = 2;
+
+  // Text normalization options.
+  TextNormalizationOptions text_normalization = 3;
+
+  // Possible languages in audio.
+  LanguageRestrictionOptions language_restriction = 4;
+
+  // For `Recognizer.RecognizeStreaming`, defines the audio data processing mode. Default is `REAL_TIME`.
+  // For `AsyncRecognizer.RecognizeFile`, this field is ignored.
+  AudioProcessingType audio_processing_type = 5;
+}
+
+message SpeakerLabelingOptions {
+  enum SpeakerLabeling {
+    SPEAKER_LABELING_UNSPECIFIED = 0;
+    // Enable speaker labeling.
+    SPEAKER_LABELING_ENABLED = 1;
+    // Disable speaker labeling. Default value.
+    SPEAKER_LABELING_DISABLED = 2;
+  }
+  // Specifies the execution of speaker labeling.
+  SpeakerLabeling speaker_labeling = 1;
+}
+
+message StreamingOptions {
+  // Configuration for speech recognition model.
+  RecognitionModelOptions recognition_model = 1;
+
+  // Configuration for an end of utterance detection model.
+  EouClassifierOptions eou_classifier = 2;
+
+  // Configuration for classifiers over speech recognition.
+  RecognitionClassifierOptions recognition_classifier = 3;
+
+  // Configuration for speech analysis over speech recognition.
+  SpeechAnalysisOptions speech_analysis = 4;
+
+  // Configuration for speaker labeling.
+  SpeakerLabelingOptions speaker_labeling = 5;
+
+  // Summarization options.
+  SummarizationOptions summarization = 6;
+}
+
+// Data chunk with audio.
+message AudioChunk {
+  // Bytes with audio data.
+  bytes data = 1;
+}
+
+// Data chunk with silence.
+message SilenceChunk {
+
+  // Duration of silence chunk in ms.
+  int64 duration_ms = 1;
+}
+
+// Force EOU.
+message Eou {
+}
+
+// Streaming audio request.
+// Events are control messages from user. First message should be session options. The next messages are audio data chunks or control messages.
+message StreamingRequest {
+  oneof Event {
+
+    // Session options. Should be the first message from user.
+    StreamingOptions session_options = 1;
+
+    // Chunk with audio data.
+    AudioChunk chunk = 2;
+
+    // Chunk with silence.
+    SilenceChunk silence_chunk = 3;
+
+    // Request to end current utterance. Works only with external EOU detector.
+    Eou eou = 4;
+  }
+}
+
+message RecognizeFileRequest {
+    oneof AudioSource {
+      // Bytes with data
+      bytes content = 1;
+      // S3 data URL
+      string uri = 2;
+    }
+  // Configuration for speech recognition model.
+  RecognitionModelOptions recognition_model = 3;
+
+  // Configuration for classifiers over speech recognition.
+  RecognitionClassifierOptions recognition_classifier = 4;
+
+  // Configuration for speech analysis over speech recognition.
+  SpeechAnalysisOptions speech_analysis = 5;
+
+  // Configuration for speaker labeling
+  SpeakerLabelingOptions speaker_labeling = 6;
+
+  // Summarization options
+  SummarizationOptions summarization = 7;
+}
+
+// Now response
+
+
+// Recognized word.
+message Word {
+
+  // Word text.
+  string text = 1;
+
+  // Estimation of word start time in ms.
+  int64 start_time_ms = 2;
+
+  // Estimation of word end time in ms.
+  int64 end_time_ms = 3;
+}
+
+// Estimation of language and its probability.
+message LanguageEstimation {
+
+  // Language tag in IETF BCP 47 format, consisting of ISO 639-1 language code and ISO 3166-1 country code (e.g., en-US, ru-RU).
+  string language_code = 1;
+
+  // Estimation of language probability.
+  double probability = 2;
+}
+
+// Recognition of specific time frame.
+message Alternative {
+
+  // Words in time frame.
+  repeated Word words = 1;
+
+  // Text in time frame.
+  string text = 2;
+
+  // Start of time frame.
+  int64 start_time_ms = 3;
+
+  // End of time frame.
+  int64 end_time_ms = 4;
+
+  // The hypothesis confidence. Currently is not used.
+  double confidence = 5;
+
+  // Distribution over possible languages.
+  repeated LanguageEstimation languages = 6;
+}
+
+// Update information for external End of Utterance.
+message EouUpdate {
+
+  // EOU estimated time.
+  int64 time_ms = 2;
+}
+
+// Update of hypothesis.
+message AlternativeUpdate {
+
+  // List of hypothesis for timeframes.
+  repeated Alternative alternatives = 1;
+
+  string channel_tag = 2 [deprecated = true];
+}
+
+// AudioCursors are state of ASR recognition stream.
+message AudioCursors {
+
+  // Amount of audio chunks server received. This cursor is moved after each audio chunk was received by server.
+  int64 received_data_ms = 1;
+
+  // Input stream reset data.
+  int64 reset_time_ms = 2;
+
+  // How much audio was processed. This time includes trimming silences as well. 
+  // This cursor is moved after server received enough data to update recognition results (includes silence as well).
+  int64 partial_time_ms = 3;
+
+  // Time of last final. This cursor is moved when server decides that recognition from start of audio until `final_time_ms` will not change anymore
+  // usually this event is followed by EOU detection. This behavior could change in future.
+  int64 final_time_ms = 4;
+
+  // This is index of last final server send. Incremented after each new final.
+  int64 final_index = 5;
+
+  // Estimated time of EOU. Cursor is updated after each new EOU is sent.
+  // For external classifier this equals to [received_data_ms] at the moment EOU event arrives.
+  // For internal classifier this is estimation of time. The time is not exact and has the same guarantees as word timings.
+  int64 eou_time_ms = 6;
+}
+
+enum CodeType {
+  CODE_TYPE_UNSPECIFIED = 0 [deprecated = true];
+  // All good.
+  WORKING = 1;
+  // For example, if speech is sent not in real-time or context is unknown and we've made fallback.
+  WARNING = 2;
+  // After session was closed.
+  CLOSED = 3;
+}
+
+// Refinement for final hypo. For example, text normalization is refinement.
+message FinalRefinement {
+
+  // Index of final for which server sends additional information.
+  int64 final_index = 1;
+
+  // Type of refinement.
+  oneof Type {
+
+    // Normalized text instead of raw one.
+    AlternativeUpdate normalized_text = 2;
+  }
+}
+
+// Status message.
+message StatusCode {
+
+  // Code type.
+  CodeType code_type = 1;
+
+  // Human readable message.
+  string message = 2;
+}
+
+// Session identifier.
+message SessionUuid {
+
+  // Internal session identifier.
+  string uuid = 1;
+
+  // User session identifier.
+  string user_request_id = 2;
+}
+
+message PhraseHighlight {
+  // Text transcription of the highlighted audio segment.
+  string text = 1;
+
+  // Start time of the highlighted audio segment.
+  int64 start_time_ms = 2;
+
+  // End time of the highlighted audio segment.
+  int64 end_time_ms = 3;
+}
+
+message RecognitionClassifierLabel {
+  // The label of the class predicted by the classifier.
+  string label = 1;
+
+  // The prediction confidence.
+  double confidence = 2;
+}
+
+message RecognitionClassifierResult {
+  // Name of the triggered classifier.
+  string classifier = 1;
+
+  // List of highlights, i.e. parts of phrase that determine the result of the classification.
+  repeated PhraseHighlight highlights = 2;
+
+  // Classifier predictions.
+  repeated RecognitionClassifierLabel labels = 3;
+}
+
+message RecognitionClassifierUpdate {
+  enum WindowType {
+    WINDOW_TYPE_UNSPECIFIED = 0 [deprecated = true];
+    // The result of applying the classifier to the last utterance response.
+    LAST_UTTERANCE = 1;
+    // The result of applying the classifier to the last final response.
+    LAST_FINAL = 2;
+    // The result of applying the classifier to the last partial response.
+    LAST_PARTIAL = 3;
+  }
+
+  // Response window type.
+  WindowType window_type = 1;
+
+  // Start time of the audio segment used for classification.
+  int64 start_time_ms = 2;
+
+  // End time of the audio segment used for classification.
+  int64 end_time_ms = 3;
+
+  // Result for dictionary-based classifier.
+  RecognitionClassifierResult classifier_result = 4;
+}
+
+message DescriptiveStatistics {
+  message Quantile {
+    // Quantile level in range (0, 1).
+    double level = 1;
+
+    // Quantile value.
+    double value = 2;
+  }
+
+  // Minimum observed value.
+  double min = 1;
+
+  // Maximum observed value.
+  double max = 2;
+
+  // Estimated mean of distribution.
+  double mean = 3;
+
+  // Estimated standard deviation of distribution.
+  double std = 4;
+
+  // List of evaluated quantiles.
+  repeated Quantile quantiles = 5;
+}
+
+message AudioSegmentBoundaries {
+  // Audio segment start time.
+  int64 start_time_ms = 1;
+
+  // Audio segment end time.
+  int64 end_time_ms = 2;
+}
+
+message SpeakerAnalysis {
+  enum WindowType {
+    WINDOW_TYPE_UNSPECIFIED = 0 [deprecated = true];
+    // Stats for all received audio.
+    TOTAL = 1;
+    // Stats for last utterance.
+    LAST_UTTERANCE = 2;
+  }
+
+  // Speaker tag.
+  string speaker_tag = 1;
+
+  // Response window type.
+  WindowType window_type = 2;
+
+  // Audio segment boundaries.
+  AudioSegmentBoundaries speech_boundaries = 3;
+
+  // Total speech duration.
+  int64 total_speech_ms = 4;
+
+  // Speech ratio within audio segment.
+  double speech_ratio = 5;
+
+  // Total duration of silence.
+  int64 total_silence_ms = 6;
+
+  // Silence ratio within audio segment.
+  double silence_ratio = 7;
+
+  // Number of words in recognized speech.
+  int64 words_count = 8;
+
+  // Number of letters in recognized speech.
+  int64 letters_count = 9;
+
+  // Descriptive statistics for words per second distribution.
+  DescriptiveStatistics words_per_second = 10;
+
+  // Descriptive statistics for letters per second distribution.
+  DescriptiveStatistics letters_per_second = 11;
+
+  // Descriptive statistics for words per utterance distribution.
+  DescriptiveStatistics words_per_utterance = 12;
+
+  // Descriptive statistics for letters per utterance distribution.
+  DescriptiveStatistics letters_per_utterance = 13;
+
+  // Number of utterances
+  int64 utterance_count = 14;
+
+  // Descriptive statistics for utterance duration distribution
+  DescriptiveStatistics utterance_duration_estimation = 15;
+}
+
+message ConversationAnalysis {
+  message InterruptsEvaluation {
+    // Speaker tag.
+    string speaker_tag = 1;
+
+    // Number of interrupts made by the speaker.
+    int64 interrupts_count = 2;
+
+    // Total duration of all interrupts.
+    int64 interrupts_duration_ms = 3;
+
+    // Boundaries for every interrupt.
+    repeated AudioSegmentBoundaries interrupts = 4;
+  }
+
+  // Audio segment boundaries.
+  AudioSegmentBoundaries conversation_boundaries = 1;
+
+  // Total simultaneous silence duration.
+  int64 total_simultaneous_silence_duration_ms = 2;
+
+  // Simultaneous silence ratio within audio segment.
+  double total_simultaneous_silence_ratio = 3;
+
+  // Descriptive statistics for simultaneous silence duration distribution.
+  DescriptiveStatistics simultaneous_silence_duration_estimation = 4;
+
+  // Total simultaneous speech duration.
+  int64 total_simultaneous_speech_duration_ms = 5;
+
+  // Simultaneous speech ratio within audio segment.
+  double total_simultaneous_speech_ratio = 6;
+
+  // Descriptive statistics for simultaneous speech duration distribution.
+  DescriptiveStatistics simultaneous_speech_duration_estimation = 7;
+
+  // Interrupts description for every speaker.
+  repeated InterruptsEvaluation speaker_interrupts = 8;
+
+  // Total speech duration, including both simultaneous and separate speech.
+  int64 total_speech_duration_ms = 9;
+
+  // Total speech ratio within audio segment.
+  double total_speech_ratio = 10;
+}
+
+// An object representing the number of content [tokens](/docs/foundation-models/concepts/yandexgpt/tokens) used by the completion model.
+message ContentUsage {
+  // The number of tokens in the textual part of the model input.
+  int64 input_text_tokens = 1;
+
+  // The number of tokens in the generated completion.
+  int64 completion_tokens = 2;
+
+  // The total number of tokens, including all input tokens and all generated tokens.
+  int64 total_tokens = 3;
+}
+
+message Summarization {
+  // A list of summarizations of transcription.
+  repeated SummarizationPropertyResult results = 1;
+
+  // A set of statistics describing the number of content tokens used by the completion model.
+  ContentUsage content_usage = 2;
+}
+
+// Responses from server.
+// Each response contains session UUID, AudioCursors, and specific event.
+message StreamingResponse {
+
+  // Session identifier.
+  SessionUuid session_uuid = 1;
+
+  // Progress bar for stream session recognition: how many data we obtained; final and partial times; etc.
+  AudioCursors audio_cursors = 2;
+
+  // Wall clock on server side. This is time when server wrote results to stream.
+  int64 response_wall_time_ms = 3;
+
+  oneof Event {
+
+    // Partial results, server will send them regularly after enough audio data was received from user. 
+    // This is the current text estimation from `final_time_ms` to `partial_time_ms`. Could change after new data will arrive.
+    AlternativeUpdate partial = 4;
+
+    // Final results, the recognition is now fixed until `final_time_ms`. For now, final is sent only if the EOU event was triggered. This behavior could be changed in future releases.
+    AlternativeUpdate final = 5;
+
+    // After EOU classifier, send the message with final, send the EouUpdate with time of EOU
+    // before eou_update we send final with the same time. there could be several finals before eou update.
+    EouUpdate eou_update = 6;
+
+    // For each final, if normalization is enabled, sent the normalized text (or some other advanced post-processing).
+    // Final normalization will introduce additional latency.
+    FinalRefinement final_refinement = 7;
+
+    // Status messages, send by server with fixed interval (keep-alive).
+    StatusCode status_code = 8;
+
+    // Result of the triggered classifier.
+    RecognitionClassifierUpdate classifier_update = 10;
+
+    // Speech statistics for every speaker.
+    SpeakerAnalysis speaker_analysis = 11;
+
+    // Conversation statistics.
+    ConversationAnalysis conversation_analysis = 12;
+
+    // Summary.
+    Summarization summarization = 13;
+  }
+
+  // Tag for distinguish audio channels.
+  string channel_tag = 9;
+}
+
+message DeleteRecognitionRequest {
+  string operation_id = 1;
+}
+
+message StreamingResponseList {
+  repeated StreamingResponse streaming_responses = 1;
+}

@@ -1,0 +1,6 @@
+requirements:
+  - python-mimeparse
+exclude:
+  - falcon/bench/*
+  - falcon/cmd/bench.py
+  - falcon/vendor/*

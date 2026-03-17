@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package yandex.cloud.mdb.opensearch.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/mdb/opensearch/v1;opensearch";
+option java_package = "yandex.cloud.api.mdb.opensearch.v1";
+
+message Backup {
+  // Required. ID of the backup.
+  string id = 1;
+
+  // ID of the folder that the backup belongs to.
+  string folder_id = 2;
+
+  // ID of the OpenSearch cluster that the backup was created for.
+  string source_cluster_id = 3;
+
+  // Time when the backup operation was started.
+  google.protobuf.Timestamp started_at = 4;
+
+  // Time when the backup operation was completed.
+  google.protobuf.Timestamp created_at = 5;
+
+  // Names of indices in the backup.
+  repeated string indices = 6  [(size) = "<=100"];
+
+  // OpenSearch version used to create the backup.
+  string opensearch_version = 7;
+
+  // Size of the backup in bytes.
+  int64 size_bytes = 8;
+
+  // The number of indices in the backup.
+  int64 indices_total = 9;
+
+  // Size of files which were copied as part of the incremental snapshot.
+  int64 incremental_size_bytes = 10;
+
+  // Size of files that are referenced by the snapshot.
+  int64 total_size_bytes = 11;
+
+  // The space amount required to restore from this backup.
+  int64 free_space_required_bytes = 12;
+}
+
+// Snapshot management configuration
+message SnapshotManagement {
+    // Snapshot creation schedule
+    SnapshotSchedule snapshot_schedule = 1;
+
+    // Snapshot max age in days
+    google.protobuf.Int64Value snapshot_max_age_days = 2 [(value) = ">=7"];
+  }
+
+  // Snapshot creation schedule
+  message SnapshotSchedule {
+    oneof schedule {
+      option (exactly_one) = true;
+      // Hourly based snapshot schedule
+      HourlySnapshotSchedule hourly_snapshot_schedule = 1;
+      // Daily based snapshot schedule
+      DailySnapshotSchedule daily_snapshot_schedule = 2;
+      // Weekly based snapshot schedule
+      WeeklySnapshotSchedule weekly_snapshot_schedule = 3;
+    }
+  }
+
+  // Hourly based snapshot schedule
+  message HourlySnapshotSchedule {
+    // The minute of the hour at which the backup should be created.
+    int64 minute = 1 [(value) = "0-59"];
+  }
+
+  // Daily based snapshot schedule
+  message DailySnapshotSchedule {
+    // The hour of the day in UTC timezone at which the backup should be created.
+    int64 hour = 1 [(value) = "0-23"];
+
+    // The minute of the hour at which the backup should be created.
+    int64 minute = 2 [(value) = "0-59"];
+  }
+
+  // Weekly based snapshot schedule
+  message WeeklySnapshotSchedule {
+    // Day of the week
+    enum WeekDay {
+      WEEK_DAY_UNSPECIFIED = 0;
+      MON = 1;
+      TUE = 2;
+      WED = 3;
+      THU = 4;
+      FRI = 5;
+      SAT = 6;
+      SUN = 7;
+    }
+    // Day of the week
+    WeekDay day = 1;
+
+    // The hour of the day in UTC timezone at which the backup should be created.
+    int64 hour = 2 [(value) = "0-23"];
+
+    // The minute of the hour at which the backup should be created.
+    int64 minute = 3 [(value) = "0-59"];
+  }

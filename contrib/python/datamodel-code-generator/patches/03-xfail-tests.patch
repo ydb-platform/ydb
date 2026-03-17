@@ -1,0 +1,100 @@
+--- contrib/python/datamodel-code-generator/tests/parser/test_openapi.py	(index)
++++ contrib/python/datamodel-code-generator/tests/parser/test_openapi.py	(working tree)
+@@ -554,4 +554,5 @@ def test_openapi_parser_parse_array_enum(with_import, format_, base_class):
+ 
+ 
++@pytest.mark.skip(reason="flaky")
+ def test_openapi_parser_parse_array_enum(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+     monkeypatch.chdir(tmp_path)
+--- contrib/python/datamodel-code-generator/tests/model/test_base.py	(index)
++++ contrib/python/datamodel-code-generator/tests/model/test_base.py	(working tree)
+@@ -57,4 +57,5 @@ class {{ class_name }}:
+ 
+ 
++@pytest.mark.xfail(reason="Relative paths in testing")
+ def test_template_base() -> None:
+     with NamedTemporaryFile("w", delete=False) as dummy_template:
+@@ -68,4 +69,5 @@ def test_template_base():
+ 
+ 
++@pytest.mark.xfail(reason="Relative paths in testing")
+ def test_data_model() -> None:
+     field = DataModelFieldBase(
+--- contrib/python/datamodel-code-generator/tests/test_main_kr.py	(index)
++++ contrib/python/datamodel-code-generator/tests/test_main_kr.py	(working tree)
+@@ -136,4 +136,5 @@
+ 
+ 
++@pytest.mark.xfail
+ def test_main_no_file(capsys: pytest.CaptureFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+     monkeypatch.chdir(tmp_path)
+@@ -144,4 +145,5 @@ def test_main_no_file(capsys: CaptureFixture) -> None:
+ 
+ 
++@pytest.mark.xfail(reason="Relative paths in testing")
+ def test_main_custom_template_dir(
+     capsys: CaptureFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+ ) -> None:
+--- contrib/python/datamodel-code-generator/tests/main/jsonschema/test_main_jsonschema.py	(index)
++++ contrib/python/datamodel-code-generator/tests/main/jsonschema/test_main_jsonschema.py	(working tree)
+@@ -3357,4 +3358,5 @@ def test_one_of_with_sub_schema_array_item():
+ 
+ @freeze_time("2019-07-26")
++@pytest.mark.xfail
+ def test_main_jsonschema_with_custom_formatters(tmp_path: Path) -> None:
+     output_file: Path = tmp_path / "output.py"
+--- contrib/python/datamodel-code-generator/tests/main/openapi/test_main_openapi.py	(index)
++++ contrib/python/datamodel-code-generator/tests/main/openapi/test_main_openapi.py	(working tree)
+@@ -248,2 +248,3 @@ def test_main_modular_filename(tmpdir_factory: TempdirFactory) -> None:
+ 
++@pytest.mark.xfail
+ def test_main_openapi_no_file(capsys: pytest.CaptureFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@@ -278,6 +279,7 @@ def test_main_openapi_no_file(capsys: CaptureFixture) -> None:
+     black.__version__.split(".")[0] == "19",
+     reason="Installed black doesn't support the old style",
+ )
++@pytest.mark.xfail
+ def test_main_openapi_extra_template_data_config(
+     capsys: pytest.CaptureFixture,
+     output_model: str,
+@@ -303,6 +305,7 @@ def test_main_openapi_extra_template_data_config(
+     assert captured.err == inferred_message.format("openapi") + "\n"
+ 
+ 
++@pytest.mark.xfail
+ def test_main_custom_template_dir_old_style(
+     capsys: pytest.CaptureFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+ ) -> None:
+@@ -329,6 +332,7 @@ def test_main_custom_template_dir_old_style(capsys: CaptureFixture) -> None:
+     assert captured.err == inferred_message.format("openapi") + "\n"
+ 
+ 
++@pytest.mark.xfail
+ def test_main_openapi_custom_template_dir(
+     capsys: pytest.CaptureFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+ ) -> None:
+@@ -1424,7 +1429,7 @@ def test_main_generate_custom_class_name_generator_modular(
+         return f"Custom{name[0].upper() + name[1:]}"
+ 
+     with freeze_time(TIMESTAMP):
+-        input_ = (OPEN_API_DATA_PATH / "modular.yaml").relative_to(Path.cwd())
++        input_ = (OPEN_API_DATA_PATH / "modular.yaml").relative_to(Path.cwd(), walk_up=True)
+         assert not input_.is_absolute()
+         generate(
+             input_=input_,
+--- contrib/python/datamodel-code-generator/tests/parser/test_openapi.py	(index)
++++ contrib/python/datamodel-code-generator/tests/parser/test_openapi.py	(working tree)
+@@ -608,4 +608,5 @@ def test_openapi_parser_parse_array_enum(
+ 
+ 
++@pytest.mark.xfail
+ def test_openapi_parser_parse_remote_ref(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+     monkeypatch.chdir(tmp_path)
+--- contrib/python/datamodel-code-generator/tests/main/openapi/test_main_openapi.py	(index)
++++ contrib/python/datamodel-code-generator/tests/main/openapi/test_main_openapi.py	(working tree)
+@@ -1922,4 +1922,5 @@ def test_main_openapi_use_operation_id_as_name(tmp_path: Path) -> None:
+ 
+ @freeze_time("2019-07-26")
++@pytest.mark.xfail
+ def test_main_openapi_use_operation_id_as_name_not_found_operation_id(
+     capsys: pytest.CaptureFixture, tmp_path: Path

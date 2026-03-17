@@ -1,0 +1,56 @@
+--- contrib/python/billiard/py3/billiard/compat.py	(index)
++++ contrib/python/billiard/py3/billiard/compat.py	(working tree)
+@@ -216,12 +216,22 @@ except ImportError:
+             os.execv(fsencode(path), args)
+         return pid
+ else:
++    def _env_list():
++        # Based on fork_exec in subprocess.py.
++        env = os.environ.copy()
++        env['Y_PYTHON_ENTRY_POINT'] = ':main'
++        env_list = []
++        for k, v in env.items():
++            if '=' not in k:
++                env_list.append(fsencode(k) + b'=' + fsencode(v))
++        return env_list
++
+     def spawnv_passfds(path, args, passfds):
+         passfds = sorted(passfds)
+         errpipe_read, errpipe_write = os.pipe()
+         try:
+             args = [
+-                args, [fsencode(path)], True, tuple(passfds), None, None,
++                args, [fsencode(path)], True, tuple(passfds), None, _env_list(),
+                 -1, -1, -1, -1, -1, -1, errpipe_read, errpipe_write,
+                 False, False]
+             if sys.version_info >= (3, 9):
+--- contrib/python/billiard/py3/billiard/popen_spawn_win32.py	(index)
++++ contrib/python/billiard/py3/billiard/popen_spawn_win32.py	(working tree)
+@@ -58,13 +58,15 @@ class Popen(object):
+         cmd = spawn.get_command_line(parent_pid=os.getpid(),
+                                      pipe_handle=rhandle)
+         cmd = ' '.join('"%s"' % x for x in cmd)
++        env = os.environ.copy()
++        env['Y_PYTHON_ENTRY_POINT'] = ':main'
+ 
+         with io.open(wfd, 'wb', closefd=True) as to_child:
+             # start process
+             try:
+                 hp, ht, pid, tid = CreateProcess(
+                     spawn.get_executable(), cmd,
+-                    None, None, False, 0, None, None, None)
++                    None, None, False, 0, env, None, None)
+                 close_thread_handle(ht)
+             except:
+                 _winapi.CloseHandle(rhandle)
+--- contrib/python/billiard/py3/billiard/spawn.py	(index)
++++ contrib/python/billiard/py3/billiard/spawn.py	(working tree)
+@@ -138,7 +138,7 @@ def get_command_line(**kwds):
+     '''
+     Returns prefix of command line used for spawning a child process
+     '''
+-    if getattr(sys, 'frozen', False):
++    if False and getattr(sys, 'frozen', False):
+         return ([sys.executable, '--billiard-fork'] +
+                 ['%s=%r' % item for item in kwds.items()])
+     else:

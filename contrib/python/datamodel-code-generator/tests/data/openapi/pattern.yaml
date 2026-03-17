@@ -1,0 +1,25 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Swagger Petstore
+  license:
+    name: MIT
+servers:
+  - url: http://petstore.swagger.io/v1
+components:
+  schemas:
+    info:
+      type: object
+      properties:
+        hostName:
+          type: string
+          format: hostname
+        arn:
+          type: string
+          pattern: '(^arn:([^:]*):([^:]*):([^:]*):(|\*|[\d]{12}):(.+)$)|^\*$'
+        tel:
+          type: string
+          pattern: '^(\([0-9]{3}\))?[0-9]{3}-[0-9]{4}$'
+        comment:
+          type: string
+          pattern: '[^\b\f\n\r\t\\a+.?''"|()]+$'

@@ -1,0 +1,131 @@
+<!-- 
+
+     File mmlextra.ent produced by the dsssl script ent.dsl
+     from input data in unicode.xml.
+
+     Please report any errors to 
+     David Carlisle <davidc@nag.co.uk>.
+
+     The numeric character values assigned to each entity
+     (should) match either official Unicode assignments
+     or assignments in the STIX proposal for characters
+     for Mathematics.
+
+     The STIX assignments are temporary and will change if
+     the proposal or some variant of it is adopted by the
+     Unicode Consortium.
+
+     Entity names in this file are derived from files carrying the
+     following notice:
+
+-->
+
+<!ENTITY af         "&#59552;" ><!--UE8A0 short form of &ApplyFunction; -->
+<!ENTITY ApplyFunction "&#59552;" ><!--UE8A0 character showing function application in presentation tagging -->
+<!ENTITY Assign     "&#59483;" ><!--UE85B assignment operator -->
+<!ENTITY BadBreak   "&#59540;" ><!--UE894 if a linebreak is needed, try to avoid breaking here -->
+<!ENTITY CapitalDifferentialD "&#63307;" ><!--UF74B D for use in differentials, e.g., within integrals -->
+<!ENTITY Cross      "&#58905;" ><!--UE619 cross or vector product -->
+<!ENTITY dd         "&#63308;" ><!--UF74C short form of &DifferentialD; -->
+<!ENTITY DD         "&#63307;" ><!--UF74B short form of CapitalDifferentialD -->
+<!ENTITY DifferentialD "&#63308;" ><!--UF74C d for use in differentials, e.g., within integrals -->
+<!ENTITY DownArrowBar "&#62724;" ><!--UF504 down arrow to bar -->
+<!ENTITY DownBreve  "&#785;"   ><!--U0311 breve, inverted (non-spacing) -->
+<!ENTITY DownLeftRightVector "&#62731;" ><!--UF50B left-down-right-down harpoon -->
+<!ENTITY DownLeftTeeVector "&#62734;" ><!--UF50E left-down harpoon from bar -->
+<!ENTITY DownLeftVectorBar "&#62732;" ><!--UF50C left-down harpoon to bar -->
+<!ENTITY DownRightTeeVector "&#62735;" ><!--UF50F right-down harpoon from bar -->
+<!ENTITY DownRightVectorBar "&#62733;" ><!--UF50D right-down harpoon to bar -->
+<!ENTITY DownTeeArrow "&#8615;"  ><!--U21A7 alias for mapstodown -->
+<!ENTITY ee         "&#63309;" ><!--UF74D short form of &ExponentialE; -->
+<!ENTITY EmptySmallSquare "&#62759;" ><!--UF527 empty small square -->
+<!ENTITY EmptyVerySmallSquare "&#62768;" ><!--UF530 empty small square -->
+<!ENTITY Equal      "&#62513;" ><!--UF431 two consecutive equal signs -->
+<!ENTITY ExponentialE "&#63309;" ><!--UF74D e use for the exponential base of the natural logarithms -->
+<!ENTITY false      "&#59559;" ><!--UE8A7 logical constant false -->
+<!ENTITY FilledSmallSquare "&#62760;" ><!--UF528 filled small square -->
+<!ENTITY FilledVerySmallSquare "&#62761;" ><!--UF529 filled very small square -->
+<!ENTITY GoodBreak  "&#59539;" ><!--UE893 if a linebreak is needed, here is a good spot -->
+<!ENTITY GreaterGreater "&#58103;" ><!--UE2F7 alias for GT -->
+<!ENTITY HorizontalLine "&#59481;" ><!--UE859 short horizontal line  -->
+<!ENTITY ic         "&#59548;" ><!--UE89C short form of  &InvisibleComma; -->
+<!ENTITY ii         "&#63310;" ><!--UF74E short form of &ImaginaryI; -->
+<!ENTITY it         "&#59550;" ><!--UE89E short form of &InvisibleTimes; -->
+<!ENTITY ImaginaryI "&#63310;" ><!--UF74E i for use as a square root of -1 -->
+<!ENTITY IndentingNewLine "&#59537;" ><!--UE891 force a line break and indent appropriately on next line -->
+<!ENTITY InvisibleComma "&#59548;" ><!--UE89C used as a separator, e.g., in indices -->
+<!ENTITY InvisibleTimes "&#59550;" ><!--UE89E marks multiplication when it is understood without a mark -->
+<!ENTITY larrb      "&#8676;"  ><!--U21E4 leftwards arrow to bar -->
+<!ENTITY LeftArrowBar "&#8676;"  ><!--U21E4 alias for larrb -->
+<!ENTITY LeftBracketingBar "&#62979;" ><!--UF603 left vertical delimiter -->
+<!ENTITY LeftDoubleBracketingBar "&#62981;" ><!--UF605 left double vertical delimiter -->
+<!ENTITY LeftDownTeeVector "&#62745;" ><!--UF519 down-left harpoon from bar -->
+<!ENTITY LeftDownVectorBar "&#62743;" ><!--UF517 down-left harpoon to bar -->
+<!ENTITY LeftRightVector  "&#62725;" ><!--UF505 left-up-right-up harpoon -->
+<!ENTITY LeftSkeleton "&#59472;" ><!--UE850 start of missing information -->
+<!ENTITY LeftTeeArrow "&#8612;"  ><!--U21A4 alias for mapstoleft -->
+<!ENTITY LeftTeeVector "&#62729;" ><!--UF509 left-up harpoon from bar -->
+<!ENTITY LeftTriangleBar "&#62480;" ><!--UF410 not left triangle, vertical bar -->
+<!ENTITY LeftUpDownVector "&#62741;" ><!--UF515 up-left-down-left harpoon -->
+<!ENTITY LeftUpTeeVector "&#62744;" ><!--UF518 up-left harpoon from bar -->
+<!ENTITY LeftUpVectorBar "&#62742;" ><!--UF516 up-left harpoon to bar -->
+<!ENTITY LeftVectorBar  "&#62727;" ><!--UF507 left-up harpoon to bar -->
+<!ENTITY LessLess   "&#58107;" ><!--UE2FB alias for Lt -->
+<!ENTITY mapstodown "&#8615;"  ><!--U21A7 downwards arrow from bar -->
+<!ENTITY mapstoleft "&#8612;"  ><!--U21A4 leftwards arrow from bar -->
+<!ENTITY mapstoup   "&#8613;"  ><!--U21A5 upwards arrow from bar -->
+<!ENTITY nbump      "&#58902;" ><!--UE616 not bumpy equals -->
+<!ENTITY nbumpe     "&#59469;" ><!--UE84D not bumpy single equals -->
+<!ENTITY nesim      "&#59470;" ><!--UE84E not equal or similar -->
+<!ENTITY NegativeMediumSpace "&#59546;" ><!--UE89A space of width -4/18 em -->
+<!ENTITY NegativeThickSpace "&#59547;" ><!--UE89B space of width -5/18 em -->
+<!ENTITY NegativeThinSpace "&#59545;" ><!--UE899 space of width -3/18 em -->
+<!ENTITY NegativeVeryThinSpace "&#59544;" ><!--UE898 space of width -1/18 em -->
+<!ENTITY NewLine    "&#10;"    ><!--U000A force a line break; line feed -->
+<!ENTITY NoBreak    "&#59538;" ><!--UE892 never break line here -->
+<!ENTITY NotANumber "&#59562;" ><!--UE8AA  used in MML 4.3.2.9 -->
+<!ENTITY NotCupCap  "&#8813;"  ><!--U226D alias for &nasymp; -->
+<!ENTITY NotEqualTilde "&#59470;" ><!--UE84E alias for  &nesim; -->
+<!ENTITY NotHumpDownHump "&#58902;" ><!--UE616 alias for &nbump; -->
+<!ENTITY NotHumpEqual "&#59469;" ><!--UE84D alias for &nbumpe; -->
+<!ENTITY NotLeftTriangleBar "&#62482;" ><!--UF412 not left triangle, vertical bar -->
+<!ENTITY NotNestedGreaterGreater "&#62504;" ><!--UF428 not double greater-than sign -->
+<!ENTITY NotNestedLessLess "&#62499;" ><!--UF423 not double less-than sign -->
+<!ENTITY NotRightTriangleBar "&#62483;" ><!--UF413 not vertical bar, right triangle -->
+<!ENTITY NotSquareSubset "&#58884;" ><!--UE604 square not subset -->
+<!ENTITY NotSquareSuperset "&#58901;" ><!--UE615 negated set-like partial order operator -->
+<!ENTITY NotSucceedsTilde "&#59447;" ><!--UE837 not succeeds or similar -->
+<!ENTITY OverBar    "&#175;"   ><!--U00AF over bar -->
+<!ENTITY OverBrace  "&#62994;" ><!--UF612 over brace  -->
+<!ENTITY OverBracket "&#62996;" ><!--UF614 over bracket -->
+<!ENTITY OverParenthesis "&#62992;" ><!--UF610 over parenthesis -->
+<!ENTITY Product    "&#8719;"  ><!--U220F alias for &prod -->
+<!ENTITY rarrb      "&#8677;"  ><!--U21E5 leftwards arrow to bar -->
+<!ENTITY RightArrowBar "&#8677;"  ><!--U21E5 alias for rarrb -->
+<!ENTITY RightBracketingBar "&#62980;" ><!--UF604 right vertical delimiter -->
+<!ENTITY RightDoubleBracketingBar "&#62982;" ><!--UF606 right double vertical delimiter -->
+<!ENTITY RightDownTeeVector "&#62740;" ><!--UF514 down-right harpoon from bar -->
+<!ENTITY RightDownVectorBar "&#62738;" ><!--UF512 down-right harpoon to bar -->
+<!ENTITY RightSkeleton "&#59473;" ><!--UE851 end of missing information -->
+<!ENTITY RightTeeVector "&#62730;" ><!--UF50A right-up harpoon from bar -->
+<!ENTITY RightTriangleBar "&#62481;" ><!--UF411 vertical bar, right triangle -->
+<!ENTITY RightUpDownVector "&#62736;" ><!--UF510 up-right-down-right harpoon -->
+<!ENTITY RightUpTeeVector "&#62739;" ><!--UF513 up-right harpoon from bar -->
+<!ENTITY RightUpVectorBar "&#62737;" ><!--UF511 up-right harpoon to bar -->
+<!ENTITY RightVectorBar "&#62728;" ><!--UF508 up-right harpoon to bar -->
+<!ENTITY RoundImplies "&#62756;" ><!--UF524 round implies -->
+<!ENTITY RuleDelayed "&#62751;" ><!--UF51F rule-delayed (colon right arrow) -->
+<!ENTITY ShortDownArrow "&#59519;" ><!--UE87F short down arrow -->
+<!ENTITY ShortUpArrow "&#59520;" ><!--UE880 sort up arrow  -->
+<!ENTITY true       "&#59563;" ><!--UE8AB logical constant true -->
+<!ENTITY Tab        "&#9;"     ><!--U0009 tabulator stop; horizontal tabulation -->
+<!ENTITY ThickSpace "&#59543;" ><!--UE897 space of width 5/18 em -->
+<!ENTITY UnderBar   "&#818;"   ><!--U0332 combining low line -->
+<!ENTITY UnderBrace "&#62995;" ><!--UF613 under brace  -->
+<!ENTITY UnderBracket "&#62997;" ><!--UF615 under bracket -->
+<!ENTITY UnderParenthesis "&#62993;" ><!--UF611 under parenthesis -->
+<!ENTITY UpArrowBar "&#62723;" ><!--UF503 up arrow to bar -->
+<!ENTITY UpTeeArrow "&#8613;"  ><!--U21A5 Alias mapstoup -->
+<!ENTITY VerticalLine "&#59482;" ><!--UE85A short vertical line  -->
+<!ENTITY VerticalSeparator "&#59484;" ><!--UE85C vertical separating operator -->
+<!ENTITY ZeroWidthSpace "&#8203;"  ><!--U200B zero width space -->

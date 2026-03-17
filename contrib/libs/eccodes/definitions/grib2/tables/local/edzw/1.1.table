@@ -1,0 +1,5 @@
+# Code table 1.1 - GRIB local tables version number
+0 0 Local tables not used. Only table entries and templates from the current master table are valid
+# 1-254 Number of local tables version used
+1 1 DWD local entries from the current Master table are used
+255 255 Missing

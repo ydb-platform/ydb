@@ -1,0 +1,44 @@
+* item 1
+*   * item 2-1
+    * item 2-2
+    * item 2-3
+    * item 2-4
+* item 3
+*   * item 4-1
+
+    * item 4-2
+
+    * item 4-3
+
+    * item 4-4
+
+## same as above, different spacing
+* item 1
+* * item 2-1
+    * item 2-2
+* item 3
+* * item 4-1
+
+     * item 4-2
+
+## only 1 item in nested list ## 
+* item 1
+* * item 2-1
+* item 3
+* * item 4-1
+
+## Something ludicrous ## 
+* item 1
+* * item 2-1
+    * item 2-2
+    * * item 2-2-1
+        * item 2-2-2
+    * item 2-3
+* item 3
+* * item 4-1
+
+    * * item 4-1-1
+        * item 4-1-2
+
+    * item 4-2
+

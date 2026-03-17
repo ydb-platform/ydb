@@ -1,0 +1,36 @@
+{
+  "title": "Test",
+  "type": "object",
+  "required": [
+    "foo"
+  ],
+  "properties": {
+    "foo": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": true
+    },
+    "bar": {
+      "type": "object",
+      "properties": {
+        "y": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "baz": {
+      "type": "object",
+      "properties": {
+        "z": {
+          "type": "integer"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,44 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 5.2, Grid point data - complex packing
+
+include "grib2/templates/template.5.packing.def"
+include "grib2/templates/template.5.original_values.def"
+
+# Group splitting method used
+codetable[1] groupSplittingMethodUsed ('5.4.table',masterDir,localDir);
+
+# Missing value management used
+codetable[1] missingValueManagementUsed ('5.5.table',masterDir,localDir);
+
+# Primary missing value substitute
+unsigned[4] primaryMissingValueSubstitute ;
+
+# Secondary missing value substitute
+unsigned[4] secondaryMissingValueSubstitute ;
+
+# NG - Number of groups of data values into which field is split
+unsigned[4] numberOfGroupsOfDataValues ;
+
+alias NG = numberOfGroupsOfDataValues;
+# Reference for group widths
+unsigned[1] referenceForGroupWidths ;
+
+# Number of bits used for the group widths
+# (after the reference value in octet 36 has been removed)
+unsigned[1] numberOfBitsUsedForTheGroupWidths ;
+
+# Reference for group lengths
+unsigned[4] referenceForGroupLengths ;
+
+# Length increment for the group lengths
+unsigned[1] lengthIncrementForTheGroupLengths ;
+
+# True length of last group
+unsigned[4] trueLengthOfLastGroup ;
+
+# Number of bits used for the scaled group lengths
+# (after subtraction of the reference value given in octets 38-41 and division
+# by the length increment given in octet 42)
+unsigned[1] numberOfBitsForScaledGroupLengths ;
+alias numberOfBitsUsedForTheScaledGroupLengths=numberOfBitsForScaledGroupLengths;

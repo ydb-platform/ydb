@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1.analysis;
+
+option java_package = "yandex.cloud.api.speechsense.v1.analysis";
+option java_outer_classname = "AssistantsProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1/analysis;speechsense";
+
+message Assistants {
+  // List of assistants results
+  repeated AssistantResult assistant_results = 1;
+}
+
+message AssistantResult {
+  // Assistant id
+  string assistant_id = 1;
+
+  // Per-field assistant results
+  repeated AssistantFieldResult results = 2;
+}
+
+message AssistantFieldResult {
+  // Assistant result field id
+  string field_id = 1;
+
+  // Parsed model answer for the field.
+  // If the model answer could not be parsed, no result fields will be set.
+  oneof field_type {
+    // Result as a string
+    string string_result = 2;
+
+    // Result as an integer
+    int64 int_result = 3;
+
+    // Result as a floating-point number
+    double float_result = 4;
+  }
+}

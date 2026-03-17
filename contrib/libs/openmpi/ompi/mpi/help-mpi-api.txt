@@ -1,0 +1,33 @@
+# -*- text -*-
+#
+# Copyright (c) 2006      High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2006-2015 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2018 IBM Corporation. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for Open MPI.
+#
+[mpi-abort]
+MPI_ABORT was invoked on rank %d in communicator %s
+with errorcode %d.
+
+NOTE: invoking MPI_ABORT causes Open MPI to kill all MPI processes.
+You may or may not see output from other processes, depending on
+exactly when Open MPI kills them.
+#
+[MPI function not supported]
+Your application has invoked an MPI function that is not supported in
+this environment.
+
+  MPI function: %s
+  Reason:       %s
+[info-set-with-reserved-prefix]
+Comments
+MPI_Info_set warning, key is using a reserved prefix.
+  Key:             %s
+  Reserved prefix: %s

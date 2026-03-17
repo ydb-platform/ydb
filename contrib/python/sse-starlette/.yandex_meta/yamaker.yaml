@@ -1,0 +1,6 @@
+copy:
+  - tests/*
+exclude:
+  - examples/*
+  - scripts/*
+repo_url: https://github.com/sysid/sse-starlette

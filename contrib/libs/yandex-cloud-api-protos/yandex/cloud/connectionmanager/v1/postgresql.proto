@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package yandex.cloud.connectionmanager.v1;
+
+import "yandex/cloud/connectionmanager/v1/common.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/connectionmanager/v1;connectionmanager";
+option java_package = "yandex.cloud.api.connectionmanager.v1";
+
+message PostgreSQLAuth {
+    oneof security {
+        UserPasswordAuth user_password = 1;
+    }
+}
+message PostgreSQLCluster {
+    reserved 1, 2;
+    message Host {
+        enum Role {
+            ROLE_UNSPECIFIED = 0;
+            MASTER = 1;
+            REPLICA = 2;
+        }
+        enum ReplicaType {
+            REPLICA_TYPE_UNSPECIFIED = 0;
+            ASYNC = 1;
+            SYNC = 2;
+            QUORUM = 3;
+        }
+        enum Health {
+            HEALTH_UNSPECIFIED = 0;
+            ALIVE = 1;
+            DEAD = 2;
+            DEGRADED = 3;
+            READONLY = 4;
+        }
+
+        string host = 1;
+        int64 port = 2;
+        Role role = 3;
+        ReplicaType replica_type = 4;
+        Health health = 5;
+    }
+
+    repeated Host hosts = 4;
+    TLSParams tls_params = 3;
+}
+message PostgreSQLConnection {
+    reserved 3;
+    // When creating/updating Connection, the field "cluster" is mutually
+    // exclusive with "managed_cluster_id".
+    PostgreSQLCluster cluster = 1;
+    // When creating/updating Connection, the field "managed_cluster_id" is
+    // mutually exclusive with "cluster".
+    string managed_cluster_id = 2;
+    PostgreSQLAuth auth = 4;
+
+    repeated string databases = 5;
+}

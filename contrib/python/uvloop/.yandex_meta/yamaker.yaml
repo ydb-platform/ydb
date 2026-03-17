@@ -1,0 +1,29 @@
+requirements:
+  - contrib/libs/libuv
+exclude:
+  - vendor/*
+exclude_from_macros:
+  - uvloop/cbhandles.pyx
+  - uvloop/dns.pyx
+  - uvloop/errors.pyx
+  - uvloop/handles/async_.pyx
+  - uvloop/handles/basetransport.pyx
+  - uvloop/handles/check.pyx
+  - uvloop/handles/fsevent.pyx
+  - uvloop/handles/handle.pyx
+  - uvloop/handles/idle.pyx
+  - uvloop/handles/pipe.pyx
+  - uvloop/handles/poll.pyx
+  - uvloop/handles/process.pyx
+  - uvloop/handles/stream.pyx
+  - uvloop/handles/streamserver.pyx
+  - uvloop/handles/tcp.pyx
+  - uvloop/handles/timer.pyx
+  - uvloop/handles/udp.pyx
+  - uvloop/lru.pyx
+  - uvloop/pseudosock.pyx
+  - uvloop/request.pyx
+  - uvloop/server.pyx
+  - uvloop/sslproto.pyx
+mark_as_cython_c:
+  - uvloop/loop.pyx

@@ -1,0 +1,13 @@
+{
+    "type": [
+        "h-geo"
+    ], 
+    "properties": {
+        "latitude": [
+            "p-latitude"
+        ], 
+        "longitude": [
+            "p-longitude"
+        ]
+    }
+}

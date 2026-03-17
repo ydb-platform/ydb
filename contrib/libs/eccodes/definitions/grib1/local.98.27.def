@@ -1,0 +1,30 @@
+# (C) Copyright 2005- ECMWF.
+# Forecasting Systems with Variable Resolution (Obsolete)
+
+constant GRIBEXSection1Problem = 107 - section1Length;
+
+#1->2
+transient grib2LocalSectionNumber=30;
+
+template mars_labeling "grib1/mars_labeling.def";
+constant wrongPadding=1 : hidden;
+
+unsigned[1] perturbationNumber : dump;
+unsigned[1] numberOfForecastsInEnsemble : dump;
+alias totalNumber=numberOfForecastsInEnsemble;
+alias number = perturbationNumber;
+
+unsigned[1] oceanAtmosphereCoupling : dump;
+
+pad padding_loc27_1(3);
+
+unsigned[4] legBaseDate : dump;
+unsigned[2] legBaseTime : dump;
+unsigned[1] legNumber : dump;
+unsigned[4] referenceDate : dump;
+unsigned[4] climateDateFrom : dump;
+unsigned[4] climateDateTo : dump;
+
+alias mars._leg_number = legNumber;
+
+pad padding_loc27_2(33);

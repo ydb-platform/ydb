@@ -1,0 +1,8 @@
+---
+bar:
+  type: object
+  required:
+    - baz
+  properties:
+    baz:
+      $ref: 'recursive_files.yaml#/definitions/Pet'

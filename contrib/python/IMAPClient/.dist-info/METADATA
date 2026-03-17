@@ -1,0 +1,56 @@
+Metadata-Version: 2.4
+Name: IMAPClient
+Version: 3.1.0
+Summary: Easy-to-use, Pythonic and complete IMAP client library
+Home-page: https://github.com/mjs/imapclient/
+Author: Menno Finlay-Smits
+Author-email: hello@menno.io
+Maintainer: IMAPClient Maintainers
+Maintainer-email: imapclient@groups.io
+License: 3-Clause BSD License
+Keywords: imap client email mail
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Communications :: Email :: Post-Office :: IMAP
+Classifier: Topic :: Internet
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Networking
+Requires-Python: >=3.8.0
+License-File: COPYING
+License-File: AUTHORS.rst
+Provides-Extra: doc
+Requires-Dist: sphinx; extra == "doc"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: maintainer
+Dynamic: maintainer-email
+Dynamic: provides-extra
+Dynamic: requires-python
+Dynamic: summary
+
+IMAPClient is an easy-to-use, Pythonic and complete IMAP client library.
+
+Features:
+    * Arguments and return values are natural Python types.
+    * IMAP server responses are fully parsed and readily usable.
+    * IMAP unique message IDs (UIDs) are handled transparently.
+    * Internationalised mailbox names are transparently handled.
+    * Time zones are correctly handled.
+    * Convenience methods are provided for commonly used functionality.
+    * Exceptions are raised when errors occur.
+
+Python versions 3.8 through 3.13 are officially supported.
+
+IMAPClient includes comprehensive units tests and automated
+functional tests that can be run against a live IMAP server.

@@ -1,0 +1,146 @@
+{% extends "admin/base_site.html" %}
+{% load i18n grp_tags %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; Fieldsets{% endblock %}
+
+{% block extrahead %}
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(django.jQuery);
+    </script>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Fieldsets</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Fieldsets</h1>
+    <div class="g-d-c">
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Modules in Forms</h1>
+                    <p>A fieldset is basically a <a href="{% url 'grp_doc_modules' %}">module</a> within a form. Therefore, it's always a <span class="grp-doc-dom"><span>fieldset</span></span> with the class <span class="grp-doc-class">.grp-module</span> which may wrap all sorts of <a href="{% url 'grp_doc_form_fields' %}">form fields</a>. If the fieldset has a name, it starts with a heading. If the fieldset is collapsible, the heading is required.</p>
+                    <p>The grid-like structure within fieldsets is based on a <a href="{% url 'grp_doc_mueller_grid_system_layouts' %}">predefined layout based on the Mueller Grid System</a>. Within each <span class="grp-doc-class">.grp-row</span> there is a layout-container <span class="grp-doc-class">.l-2c-fluid.l-d-4</span> (or <span class="grp-doc-class">.grp-cell.l-2c-fluid.l-d-4</span> if you got cells) where <span class="grp-doc-class">.l-d-4</span> sets the width of the fixed column. The layout container wraps two columns: <span class="grp-doc-class">.c-1</span> has a fixed width and usually contains the label whereas <span class="grp-doc-class">.c-2</span> has a fluid width and contains the form fields.</p>
+                    <p>If you need a description for the module, just put a <span class="grp-doc-dom"><span>p.grp-description</span></span> in a <span class="grp-doc-class">.grp-row</span>.</p>
+                    <p><small>Note: Make sure to wrap the fieldset with spaceless-tags to avoid whitespaces.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code-source">
+                    {% spaceless %}
+                        <fieldset class="grp-module grp-collapse grp-open">
+                            <h2 class="grp-collapse-handler">Fieldset Name</h2>
+                            <div class="grp-row"><p class="grp-description">Some text describing the fieldset</p></div>
+                            <div class="grp-row">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label class="required">Label</label></div>
+                                    <div class="c-2">
+                                        <input type="text" value="" />
+                                        <p class="grp-help">Helptext</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="grp-row grp-cells">
+                                <div class="grp-cell l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2">
+                                        <input type="text" value="" />
+                                    </div>
+                                </div>
+                                <div class="grp-cell l-2c-fluid l-d-4">
+                                    <div class="c-1"><label>Label</label></div>
+                                    <div class="c-2">
+                                        <input type="text" value="" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="grp-row grp-errors">
+                                <div class="l-2c-fluid l-d-4">
+                                    <div class="c-1"><label class="required">Label</label></div>
+                                    <div class="c-2">
+                                        <input type="text" value="" />
+                                        <ul class="errorlist"><li>Errorlist</li></ul>
+                                        <p class="grp-help">Helptext</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </fieldset>
+                    {% endspaceless %}
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} spaceless {% templatetag closeblock %}
+    <fieldset class="grp-module grp-collapse grp-open">
+        <h2 class="grp-collapse-handler">Fieldset Name</h2>
+        <div class="grp-row"><p class="grp-description">Some text describing the fieldset</p></div>
+        <div class="grp-row">
+            <div class="l-2c-fluid l-d-4">
+                <div class="c-1"><label class="required">Label</label></div>
+                <div class="c-2">
+                    <input type="text" value="" />
+                    <p class="grp-help">Helptext</p>
+                </div>
+            </div>
+        </div>
+        <div class="grp-row grp-cells">
+            <div class="grp-cell l-2c-fluid l-d-4">
+            <div class="c-1"><label>Label</label></div>
+                <div class="c-2">
+                    <input type="text" value="" />
+                </div>
+            </div>
+            <div class="grp-cell l-2c-fluid l-d-4">
+                <div class="c-1"><label>Label</label></div>
+                <div class="c-2">
+                    <input type="text" value="" />
+                </div>
+            </div>
+        </div>
+        <div class="grp-row grp-errors">
+            <div class="l-2c-fluid l-d-4">
+                <div class="c-1"><label class="required">Label</label></div>
+                <div class="c-2">
+                    <input type="text" value="" />
+                    <ul class="errorlist"><li>Errorlist</li></ul>
+                    <p class="grp-help">Helptext</p>
+                </div>
+            </div>
+        </div>
+    </fieldset>
+{% templatetag openblock %} endspaceless {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Modules in Groups</h1>
+                    <p>As fieldsets are <a href="{% url 'grp_doc_modules' %}">modules</a> you may also combine them in (stacked &amp; tabular) <a href="{% url 'grp_doc_groups' %}">groups</a>.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+{% endblock %}
+

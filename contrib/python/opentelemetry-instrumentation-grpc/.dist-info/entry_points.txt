@@ -1,0 +1,5 @@
+[opentelemetry_instrumentor]
+grpc_aio_client = opentelemetry.instrumentation.grpc:GrpcAioInstrumentorClient
+grpc_aio_server = opentelemetry.instrumentation.grpc:GrpcAioInstrumentorServer
+grpc_client = opentelemetry.instrumentation.grpc:GrpcInstrumentorClient
+grpc_server = opentelemetry.instrumentation.grpc:GrpcInstrumentorServer

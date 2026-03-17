@@ -1,0 +1,19 @@
+# input.yaml
+components:
+  schemas:
+    BadSchema:
+      type: object
+      properties:
+        fields:
+          type: array
+          items:
+            oneOf:
+            - type: object
+              properties:
+                a:
+                  type: string
+            - type: object
+              properties:
+                b:
+                  type: string
+                  pattern: "^[a-zA-Z_]+$"

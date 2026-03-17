@@ -1,0 +1,29 @@
+copy:
+  - src/*
+  - pysrc/*
+  - include/yyjson/*
+  - test
+  - build.rs
+  - Cargo.lock
+  - Cargo.toml
+  - pyproject.toml
+exclude:
+  - include/cargo/*
+  - tests/requirements.txt
+keep:
+  - .arcignore
+  - .idea/*
+  - a/**
+  - README_UPDATE.md
+exclude_from_macros:
+  - .arcignore
+  - .idea/*
+  - a/**
+  - .cargo/config.toml
+  - src/*
+  - include/yyjson/*
+  - build.rs
+  - Cargo.lock
+  - Cargo.toml
+  - pyproject.toml
+  - README_UPDATE.md

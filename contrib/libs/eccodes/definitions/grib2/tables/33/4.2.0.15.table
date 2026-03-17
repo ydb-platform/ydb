@@ -1,0 +1,21 @@
+# Product discipline 0 - Meteorological products, parameter category 15: radar
+0 0 Base spectrum width (m/s)
+1 1 Base reflectivity (dB)
+2 2 Base radial velocity (m/s)
+3 3 Vertically integrated liquid water (VIL) (kg m-2)
+4 4 Layer-maximum base reflectivity (dB)
+5 5 Precipitation (kg m-2)
+6 6 Radar spectra (1) (-)
+7 7 Radar spectra (2) (-)
+8 8 Radar spectra (3) (-)
+9 9 Reflectivity of cloud droplets (dB)
+10 10 Reflectivity of cloud ice (dB)
+11 11 Reflectivity of snow (dB)
+12 12 Reflectivity of rain (dB)
+13 13 Reflectivity of graupel (dB)
+14 14 Reflectivity of hail (dB)
+15 15 Hybrid scan reflectivity (dB)
+16 16 Hybrid scan reflectivity height (m)
+# 17-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,138 @@
+<?xml version="1.0"?>
+<definitions 
+    xmlns:tns="http://example.com/stockquote.wsdl" 
+    xmlns:xsd1="http://example.com/stockquote.xsd" 
+    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" 
+    xmlns="http://schemas.xmlsoap.org/wsdl/"
+    name="StockQuote" 
+    targetNamespace="http://example.com/stockquote.wsdl">
+  <types>
+    <schema xmlns="http://www.w3.org/2001/XMLSchema" 
+            targetNamespace="http://example.com/stockquote.xsd"
+            xmlns:tns="http://example.com/stockquote.xsd" >
+      <complexType name="Address">
+        <sequence>
+          <element minOccurs="0" maxOccurs="1" name="NameFirst" type="string"/>
+          <element minOccurs="0" maxOccurs="1" name="NameLast" type="string"/>
+          <element minOccurs="0" maxOccurs="1" name="Email" type="string"/>
+        </sequence>
+      </complexType>
+      <element name="Fault1">
+        <complexType>
+          <sequence>
+            <element name="message" type="string"/>
+          </sequence>
+        </complexType>
+      </element>
+      <element name="Fault2">
+        <complexType>
+          <sequence>
+            <element name="message" type="string"/>
+          </sequence>
+        </complexType>
+      </element>
+      <element name="TradePriceRequest">
+        <complexType>
+          <all>
+            <element name="tickerSymbol" type="string"/>
+            <element name="account" type="tns:account" minOccurs="0" />
+            <element ref="tns:country"/>
+          </all>
+        </complexType>
+      </element>
+      <element name="TradePrice">
+        <complexType>
+          <all>
+            <element name="price" type="float"/>
+          </all>
+        </complexType>
+      </element>
+      <complexType name="account">
+        <sequence>
+          <element name="id" type="int"/>
+          <element name="user" type="string"/>
+        </sequence>
+      </complexType>
+      <complexType name="country">
+          <sequence>
+            <element name="code" type="string"/>
+          </sequence>
+      </complexType>
+      <element name="country">
+        <complexType>
+          <sequence>
+            <element name="name" type="string"/>
+            <element name="code" type="string"/>
+          </sequence>
+        </complexType>
+      </element>
+    </schema>
+  </types>
+  <message name="GetLastTradePriceInput">
+    <part name="body" element="xsd1:TradePriceRequest"/>
+  </message>
+  <message name="GetLastTradePriceOutput">
+    <part name="body" element="xsd1:TradePrice"/>
+  </message>
+  <message name="FaultMessageMsg1">
+    <part name="fault1" element="xsd1:Fault1"/>
+  </message>
+  <message name="FaultMessageMsg2">
+    <part name="fault2" element="xsd1:Fault2"/>
+  </message>
+  <portType name="StockQuotePortType">
+    <operation name="GetLastTradePrice">
+      <input message="tns:GetLastTradePriceInput"/>
+      <output message="tns:GetLastTradePriceOutput"/>
+      <fault message="tns:FaultMessageMsg1" name="fault1"/>
+      <fault message="tns:FaultMessageMsg2" name="fault2"/>
+    </operation>
+  </portType>
+
+  <binding name="StockQuoteBinding" type="tns:StockQuotePortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="GetLastTradePrice">
+      <soap:operation soapAction="http://example.com/GetLastTradePrice"/>
+      <input>
+        <soap:body use="literal"/>
+      </input>
+      <output>
+        <soap:body use="literal"/>
+      </output>
+      <fault name="fault1">
+        <soap:fault name="fault1" use="literal"/>
+      </fault>
+      <fault name="fault2">
+        <soap:fault name="fault2" use="literal"/>
+      </fault>
+    </operation>
+  </binding>
+
+  <binding name="StockQuoteBinding" type="tns:StockQuotePortType">
+	  <soap:binding style="document" transport="http://schemas.microsoft.com/soap/tcp"/>
+    <operation name="GetLastTradePrice">
+      <soap:operation soapAction="http://example.com/GetLastTradePrice"/>
+      <input>
+        <soap:body use="literal"/>
+      </input>
+      <output>
+        <soap:body use="literal"/>
+      </output>
+      <fault name="fault1">
+        <soap:fault name="fault1" use="literal"/>
+      </fault>
+      <fault name="fault2">
+        <soap:fault name="fault2" use="literal"/>
+      </fault>
+    </operation>
+  </binding>
+
+
+
+  <service name="StockQuoteService">
+    <documentation>My first service</documentation>
+    <port name="StockQuotePort" binding="tns:StockQuoteBinding">
+      <soap:address location="http://example.com/stockquote"/>
+    </port>
+  </service>
+</definitions>

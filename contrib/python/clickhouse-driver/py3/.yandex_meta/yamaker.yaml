@@ -1,0 +1,9 @@
+requirements:
+  - clickhouse-cityhash
+  - lz4
+  - zstandard
+mark_as_cython_c:
+  - clickhouse_driver/bufferedreader.pyx
+  - clickhouse_driver/bufferedwriter.pyx
+  - clickhouse_driver/columns/largeint.pyx
+  - clickhouse_driver/varint.pyx

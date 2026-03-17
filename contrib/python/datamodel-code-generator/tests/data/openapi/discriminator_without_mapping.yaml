@@ -1,0 +1,38 @@
+openapi: "3.0.0"
+components:
+  schemas:
+    ObjectBase:
+      description: Object schema
+      type: object
+      properties:
+        name:
+          description: Name of the object
+          type: string
+        type:
+          description: Object type
+          type: string
+          enum:
+            - my_first_object
+            - my_second_object
+            - my_third_object
+    CreateObjectRequest:
+      description: Request schema for object creation
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/ObjectBase'
+      required:
+        - name
+        - type
+    UpdateObjectRequest:
+      description: Request schema for object updates
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/ObjectBase'
+    Demo:
+        oneOf:
+          - $ref: "#/components/schemas/ObjectBase"
+          - $ref: "#/components/schemas/CreateObjectRequest"
+          - $ref: "#/components/schemas/UpdateObjectRequest"
+        discriminator:
+          propertyName: type
+

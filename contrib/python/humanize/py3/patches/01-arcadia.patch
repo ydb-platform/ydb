@@ -1,0 +1,9 @@
+--- contrib/python/humanize/py3/humanize/i18n.py	(index)
++++ contrib/python/humanize/py3/humanize/i18n.py	(working tree)
+@@ -44 +44 @@ def _get_default_locale_path() -> pathlib.Path | None:
+-    import importlib.resources
++    import pathlib
+@@ -46,2 +46 @@ def _get_default_locale_path() -> pathlib.Path | None:
+-    with importlib.resources.as_file(importlib.resources.files(package)) as pkg:
+-        return pkg / "locale"
++    return pathlib.Path(__file__).parent / "locale"

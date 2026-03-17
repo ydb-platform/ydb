@@ -1,0 +1,11 @@
+# (C) Copyright 2005- ECMWF.
+
+# GRID DEFINITION Stretched spherical harmonics
+
+# grib 1 -> 2
+constant gridDefinitionTemplateNumber     = 52;
+
+template commonBlock "grib1/grid_definition_spherical_harmonics.def";
+
+# Stretching parameters
+include "grib1/grid_stretching.def"

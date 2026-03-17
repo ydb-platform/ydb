@@ -1,0 +1,38 @@
+Metadata-Version: 2.1
+Name: pymaven-patch
+Version: 0.3.2
+Summary: Python access to maven. nexB advanced patch.
+Home-page: https://github.com/nexB/pymaven
+Author: Walter Scheper
+Author-email: Walter.Scheper@sas.com
+License: Apache-2
+License-File: LICENSE
+Requires-Dist: lxml >=4.0.0
+Requires-Dist: requests >=2.7.0
+Requires-Dist: six >=1.10
+Provides-Extra: development
+Requires-Dist: detox ; extra == 'development'
+Requires-Dist: epdb ; extra == 'development'
+Requires-Dist: flake8 ; extra == 'development'
+Requires-Dist: isort ; extra == 'development'
+Requires-Dist: yapf ; extra == 'development'
+Requires-Dist: pytest ; extra == 'development'
+Provides-Extra: test
+Requires-Dist: pytest ; extra == 'test'
+Requires-Dist: pytest-cov ; extra == 'test'
+Requires-Dist: mock ; (( python_version<'3.4')) and extra == 'test'
+
+=======
+Pymaven
+=======
+
+Overview
+========
+
+Pymaven is a Python library for interfacing with the maven build system. There
+are two major interfaces:
+
+* pymaven.client provides a basic maven repository client
+* pymaven.pom provides a Pom object that can provide progromatic access to
+  a maven pom file
+

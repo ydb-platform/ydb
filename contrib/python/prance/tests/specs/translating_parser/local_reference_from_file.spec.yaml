@@ -1,0 +1,15 @@
+---
+openapi: 3.0.3
+info:
+  title: Test specification for the translating parser
+  version: 0.0.0
+paths:
+  /hosts:
+    get:
+      responses:
+        default:
+          description: A file reference to a local reference
+          content:
+            application/json:
+              schema:
+                $ref: 'local_reference_from_file_schemas.spec.yaml#/$defs/RefObject'

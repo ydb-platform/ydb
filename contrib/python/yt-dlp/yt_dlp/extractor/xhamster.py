@@ -1,0 +1,638 @@
+import itertools
+import re
+import urllib.parse
+
+from .common import InfoExtractor
+from ..jsinterp import int_to_int32
+from ..utils import (
+    ExtractorError,
+    clean_html,
+    determine_ext,
+    dict_get,
+    extract_attributes,
+    float_or_none,
+    int_or_none,
+    join_nonempty,
+    parse_duration,
+    str_or_none,
+    try_get,
+    unified_strdate,
+    url_or_none,
+)
+
+
+class _ByteGenerator:
+    def __init__(self, algo_id, seed):
+        try:
+            self._algorithm = getattr(self, f'_algo{algo_id}')
+        except AttributeError:
+            raise ExtractorError(f'Unknown algorithm ID "{algo_id}"')
+        self._s = int_to_int32(seed)
+
+    def _algo1(self, s):
+        # LCG (a=1664525, c=1013904223, m=2^32)
+        # Ref: https://en.wikipedia.org/wiki/Linear_congruential_generator
+        s = self._s = int_to_int32(s * 1664525 + 1013904223)
+        return s
+
+    def _algo2(self, s):
+        # xorshift32
+        # Ref: https://en.wikipedia.org/wiki/Xorshift
+        s = int_to_int32(s ^ (s << 13))
+        s = int_to_int32(s ^ ((s & 0xFFFFFFFF) >> 17))
+        s = self._s = int_to_int32(s ^ (s << 5))
+        return s
+
+    def _algo3(self, s):
+        # Weyl Sequence (k≈2^32*φ, m=2^32) + MurmurHash3 (fmix32)
+        # Ref: https://en.wikipedia.org/wiki/Weyl_sequence
+        # https://commons.apache.org/proper/commons-codec/jacoco/org.apache.commons.codec.digest/MurmurHash3.java.html
+        s = self._s = int_to_int32(s + 0x9e3779b9)
+        s = int_to_int32(s ^ ((s & 0xFFFFFFFF) >> 16))
+        s = int_to_int32(s * int_to_int32(0x85ebca77))
+        s = int_to_int32(s ^ ((s & 0xFFFFFFFF) >> 13))
+        s = int_to_int32(s * int_to_int32(0xc2b2ae3d))
+        return int_to_int32(s ^ ((s & 0xFFFFFFFF) >> 16))
+
+    def _algo4(self, s):
+        # Custom scrambling function involving a left rotation (ROL)
+        s = self._s = int_to_int32(s + 0x6d2b79f5)
+        s = int_to_int32((s << 7) | ((s & 0xFFFFFFFF) >> 25))  # ROL 7
+        s = int_to_int32(s + 0x9e3779b9)
+        s = int_to_int32(s ^ ((s & 0xFFFFFFFF) >> 11))
+        return int_to_int32(s * 0x27d4eb2d)
+
+    def _algo5(self, s):
+        # xorshift variant with a final addition
+        s = int_to_int32(s ^ (s << 7))
+        s = int_to_int32(s ^ ((s & 0xFFFFFFFF) >> 9))
+        s = int_to_int32(s ^ (s << 8))
+        s = self._s = int_to_int32(s + 0xa5a5a5a5)
+        return s
+
+    def _algo6(self, s):
+        # LCG (a=0x2c9277b5, c=0xac564b05) with a variable right shift scrambler
+        s = self._s = int_to_int32(s * int_to_int32(0x2c9277b5) + int_to_int32(0xac564b05))
+        s2 = int_to_int32(s ^ ((s & 0xFFFFFFFF) >> 18))
+        shift = (s & 0xFFFFFFFF) >> 27 & 31
+        return int_to_int32((s2 & 0xFFFFFFFF) >> shift)
+
+    def _algo7(self, s):
+        # Weyl Sequence (k=0x9e3779b9) + custom multiply-xor-shift mixing function
+        s = self._s = int_to_int32(s + int_to_int32(0x9e3779b9))
+        e = int_to_int32(s ^ (s << 5))
+        e = int_to_int32(e * int_to_int32(0x7feb352d))
+        e = int_to_int32(e ^ ((e & 0xFFFFFFFF) >> 15))
+        return int_to_int32(e * int_to_int32(0x846ca68b))
+
+    def __next__(self):
+        return self._algorithm(self._s) & 0xFF
+
+
+class XHamsterIE(InfoExtractor):
+    _DOMAINS = r'(?:xhamster\.(?:com|one|desi)|xhms\.pro|xhamster\d+\.(?:com|desi)|xhday\.com|xhvid\.com)'
+    _VALID_URL = rf'''(?x)
+                    https?://
+                        (?:[^/?#]+\.)?{_DOMAINS}/
+                        (?:
+                            movies/(?P<id>[\dA-Za-z]+)/(?P<display_id>[^/]*)\.html|
+                            videos/(?P<display_id_2>[^/]*)-(?P<id_2>[\dA-Za-z]+)
+                        )
+                    '''
+    _TESTS = [{
+        'url': 'https://xhamster.com/videos/femaleagent-shy-beauty-takes-the-bait-1509445',
+        'md5': 'e009ea6b849b129e3bebaeb9cf0dee51',
+        'info_dict': {
+            'id': '1509445',
+            'display_id': 'femaleagent-shy-beauty-takes-the-bait',
+            'ext': 'mp4',
+            'title': 'FemaleAgent Shy beauty takes the bait',
+            'timestamp': 1350194821,
+            'upload_date': '20121014',
+            'uploader': 'Ruseful2011',
+            'uploader_id': 'ruseful2011',
+            'duration': 893,
+            'age_limit': 18,
+            'thumbnail': r're:https?://.+\.jpg',
+            'uploader_url': 'https://xhamster.com/users/ruseful2011',
+            'description': '',
+            'view_count': int,
+            'comment_count': int,
+        },
+    }, {
+        'url': 'https://xhamster.com/videos/britney-spears-sexy-booty-2221348?hd=',
+        'info_dict': {
+            'id': '2221348',
+            'display_id': 'britney-spears-sexy-booty',
+            'ext': 'mp4',
+            'title': 'Britney Spears  Sexy Booty',
+            'timestamp': 1379123460,
+            'upload_date': '20130914',
+            'uploader': 'jojo747400',
+            'duration': 200,
+            'age_limit': 18,
+            'description': '',
+            'view_count': int,
+            'thumbnail': r're:https?://.+\.jpg',
+            'comment_count': int,
+        },
+        'params': {
+            'extractor_args': {'generic': {'impersonate': ['chrome']}},
+            'skip_download': 'm3u8',
+        },
+    }, {
+        # empty seo, unavailable via new URL schema
+        'url': 'http://xhamster.com/movies/5667973/.html',
+        'info_dict': {
+            'id': '5667973',
+            'ext': 'mp4',
+            'title': '....',
+            'timestamp': 1454948101,
+            'upload_date': '20160208',
+            'uploader': 'parejafree',
+            'uploader_id': 'parejafree',
+            'duration': 72,
+            'age_limit': 18,
+            'comment_count': int,
+            'uploader_url': 'https://xhamster.com/users/parejafree',
+            'description': '',
+            'view_count': int,
+            'thumbnail': r're:https?://.+\.jpg',
+        },
+        'skip': 'Invalid URL',
+    }, {
+        # mobile site
+        'url': 'https://m.xhamster.com/videos/cute-teen-jacqueline-solo-masturbation-8559111',
+        'only_matching': True,
+    }, {
+        'url': 'https://xhamster.com/movies/2272726/amber_slayed_by_the_knight.html',
+        'only_matching': True,
+    }, {
+        # This video is visible for marcoalfa123456's friends only
+        'url': 'https://it.xhamster.com/movies/7263980/la_mia_vicina.html',
+        'only_matching': True,
+    }, {
+        # new URL schema
+        'url': 'https://pt.xhamster.com/videos/euro-pedal-pumping-7937821',
+        'only_matching': True,
+    }, {
+        'url': 'https://xhamster.one/videos/femaleagent-shy-beauty-takes-the-bait-1509445',
+        'only_matching': True,
+    }, {
+        'url': 'https://xhamster.desi/videos/femaleagent-shy-beauty-takes-the-bait-1509445',
+        'only_matching': True,
+    }, {
+        'url': 'https://xhamster2.com/videos/femaleagent-shy-beauty-takes-the-bait-1509445',
+        'only_matching': True,
+    }, {
+        'url': 'https://xhamster11.com/videos/femaleagent-shy-beauty-takes-the-bait-1509445',
+        'only_matching': True,
+    }, {
+        'url': 'https://xhamster26.com/videos/femaleagent-shy-beauty-takes-the-bait-1509445',
+        'only_matching': True,
+    }, {
+        'url': 'http://xhamster.com/movies/1509445/femaleagent_shy_beauty_takes_the_bait.html',
+        'only_matching': True,
+    }, {
+        'url': 'http://xhamster.com/movies/2221348/britney_spears_sexy_booty.html?hd',
+        'only_matching': True,
+    }, {
+        'url': 'http://de.xhamster.com/videos/skinny-girl-fucks-herself-hard-in-the-forest-xhnBJZx',
+        'only_matching': True,
+    }, {
+        'url': 'https://xhday.com/videos/strapless-threesome-xhh7yVf',
+        'only_matching': True,
+    }, {
+        'url': 'https://xhvid.com/videos/lk-mm-xhc6wn6',
+        'only_matching': True,
+    }, {
+        'url': 'https://xhamster20.desi/videos/my-verification-video-scottishmistress23-11937369',
+        'only_matching': True,
+    }]
+
+    _VALID_HEX_RE = r'[0-9a-fA-F]{12,}'
+
+    def _decipher_hex_string(self, hex_string, format_id):
+        byte_data = bytes.fromhex(hex_string)
+        seed = int.from_bytes(byte_data[1:5], byteorder='little', signed=True)
+
+        try:
+            byte_gen = _ByteGenerator(byte_data[0], seed)
+        except ExtractorError as e:
+            self.report_warning(f'Skipping format "{format_id}": {e.msg}')
+            return None
+
+        return bytearray(byte ^ next(byte_gen) for byte in byte_data[5:]).decode('latin-1')
+
+    def _decipher_format_url(self, format_url, format_id):
+        # format_url can be hex ciphertext or a URL with a hex ciphertext segment
+        if re.fullmatch(self._VALID_HEX_RE, format_url):
+            return self._decipher_hex_string(format_url, format_id)
+        elif not url_or_none(format_url):
+            if re.fullmatch(r'[0-9a-fA-F]+', format_url):
+                # Hex strings that are too short are expected, so we don't want to warn
+                self.write_debug(f'Skipping dummy ciphertext for "{format_id}": {format_url}')
+            else:
+                # Something has likely changed on the site's end, so we need to warn
+                self.report_warning(f'Skipping format "{format_id}": invalid ciphertext')
+            return None
+
+        parsed_url = urllib.parse.urlparse(format_url)
+
+        hex_string, path_remainder = self._search_regex(
+            rf'^/(?P<hex>{self._VALID_HEX_RE})(?P<rem>[/,].+)$', parsed_url.path, 'url components',
+            default=(None, None), group=('hex', 'rem'))
+        if not hex_string:
+            self.report_warning(f'Skipping format "{format_id}": unsupported URL format')
+            return None
+
+        deciphered = self._decipher_hex_string(hex_string, format_id)
+        if not deciphered:
+            return None
+
+        return parsed_url._replace(path=f'/{deciphered}{path_remainder}').geturl()
+
+    def _fixup_formats(self, formats):
+        for f in formats:
+            if f.get('vcodec'):
+                continue
+            for vcodec in ('av1', 'h264'):
+                if any(f'.{vcodec}.' in f_url for f_url in (f['url'], f.get('manifest_url', ''))):
+                    f['vcodec'] = vcodec
+                    break
+        return formats
+
+    def _real_extract(self, url):
+        mobj = self._match_valid_url(url)
+        video_id = mobj.group('id') or mobj.group('id_2')
+        display_id = mobj.group('display_id') or mobj.group('display_id_2')
+
+        desktop_url = re.sub(r'^(https?://(?:.+?\.)?)m\.', r'\1', url)
+        webpage, urlh = self._download_webpage_handle(desktop_url, video_id, impersonate=True)
+
+        error = self._html_search_regex(
+            r'<div[^>]+id=["\']videoClosed["\'][^>]*>(.+?)</div>',
+            webpage, 'error', default=None)
+        if error:
+            raise ExtractorError(error, expected=True)
+
+        age_limit = self._rta_search(webpage)
+
+        def get_height(s):
+            return int_or_none(self._search_regex(
+                r'^(\d+)[pP]', s, 'height', default=None))
+
+        initials = self._parse_json(
+            self._search_regex(
+                (r'window\.initials\s*=\s*({.+?})\s*;\s*</script>',
+                 r'window\.initials\s*=\s*({.+?})\s*;'), webpage, 'initials',
+                default='{}'),
+            video_id, fatal=False)
+        if initials:
+            video = initials['videoModel']
+            title = video['title']
+            formats = []
+            format_urls = set()
+            format_sizes = {}
+            sources = try_get(video, lambda x: x['sources'], dict) or {}
+            for format_id, formats_dict in sources.items():
+                if not isinstance(formats_dict, dict):
+                    continue
+                download_sources = try_get(sources, lambda x: x['download'], dict) or {}
+                for quality, format_dict in download_sources.items():
+                    if not isinstance(format_dict, dict):
+                        continue
+                    format_sizes[quality] = float_or_none(format_dict.get('size'))
+                for quality, format_item in formats_dict.items():
+                    if format_id == 'download':
+                        # Download link takes some time to be generated,
+                        # skipping for now
+                        continue
+                    format_url = format_item
+                    format_url = url_or_none(format_url)
+                    if not format_url or format_url in format_urls:
+                        continue
+                    format_urls.add(format_url)
+                    formats.append({
+                        'format_id': f'{format_id}-{quality}',
+                        'url': format_url,
+                        'ext': determine_ext(format_url, 'mp4'),
+                        'height': get_height(quality),
+                        'filesize': format_sizes.get(quality),
+                        'http_headers': {
+                            'Referer': urlh.url,
+                        },
+                    })
+            xplayer_sources = try_get(
+                initials, lambda x: x['xplayerSettings']['sources'], dict)
+            if xplayer_sources:
+                hls_sources = xplayer_sources.get('hls')
+                if isinstance(hls_sources, dict):
+                    for hls_format_key in ('url', 'fallback'):
+                        hls_url = hls_sources.get(hls_format_key)
+                        if not hls_url:
+                            continue
+                        hls_url = self._decipher_format_url(hls_url, f'hls-{hls_format_key}')
+                        if not hls_url or hls_url in format_urls:
+                            continue
+                        format_urls.add(hls_url)
+                        formats.extend(self._extract_m3u8_formats(
+                            hls_url, video_id, 'mp4', entry_protocol='m3u8_native',
+                            m3u8_id='hls', fatal=False))
+                standard_sources = xplayer_sources.get('standard')
+                if isinstance(standard_sources, dict):
+                    for identifier, formats_list in standard_sources.items():
+                        if not isinstance(formats_list, list):
+                            continue
+                        for standard_format in formats_list:
+                            if not isinstance(standard_format, dict):
+                                continue
+                            for standard_format_key in ('url', 'fallback'):
+                                standard_url = standard_format.get(standard_format_key)
+                                if not standard_url:
+                                    continue
+                                quality = (str_or_none(standard_format.get('quality'))
+                                           or str_or_none(standard_format.get('label'))
+                                           or '')
+                                format_id = join_nonempty(identifier, quality)
+                                standard_url = self._decipher_format_url(standard_url, format_id)
+                                if not standard_url or standard_url in format_urls:
+                                    continue
+                                format_urls.add(standard_url)
+                                ext = determine_ext(standard_url, 'mp4')
+                                if ext == 'm3u8':
+                                    formats.extend(self._extract_m3u8_formats(
+                                        standard_url, video_id, 'mp4', entry_protocol='m3u8_native',
+                                        m3u8_id='hls', fatal=False))
+                                    continue
+
+                                formats.append({
+                                    'format_id': format_id,
+                                    'url': standard_url,
+                                    'ext': ext,
+                                    'height': get_height(quality),
+                                    'filesize': format_sizes.get(quality),
+                                    'http_headers': {
+                                        'Referer': urlh.url,
+                                    },
+                                    # HTTP formats return "Wrong key" error even when deciphered by site JS
+                                    # TODO: Remove this when resolved on the site's end
+                                    '__needs_testing': True,
+                                })
+
+            categories_list = video.get('categories')
+            if isinstance(categories_list, list):
+                categories = []
+                for c in categories_list:
+                    if not isinstance(c, dict):
+                        continue
+                    c_name = c.get('name')
+                    if isinstance(c_name, str):
+                        categories.append(c_name)
+            else:
+                categories = None
+
+            uploader_url = url_or_none(try_get(video, lambda x: x['author']['pageURL']))
+            return {
+                'id': video_id,
+                'display_id': display_id,
+                'title': title,
+                'description': video.get('description'),
+                'timestamp': int_or_none(video.get('created')),
+                'uploader': try_get(
+                    video, lambda x: x['author']['name'], str),
+                'uploader_url': uploader_url,
+                'uploader_id': uploader_url.split('/')[-1] if uploader_url else None,
+                'thumbnail': video.get('thumbURL'),
+                'duration': int_or_none(video.get('duration')),
+                'view_count': int_or_none(video.get('views')),
+                'like_count': int_or_none(try_get(
+                    video, lambda x: x['rating']['likes'], int)),
+                'dislike_count': int_or_none(try_get(
+                    video, lambda x: x['rating']['dislikes'], int)),
+                'comment_count': int_or_none(video.get('comments')),
+                'age_limit': age_limit if age_limit is not None else 18,
+                'categories': categories,
+                'formats': self._fixup_formats(formats),
+                # TODO: Revert to ('res', 'proto', 'tbr') when HTTP formats problem is resolved
+                '_format_sort_fields': ('res', 'proto:m3u8', 'tbr'),
+            }
+
+        # Old layout fallback
+
+        title = self._html_search_regex(
+            [r'<h1[^>]*>([^<]+)</h1>',
+             r'<meta[^>]+itemprop=".*?caption.*?"[^>]+content="(.+?)"',
+             r'<title[^>]*>(.+?)(?:,\s*[^,]*?\s*Porn\s*[^,]*?:\s*xHamster[^<]*| - xHamster\.com)</title>'],
+            webpage, 'title')
+
+        formats = []
+        format_urls = set()
+
+        sources = self._parse_json(
+            self._search_regex(
+                r'sources\s*:\s*({.+?})\s*,?\s*\n', webpage, 'sources',
+                default='{}'),
+            video_id, fatal=False)
+        for format_id, format_url in sources.items():
+            format_url = url_or_none(format_url)
+            if not format_url:
+                continue
+            if format_url in format_urls:
+                continue
+            format_urls.add(format_url)
+            formats.append({
+                'format_id': format_id,
+                'url': format_url,
+                'height': get_height(format_id),
+            })
+
+        video_url = self._search_regex(
+            [r'''file\s*:\s*(?P<q>["'])(?P<mp4>.+?)(?P=q)''',
+             r'''<a\s+href=(?P<q>["'])(?P<mp4>.+?)(?P=q)\s+class=["']mp4Thumb''',
+             r'''<video[^>]+file=(?P<q>["'])(?P<mp4>.+?)(?P=q)[^>]*>'''],
+            webpage, 'video url', group='mp4', default=None)
+        if video_url and video_url not in format_urls:
+            formats.append({
+                'url': video_url,
+            })
+
+        # Only a few videos have an description
+        mobj = re.search(r'<span>Description: </span>([^<]+)', webpage)
+        description = mobj.group(1) if mobj else None
+
+        upload_date = unified_strdate(self._search_regex(
+            r'hint=["\'](\d{4}-\d{2}-\d{2}) \d{2}:\d{2}:\d{2} [A-Z]{3,4}',
+            webpage, 'upload date', fatal=False))
+
+        uploader = self._html_search_regex(
+            r'<span[^>]+itemprop=["\']author[^>]+><a[^>]+><span[^>]+>([^<]+)',
+            webpage, 'uploader', default='anonymous')
+
+        thumbnail = self._search_regex(
+            [r'''["']thumbUrl["']\s*:\s*(?P<q>["'])(?P<thumbnail>.+?)(?P=q)''',
+             r'''<video[^>]+"poster"=(?P<q>["'])(?P<thumbnail>.+?)(?P=q)[^>]*>'''],
+            webpage, 'thumbnail', fatal=False, group='thumbnail')
+
+        duration = parse_duration(self._search_regex(
+            [r'<[^<]+\bitemprop=["\']duration["\'][^<]+\bcontent=["\'](.+?)["\']',
+             r'Runtime:\s*</span>\s*([\d:]+)'], webpage,
+            'duration', fatal=False))
+
+        view_count = int_or_none(self._search_regex(
+            r'content=["\']User(?:View|Play)s:(\d+)',
+            webpage, 'view count', fatal=False))
+
+        mobj = re.search(r'hint=[\'"](?P<likecount>\d+) Likes / (?P<dislikecount>\d+) Dislikes', webpage)
+        (like_count, dislike_count) = (mobj.group('likecount'), mobj.group('dislikecount')) if mobj else (None, None)
+
+        mobj = re.search(r'</label>Comments \((?P<commentcount>\d+)\)</div>', webpage)
+        comment_count = mobj.group('commentcount') if mobj else 0
+
+        categories_html = self._search_regex(
+            r'(?s)<table.+?(<span>Categories:.+?)</table>', webpage,
+            'categories', default=None)
+        categories = [clean_html(category) for category in re.findall(
+            r'<a[^>]+>(.+?)</a>', categories_html)] if categories_html else None
+
+        return {
+            'id': video_id,
+            'display_id': display_id,
+            'title': title,
+            'description': description,
+            'upload_date': upload_date,
+            'uploader': uploader,
+            'uploader_id': uploader.lower() if uploader else None,
+            'thumbnail': thumbnail,
+            'duration': duration,
+            'view_count': view_count,
+            'like_count': int_or_none(like_count),
+            'dislike_count': int_or_none(dislike_count),
+            'comment_count': int_or_none(comment_count),
+            'age_limit': age_limit,
+            'categories': categories,
+            'formats': formats,
+        }
+
+
+class XHamsterEmbedIE(InfoExtractor):
+    _VALID_URL = rf'https?://(?:[^/?#]+\.)?{XHamsterIE._DOMAINS}/xembed\.php\?video=(?P<id>\d+)'
+    _EMBED_REGEX = [r'<iframe[^>]+?src=(["\'])(?P<url>(?:https?:)?//(?:www\.)?xhamster\.com/xembed\.php\?video=\d+)\1']
+    _TESTS = [{
+        'url': 'http://xhamster.com/xembed.php?video=3328539',
+        'info_dict': {
+            'id': '3328539',
+            'ext': 'mp4',
+            'title': 'Pen Masturbation',
+            'comment_count': int,
+            'description': '',
+            'display_id': 'pen-masturbation',
+            'timestamp': 1406581861,
+            'upload_date': '20140728',
+            'uploader': 'ManyakisArt',
+            'duration': 5,
+            'age_limit': 18,
+            'thumbnail': r're:https?://.+\.jpg',
+            'uploader_id': 'manyakisart',
+            'uploader_url': 'https://xhamster.com/users/manyakisart',
+            'view_count': int,
+        },
+    }]
+    _WEBPAGE_TESTS = [{
+        # FIXME: Embed detection
+        'url': 'https://xhamster.com/awards/2023',
+        'info_dict': {
+            'id': 'xh2VnYn',
+            'ext': 'mp4',
+            'title': 'xHamster Awards 2023 - The Winners',
+            'age_limit': 18,
+            'comment_count': int,
+            'description': '',
+            'display_id': 'xhamster-awards-2023-the-winners',
+            'duration': 292,
+            'thumbnail': r're:https?://ic-vt-nss\.xhcdn\.com/.+',
+            'timestamp': 1700122082,
+            'upload_date': '20231116',
+            'uploader': 'xHamster',
+            'uploader_id': 'xhamster',
+            'uploader_url': 'https://xhamster.com/users/xhamster',
+            'view_count': int,
+        },
+        'params': {'skip_download': 'm3u8'},
+    }]
+
+    def _real_extract(self, url):
+        video_id = self._match_id(url)
+
+        webpage = self._download_webpage(url, video_id)
+
+        video_url = self._search_regex(
+            rf'href="(https?://xhamster\.com/(?:movies/{video_id}/[^"]*\.html|videos/[^/]*-{video_id})[^"]*)"',
+            webpage, 'xhamster url', default=None)
+
+        if not video_url:
+            player_vars = self._parse_json(
+                self._search_regex(r'vars\s*:\s*({.+?})\s*,\s*\n', webpage, 'vars'),
+                video_id)
+            video_url = dict_get(player_vars, ('downloadLink', 'homepageLink', 'commentsLink', 'shareUrl'))
+
+        return self.url_result(video_url, 'XHamster')
+
+
+class XHamsterUserIE(InfoExtractor):
+    _VALID_URL = rf'https?://(?:[^/?#]+\.)?{XHamsterIE._DOMAINS}/(?:(?P<user>users)|creators)/(?P<id>[^/?#&]+)'
+    _TESTS = [{
+        # Paginated user profile
+        'url': 'https://xhamster.com/users/netvideogirls/videos',
+        'info_dict': {
+            'id': 'netvideogirls',
+        },
+        'playlist_mincount': 267,
+    }, {
+        # Non-paginated user profile
+        'url': 'https://xhamster.com/users/firatkaan/videos',
+        'info_dict': {
+            'id': 'firatkaan',
+        },
+        'playlist_mincount': 0,
+    }, {
+        'url': 'https://xhamster.com/creators/squirt-orgasm-69',
+        'info_dict': {
+            'id': 'squirt-orgasm-69',
+        },
+        'playlist_mincount': 46,
+    }, {
+        'url': 'https://xhday.com/users/mobhunter',
+        'only_matching': True,
+    }, {
+        'url': 'https://xhvid.com/users/pelushe21',
+        'only_matching': True,
+    }]
+
+    def _entries(self, user_id, is_user):
+        prefix, suffix = ('users', 'videos') if is_user else ('creators', 'exclusive')
+        next_page_url = f'https://xhamster.com/{prefix}/{user_id}/{suffix}/1'
+        for pagenum in itertools.count(1):
+            page = self._download_webpage(
+                next_page_url, user_id, f'Downloading page {pagenum}')
+            for video_tag in re.findall(
+                    r'(<a[^>]+class=["\'].*?\bvideo-thumb__image-container[^>]+>)',
+                    page):
+                video = extract_attributes(video_tag)
+                video_url = url_or_none(video.get('href'))
+                if not video_url or not XHamsterIE.suitable(video_url):
+                    continue
+                video_id = XHamsterIE._match_id(video_url)
+                yield self.url_result(
+                    video_url, ie=XHamsterIE.ie_key(), video_id=video_id)
+            mobj = re.search(r'<a[^>]+data-page=["\']next[^>]+>', page)
+            if not mobj:
+                break
+            next_page = extract_attributes(mobj.group(0))
+            next_page_url = url_or_none(next_page.get('href'))
+            if not next_page_url:
+                break
+
+    def _real_extract(self, url):
+        user, user_id = self._match_valid_url(url).group('user', 'id')
+        return self.playlist_result(self._entries(user_id, bool(user)), user_id)

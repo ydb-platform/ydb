@@ -1,0 +1,139 @@
+{% extends "dashboard/repository_settings/base.html" %}
+{% load i18n %}
+
+{% block title %}
+{{ package.name }}
+{% endblock %}
+
+
+{% block description %}
+{{ release.summary }}
+{% endblock %}
+
+{% block content_panel %}
+<div class="tabbable">
+    <ul class="nav nav-tabs" id="package-tabs">
+        <li class="active">
+            <a href="#information" data-toggle="tab">Metadata</a>
+        </li>
+        <li><a href="#description" data-toggle="tab">Readme</a></li>
+    </ul>
+    <div class="tab-content">
+        <div class="tab-pane" id="description">
+            <div class="row">
+                <div class="col-md-9">
+                    {{ release.description_html|safe }}
+                </div>
+            </div>
+        </div>
+        <div class="tab-pane active" id="information">
+
+            <div class="row">
+                <div class="col-md-8">
+                    {% if package.is_local %}
+                    <h2>Owners</h2>
+                    <p>The following users are owners of this local package</p>
+                    <ul>
+                        {% for user in package.owners.all %}
+                        <li>{{ user.username }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                    <h2>Metadata</h2>
+                    <table class="table table-striped table-condensed table-bordered">
+                        <tbody>
+                            <tr>
+                                <td>Version</td>
+                                <td>{{ release.version }}</td>
+                            </tr>
+                            <tr>
+                                <td>License</td>
+                                <td>{{ release.license }}</td>
+                            </tr>
+                            <tr>
+                                <td>Author</td>
+                                <td>{{ release.author }} &lt;{{ release.author_email }}&gt;</td>
+                            </tr>
+                            <tr>
+                                <td>Homepage</td>
+                                <td><a href="{{ release.home_page}}">{{ release.home_page }}</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="col-md-2">
+                    <h2>Info</h2>
+                    {% if package.is_trusted %}
+                    <div class="panel panel-success">
+                        <div class="panel-heading">
+                            This is a trusted package. New releases are not quarantined.
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if package.is_local %}
+                    <p>
+                    This is a local package and only
+                    available from this shop.
+                    </p>
+                    <span class="btn" disabled="disabled"><span class="icon-refresh"></span> Refresh</span>
+                    {% else %}
+                    Upstream information:
+                    <ul>
+                        <li><a href="{{ pypi_url }}/{{ package.name }}">pypi</a></li>
+                    </ul>
+
+                    <a href="{% url 'dashboard:package_refresh' repo=view.repository.slug name=package.name %}" class="btn btn-primary btn-small"><span class="icon-refresh"></span> Refresh</a>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-10">
+                    <h2>Files</h2>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th colspan="2">Filename</th>
+                                <th>Type</th>
+                                <th>MD5 digest</th>
+                                <th>Released</th>
+                                <th>Python</th>
+                                <th>Labels</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for release in package.get_ordered_releases %}
+                            <tr>
+                                <th colspan="8">{{ release.version }}</th>
+                            </tr>
+                                {% for file in release.files.all %}
+                            <tr>
+                                <td>&nbsp;</td>
+                                <td><a href="{{ file.get_absolute_url }}">{{ file.filename }}</a></td>
+                                <td>{{ file.get_filetype_display }}</td>
+                                <td>{{ file.md5_digest }}</td>
+                                <td>{{ file.created }}</td>
+                                <td>{{ file.python_version }}</td>
+                                <td>
+                                    {% if file.distribution %}
+                                    <span class="label label-success">local copy</span>
+                                    {% else %}
+                                    <form method="post" action="{% url 'dashboard:package_mirror_file' repo=package.repository.slug name=package.name %}">
+                                        <input type="hidden" name="pk" value="{{ file.pk }}">
+                                        <button type="submit" class="btn btn-primary btn-xs">mirror</button>
+                                        {% csrf_token %}
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                                {% endfor %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+

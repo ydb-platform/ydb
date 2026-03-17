@@ -1,0 +1,12 @@
+
+forwarding-options
+    port-mirroring
+        ~
+    activate port-mirroring
+        ~
+
+
+# Правило на все команды
+* %global
+# Добавляем веса комментам, чтобы они катились всегда после команд, но только в патче
+*/\/\*(?:(?!\*\/).)*\*\// %global %scope=patch

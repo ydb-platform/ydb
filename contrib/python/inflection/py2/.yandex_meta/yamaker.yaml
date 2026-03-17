@@ -1,0 +1,4 @@
+copy:
+  - test_inflection.py
+mark_as_tests:
+  - test_inflection.py

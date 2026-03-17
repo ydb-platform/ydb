@@ -1,0 +1,10 @@
+mark_as_cython_c:
+  - pywt/_extensions/*.pyx
+cython_templates:
+  - pywt/_extensions/config.pxi.in
+  - pywt/_c99_config.py.in
+exclude_from_macros:
+  - pywt/_extensions/c/*.template.c
+  - "**/meson.build"
+keep:
+  - pywt/version.py

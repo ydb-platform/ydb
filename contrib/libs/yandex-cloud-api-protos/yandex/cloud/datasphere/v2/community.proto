@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package yandex.cloud.datasphere.v2;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/datasphere/v2;datasphere";
+option java_package = "yandex.cloud.api.datasphere.v2";
+
+message Community {
+  reserved 7 to 9;
+  // ID of the community.
+  string id = 1;
+
+  // Time when community was created.
+  google.protobuf.Timestamp created_at = 2;
+
+  // Name of the community.
+  string name = 3;
+
+  // Description of the comminuty.
+  string description = 4;
+
+  // Labels of the community.
+  map<string, string> labels = 5;
+
+  // ID of the user who created the community.
+  string created_by_id = 6;
+
+  // ID of the organization to which community belongs.
+  string organization_id = 10;
+
+  // ID of the zone where this community was created
+  string zone_id = 11;
+}

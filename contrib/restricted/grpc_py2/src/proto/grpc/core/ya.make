@@ -6,11 +6,6 @@ VERSION(Service-proxy-version)
 
 LICENSE(Apache-2.0)
 
-SUBSCRIBER(
-    g:contrib
-    g:cpp-contrib
-)
-
 PROTO_NAMESPACE(
     GLOBAL
     contrib/restricted/grpc_py2

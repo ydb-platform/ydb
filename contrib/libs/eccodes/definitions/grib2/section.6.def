@@ -1,0 +1,59 @@
+# (C) Copyright 2005- ECMWF.
+
+# SECTION 6, BIT-MAP SECTION
+position offsetSection6;
+position offsetBSection6;
+
+section_length[4] section6Length ;
+meta section6 section_pointer(offsetSection6,section6Length,6);
+
+#  Number of section
+unsigned[1] numberOfSection = 6:read_only;
+
+#  Bit-map indicator
+codetable[1] bitMapIndicator ('6.0.table',masterDir,localDir) = 255 : dump;
+
+#transient bitmapPresent=1;
+meta geography.bitmapPresent g2bitmap_present(bitMapIndicator): dump;
+transient missingValuesPresent = bitmapPresent : hidden, read_only;
+
+# Bitmap...
+if (bitMapIndicator == 0) {
+  if (dataRepresentationTemplateNumber == 1) {
+    if (matrixBitmapsPresent == 1) {
+      meta primaryBitmap g2bitmap( tableReference,
+          missingValue,
+          offsetBSection6,
+          section6Length,
+          numberOfDataMatrices) : read_only;
+    }
+    else {
+      meta geography.bitmap g2bitmap( tableReference,
+          missingValue,
+          offsetBSection6,
+          section6Length,
+          numberOfDataPoints) : read_only;
+    }
+  }
+  else {
+    meta geography.bitmap g2bitmap( tableReference,
+        missingValue,
+        offsetBSection6,
+        section6Length,
+        numberOfDataPoints) : read_only;
+  }
+}
+
+if (bitMapIndicator == 255)
+{
+  # No bitmap is used but some complex packing schemes embed the missing values in the data section
+  if (dataRepresentationTemplateNumber == 2 || dataRepresentationTemplateNumber == 3) {
+    transient missingValuesPresent = (missingValueManagementUsed != 0) : read_only;
+  }
+  if (dataRepresentationTemplateNumber == 200) {
+    # This template can have undefined values within its Data Section
+    transient missingValuesPresent = 1;
+  }
+}
+
+meta md5Section6 md5(offsetSection6,section6Length);

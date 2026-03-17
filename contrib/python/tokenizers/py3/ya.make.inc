@@ -1,0 +1,19 @@
+PY_SRCS(
+    TOP_LEVEL
+    tokenizers/decoders/__init__.py
+    tokenizers/implementations/base_tokenizer.py
+    tokenizers/implementations/bert_wordpiece.py
+    tokenizers/implementations/byte_level_bpe.py
+    tokenizers/implementations/char_level_bpe.py
+    tokenizers/implementations/__init__.py
+    tokenizers/implementations/sentencepiece_bpe.py
+    tokenizers/implementations/sentencepiece_unigram.py
+    tokenizers/__init__.py
+    tokenizers/models/__init__.py
+    tokenizers/normalizers/__init__.py
+    tokenizers/pre_tokenizers/__init__.py
+    tokenizers/processors/__init__.py
+    tokenizers/tools/__init__.py
+    tokenizers/tools/visualizer.py
+    tokenizers/trainers/__init__.py
+)

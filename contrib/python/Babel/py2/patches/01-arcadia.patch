@@ -1,0 +1,93 @@
+--- contrib/python/Babel/py2/babel/core.py	(index)
++++ contrib/python/Babel/py2/babel/core.py	(working tree)
+@@ -72,6 +72,10 @@ def get_global(key):
+-        dirname = os.path.join(os.path.dirname(__file__))
+-        filename = os.path.join(dirname, 'global.dat')
+-        if not os.path.isfile(filename):
+-            _raise_no_data_error()
+-        with open(filename, 'rb') as fileobj:
+-            _global_data = pickle.load(fileobj)
++        try:
++            import library.python.resource as rs
++            _global_data = pickle.loads(rs.find("resfs/file/contrib/python/Babel/py2/babel/global.dat"))
++        except ImportError:
++            dirname = os.path.join(os.path.dirname(__file__))
++            filename = os.path.join(dirname, 'global.dat')
++            if not os.path.isfile(filename):
++                _raise_no_data_error()
++            with open(filename, 'rb') as fileobj:
++                _global_data = pickle.load(fileobj)
+--- contrib/python/Babel/py2/babel/localedata.py	(index)
++++ contrib/python/Babel/py2/babel/localedata.py	(working tree)
+@@ -68,7 +68,11 @@ def exists(name):
+         return False
+     if name in _cache:
+         return True
+-    file_found = os.path.exists(resolve_locale_filename(name))
++    try:
++        import library.python.resource as rs
++        file_found = rs.find("resfs/file/contrib/python/Babel/py2/babel/locale-data/%s" % os.path.basename(resolve_locale_filename(name))) is not None
++    except ImportError:
++        file_found = os.path.exists(resolve_locale_filename(name))
+     return True if file_found else bool(normalize_locale(name))
+ 
+ 
+@@ -87,12 +91,21 @@ def locale_identifiers():
+     """
+     data = getattr(locale_identifiers, 'cache', None)
+     if data is None:
+-        locale_identifiers.cache = data = [
+-            stem
+-            for stem, extension in
+-            (os.path.splitext(filename) for filename in os.listdir(_dirname))
+-            if extension == '.dat' and stem != 'root'
+-        ]
++        try:
++            import library.python.resource as rs
++            locale_identifiers.cache = data = [
++                os.path.basename(stem)
++                for stem, extension in
++                (os.path.splitext(filename) for filename in rs.iterkeys(prefix="resfs/file/contrib/python/Babel/py2/babel/locale-data"))
++                if extension == '.dat' and stem != 'root'
++            ]
++        except ImportError:
++            locale_identifiers.cache = data = [
++                stem
++                for stem, extension in
++                (os.path.splitext(filename) for filename in os.listdir(_dirname))
++                if extension == '.dat' and stem != 'root'
++            ]
+     return data
+ 
+ 
+@@ -139,12 +152,26 @@ def load(name, merge_inherited=True):
+                     else:
+                         parent = '_'.join(parts[:-1])
+                 data = load(parent).copy()
+-            filename = resolve_locale_filename(name)
+-            with open(filename, 'rb') as fileobj:
++
++            try:
++                import library.python.resource as rs
++                pickle_data = rs.find("resfs/file/contrib/python/Babel/py2/babel/locale-data/%s" % os.path.basename(resolve_locale_filename(name)))
++                if pickle_data is None:
++                    raise IOError
++                data_ = pickle.loads(pickle_data)
++
+                 if name != 'root' and merge_inherited:
+-                    merge(data, pickle.load(fileobj))
++                    merge(data, data_)
+                 else:
+-                    data = pickle.load(fileobj)
++                    data = data_
++
++            except ImportError:
++                filename = resolve_locale_filename(name)
++                with open(filename, 'rb') as fileobj:
++                    if name != 'root' and merge_inherited:
++                        merge(data, pickle.load(fileobj))
++                    else:
++                        data = pickle.load(fileobj)
+             _cache[name] = data
+         return data
+     finally:

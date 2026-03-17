@@ -1,0 +1,11 @@
+__version__ = "2.1.3"
+__git_commiter_name__ = "Kobi Tal"
+__git_commiter_email__ = "ktal@infinidat.com"
+__git_branch__ = '(HEAD detached at v2.1.3)'
+__git_remote_tracking_branch__ = '(No remote tracking)'
+__git_remote_url__ = '(Not remote tracking)'
+__git_head_hash__ = '45a9200ff6e05dd7623219c4731acc14db04bfc5'
+__git_head_subject__ = 'Finished Release v2.1.3'
+__git_head_message__ = ''
+__git_dirty_diff__ = ''
+__git_commit_date__ = '2022-11-29 15:17:14'

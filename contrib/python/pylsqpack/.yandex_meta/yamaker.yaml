@@ -1,0 +1,2 @@
+requirements:
+  - ls-qpack: contrib/libs/ls-qpack

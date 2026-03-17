@@ -1,0 +1,7 @@
+# Code table 4.1 - Parameter category by product discipline
+0 0 Vegetation/biomass
+1 1 Agri-/aquacultural special products
+2 2 Transportation-related products
+3 3 Soil products
+4 4 Fire weather products
+255 255 Missing

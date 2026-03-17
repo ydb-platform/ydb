@@ -1,0 +1,43 @@
+--- contrib/python/patched/subvertpy/subvertpy/wc.c	(9855ce7c591c0ac55d8afff6d02e8efc6948b2bc)
++++ contrib/python/patched/subvertpy/subvertpy/wc.c	(working tree)
+@@ -2255,6 +2255,31 @@ static PyObject *ra_status(PyObject *self, PyObject *args)
+ 	return (PyObject*)ret;
+ }
+ 
++static PyObject *uri_canonicalize(PyObject *self, PyObject *args)
++{
++	apr_pool_t *pool;
++	const char *path;
++	PyObject *py_path;
++	PyObject *ret;
++
++	if (!PyArg_ParseTuple(args, "O", &py_path))
++		return NULL;
++
++	pool = Pool(NULL);
++	if (pool == NULL)
++		return NULL;
++
++	path = py_object_to_svn_uri(py_path, pool);
++	if (path == NULL) {
++		apr_pool_destroy(pool);
++		return NULL;
++	}
++
++	ret = PyUnicode_FromString(path);
++	apr_pool_destroy(pool);
++	return ret;
++}
++
+ /* Subversion 1.7 has a couple of significant behaviour changes that break subvertpy.
+  * We haven't updated the code to deal with these changes in behaviour yet.
+  * */
+@@ -2990,6 +3015,8 @@ static PyMethodDef wc_methods[] = {
+ 		"match_ignore_list(str, patterns) -> bool" },
+ 	{ "get_actual_target", (PyCFunction)get_actual_target, METH_VARARGS,
+ 		"get_actual_target(path) -> (anchor, target)" },
++	{ "uri_canonicalize", (PyCFunction)uri_canonicalize, METH_VARARGS,
++	    "uri_canonicalize(path) -> path" },
+ 	{ NULL, }
+ };
+ 

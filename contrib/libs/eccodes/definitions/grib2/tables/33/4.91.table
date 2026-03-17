@@ -1,0 +1,16 @@
+# Code table 4.91 - Type of Interval
+0 0 Smaller than first limit
+1 1 Greater than second limit
+2 2 Between first and second limit. The range includes the first limit but not the second limit
+3 3 Greater than first limit
+4 4 Smaller than second limit
+5 5 Smaller or equal first limit
+6 6 Greater or equal second limit
+7 7 Between first and second. The range includes the first limit and the second limit
+8 8 Greater or equal first limit
+9 9 Smaller or equal second limit
+10 10 Between first and second limit. The range includes the second limit but not the first limit
+11 11 Equal to first limit
+# 12-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

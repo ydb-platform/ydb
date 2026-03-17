@@ -1,0 +1,8 @@
+{% load i18n %}
+<div class="submit-row">
+  {% if not revert_disabled %}
+    <input type="submit" value="{% trans 'Revert' %}" class="default" name="_save" {{ onclick_attrib }}/>{% endif %}
+  {% if change_history %}
+    <input type="submit" value="{% trans 'Change History' %}" class="default" name="_change_history" {{ onclick_attrib }}/>{% endif %}
+  <a href="{{ history_url }}" class="closelink">{% trans 'Close' %}</a>
+</div>

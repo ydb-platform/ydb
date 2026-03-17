@@ -1,0 +1,8 @@
+requirements:
+  - numpy
+  - spidev
+  - RPi.GPIO
+keep:
+  - README.md
+exclude_from_macros:
+  - README.md

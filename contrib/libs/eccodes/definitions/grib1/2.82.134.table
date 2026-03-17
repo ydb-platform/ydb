@@ -1,0 +1,85 @@
+1 c2h6 C2H6 C2H6/Ethane -
+2 nc4h10 NC4H10 NC4H10/N-butane -
+3 c2h4 C2H4 C2H4/Ethene -
+4 c3h6 C3H6 C3H6/Propene -
+5 oxylene OXYLENE OXYLENE/O-xylene -
+6 hcho HCHO HCHO/Formalydehyde -
+7 ch3cho CH3CHO CH3CHO/Acetaldehyde -
+8 ch3coc2h5 CH3COC2H5 CH3COC2H5/Ethyl methyl keton -
+9 mglyox MGLYOX MGLYOX/Methyl-glyoxal (CH3COCHO) -
+10 glyox GLYOX GLYOX/Glyoxal (HCOCHO) -
+11 c5h8 C5H8 C5H8/Isoprene -
+12 c2h5oh C2H5OH C2H5OH/Ethanol -
+13 ch3oh CH3OH CH3OH/Metanol -
+14 hcooh HCOOH HCOOH/Formic acid -
+15 ch3cooh CH3COOH CH3COOH/Acetic acid -
+19 nmvoc_c NMVOC_C NMVOC_C/Total NMVOC as C -
+21 pan PAN PAN/Peroxy acetyl nitrate -
+22 no3 NO3 NO3/Nitrate radical -
+23 n2o5 N2O5 N2O5/Dinitrogen pentoxide -
+24 onit ONIT ONIT/Organic nitrate -
+25 isonro2 ISONRO2 ISONRO2/Isoprene-NO3 adduct -
+26 ho2no2 HO2NO2 HO2NO2/HO2NO2 -
+27 mpan MPAN MPAN -
+28 isono3h ISONO3H ISONO3H -
+29 hono HONO HONO -
+31 ho2 HO2 HO2/Hydroperhydroxyl radical -
+32 h2 H2 H2/Molecular hydrogen -
+33 o O O/Oxygen atomic ground state (3P) -
+34 o1d O1D O1D/Oxygen atomic first singlet state -
+41 ch3o2 CH3O2 CH3O2/Methyl peroxy radical -
+42 ch3o2h CH3O2H CH3O2H/Methyl hydroperoxide -
+43 c2h5o2 C2H5O2 C2H5O2/Ethyl peroxy radical -
+44 ch3coo2 CH3COO2 CH3COO2/Peroxy acetyl radical -
+45 secc4h9o2 SECC4H9O2 SECC4H9O2/Buthyl peroxy radical -
+46 ch3cocho2ch3 CH3COCHO2CH3 CH3COCHO2CH3/peroxy radical from MEK -
+47 acetol ACETOL ACETOL/acetol (hydroxy acetone) -
+48 ch2o2ch2oh CH2O2CH2OH CH2O2CH2OH -
+49 ch3cho2ch2oh CH3CHO2CH2OH CH3CHO2CH2OH/Peroxy radical from C3H6 plus OH -
+50 mal MAL MAL/CH3COCHCHCHO -
+51 malo2 MALO2 MALO2/Peroxy radical from MAL plus oh -
+52 isro2 ISRO2 ISRO2/Peroxy radical from isoprene plus oh -
+53 isoprod ISOPROD ISOPROD/Peroxy radical from ISOPROD -
+54 c2h5ooh C2H5OOH C2H5OOH/Ethyl hydroperoxide -
+55 ch3coo2h CH3COO2H CH3COO2H -
+56 oxyo2h OXYO2H OXYO2H/Hydroperoxide from OXYO2 -
+57 secc4h9o2h SECC4H9O2H SECC4H9O2H/Buthyl hydroperoxide -
+58 ch2oohch2oh CH2OOHCH2OH CH2OOHCH2OH -
+59 ch3choohch2oh CH3CHOOHCH2OH CH3CHOOHCH2OH//hydroperoxide from PRRO2 plus HO2 -
+60 ch3cocho2hch3 CH3COCHO2HCH3 CH3COCHO2HCH3/hydroperoxide from MEKO2 plus HO2 -
+61 malo2h MALO2H MALO2H/Hydroperoxide from MALO2 plus ho2 -
+62 ipro2 IPRO2 IPRO2 -
+63 xo2 XO2 XO2 -
+64 oxyo2 OXYO2 OXYO2/Peroxy radical from o-xylene plus oh -
+65 isro2h ISRO2H ISRO2H -
+66 mvk MVK MVK -
+67 mvko2 MVKO2 MVKO2 -
+68 mvko2h MVKO2H MVKO2H -
+70 benzene BENZENE BENZENE -
+74 isni ISNI ISNI -
+75 isnir ISNIR ISNIR -
+76 isnirh ISNIRH ISNIRH -
+77 macr MACR MACR -
+78 aoh1 AOH1 AOH1 -
+79 aoh1h AOH1H AOH1H -
+80 macro2 MACRO2 MACRO2 -
+81 maco3h MACO3H MACO3H -
+82 macooh MACOOH MACOOH -
+83 ch2cch3 CH2CCH3 CH2CCH3 -
+84 ch2co2hch3 CH2CO2HCH3 CH2CO2HCH3 -
+90 bigene BIGENE BIGENE -
+91 bigalk BIGALK BIGALK -
+92 toluene TOLUENE TOLUENE -
+100 ch2chcn CH2CHCN CH2CHCN -
+101 ch32nnh2 CH32NNH2 (CH3)2NNH2/Dimetylhydrazin -
+102 ch2oc2h3cl CH2OC2H3CL CH2OC2H3Cl/Epiklorhydrin -
+103 ch2oc2 CH2OC2 CH2OC2/Etylenoxid -
+105 hf HF HF/Vaetefluorid -
+106 hcl HCL Hcl/Vaeteklorid -
+107 cs2 CS2 CS2/Koldisulfid -
+108 ch3nh2 CH3NH2 CH3NH2/Metylamin -
+110 sf6 SF6 SF6/Sulphurhexafloride -
+111 hcn HCN HCN/Vaetecyanid -
+112 cocl2 COCL2 COCl2/Fosgen -
+113 h2cchcl H2CCHCL H2CCHCl/Vinylklorid -
+128 va VA Volcanic ash Code

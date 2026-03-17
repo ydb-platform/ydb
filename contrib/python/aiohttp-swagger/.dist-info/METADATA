@@ -1,0 +1,61 @@
+Metadata-Version: 2.1
+Name: aiohttp-swagger
+Version: 1.0.16
+Summary: Swagger API Documentation builder for aiohttp server
+Home-page: https://github.com/cr0hn/aiohttp-swagger
+Author: Daniel Garcia (cr0hn)
+Author-email: cr0hn@cr0hn.com
+License: BSD
+Platform: UNKNOWN
+Classifier: Environment :: Console
+Classifier: Intended Audience :: System Administrators
+Classifier: Intended Audience :: Other Audience
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: MacOS
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Topic :: Security
+Description-Content-Type: text/markdown
+Requires-Dist: pyYAML (>=5.1)
+Requires-Dist: jinja2 (>=2.11.2)
+Requires-Dist: aiohttp (>=2.3.10)
+Provides-Extra: performance
+Requires-Dist: ujson ; extra == 'performance'
+
+aiohttp-swagger
+===============
+
+**LOOCKING FOR MAINTAINERS**!!!!!
+
+![Logo](doc/source/_static/logo.png)
+
+[![Build Status](https://travis-ci.org/cr0hn/aiohttp-swagger.svg?branch=master)](https://travis-ci.org/cr0hn/aiohttp-swagger)
+[![codecov.io](https://codecov.io/github/cr0hn/aiohttp-swagger/coverage.svg?branch=master)](https://codecov.io/github/cr0hn/aiohttp-swagger)
+
+*aiohttp-swagger: Swagger API Documentation builder for aiohttp server*
+
+Documentation |  http://aiohttp-swagger.readthedocs.io/en/latest/
+------------- | -------------------------------------------------
+Code | https://github.com/cr0hn/aiohttp-swagger
+Issues | https://github.com/cr0hn/aiohttp-swagger/issues/
+Python version | Python 3.4 and above
+
+What's aiohttp-swagger
+----------------------
+
+aiohttp-swagger is a plugin for aiohttp.web server that allow to document APIs using Swagger show the Swagger-ui console.
+
+What's new?
+-----------
+
+### Version 1.0.0
+
+- First version released
+
+You can read entire list in [CHANGELOG](https://github.com/cr0hn/aiohttp-swagger/blob/master/CHANGELOG) file.
+
+

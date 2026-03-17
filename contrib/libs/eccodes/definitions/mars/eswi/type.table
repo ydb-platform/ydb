@@ -1,0 +1,13 @@
+#########################
+#
+# author: Sebastien Villaume
+# created: 6 Oct 2011
+# modified: 13 May 2013
+#
+0 none not set, default
+2 an Analysis
+5 3v 3DVAR analysis
+6 4v 4DVAR analysis
+9 fc Forecast
+21 si Climate simulation
+101 sa need to be filled

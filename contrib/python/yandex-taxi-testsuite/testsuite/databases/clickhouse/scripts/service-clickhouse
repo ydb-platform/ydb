@@ -1,0 +1,55 @@
+#!/bin/sh
+
+. "$TESTSUITE_LIB_UTILS"
+. "$(dirname "$0")/find-clickhouse.sh"
+
+# use ramdisk for clickhouse if available
+RAMDISK="/mnt/ramdisk/$USER"
+if mkdir -p "$RAMDISK" 2> /dev/null; then
+    CLICKHOUSE_TMPDIR=$RAMDISK/_clickhouse${WORKER_SUFFIX_PATH}
+fi
+
+if [ "x$CLICKHOUSE_TMPDIR" = "x" ]; then
+    die "CLICKHOUSE_TMPDIR must be set or RAM-disk must be enabled"
+fi
+if [ "x$CLICKHOUSE_TCP_PORT" = "x" ]; then
+    die "CLICKHOUSE_TCP_PORT must be set"
+fi
+if [ "x$CLICKHOUSE_HTTP_PORT" = "x" ]; then
+    die "CLICKHOUSE_HTTP_PORT must be set"
+fi
+
+CLICKHOUSE_LOG_FILE="$CLICKHOUSE_TMPDIR/clickhouse.log"
+CLICKHOUSE_PID_FILE="$CLICKHOUSE_TMPDIR/clickhouse.pid"
+
+start_clickhouse() {
+    mkdir -p "$CLICKHOUSE_TMPDIR"
+    mkdir -p "$CLICKHOUSE_TMPDIR/data"
+    ln -s "$CLICKHOUSE_BINPATH" "$CLICKHOUSE_TMPDIR"
+    "$CLICKHOUSE_TMPDIR/clickhouse"             \
+        server                                  \
+        --log-file="$CLICKHOUSE_LOG_FILE"       \
+        --pid-file="$CLICKHOUSE_PID_FILE"       \
+        --daemon                                \
+        --                                      \
+        --tcp_port="$CLICKHOUSE_TCP_PORT"       \
+        --http_port="$CLICKHOUSE_HTTP_PORT"     \
+        --path="$CLICKHOUSE_TMPDIR/data"        \
+        --listen_host=localhost || {
+        dump_log_stderr "$CLICKHOUSE_LOG_FILE"
+        exit 1
+    }
+
+    sleep 1
+}
+
+start() {
+    (ulimit_files && start_clickhouse)
+}
+
+stop() {
+    stop_daemon "$CLICKHOUSE_BINPATH" "$CLICKHOUSE_PID_FILE"
+    rm -rf "$CLICKHOUSE_TMPDIR"
+}
+
+script_main "$@"

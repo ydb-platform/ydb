@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+    <S:Envelope xmlns:S="http://www.w3.org/2003/05/soap-envelope"
+    xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" 
+    xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy" 
+    xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" 
+    xmlns:wsa="http://www.w3.org/2005/08/addressing"
+    xmlns:wst="http://schemas.xmlsoap.org/ws/2005/02/trust">
+    <S:Header>
+        <wsa:Action S:mustUnderstand="1">http://schemas.xmlsoap.org/ws/2005/02/trust/RST/Issue</wsa:Action>
+        <wsa:To S:mustUnderstand="1">{serviceTokenUrl}</wsa:To>
+        <ps:AuthInfo xmlns:ps="http://schemas.microsoft.com/LiveID/SoapServices/v1" Id="PPAuthInfo">
+            <ps:BinaryVersion>5</ps:BinaryVersion>
+            <ps:HostingApp>Managed IDCRL</ps:HostingApp>
+        </ps:AuthInfo>
+        <wsse:Security>{assertion_node}</wsse:Security>
+    </S:Header>
+    <S:Body>
+        <wst:RequestSecurityToken xmlns:wst="http://schemas.xmlsoap.org/ws/2005/02/trust" Id="RST0">
+            <wst:RequestType>http://schemas.xmlsoap.org/ws/2005/02/trust/Issue</wst:RequestType>
+            <wsp:AppliesTo>
+                <wsa:EndpointReference>
+                    <wsa:Address>{auth_url}</wsa:Address>
+                </wsa:EndpointReference>
+            </wsp:AppliesTo>
+            <wsp:PolicyReference URI="MBI"></wsp:PolicyReference>
+        </wst:RequestSecurityToken>
+    </S:Body>
+    </S:Envelope>

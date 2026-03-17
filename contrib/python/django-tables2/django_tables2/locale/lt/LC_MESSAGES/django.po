@@ -1,0 +1,45 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: django-tables2\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2020-07-28 12:40+0300\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Robertas Murnikovas <murnikovas.r@gmail.com>\n"
+"Language-Team: Lithuanian <murnikovas.r@gmail.com>\n"
+"Language: lt\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n % 10 == 1 && (n % 100 > 19 || n % 100 < "
+"11) ? 0 : (n % 10 >= 2 && n % 10 <=9) && (n % 100 > 19 || n % 100 < 11) ? "
+"1 : n % 1 != 0 ? 2: 3);\n"
+
+#: paginators.py:72
+msgid "That page number is not an integer"
+msgstr "Puslapio numeris nėra sveikasis skaičius"
+
+#: paginators.py:74
+msgid "That page number is less than 1"
+msgstr "Puslapio numeris yra mažesnis už 1"
+
+#: paginators.py:93
+msgid "That page contains no results"
+msgstr "Puslapyje nerasta jokių rezultatų"
+
+#: templates/django_tables2/bootstrap.html:66
+#: templates/django_tables2/bootstrap4.html:66
+#: templates/django_tables2/table.html:64
+msgid "previous"
+msgstr "ankstesnis"
+
+#: templates/django_tables2/bootstrap.html:91
+#: templates/django_tables2/bootstrap4.html:86
+#: templates/django_tables2/table.html:88
+msgid "next"
+msgstr "kitas"

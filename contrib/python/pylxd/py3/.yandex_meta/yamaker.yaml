@@ -1,0 +1,5 @@
+requirements:
+  - setuptools
+mark_as_tests:
+  - integration/*
+  - migration/*

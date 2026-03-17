@@ -1,0 +1,177 @@
+{#
+This template renders MIB instrumentation hooks to the SMI classes
+representing Managed Objects Instances for scalar and columnar
+Managed Objects.
+
+By default all read/readnext/write/create/destroy hooks are generated.
+User can extend this template muting some of the hooks to reduce code
+size.
+
+If the hook is not overridden, it will manage the volatile variable
+as defined by the MIB OBJECT-TYPE clause.
+
+These hooks are asynchronous by design. Be sure to understand pysnmp
+SMI data model (`https://www.pysnmp.com/pysnmp`) if you are going to add
+your code into these hooks.
+#}
+{% extends "pysnmp/managed-objects-instances.j2" %}
+
+{% block mib_scalar_object_instance_definition %}
+
+
+class {{ symbol|capfirst }}_ObjectInstance(MibScalarInstance):
+    """Scalar Managed Object Instance with MIB instrumentation hooks.
+
+    User can override none, some or all of the method below interfacing
+    them to the data source they want to manage through SNMP.
+    Non-overridden methods could just be removed from this class.
+
+    See the SMI data model documentation at `https://www.pysnmp.com/pysnmp`.
+    """
+    {% block mib_scalar_object_instance_read scoped %}
+    def readTest(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.readTest(self, varBind, **context)
+
+    def readGet(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.readGet(self, varBind, **context)
+    {% endblock %}
+
+    {% block mib_scalar_object_instance_readnext scoped %}
+    def readTestNext(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.readTestNext(self, varBind, **context)
+
+    def readGetNext(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.readGetNext(self, varBind, **context)
+    {% endblock %}
+
+    {% block mib_scalar_object_instance_write scoped %}
+    def writeTest(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.writeTest(self, varBind, **context)
+
+    def writeCommit(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.writeCommit(self, varBind, **context)
+
+    def writeCleanup(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.writeCleanup(self, varBind, **context)
+
+    def writeUndo(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.writeUndo(self, varBind, **context)
+    {% endblock %}
+
+    {% block mib_scalar_object_instance_create scoped %}
+    def createTest(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.createTest(self, varBind, **context)
+
+    def createCommit(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.createCommit(self, varBind, **context)
+
+    def createCleanup(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.createCleanup(self, varBind, **context)
+
+    def createUndo(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.createUndo(self, varBind, **context)
+    {% endblock %}
+
+
+{% endblock -%}
+
+{% block mib_table_column_object_instance_definition %}
+
+
+class {{ symbol|capfirst }}_ObjectInstance(MibScalarInstance):
+    """Columnar Managed Object Instance with MIB instrumentation hooks.
+
+    User can override none, some or all of the method below interfacing
+    them to the data source they want to manage through SNMP.
+    Non-overridden methods could just be removed from this class.
+
+    See the SMI data model documentation at `https://www.pysnmp.com/pysnmp`.
+    """
+    {% block mib_table_column_object_instance_read scoped %}
+    def readTest(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.readTest(self, varBind, **context)
+
+    def readGet(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.readGet(self, varBind, **context)
+    {% endblock %}
+
+    {% block mib_table_column_object_instance_readnext scoped %}
+    def readTestNext(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.readTestNext(self, varBind, **context)
+
+    def readGetNext(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.readGetNext(self, varBind, **context)
+    {% endblock %}
+
+    {% block mib_table_column_object_instance_write scoped %}
+    def writeTest(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.writeTest(self, varBind, **context)
+
+    def writeCommit(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.writeCommit(self, varBind, **context)
+
+    def writeCleanup(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.writeCleanup(self, varBind, **context)
+
+    def writeUndo(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.writeUndo(self, varBind, **context)
+    {% endblock %}
+
+    {% block mib_table_column_object_instance_create scoped %}
+    def createTest(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.createTest(self, varBind, **context)
+
+    def createCommit(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.createCommit(self, varBind, **context)
+
+    def createCleanup(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.createCleanup(self, varBind, **context)
+
+    def createUndo(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.createUndo(self, varBind, **context)
+    {% endblock %}
+
+    {% block mib_table_column_object_instance_destroy scoped %}
+    def destroyTest(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.destroyTest(self, varBind, **context)
+
+    def destroyCommit(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.destroyCommit(self, varBind, **context)
+
+    def destroyCleanup(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.destroyCleanup(self, varBind, **context)
+
+    def destroyUndo(self, varBind, **context):
+        # Put your code here
+        MibScalarInstance.destroyUndo(self, varBind, **context)
+    {% endblock %}
+
+
+{% endblock %}

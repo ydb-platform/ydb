@@ -1,0 +1,3 @@
+mark_as_py3_sources:
+  - graphql/execution/executors/asyncio.py
+  - graphql/execution/executors/asyncio_utils.py

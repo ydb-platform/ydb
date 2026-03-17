@@ -1,0 +1,18 @@
+--- contrib/python/orderly-set/tests/test_ordered_set_1.py	(index)
++++ contrib/python/orderly-set/tests/test_ordered_set_1.py	(working tree)
+@@ -12 +12 @@ import pytest
+-from tests import (
++from . import (
+--- contrib/python/orderly-set/tests/test_ordered_set_2.py	(index)
++++ contrib/python/orderly-set/tests/test_ordered_set_2.py	(working tree)
+@@ -13 +13 @@ import pytest
+-from tests import (
++from . import (
+@@ -25 +25 @@ from tests import (
+-from tests.pytest_util import (
++from .pytest_util import (
+--- contrib/python/orderly-set/tests/test_ordered_set_3.py	(index)
++++ contrib/python/orderly-set/tests/test_ordered_set_3.py	(working tree)
+@@ -10 +10 @@ import pytest
+-from tests import all_sets, stable_and_orderly_sets, SortedSet, stable_and_orderly_sets_except_sorted_set
++from . import all_sets, stable_and_orderly_sets, SortedSet, stable_and_orderly_sets_except_sorted_set

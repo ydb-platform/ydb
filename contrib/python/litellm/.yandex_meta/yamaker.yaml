@@ -1,0 +1,3 @@
+requirements:
+  - pydantic: contrib/python/pydantic/pydantic-2
+  - aiohttp: null

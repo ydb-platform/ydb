@@ -1,0 +1,6 @@
+# Reference data taken from libsodium's test/default/box_seed.c
+# and test/default/box_seed.exp.
+# The seed comes from box_seed.c, the public and secret keys
+# come from box_seed.exp where they are directly concatenated.
+# Fmt: <seed> <tab> <public_key> || <secret_key>
+77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a	ed7749b4d989f6957f3bfde6c56767e988e21c9f8784d91d610011cd553f9b06accd44eb8e93319c0570bc11005c0e0189d34ff02f6c17773411ad191293c98f

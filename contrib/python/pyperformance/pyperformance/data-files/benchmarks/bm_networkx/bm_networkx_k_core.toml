@@ -1,0 +1,3 @@
+[tool.pyperformance]
+name = "networkx_k_core"
+extra_opts = ["k_core"]

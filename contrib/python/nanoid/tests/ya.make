@@ -1,0 +1,13 @@
+PY3TEST()
+
+NO_LINT()
+
+PEERDIR(
+    contrib/python/nanoid
+)
+
+ALL_PYTEST_SRCS(RECURSIVE)
+
+SIZE(MEDIUM)
+
+END()

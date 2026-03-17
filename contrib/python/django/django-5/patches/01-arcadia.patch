@@ -1,0 +1,285 @@
+--- django-5/django/core/management/commands/loaddata.py	(index)
++++ django-5/django/core/management/commands/loaddata.py	(working tree)
+@@ -1,6 +1,7 @@
+ import functools
+ import glob
+ import gzip
++import io
+ import os
+ import sys
+ import warnings
+@@ -24,6 +25,8 @@ from django.db import (
+ )
+ from django.utils.functional import cached_property
+ 
++from library.python import resource
++
+ try:
+     import bz2
+ 
+@@ -41,6 +44,32 @@ except ImportError:
+ READ_STDIN = "-"
+ 
+ 
++cached_resfs_read = functools.lru_cache(maxsize=None)(resource.resfs_read)
++
++
++def open_fixture(fixture_file, open_method, mode):
++    """
++    Yandex-specific
++    :return:
++    """
++    # try load from resource, in case of success - use correct open_method
++    content = resource.resfs_read(fixture_file)
++    if content is None:
++        return open_method(fixture_file, mode)
++    if has_bz2 and open_method == bz2.BZ2File:
++        return io.BytesIO(bz2.decompress(content))
++    f = io.BytesIO(content)
++    if open_method == open:
++        return f
++    if open_method == gzip.GzipFile:
++        return gzip.GzipFile(fileobj=f, mode=mode)
++    if open_method == SingleZipReader:
++        return SingleZipReader(f, mode=mode)
++    raise NotImplementedError("open_method {} for {} is not implemented".format(
++        open_method, fixture_file
++    ))
++
++
+ class Command(BaseCommand):
+     help = "Installs the named fixture(s) in the database."
+     missing_args_message = (
+@@ -231,7 +260,7 @@ class Command(BaseCommand):
+         ):
+             _, ser_fmt, cmp_fmt = self.parse_name(os.path.basename(fixture_file))
+             open_method, mode = self.compression_formats[cmp_fmt]
+-            fixture = open_method(fixture_file, mode)
++            fixture = open_fixture(fixture_file, open_method, mode)
+             self.fixture_count += 1
+             objects_in_fixture = 0
+             loaded_objects_in_fixture = 0
+@@ -312,6 +341,37 @@ class Command(BaseCommand):
+                 fixture_files_in_dir.append((candidate, fixture_dir, fixture_name))
+         return fixture_files_in_dir
+ 
++    @functools.lru_cache(maxsize=None)
++    def find_fixtures_in_resource(self, fixture_label):
++        """
++        Yandex-specific
++        :param fixture_label: some string, which user provides in loaddata command
++        :return: list of (candidate, fixture_dir, fixture_name)
++        """
++        fixture_name, _, _ = self.parse_name(fixture_label)
++
++        if self.verbosity >= 2:
++            self.stdout.write("Trying load '%s' from resource..." % fixture_label)
++
++        # try load by literal path
++        if cached_resfs_read(fixture_label) is not None:
++            return [(fixture_label, None, fixture_name)]
++
++        result = []
++        for fixture_dir in self.fixture_paths_in_resource:
++            fixture_path = os.path.join(fixture_dir, fixture_label)
++            # try load by literal path in dir
++            fixture = cached_resfs_read(fixture_path)
++            if fixture is not None:
++                result.append((fixture_path, fixture_dir, fixture_name))
++                continue
++
++            # try load all files in dir without regarding an extension
++            for entry in resource.resfs_files(prefix=fixture_path + "/"):
++                result.append((entry, fixture_path, fixture_name))
++
++        return result
++
+     @functools.cache
+     def find_fixtures(self, fixture_label):
+         """Find fixture files for a given label."""
+@@ -322,6 +382,12 @@ class Command(BaseCommand):
+         if self.verbosity >= 2:
+             self.stdout.write("Loading '%s' fixtures..." % fixture_name)
+ 
++        # Yandex-specific: at first we should try to load fixtures from Arcadia resource
++        fixture_files = self.find_fixtures_in_resource(fixture_label)
++        if fixture_files:
++            return fixture_files
++        # End of Yandex-specific
++
+         fixture_name, fixture_dirs = self.get_fixture_name_and_dirs(fixture_name)
+         targets = self.get_targets(fixture_name, ser_fmt, cmp_fmt)
+         fixture_files = []
+@@ -383,6 +449,31 @@ class Command(BaseCommand):
+         dirs.append("")
+         return [os.path.realpath(d) for d in dirs]
+ 
++    @cached_property
++    def fixture_paths_in_resource(self):
++        """
++        Yandex-specific
++        Return a list of fixture prefixes.
++        """
++        dirs = []
++        fixture_dirs = settings.FIXTURE_DIRS
++        if len(fixture_dirs) != len(set(fixture_dirs)):
++            raise ImproperlyConfigured("settings.FIXTURE_DIRS contains duplicates.")
++        for app_config in apps.get_app_configs():
++            app_label = app_config.label
++            app_dir = os.path.dirname(app_config.module.__loader__.get_filename(app_config.module.__name__)) + "/fixtures"
++            if app_dir in fixture_dirs:
++                raise ImproperlyConfigured(
++                    "'%s' is a default fixture directory for the '%s' app "
++                    "and cannot be listed in settings.FIXTURE_DIRS." % (app_dir, app_label)
++                )
++
++            if self.app_label and app_label != self.app_label:
++                continue
++            dirs.append(app_dir)
++        dirs.extend(list(fixture_dirs))
++        return dirs
++
+     def parse_name(self, fixture_name):
+         """
+         Split fixture name in name, serialization format, compression format.
+--- django-5/django/core/management/commands/makemigrations.py	(index)
++++ django-5/django/core/management/commands/makemigrations.py	(working tree)
+@@ -1,6 +1,7 @@
+ import os
+ import sys
+ import warnings
++from importlib import import_module
+ from itertools import takewhile
+ 
+ from django.apps import apps
+@@ -22,6 +23,9 @@ from django.db.migrations.state import ProjectState
+ from django.db.migrations.utils import get_migration_name_timestamp
+ from django.db.migrations.writer import MigrationWriter
+ 
++from library.python.django.utils import get_module_dir
++from yalibrary.makelists import from_file
++
+ 
+ class Command(BaseCommand):
+     help = "Creates new migration(s) for apps."
+@@ -138,6 +142,10 @@ class Command(BaseCommand):
+         # the loader doesn't try to resolve replaced migrations from DB.
+         loader = MigrationLoader(None, ignore_no_migrations=True)
+ 
++        # Yandex - specific: we need loader later in order to get migrations module
++        self._loader = loader
++        # End of Yandex-specific
++
+         # Raise an error if any migrations are applied before their dependencies.
+         consistency_check_labels = {config.label for config in apps.get_app_configs()}
+         # Non-default databases are only checked if database routers used.
+@@ -365,6 +373,12 @@ class Command(BaseCommand):
+                     with open(writer.path, "w", encoding="utf-8") as fh:
+                         fh.write(migration_string)
+                         self.written_files.append(writer.path)
++                        # Yandex - specific: we're trying to add migration to ya.make in migrations dir
++                        try:
++                            self._add_migration_to_ya_make(app_label, writer.filename)
++                        except IOError:
++                            self.log("Failed to update ya.make, please ensure that it is in migrations dir")
++                        # End of Yandex-specific
+                     if update_previous_migration_paths:
+                         prev_path = update_previous_migration_paths[app_label]
+                         rel_prev_path = self.get_relative_path(prev_path)
+@@ -498,6 +512,12 @@ class Command(BaseCommand):
+                     # Write the merge migrations file to the disk
+                     with open(writer.path, "w", encoding="utf-8") as fh:
+                         fh.write(writer.as_string())
++                        # Yandex - specific: we're trying to add migration to ya.make in migrations dir
++                        try:
++                            self._add_migration_to_ya_make(app_label, writer.filename)
++                        except IOError:
++                            self.log("Failed to update ya.make, please ensure that it is migrations dir")
++                        # End of Yandex-specific
+                     run_formatters([writer.path], stderr=self.stderr)
+                     if self.verbosity > 0:
+                         self.log("\nCreated new merge migration %s" % writer.path)
+@@ -513,3 +533,16 @@ class Command(BaseCommand):
+                         )
+                     )
+                     self.log(writer.as_string())
++
++    # Yandex - specific: we're trying to add migration to ya.make in migrations dir
++    def _add_migration_to_ya_make(self, app_label, migration_name):
++        migration_package_name, _ = self._loader.migrations_module(app_label)
++        migration_module = import_module(migration_package_name)
++        migration_fs_path = get_module_dir(migration_module)
++        ya_make_path = os.path.join(migration_fs_path, "ya.make")
++        make_list = from_file(ya_make_path)
++        if not make_list.project.py_srcs().children:
++            make_list.project.py_srcs().add("__init__.py")
++        make_list.project.py_srcs().add(migration_name)
++        make_list.write(ya_make_path)
++    # End of Yandex-specific
+--- django-5/django/db/migrations/questioner.py	(index)
++++ django-5/django/db/migrations/questioner.py	(working tree)
+@@ -10,6 +10,9 @@ from django.utils import timezone
+ from django.utils.version import get_docs_version
+ 
+ from .loader import MigrationLoader
++# Yandex-Specific: right imports
++from library.python.django.utils import get_module_dir
++# End of Yandex-Specific
+ 
+ 
+ class MigrationQuestioner:
+@@ -46,12 +49,9 @@ class MigrationQuestioner:
+         except ImportError:
+             return self.defaults.get("ask_initial", False)
+         else:
+-            if getattr(migrations_module, "__file__", None):
+-                filenames = os.listdir(os.path.dirname(migrations_module.__file__))
+-            elif hasattr(migrations_module, "__path__"):
+-                if len(migrations_module.__path__) > 1:
+-                    return False
+-                filenames = os.listdir(list(migrations_module.__path__)[0])
++            # Yandex-Specific: in arcadia we should use specific methods in order to find migrations directory
++            filenames = os.listdir(get_module_dir(migrations_module))
++            # End of Yandex-Specific
+             return not any(x.endswith(".py") for x in filenames if x != "__init__.py")
+ 
+     def ask_not_null_addition(self, field_name, model_name):
+--- django-5/django/template/engine.py	(index)
++++ django-5/django/template/engine.py	(working tree)
+@@ -148,6 +148,11 @@ class Engine:
+             loader_class = import_string(loader)
+             return loader_class(self, *args)
+         else:
++            try:
++                if isinstance(engines["django"], DjangoTemplates):
++                    return engines["django"].engine
++            except KeyError:
++                pass
+             raise ImproperlyConfigured(
+                 "Invalid value in template loaders configuration: %r" % loader
+             )
+--- django-5/django/utils/module_loading.py	(index)
++++ django-5/django/utils/module_loading.py	(working tree)
+@@ -4,6 +4,8 @@ import sys
+ from importlib import import_module
+ from importlib.util import find_spec as importlib_find
+ 
++from library.python.django.utils import get_module_dir
++
+ 
+ def cached_import(module_path, class_name):
+     # Check whether module is loaded and fully initialized.
+@@ -96,12 +98,4 @@ def module_dir(module):
+     Raise ValueError otherwise, e.g. for namespace packages that are split
+     over several directories.
+     """
+-    # Convert to list because __path__ may not support indexing.
+-    paths = list(getattr(module, "__path__", []))
+-    if len(paths) == 1:
+-        return paths[0]
+-    else:
+-        filename = getattr(module, "__file__", None)
+-        if filename is not None:
+-            return os.path.dirname(filename)
+-    raise ValueError("Cannot determine directory containing %s" % module)
++    return get_module_dir(module)

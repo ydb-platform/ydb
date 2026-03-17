@@ -1,0 +1,82 @@
+{
+    "$schema": "https://json-schema.org/draft/2019-09/schema",
+    "type": "object",
+    "title": "v2_test",
+    "additionalProperties": true,
+    "oneOf": [
+        {
+            "type": "object",
+            "properties": {
+                "field_1": {
+                    "enum": [
+                        "response_1"
+                    ]
+                }
+            },
+            "additionalProperties": true,
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "field_2": {
+                            "enum": [
+                                "response_a"
+                            ]
+                        }
+                    },
+                    "additionalProperties": true,
+                    "required": [
+                        "field_2"
+                    ]
+                }
+            ],
+            "required": [
+                "field_1"
+            ]
+        },
+        {
+            "type": "object",
+            "properties": {
+                "field_1": {
+                    "enum": [
+                        "response_2"
+                    ]
+                }
+            },
+            "additionalProperties": true,
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "field_2": {
+                            "enum": [
+                                "response_b"
+                            ]
+                        }
+                    },
+                    "additionalProperties": true,
+                    "required": [
+                        "field_2"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "field_2": {
+                            "enum": [
+                                "response_c"
+                            ]
+                        }
+                    },
+                    "additionalProperties": true,
+                    "required": [
+                        "field_2"
+                    ]
+                }
+            ],
+            "required": [
+                "field_1"
+            ]
+        }
+    ]
+}

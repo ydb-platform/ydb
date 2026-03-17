@@ -1,0 +1,6 @@
+#Code Table obstat.6.0: List of data streams
+0 Normal_delivery Normal delivery
+1 EARS EARS
+2 PAC-RARS PAC-RARS
+3 DB_MODIS DB MODIS winds
+#4-255 Reserved

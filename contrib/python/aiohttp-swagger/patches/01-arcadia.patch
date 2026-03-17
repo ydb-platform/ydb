@@ -1,0 +1,60 @@
+--- contrib/python/aiohttp-swagger/aiohttp_swagger/__init__.py	(index)
++++ contrib/python/aiohttp-swagger/aiohttp_swagger/__init__.py	(working tree)
+@@ -1,4 +1,5 @@
+ import asyncio
++import importlib.resources
+ from os.path import abspath, dirname, join
+ from types import FunctionType
+ 
+@@ -54,9 +55,9 @@ def setup_swagger(app: web.Application,
+     _swagger_def_url = '{}/swagger.json'.format(_base_swagger_url)
+ 
+     if ui_version == 3:
+-        STATIC_PATH = abspath(join(dirname(__file__), "swagger_ui3"))
++        STATIC_PATH = importlib.resources.files(__package__) / "swagger_ui3"
+     else:
+-        STATIC_PATH = abspath(join(dirname(__file__), "swagger_ui"))
++        STATIC_PATH = importlib.resources.files(__package__) / "swagger_ui"
+ 
+     # Build Swagget Info
+     if swagger_info is None:
+@@ -98,7 +98,7 @@ def setup_swagger(app: web.Application,
+     # Build templates
+     # --------------------------------------------------------------------------
+     app["SWAGGER_DEF_CONTENT"] = swagger_info
+-    with open(join(STATIC_PATH, "index.html"), "r") as f:
++    with (STATIC_PATH / "index.html").open("r") as f:
+         app["SWAGGER_TEMPLATE_CONTENT"] = (
+             f.read()
+             .replace("##SWAGGER_CONFIG##", '{}{}'.
+--- contrib/python/aiohttp-swagger/aiohttp_swagger/helpers/builders.py	(index)
++++ contrib/python/aiohttp-swagger/aiohttp_swagger/helpers/builders.py	(working tree)
+@@ -1,3 +1,4 @@
++import importlib.resources
+ from collections import defaultdict
+ from os.path import abspath, dirname, join
+ from inspect import isclass
+@@ -13,7 +14,7 @@ except ImportError: # pragma: no cover
+     import json
+ 
+ 
+-SWAGGER_TEMPLATE = abspath(join(dirname(__file__), "..", "templates"))
++SWAGGER_TEMPLATE = importlib.resources.files("aiohttp_swagger") / "templates"
+ 
+ 
+ def _extract_swagger_docs(end_point_doc, method="get"):
+@@ -108,11 +109,11 @@ def generate_doc_from_each_end_point(
+ 
+     if template_path is None:
+         if ui_version == 3:
+-            template_path = join(SWAGGER_TEMPLATE, "openapi.yaml")
++            template_path = SWAGGER_TEMPLATE / "openapi.yaml"
+         else:
+-            template_path = join(SWAGGER_TEMPLATE, "swagger.yaml")
++            template_path = SWAGGER_TEMPLATE / "swagger.yaml"
+ 
+-    with open(template_path, "r") as f:
++    with template_path.open("r") as f:
+         swagger_base = (
+             jinja2_env.from_string(f.read()).render(
+                 description=cleaned_description,

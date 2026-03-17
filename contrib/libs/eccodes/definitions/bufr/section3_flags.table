@@ -1,0 +1,5 @@
+# CODE TABLE 1, Flag indication relative to section 2 and 3
+1 0 Other data
+1 1 Observed data
+2 0 Non-compressed data
+2 1 Compressed data

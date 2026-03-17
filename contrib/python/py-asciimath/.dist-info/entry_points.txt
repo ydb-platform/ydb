@@ -1,0 +1,3 @@
+[console_scripts]
+py_asciimath = py_asciimath.py_asciimath:main
+

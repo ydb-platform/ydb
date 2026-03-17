@@ -1,0 +1,5 @@
+192 192 UV visible albedo for diffuse radiation
+193 193 UV visible albedo for direct radiation
+194 194 UV visible albedo for direct radiation, geometric component
+195 195 UV visible albedo for direct radiation, isotropic component
+196 196 UV visible albedo for direct radiation, volumetric component

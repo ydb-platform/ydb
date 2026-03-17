@@ -1,0 +1,3 @@
+exclude_from_macros:
+  - blib2to3/LICENSE
+  - blib2to3/README

@@ -1,0 +1,19 @@
+--- contrib/python/plotly/py3/ya.make	(index)
++++ contrib/python/plotly/py3/ya.make	(working tree)
+@@ -13,6 +11,16 @@ PEERDIR(
+     contrib/python/tenacity
+ )
+ 
++IF (NOT WINDOWS)
++   # some modules don't cannot be built on Windows
++   PEERDIR(
++       contrib/python/ipywidgets
++   )
++ENDIF()
++
++# joint source compilation takes too many time under sanitizer
++NO_SANITIZE()
++
+ NO_LINT()
+ 
+ NO_CHECK_IMPORTS(

@@ -1,0 +1,6 @@
+---
+$defs:
+  RefObject:
+    $ref: "same_file_reference_from_file_schemas.spec.yaml#/$defs/PlainObject"
+  PlainObject:
+    type: object

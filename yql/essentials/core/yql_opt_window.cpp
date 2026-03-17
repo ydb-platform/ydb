@@ -1696,8 +1696,6 @@ public:
             .Seal()
             .Build();
 
-        state = WrapWithWinContext(state, ctx);
-
         auto initBody = ctx.Builder(GetPos())
             .List()
                 .Apply(0, calculate)
@@ -1732,8 +1730,6 @@ public:
                 .Add(2, ctx.DeepCopyLambda(*originalUpdate))
             .Seal()
             .Build();
-
-        state = WrapWithWinContext(state, ctx);
 
         auto updateBody = ctx.Builder(GetPos())
             .List()
@@ -1782,8 +1778,6 @@ public:
                 .Add(2, ctx.DeepCopyLambda(*originalUpdate))
             .Seal()
             .Build();
-
-        state = WrapWithWinContext(state, ctx);
 
         auto initBody = ctx.Builder(GetPos())
             .List()
@@ -1954,8 +1948,6 @@ private:
                 .Add(2, ctx.DeepCopyLambda(*originalUpdate))
             .Seal()
             .Build();
-
-        fold1 = WrapWithWinContext(fold1, ctx);
 
         auto output = ctx.Builder(GetPos())
             .Callable("Map")

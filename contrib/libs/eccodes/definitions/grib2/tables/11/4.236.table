@@ -1,0 +1,9 @@
+#Soil texture fraction (to be used as partitioned parameter in PDT 4.53 or 4.54)
+1 1 Coarse
+2 2 Medium
+3 3 Medium-fine
+4 4 Fine
+5 5 Very-fine
+6 6 Organic
+7 7 Tropical-organic
+

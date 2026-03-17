@@ -1,0 +1,5 @@
+exclude_from_macros:
+  - pyphen/dictionaries/README_hyph_*.txt
+  - pyphen/dictionaries/update.sh
+keep:
+  - pyphen/dictionaries/__init__.py

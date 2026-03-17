@@ -1,0 +1,271 @@
+# Slovak translation of humanize
+# Copyright (C) 2016
+# This file is distributed under the same license as the PACKAGE package.
+# Jose Riha <jose1711 gmail com>, 2016.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2020-02-08 20:05+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Jose Riha <jose1711 gmail com>\n"
+"Language-Team: sk <LL@li.org>\n"
+"Language: Slovak\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
+
+#: src/humanize/number.py:24
+msgctxt "0"
+msgid "th"
+msgstr "."
+
+#: src/humanize/number.py:25
+msgctxt "1"
+msgid "st"
+msgstr "."
+
+#: src/humanize/number.py:26
+msgctxt "2"
+msgid "nd"
+msgstr "."
+
+#: src/humanize/number.py:27
+msgctxt "3"
+msgid "rd"
+msgstr "."
+
+#: src/humanize/number.py:28
+msgctxt "4"
+msgid "th"
+msgstr "."
+
+#: src/humanize/number.py:29
+msgctxt "5"
+msgid "th"
+msgstr "."
+
+#: src/humanize/number.py:30
+msgctxt "6"
+msgid "th"
+msgstr "."
+
+#: src/humanize/number.py:31
+msgctxt "7"
+msgid "th"
+msgstr "."
+
+#: src/humanize/number.py:32
+msgctxt "8"
+msgid "th"
+msgstr "."
+
+#: src/humanize/number.py:33
+msgctxt "9"
+msgid "th"
+msgstr "."
+
+#: src/humanize/number.py:62
+msgid "million"
+msgstr "milióna/ov"
+
+#: src/humanize/number.py:63
+msgid "billion"
+msgstr "miliardy/árd"
+
+#: src/humanize/number.py:64
+msgid "trillion"
+msgstr "bilióna/ov"
+
+#: src/humanize/number.py:65
+msgid "quadrillion"
+msgstr "biliardy/árd"
+
+#: src/humanize/number.py:66
+msgid "quintillion"
+msgstr "trilióna/árd"
+
+#: src/humanize/number.py:67
+msgid "sextillion"
+msgstr "triliardy/árd"
+
+#: src/humanize/number.py:68
+msgid "septillion"
+msgstr "kvadrilióna/ov"
+
+#: src/humanize/number.py:69
+msgid "octillion"
+msgstr "kvadriliardy/árd"
+
+#: src/humanize/number.py:70
+msgid "nonillion"
+msgstr "kvintilióna/ov"
+
+#: src/humanize/number.py:71
+msgid "decillion"
+msgstr "kvintiliardy/árd"
+
+#: src/humanize/number.py:72
+msgid "googol"
+msgstr "googola/ov"
+
+#: src/humanize/number.py:108
+msgid "one"
+msgstr "jedna"
+
+#: src/humanize/number.py:109
+msgid "two"
+msgstr "dve"
+
+#: src/humanize/number.py:110
+msgid "three"
+msgstr "tri"
+
+#: src/humanize/number.py:111
+msgid "four"
+msgstr "štyri"
+
+#: src/humanize/number.py:112
+msgid "five"
+msgstr "päť"
+
+#: src/humanize/number.py:113
+msgid "six"
+msgstr "šesť"
+
+#: src/humanize/number.py:114
+msgid "seven"
+msgstr "sedem"
+
+#: src/humanize/number.py:115
+msgid "eight"
+msgstr "osem"
+
+#: src/humanize/number.py:116
+msgid "nine"
+msgstr "deväť"
+
+#: src/humanize/time.py:68 src/humanize/time.py:131
+msgid "a moment"
+msgstr "chvíľku"
+
+#: src/humanize/time.py:70
+msgid "a second"
+msgstr "sekundu"
+
+#: src/humanize/time.py:72
+#, python-format
+msgid "%d second"
+msgid_plural "%d seconds"
+msgstr[0] "%d sekundu"
+msgstr[1] "%d sekundy"
+msgstr[2] "%d sekúnd"
+
+#: src/humanize/time.py:74
+msgid "a minute"
+msgstr "minútu"
+
+#: src/humanize/time.py:77
+#, python-format
+msgid "%d minute"
+msgid_plural "%d minutes"
+msgstr[0] "%d minútu"
+msgstr[1] "%d minúty"
+msgstr[2] "%d minút"
+
+#: src/humanize/time.py:79
+msgid "an hour"
+msgstr "hodinu"
+
+#: src/humanize/time.py:82
+#, python-format
+msgid "%d hour"
+msgid_plural "%d hours"
+msgstr[0] "%d hodina"
+msgstr[1] "%d hodiny"
+msgstr[2] "%d hodín"
+
+#: src/humanize/time.py:85
+msgid "a day"
+msgstr "deň"
+
+#: src/humanize/time.py:87 src/humanize/time.py:90
+#, python-format
+msgid "%d day"
+msgid_plural "%d days"
+msgstr[0] "%d deň"
+msgstr[1] "%d dni"
+msgstr[2] "%d dní"
+
+#: src/humanize/time.py:92
+msgid "a month"
+msgstr "mesiac"
+
+#: src/humanize/time.py:94
+#, python-format
+msgid "%d month"
+msgid_plural "%d months"
+msgstr[0] "%d mesiac"
+msgstr[1] "%d mesiace"
+msgstr[2] "%d mesiacov"
+
+#: src/humanize/time.py:97
+msgid "a year"
+msgstr "rok"
+
+#: src/humanize/time.py:99 src/humanize/time.py:108
+#, python-format
+msgid "1 year, %d day"
+msgid_plural "1 year, %d days"
+msgstr[0] "1 rok, %d deň"
+msgstr[1] "1 rok, %d dni"
+msgstr[2] "1 rok, %d dní"
+
+#: src/humanize/time.py:102
+msgid "1 year, 1 month"
+msgstr "1 rok, 1 mesiac"
+
+#: src/humanize/time.py:105
+#, python-format
+msgid "1 year, %d month"
+msgid_plural "1 year, %d months"
+msgstr[0] "1 rok, %d mesiac"
+msgstr[1] "1 rok, %d mesiace"
+msgstr[2] "1 rok, %d mesiacov"
+
+#: src/humanize/time.py:110
+#, python-format
+msgid "%d year"
+msgid_plural "%d years"
+msgstr[0] "%d rok"
+msgstr[1] "%d roky"
+msgstr[2] "%d rokov"
+
+#: src/humanize/time.py:128
+#, python-format
+msgid "%s from now"
+msgstr "o %s"
+
+#: src/humanize/time.py:128
+#, python-format
+msgid "%s ago"
+msgstr "%s naspäť"
+
+#: src/humanize/time.py:132
+msgid "now"
+msgstr "teraz"
+
+#: src/humanize/time.py:151
+msgid "today"
+msgstr "dnes"
+
+#: src/humanize/time.py:153
+msgid "tomorrow"
+msgstr "zajtra"
+
+#: src/humanize/time.py:155
+msgid "yesterday"
+msgstr "včera"

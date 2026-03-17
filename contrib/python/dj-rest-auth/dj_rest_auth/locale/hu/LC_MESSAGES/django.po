@@ -1,0 +1,100 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-09-01 23:40+0100\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: registration/serializers.py:53
+msgid "View is not defined, pass it as a context variable"
+msgstr "A \"View\" nincs meghatározva, adja át kontextus változóként"
+
+#: registration/serializers.py:58
+msgid "Define adapter_class in view"
+msgstr "Adja meg az \"adapter_class\"-t a view-ban"
+
+#: registration/serializers.py:77
+msgid "Define callback_url in view"
+msgstr "Adja meg a \"callback_url\"-t a view-ban"
+
+#: registration/serializers.py:81
+msgid "Define client_class in view"
+msgstr "Adja meg a \"client_class\"-t a view-ban"
+
+#: registration/serializers.py:102
+msgid "Incorrect input. access_token or code is required."
+msgstr "Helytelen bemenet. \"access_token\" vagy \"code\" megadása kötelező."
+
+#: registration/serializers.py:111
+msgid "Incorrect value"
+msgstr "Helytelen érték"
+
+#: registration/serializers.py:140
+msgid "A user is already registered with this e-mail address."
+msgstr "Már van felhasználó ezzel az e-mail címmel."
+
+#: registration/serializers.py:148
+msgid "The two password fields didn't match."
+msgstr "A két jelszó nem egyezik."
+
+#: registration/views.py:44
+msgid "Verification e-mail sent."
+msgstr "Ellenőrző e-mail elküldve."
+
+#: registration/views.py:91
+msgid "ok"
+msgstr "OK"
+
+#: serializers.py:30
+msgid "Must include \"email\" and \"password\"."
+msgstr "Meg kell adni az \"email\" és a \"jelszó\" mezőket."
+
+#: serializers.py:41
+msgid "Must include \"username\" and \"password\"."
+msgstr "Meg kell adni a \"felhasználónév\" és a \"jelszó\" mezőket."
+
+#: serializers.py:54
+msgid "Must include either \"username\" or \"email\" and \"password\"."
+msgstr "Meg kell adni a \"felhasználónév\" vagy az \"email\" és a \"jelszó\" mezőket."
+
+#: serializers.py:95
+msgid "User account is disabled."
+msgstr "Felhasználói fiók letiltva."
+
+#: serializers.py:98
+msgid "Unable to log in with provided credentials."
+msgstr "Nem lehet bejelentkezni a megadott adatokkal."
+
+#: serializers.py:107
+msgid "E-mail is not verified."
+msgstr "Az e-mail cím nincs megerősítve."
+
+#: views.py:126
+msgid "Successfully logged out."
+msgstr "Sikeres kijelentkezés."
+
+#: views.py:174
+msgid "Password reset e-mail has been sent."
+msgstr "A jelszó visszaállítási e-mail elküldve."
+
+#: views.py:200
+msgid "Password has been reset with the new password."
+msgstr "A jelszó visszaállítva az új jelszóra."
+
+#: views.py:222
+msgid "New password has been saved."
+msgstr "Az új jelszó elmentve."
+

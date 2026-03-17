@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Modbus simulator</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/apple60.png">
+  <link rel="apple-touch-icon" sizes="76x76" href="/apple76.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="/apple120.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="/apple152.png">
+  <link rel="stylesheet" type="text/css" href="/pymodbus.css">
+  <!--REFRESH-->
+</head>
+<body>
+  <h1><center>Calls</center></h1>
+  <table width="80%" class="listbox">
+    <thead>
+      <tr>
+        <th width="20%">Call/Response</th>
+        <th width="10%">Address</th>
+        <th width="10%">Count</th>
+        <th width="60%">Data</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!--FC_ROWS-->
+    </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="4"><!--FC_FOOT--></th>
+      </tr>
+    </tfoot>
+  </table>
+  <fieldset class="tools_fieldset">
+    <legend>Monitor</legend>
+    <form action="/api/calls" method="get">
+      <table>
+        <tr>
+          <td><label>Register range</label></td>
+          <td>
+            <input type="number" value="FUNCTION_RANGE_START" name="range_start" />
+            <input type="number" value="FUNCTION_RANGE_STOP" name="range_stop" />
+          </td>
+        </tr>
+        <tr>
+          <td><label>Function</label></td>
+          <td>
+            <select name="function">
+              <option value=-1 selected>Any</option>
+              <!--FUNCTION_CODES-->
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td><label>Show as</label></td>
+          <td>
+            <input type="checkbox" FUNCTION_SHOW_HEX_CHECKED name="show_hex">Hex</input>
+            <input type="checkbox" FUNCTION_SHOW_DECODED_CHECKED name="show_decode">Decoded</input>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Monitor" name="submit" />
+      <input type="submit" value="Stop" name="submit" />
+    </form>
+  </fieldset>
+<fieldset class="tools_fieldset">
+    <legend>Simulate <b><!--SIMULATION_ACTIVE--></b></legend>
+    <form action="/api/calls" method="get">
+      <table>
+        <tr>
+          <td>
+            <input type="radio" name="response_type" value="2" FUNCTION_RESPONSE_EMPTY_CHECKED>Empty</input>
+          </td>
+          <td></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>
+            <input type="radio" name="response_type" value="0" FUNCTION_RESPONSE_NORMAL_CHECKED>Normal</input>
+          </td>
+          <td><Label>split response</Label></td>
+          <td>
+            <input type="checkbox" name="response_split" FUNCTION_RESPONSE_SPLIT_CHECKED/>
+            <input type="number" name="split_delay" value="FUNCTION_RESPONSE_SPLIT_DELAY"/>seconds delay
+          </td>
+        </tr>
+        <tr>
+          <td></td>
+          <td><Label>Change rate</Label></td>
+          <td>
+            <input type="checkbox" name="response_cr" FUNCTION_RESPONSE_CR_CHECKED/>
+            <input type="number" name="response_cr_pct" value="FUNCTION_RESPONSE_CR_PCT"/>%
+          </td>
+        </tr>
+        <tr>
+          <td></td>
+          <td><Label>Delay response</Label></td>
+          <td><input type="number" name="response_delay" value="FUNCTION_RESPONSE_DELAY"/>seconds</td>
+        </tr>
+        <tr>
+          <td>
+            <input type="radio" name="response_type" value="1" FUNCTION_RESPONSE_ERROR_CHECKED>Error</input>
+          </td>
+          <td></td>
+          <td>
+            <select name="response_error">
+              <!--FUNCTION_ERROR-->
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <input type="radio" name="response_type" value="3" FUNCTION_RESPONSE_JUNK_CHECKED>Junk</input>
+          </td>
+          <td><Label>Datalength</Label></td>
+          <td><input type="number" name="response_junk_datalen" value="FUNCTION_RESPONSE_JUNK" />bytes</td>
+        </tr>
+        <tr>
+          <td colspan="2"><Label>Clear after</Label></td>
+          <td><input type="number" name="response_clear_after" value="FUNCTION_RESPONSE_CLEAR_AFTER" />requests</td>
+        </tr>
+      </table>
+      <input type="submit" value="Simulate" name="submit" />
+      <input type="submit" value="Reset" name="submit" />
+  </form>
+  </fieldset>
+</body>
+</html>

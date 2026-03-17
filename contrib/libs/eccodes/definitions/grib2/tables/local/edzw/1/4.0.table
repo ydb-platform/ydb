@@ -1,0 +1,18 @@
+# Code table 4.0 - Product definition template number
+# 32768-65534 Reserved for local use 
+40033 40033 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for simulated (synthetic) satellite data
+40034 40034 Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval for simulated (synthetic) satellite data
+40055 40055 tiles parameters at a horizontal level or in a horizontal layer at a point in time
+40056 40056 tiles  Individual ensemble forecast, control and perturbed, at a horizontal level or in a horizontal layer at a point in time for ........... parameters
+40180 40180 Derived categorical ensemble product, optionally a composite of several source products, categories based on a single object parameter, at a horizontal level or in a horizontal layer at a point in time
+40181 40181 Derived categorical ensemble product, optionally a composite of several source products, categories based on a single object parameter, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+40182 40182 Probability ensemble product, optionally a composite of several source products, at a horizontal level or in a horizontal layer at a point in time
+40183 40183 Probability ensemble product, optionally a composite of several source products, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+40184 40184 Percentile ensemble product, optionally a composite of several source products, at a horizontal level or in a horizontal layer at a point in time
+40185 40185 Percentile ensemble product, optionally a composite of several source products, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+40186 40186 Ensemble product, optionally a composite of several source products, at a horizontal level or in a horizontal layer at a point in time
+40187 40187 Ensemble product, optionally a composite of several source products, at a horizontal level or in a horizontal layer in a continuous or non-continuous time interval
+40455 40455 ???tiles parameters at a horizontal level or in a horizontal layer, in a continuous or non-continuous interval
+50001 50001 Forecasting Systems with Variable Resolution in a point in time
+50011 50011 Forecasting Systems with Variable Resolution in a continous or non countinous time interval
+65535 65535 Missing 

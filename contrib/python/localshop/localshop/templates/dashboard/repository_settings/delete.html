@@ -1,0 +1,20 @@
+{% extends "dashboard/repository_settings/base.html" %}
+{% load i18n %}
+
+{% block content_panel %}
+<h1>Repository delete</h1>
+
+<form method="post" action="" class="form-horizontal">
+    <p>
+        Delete the {{ repository }} repository?
+        <strong>This will also delete all associated packages!</strong>
+
+    </p>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-danger"><span class="icon-trash icon-white"></span> Delete</button>
+        <a href="{% url 'dashboard:index' repo=repository.slug %}" class="btn">Cancel</a>
+    </div>
+    {% csrf_token %}
+</form>
+{% endblock %}

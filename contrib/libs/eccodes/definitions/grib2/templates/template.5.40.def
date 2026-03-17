@@ -1,0 +1,12 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 5.40, Grid point data - JPEG 2000 Code Stream Format
+
+include "grib2/templates/template.5.packing.def"
+include "grib2/templates/template.5.original_values.def"
+
+codetable[1] typeOfCompressionUsed ('5.40.table',masterDir,localDir) ;
+
+# Target compression ratio, M:1 (with respect to the bit-depth specified in octet 20),
+# when typeOfCompressionUsed indicates Lossy Compression. Otherwise, set to missing.
+unsigned[1] targetCompressionRatio = 255;

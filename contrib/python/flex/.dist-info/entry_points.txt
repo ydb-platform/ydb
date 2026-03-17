@@ -1,0 +1,3 @@
+[console_scripts]
+swagger-flex = flex.cli:main
+

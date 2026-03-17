@@ -1,0 +1,8 @@
+requirements:
+  - html5lib
+exclude:
+  - bleach/_vendor/README.rst
+  - bleach/_vendor/__init__.py
+  - bleach/_vendor/html5lib/*
+  - bleach/_vendor/vendor*
+  - bleach/_vendor/parse.py.SHA256SUM

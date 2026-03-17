@@ -1,0 +1,56 @@
+Metadata-Version: 2.4
+Name: pydyf
+Version: 0.12.1
+Summary: A low-level PDF generator.
+Keywords: pdf,generator
+Author-email: CourtBouillon <contact@courtbouillon.org>
+Maintainer-email: CourtBouillon <contact@courtbouillon.org>
+Requires-Python: >=3.10
+Description-Content-Type: text/x-rst
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+License-File: LICENSE
+Requires-Dist: sphinx ; extra == "doc"
+Requires-Dist: furo ; extra == "doc"
+Requires-Dist: pytest ; extra == "test"
+Requires-Dist: ruff ; extra == "test"
+Requires-Dist: pillow ; extra == "test"
+Project-URL: Changelog, https://github.com/CourtBouillon/pydyf/releases
+Project-URL: Code, https://github.com/CourtBouillon/pydyf
+Project-URL: Documentation, https://doc.courtbouillon.org/pydyf/
+Project-URL: Donation, https://opencollective.com/courtbouillon
+Project-URL: Homepage, https://www.courtbouillon.org/pydyf
+Project-URL: Issues, https://github.com/CourtBouillon/pydyf/issues
+Provides-Extra: doc
+Provides-Extra: test
+
+pydyf is a low-level PDF generator written in Python and based on PDF
+specification 1.7.
+
+* Free software: BSD license
+* For Python 3.10+, tested on CPython and PyPy
+* Documentation: https://doc.courtbouillon.org/pydyf
+* Changelog: https://github.com/CourtBouillon/pydyf/releases
+* Code, issues, tests: https://github.com/CourtBouillon/pydyf
+* Code of conduct: https://www.courtbouillon.org/code-of-conduct
+* Professional support: https://www.courtbouillon.org
+* Donation: https://opencollective.com/courtbouillon
+
+Copyrights are retained by their contributors, no copyright assignment is
+required to contribute to pydyf. Unless explicitly stated otherwise, any
+contribution intentionally submitted for inclusion is licensed under the BSD
+3-clause license, without any additional terms or conditions. For full
+authorship information, see the version control history.
+

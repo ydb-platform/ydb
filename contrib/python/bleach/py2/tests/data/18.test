@@ -1,0 +1,3 @@
+<IMG SRC="jav&#x09;ascript:alert(<WBR>'XSS');">
+--
+&lt;IMG SRC="jav&#x09;ascript:alert(&lt;WBR&gt;'XSS');"&gt;

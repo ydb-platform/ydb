@@ -1,0 +1,9 @@
+{% if data | is_iter %}
+    <ul>
+        {% for value in data %}
+            <li><a href="{{ value }}">{{ value }}</a></li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <a href="{{ data }}">{{ data }}</a>
+{% endif %}

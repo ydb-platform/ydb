@@ -1,0 +1,3 @@
+<IMG SRC=JaVaScRiPt:alert(&quot;XSS<WBR>&quot;)>
+--
+&lt;IMG SRC=JaVaScRiPt:alert(&quot;XSS&lt;WBR&gt;&quot;)&gt;

@@ -1,0 +1,2 @@
+3: error: Cannot infer type argument 2 of "chain"  [misc]
+5: error: Cannot infer type argument 1 of "add"  [misc]

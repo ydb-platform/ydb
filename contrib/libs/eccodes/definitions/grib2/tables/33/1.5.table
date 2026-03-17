@@ -1,0 +1,7 @@
+# Code table 1.5 - Identification template number
+0 0 Calendar definition
+1 1 Paleontological offset
+2 2 Calendar definition and paleontological offset
+# 3-32767 Reserved
+# 32768-65534 Reserved for local use
+65535 65535 Missing

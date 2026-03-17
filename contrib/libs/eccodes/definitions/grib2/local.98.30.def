@@ -1,0 +1,20 @@
+# Local definition 30: Forecasting Systems with Variable Resolution
+
+unsigned[1] oceanAtmosphereCoupling : dump;
+
+unsigned[4] legBaseDate  : dump;
+unsigned[2] legBaseTime : dump;
+unsigned[1] legNumber : dump;
+unsigned[4] referenceDate : dump;
+unsigned[4] climateDateFrom : dump;
+unsigned[4] climateDateTo : dump;
+
+alias local.oceanAtmosphereCoupling=oceanAtmosphereCoupling;
+alias local.legBaseDate=legBaseDate;
+alias local.legBaseTime=legBaseTime;
+alias local.legNumber=legNumber;
+alias local.referenceDate=referenceDate;
+alias local.climateDateFrom=climateDateFrom;
+alias local.climateDateTo=climateDateTo;
+
+alias mars._leg_number = legNumber;

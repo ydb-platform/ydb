@@ -1,0 +1,75 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+SKIP     LicenseRef-scancode-unknown-license-reference AND GPL-3.0-only 2738924522dfd36ced798bcf3bf76ce5
+BELONGS ya.make
+    # its about other libs:
+    # ...RStan and PyStan are licensed under GPLv3...
+    License text:
+        The Stan math library, core Stan code, and CmdStan are licensed under new BSD.   RStan and PyStan are licensed under GPLv3, with other interfaces having other open-source licenses.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README.md [36:36]
+    Scancode info:
+        Original SPDX id: GPL-3.0-only
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, http://www.gnu.org/licenses/gpl-3.0.html, https://spdx.org/licenses/GPL-3.0-only
+    Files with this license:
+        README.md [36:36]
+
+KEEP     BSD-3-Clause         620dafa7fbb3e626c0083b805ee5cff1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 94.76
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.md [1:14]
+
+SKIP     LGPL-2.0-or-later    86b3d9bfad4606f81a6497a799672292
+BELONGS ya.make
+    # see text
+    License text:
+         -- updated Eigen licensing information (now MPL, was LGPL)
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        RELEASE-NOTES.txt [1374:1374]

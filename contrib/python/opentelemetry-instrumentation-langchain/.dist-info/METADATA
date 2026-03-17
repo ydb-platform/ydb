@@ -1,0 +1,49 @@
+Metadata-Version: 2.4
+Name: opentelemetry-instrumentation-langchain
+Version: 0.52.6
+Summary: OpenTelemetry Langchain instrumentation
+Project-URL: Repository, https://github.com/traceloop/openllmetry/tree/main/packages/opentelemetry-instrumentation-langchain
+Author-email: Gal Kleinman <gal@traceloop.com>, Nir Gazit <nir@traceloop.com>, Tomer Friedman <tomer@traceloop.com>
+License-Expression: Apache-2.0
+Requires-Python: <4,>=3.10
+Requires-Dist: opentelemetry-api<2,>=1.38.0
+Requires-Dist: opentelemetry-instrumentation>=0.59b0
+Requires-Dist: opentelemetry-semantic-conventions-ai<0.5.0,>=0.4.13
+Requires-Dist: opentelemetry-semantic-conventions>=0.59b0
+Provides-Extra: instruments
+Requires-Dist: langchain; extra == 'instruments'
+Description-Content-Type: text/markdown
+
+# OpenTelemetry Langchain Instrumentation
+
+<a href="https://pypi.org/project/opentelemetry-instrumentation-langchain/">
+    <img src="https://badge.fury.io/py/opentelemetry-instrumentation-langchain.svg">
+</a>
+
+This library allows tracing complete LLM applications built with [Langchain](https://github.com/langchain-ai/langchain).
+
+## Installation
+
+```bash
+pip install opentelemetry-instrumentation-langchain
+```
+
+## Example usage
+
+```python
+from opentelemetry.instrumentation.langchain import LangchainInstrumentor
+
+LangchainInstrumentor().instrument()
+```
+
+## Privacy
+
+**By default, this instrumentation logs prompts, completions, and embeddings to span attributes**. This gives you a clear visibility into how your LLM application is working, and can make it easy to debug and evaluate the quality of the outputs.
+
+However, you may want to disable this logging for privacy reasons, as they may contain highly sensitive data from your users. You may also simply want to reduce the size of your traces.
+
+To disable logging, set the `TRACELOOP_TRACE_CONTENT` environment variable to `false`.
+
+```bash
+TRACELOOP_TRACE_CONTENT=false
+```

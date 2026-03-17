@@ -1,0 +1,10 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 4.113, Generalised tiles at a horizontal level or horizontal layer at a point in time
+
+include "grib2/templates/template.4.parameter.def"
+include "grib2/templates/template.4.generalised_tile.def"
+include "grib2/templates/template.4.generating_process.def"
+include "grib2/templates/template.4.forecast_time.def"
+include "grib2/templates/template.4.point_in_time.def"
+include "grib2/templates/template.4.horizontal.def"

@@ -1,0 +1,194 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# 
+msgid ""
+msgstr ""
+"Project-Id-Version: django-sitetree\n"
+"Report-Msgid-Bugs-To: https://github.com/idlesign/django-sitetree/issues\n"
+"POT-Creation-Date: 2011-04-24 11:22+0700\n"
+"PO-Revision-Date: 2011-04-24 12:15+0000\n"
+"Last-Translator: Sergiy_Gavrylov <sergiovana@bigmir.net>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: uk_UA\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2)\n"
+
+#: admin.py:16
+msgid "Basic settings"
+msgstr "Основні налаштування"
+
+#: admin.py:19
+msgid "Display settings"
+msgstr "Налаштування показу"
+
+#: admin.py:23
+msgid "Additional settings"
+msgstr "Додаткові налаштування"
+
+#: admin.py:142
+msgid "Item's parent left unchanged. Item couldn't be parent to itself."
+msgstr ""
+"Батько елемента залишений без змін. Елемент не може бути батьком для самого "
+"себе."
+
+#: models.py:23 models.py:39
+msgid "Alias"
+msgstr "Псевдонім"
+
+#: models.py:23
+msgid "Short name to address site tree from a template."
+msgstr "Коротка назва для звертання до дерева сайту з шаблону."
+
+#: models.py:26 models.py:37
+msgid "Site Tree"
+msgstr "Дерево сайту"
+
+#: models.py:27
+msgid "Site Trees"
+msgstr "Дерева сайту"
+
+#: models.py:33 templates/admin/sitetree/tree/change_form.html:38
+msgid "Title"
+msgstr "Заголовок"
+
+#: models.py:33
+msgid ""
+"Site tree item title. Can contain template variables E.g.: {{ mytitle }}."
+msgstr ""
+"Заголовок елемента дерева сайту. Може містити змінні шаблону, наприклад: {{ "
+"mytitle }}."
+
+#: models.py:34
+msgid "Hint"
+msgstr "Підказка"
+
+#: models.py:34
+msgid "Some additional information about this item that is used as a hint."
+msgstr "Додаткові дані про елемент, що будуть використовуватись як підказка."
+
+#: models.py:35 templates/admin/sitetree/tree/change_form.html:39
+msgid "URL"
+msgstr "URL"
+
+#: models.py:35
+msgid "Exact URL or URL pattern (see \"Additional settings\") for this item."
+msgstr ""
+"Точний URL чи URL-шаблон (див. «Додаткові налаштування») для цього елемента."
+
+#: models.py:36
+msgid "URL as Pattern"
+msgstr "URL як шаблон"
+
+#: models.py:36
+msgid ""
+"Whether the given URL should be treated as a pattern.<br/><b>Note:</b> Refer"
+" to Django \"URL dispatcher\" documentation (e.g. \"Naming URL patterns\" "
+"part)."
+msgstr ""
+"Чи заданий URL потрібно обробляти як шаблон.<br/><b>Увага:</b> Зверніться до"
+" документації Django «Диспетчер URL» (розділ «Присвоювання назв URL-"
+"шаблонам»)."
+
+#: models.py:37
+msgid "Site tree this item belongs to."
+msgstr "Дерево сайту, до якого належить елемент."
+
+#: models.py:38 templates/admin/sitetree/tree/change_form.html:34
+msgid "Hidden"
+msgstr "Прихований"
+
+#: models.py:38
+msgid "Whether to show this item in navigation."
+msgstr "Чи приховувати цей елемент в навігації."
+
+#: models.py:39
+msgid ""
+"Short name to address site tree item from a template.<br /><b>Reserved "
+"aliases:</b> \"trunk\", \"this-children\" and \"this-siblings\"."
+msgstr ""
+"Коротка назва для звертання до елементу з шаблона.<br /><b>Зарезервовані "
+"псевдоніми:</b> «trunk», «this-children» та «this-siblings»."
+
+#: models.py:40
+msgid "Description"
+msgstr "Опис"
+
+#: models.py:40
+msgid "Additional comments on this item."
+msgstr "Додаткові коментарі для цього елементу."
+
+#: models.py:41
+msgid "Show in menu"
+msgstr "Показувати в меню"
+
+#: models.py:41
+msgid "Whether to show this item in a menu."
+msgstr "Чи показувати цей елемент в меню."
+
+#: models.py:42
+msgid "Show in breadcrumb path"
+msgstr "Показувати в навігаційному ланцюжку"
+
+#: models.py:42
+msgid "Whether to show this item in a breadcrumb path."
+msgstr "Чи показувати цей елемент в навігаційному ланцюжку."
+
+#: models.py:43
+msgid "Show in site tree"
+msgstr "Показувати в дереві сайту"
+
+#: models.py:43
+msgid "Whether to show this item in a site tree."
+msgstr "Чи показувати цей елемент в дереві сайту."
+
+#: models.py:46
+msgid "Parent"
+msgstr "Батьківський сайт"
+
+#: models.py:46
+msgid "Parent site tree item."
+msgstr "Елемент дерева батьківського сайту."
+
+#: models.py:47 templates/admin/sitetree/tree/change_form.html:40
+msgid "Sort order"
+msgstr "Порядок сортування"
+
+#: models.py:47
+msgid "Item position among other site tree items under the same parent."
+msgstr "Позиція елемента між іншими елементами того ж батьківського сайту."
+
+#: models.py:60
+msgid "Site Tree Item"
+msgstr "Елемент дерева сайту"
+
+#: models.py:61 templates/admin/sitetree/tree/change_form.html:17
+msgid "Site Tree Items"
+msgstr "Елементи дерева сайту"
+
+#: templates/admin/sitetree/tree/change_form.html:24
+msgid "Add Site Tree item"
+msgstr "Додати елемент дерева сайту"
+
+#: templates/admin/sitetree/tree/change_form.html:35
+msgid "Menu"
+msgstr "Меню"
+
+#: templates/admin/sitetree/tree/change_form.html:36
+msgid "Breadcrumbs"
+msgstr "Навігаційний ланцюжок"
+
+#: templates/admin/sitetree/tree/change_form.html:37
+msgid "Tree"
+msgstr "Дерево"
+
+#: templates/admin/sitetree/tree/tree.html:16
+msgid "Move up"
+msgstr "Перемістити вгору"
+
+#: templates/admin/sitetree/tree/tree.html:18
+msgid "Move down"
+msgstr "Перемістити вниз"

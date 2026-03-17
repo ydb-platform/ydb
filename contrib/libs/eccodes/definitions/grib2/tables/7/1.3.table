@@ -1,0 +1,8 @@
+# CODE TABLE 1.3, Production status of data
+0 0  Operational products
+1 1  Operational test products
+2 2  Research products
+3 3  Re-analysis products
+4 4  THORPEX Interactive Grand Global Ensemble (TIGGE)
+5 5  THORPEX Interactive Grand Global Ensemble (TIGGE) test
+255 255  Missing

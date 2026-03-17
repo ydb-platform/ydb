@@ -1,0 +1,307 @@
+Metadata-Version: 2.4
+Name: msoffcrypto-tool
+Version: 6.0.0
+Summary: Python tool and library for decrypting and encrypting MS Office files using a password or other keys
+License: MIT
+License-File: LICENSE.txt
+License-File: NOTICE.txt
+Author: nolze
+Author-email: nolze@int3.net
+Requires-Python: >=3.10,<4.0
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Requires-Dist: cryptography (>=39.0)
+Requires-Dist: olefile (>=0.46)
+Project-URL: Homepage, https://github.com/nolze/msoffcrypto-tool
+Description-Content-Type: text/markdown
+
+# msoffcrypto-tool
+
+[![PyPI](https://img.shields.io/pypi/v/msoffcrypto-tool.svg)](https://pypi.org/project/msoffcrypto-tool/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/msoffcrypto-tool.svg)](https://pypistats.org/packages/msoffcrypto-tool)
+[![build](https://github.com/nolze/msoffcrypto-tool/actions/workflows/ci.yaml/badge.svg)](https://github.com/nolze/msoffcrypto-tool/actions/workflows/ci.yaml)
+[![Coverage Status](https://codecov.io/gh/nolze/msoffcrypto-tool/branch/master/graph/badge.svg)](https://codecov.io/gh/nolze/msoffcrypto-tool)
+[![Documentation Status](https://readthedocs.org/projects/msoffcrypto-tool/badge/?version=latest)](http://msoffcrypto-tool.readthedocs.io/en/latest/?badge=latest)
+
+msoffcrypto-tool is a Python tool and library for decrypting and encrypting MS Office files using a password or other keys.
+
+## Contents
+
+* [Installation](#installation)
+* [Examples](#examples)
+* [Supported encryption methods](#supported-encryption-methods)
+* [Tests](#tests)
+* [Todo](#todo)
+* [Resources](#resources)
+* [Use cases and mentions](#use-cases-and-mentions)
+* [Contributors](#contributors)
+* [Credits](#credits)
+
+## Installation
+
+```
+pip install msoffcrypto-tool
+```
+
+## Examples
+
+### As CLI tool (with password)
+
+#### Decryption
+
+Specify the password with `-p` flag:
+
+```
+msoffcrypto-tool encrypted.docx decrypted.docx -p Passw0rd
+```
+
+Password is prompted if you omit the password argument value:
+
+```bash
+$ msoffcrypto-tool encrypted.docx decrypted.docx -p
+Password:
+```
+
+To check if the file is encrypted or not, use `-t` flag:
+
+```
+msoffcrypto-tool document.doc --test -v
+```
+
+It returns `1` if the file is encrypted, `0` if not.
+
+#### Encryption (OOXML only, experimental)
+
+> [!IMPORTANT]
+> Encryption feature is experimental. Please use it at your own risk.
+
+To password-protect a document, use `-e` flag along with `-p` flag:
+
+```
+msoffcrypto-tool -e -p Passw0rd plain.docx encrypted.docx
+```
+
+### As library
+
+Password and more key types are supported with library functions.
+
+#### Decryption
+
+Basic usage:
+
+```python
+import msoffcrypto
+
+encrypted = open("encrypted.docx", "rb")
+file = msoffcrypto.OfficeFile(encrypted)
+
+file.load_key(password="Passw0rd")  # Use password
+
+with open("decrypted.docx", "wb") as f:
+    file.decrypt(f)
+
+encrypted.close()
+```
+
+In-memory:
+
+```python
+import msoffcrypto
+import io
+import pandas as pd
+
+decrypted = io.BytesIO()
+
+with open("encrypted.xlsx", "rb") as f:
+    file = msoffcrypto.OfficeFile(f)
+    file.load_key(password="Passw0rd")  # Use password
+    file.decrypt(decrypted)
+
+df = pd.read_excel(decrypted)
+print(df)
+```
+
+Advanced usage:
+
+```python
+# Verify password before decryption (default: False)
+# The ECMA-376 Agile/Standard crypto system allows one to know whether the supplied password is correct before actually decrypting the file
+# Currently, the verify_password option is only meaningful for ECMA-376 Agile/Standard Encryption
+file.load_key(password="Passw0rd", verify_password=True)
+
+# Use private key
+file.load_key(private_key=open("priv.pem", "rb"))
+
+# Use intermediate key (secretKey)
+file.load_key(secret_key=binascii.unhexlify("AE8C36E68B4BB9EA46E5544A5FDB6693875B2FDE1507CBC65C8BCF99E25C2562"))
+
+# Check the HMAC of the data payload before decryption (default: False)
+# Currently, the verify_integrity option is only meaningful for ECMA-376 Agile Encryption
+file.decrypt(open("decrypted.docx", "wb"), verify_integrity=True)
+```
+
+Supported key types are
+
+- Passwords
+- Intermediate keys (optional)
+- Private keys used for generating escrow keys (escrow certificates) (optional)
+
+See also ["Backdooring MS Office documents with secret master keys"](https://web.archive.org/web/20171008075059/http://secuinside.com/archive/2015/2015-1-9.pdf) for more information on the key types.
+
+#### Encryption (OOXML only, experimental)
+
+> [!IMPORTANT]
+> Encryption feature is experimental. Please use it at your own risk.
+
+Basic usage:
+
+```python
+from msoffcrypto.format.ooxml import OOXMLFile
+
+plain = open("plain.docx", "rb")
+file = OOXMLFile(plain)
+
+with open("encrypted.docx", "wb") as f:
+    file.encrypt("Passw0rd", f)
+
+plain.close()
+```
+
+In-memory:
+
+```python
+from msoffcrypto.format.ooxml import OOXMLFile
+import io
+
+encrypted = io.BytesIO()
+
+with open("plain.xlsx", "rb") as f:
+    file = OOXMLFile(f)
+    file.encrypt("Passw0rd", encrypted)
+
+# Do stuff with encrypted buffer; it contains an OLE container with an encrypted stream
+...
+```
+
+## Supported encryption methods
+
+### MS-OFFCRYPTO specs
+
+* [x] ECMA-376 (Agile Encryption/Standard Encryption)
+  * [x] MS-DOCX (OOXML) (Word 2007-)
+  * [x] MS-XLSX (OOXML) (Excel 2007-)
+  * [x] MS-PPTX (OOXML) (PowerPoint 2007-)
+* [x] Office Binary Document RC4 CryptoAPI
+  * [x] MS-DOC (Word 2002, 2003, 2004)
+  * [x] MS-XLS ([Excel 2002, 2003, 2007, 2010](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a3ad4e36-ab66-426c-ba91-b84433312068#Appendix_A_22)) (experimental)
+  * [x] MS-PPT (PowerPoint 2002, 2003, 2004) (partial, experimental)
+* [x] Office Binary Document RC4
+  * [x] MS-DOC (Word 97, 98, 2000)
+  * [x] MS-XLS (Excel 97, 98, 2000) (experimental)
+* [ ] ECMA-376 (Extensible Encryption)
+* [x] XOR Obfuscation
+  * [x] MS-XLS ([Excel 2002, 2003](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a3ad4e36-ab66-426c-ba91-b84433312068#Appendix_A_21)) (experimental)
+  * [ ] MS-DOC (Word 2002, 2003, 2004?)
+
+### Other
+
+* [ ] Word 95 Encryption (Word 95 and prior)
+* [ ] Excel 95 Encryption (Excel 95 and prior)
+* [ ] PowerPoint 95 Encryption (PowerPoint 95 and prior)
+
+PRs are welcome!
+
+## Tests
+
+With [coverage](https://github.com/nedbat/coveragepy) and [pytest](https://pytest.org/):
+
+```
+poetry install
+poetry run coverage run -m pytest -v
+```
+
+## Todo
+
+* [x] Add tests
+* [x] Support decryption with passwords
+* [x] Support older encryption schemes
+* [x] Add function-level tests
+* [x] Add API documents
+* [x] Publish to PyPI
+* [x] Add decryption tests for various file formats
+* [x] Integrate with more comprehensive projects handling MS Office files (such as [oletools](https://github.com/decalage2/oletools/)?) if possible
+* [x] Add the password prompt mode for CLI
+* [x] Improve error types (v4.12.0)
+* [ ] Add type hints
+* [ ] Introduce something like `ctypes.Structure`
+* [x] Support OOXML encryption
+* [ ] Support other encryption
+* [ ] Isolate parser
+* [ ] Redesign APIs (v6.0.0)
+
+## Resources
+
+* "Backdooring MS Office documents with secret master keys" [http://secuinside.com/archive/2015/2015-1-9.pdf](https://web.archive.org/web/20171008075059/http://secuinside.com/archive/2015/2015-1-9.pdf)
+* Technical Documents <https://msdn.microsoft.com/en-us/library/cc313105.aspx>
+  * [MS-OFFCRYPTO] Agile Encryption <https://msdn.microsoft.com/en-us/library/dd949735(v=office.12).aspx>
+* [MS-OFFDI] Microsoft Office File Format Documentation Introduction <https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-offdi/24ed256c-eb5b-494e-b4f6-fb696ad2b4dc>
+* LibreOffice/core <https://github.com/LibreOffice/core>
+* LibreOffice/mso-dumper <https://github.com/LibreOffice/mso-dumper>
+* wvDecrypt <http://www.skynet.ie/~caolan/Packages/wvDecrypt.html>
+* Microsoft Office password protection - Wikipedia <https://en.wikipedia.org/wiki/Microsoft_Office_password_protection#History_of_Microsoft_Encryption_password>
+* office2john.py <https://github.com/magnumripper/JohnTheRipper/blob/bleeding-jumbo/run/office2john.py>
+
+## Alternatives
+
+* herumi/msoffice <https://github.com/herumi/msoffice>
+* DocRecrypt <https://blogs.technet.microsoft.com/office_resource_kit/2013/01/23/now-you-can-reset-or-remove-a-password-from-a-word-excel-or-powerpoint-filewith-office-2013/>
+* Apache POI - the Java API for Microsoft Documents <https://poi.apache.org/>
+
+## Use cases and mentions
+
+### General
+
+* <https://repology.org/project/python:msoffcrypto-tool/versions> (kudos to maintainers!)
+<!-- * <https://checkroth.com/unlocking-password-protected-files.html> (outdated) -->
+
+### Corporate
+
+* Workato <https://docs.workato.com/connectors/python.html#supported-features> <!-- https://web.archive.org/web/20240525062245/https://docs.workato.com/connectors/python.html#supported-features -->
+* Check Point <https://www.checkpoint.com/about-us/copyright-and-trademarks/> <!-- https://web.archive.org/web/20230326071230/https://www.checkpoint.com/about-us/copyright-and-trademarks/ -->
+
+### Malware/maldoc analysis
+
+* <https://github.com/jbremer/sflock/commit/3f6a96abe1dbb4405e4fb7fd0d16863f634b09fb>
+* <https://isc.sans.edu/forums/diary/Video+Analyzing+Encrypted+Malicious+Office+Documents/24572/>
+
+### CTF
+
+* <https://github.com/shombo/cyberstakes-writeps-2018/tree/master/word_up>
+* <https://github.com/willi123yao/Cyberthon2020_Writeups/blob/master/csit/Lost_Magic>
+
+### In other languages
+
+* <https://github.com/dtjohnson/xlsx-populate>
+* <https://github.com/opendocument-app/OpenDocument.core/blob/233663b039/src/internal/ooxml/ooxml_crypto.h>
+* <https://github.com/jaydadhania08/PHPDecryptXLSXWithPassword>
+* <https://github.com/epicentre-msf/rpxl>
+
+### In publications
+
+* [Excel、データ整理＆分析、画像処理の自動化ワザを完全網羅！ 超速Python仕事術大全](https://books.google.co.jp/books?id=TBdVEAAAQBAJ&q=msoffcrypto) (伊沢剛, 2022)
+* ["Analyse de documents malveillants en 2021"](https://twitter.com/decalage2/status/1435255507846053889), MISC Hors-série N° 24, "Reverse engineering : apprenez à analyser des binaires" (Lagadec Philippe, 2021)
+* [シゴトがはかどる Python自動処理の教科書](https://books.google.co.jp/books?id=XEYUEAAAQBAJ&q=msoffcrypto) (クジラ飛行机, 2020)
+
+## Contributors
+
+* <https://github.com/nolze/msoffcrypto-tool/graphs/contributors>
+
+## Credits
+
+* The sample file for XOR Obfuscation is from: <https://github.com/openwall/john-samples/tree/main/Office/Office_Secrets>
+

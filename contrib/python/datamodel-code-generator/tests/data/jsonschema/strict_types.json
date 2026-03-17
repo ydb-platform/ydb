@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "User",
+  "type": "object",
+  "properties": {
+        "name": {
+          "type": "string",
+          "example": "ken"
+        },
+        "age": {
+          "type": "integer"
+        },
+        "salary": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "debt" : {
+          "type": "integer",
+          "maximum": 0
+        },
+        "loan" : {
+          "type": "number",
+          "maximum": 0
+        },
+        "tel": {
+          "type": "string",
+          "pattern": "^(\\([0-9]{3}\\))?[0-9]{3}-[0-9]{4}$"
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0
+        },
+        "score": {
+          "type": "number",
+          "minimum": 1e-08
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "photo": {
+          "type": "string",
+          "format": "binary",
+          "minLength": 100
+        }
+      }
+}

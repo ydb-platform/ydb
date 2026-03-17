@@ -1,0 +1,5 @@
+[console_scripts]
+sqllineage = sqllineage.cli:main
+
+[gui_scripts]
+sqllineage = sqllineage.cli:main

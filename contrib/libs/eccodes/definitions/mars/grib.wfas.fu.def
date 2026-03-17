@@ -1,0 +1,15 @@
+# GLOFAS
+
+# ECC-701
+alias mars.step = endStep;
+
+alias mars.date = dateOfForecast;
+alias mars.time = timeOfForecast;
+
+alias mars.origin = inputOriginatingCentre;
+
+alias mars.anoffset=anoffset;
+
+# We need this because 'postProcessing' is defined later
+meta efas_model sprintf("%s", postProcessing) : no_copy;
+alias mars.model = efas_model;

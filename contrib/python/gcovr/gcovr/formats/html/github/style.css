@@ -1,0 +1,131 @@
+@charset "utf-8";
+
+{% include "primer.css" %}
+
+{% include "style.common.css" %}
+
+{% include "style.colors.css" %}
+
+.transy-2 {
+  transform: translateY(-2px);
+}
+
+td.linenos .normal {
+  color: inherit;
+  background-color: transparent;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+.src {
+  white-space: pre;
+}
+
+.ws-unset {
+  white-space: unset;
+}
+
+.style-function-name
+{
+  font-style: italic !important;
+  font-weight: bolder !important;
+}
+
+.color-excluded-branch, .color-taken-branch, .color-excluded-condition, .color-taken-condition, .color-taken-decision, .color-excluded-call, .color-invoked-call {
+  color: var(--taken_color) !important;
+}
+
+.coveredLine.show_coveredLine {
+  background-color: var(--covered_color) !important;
+}
+
+.partialCoveredLine.show_partialCoveredLine {
+  background-color: var(--partial_covered_color) !important;
+}
+
+.uncoveredLine.show_uncoveredLine {
+  background-color: var(--uncovered_color) !important;
+}
+
+.excludedLine.show_excludedLine {
+  background-color: var(--excluded_color) !important;
+}
+
+.coverage-unknown {
+  visibility: hidden;
+  min-width: 43px;
+}
+
+.coverage-none {
+  background-color: var(--unknown_color) !important;
+}
+
+.coverage-low {
+  background-color: var(--low_color) !important;
+}
+
+.coverage-medium {
+  background-color: var(--medium_color) !important;
+}
+
+.coverage-high {
+  background-color: var(--high_color) !important;
+}
+
+.Label--minw {
+  min-width: 61px;
+  text-align: right;
+}
+
+.Label--minw > span {
+  min-width: 57px;
+  width: 57px;
+}
+
+.Label--coverage-unknown {
+  visibility: hidden;
+}
+
+.Label--coverage-none {
+  border-color: var(--color-fg-muted) !important;
+  color: var(--color-fg-muted) !important;
+}
+
+.Label--coverage-low {
+  border-color: var(--low_color);
+  color: var(--low_color_fg);
+}
+
+.Label--coverage-medium {
+  border-color: var(--medium_color);
+  color: var(--medium_color_fg);
+}
+
+.Label--coverage-high{
+  border-color: var(--high_color);
+  color: var(--high_color_fg);
+}
+
+.Box-row--focus-gray:hover {
+  background-color: var(--color-canvas-subtle) !important;
+}
+
+.filelist .Box-row:nth-child(2n+3){
+  background-color: var(--color-accent-subtle);
+}
+
+.functionslist .Box-row:nth-child(2n+3){
+  background-color: var(--color-accent-subtle);
+}
+
+@media (max-width: 544px) {
+  .meter {
+    display: none !important;
+  }
+  .meter-label {
+    display: block !important;
+  }
+  .line-percentage-text {
+    display: none !important;
+  }
+}

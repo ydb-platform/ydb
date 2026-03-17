@@ -1,0 +1,32 @@
+# -*- text -*-
+#
+# Copyright (c) 2007-2009 Cisco Systems, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+[all mem leaks]
+The following memory locations were allocated via MPI_ALLOC_MEM but
+not freed via MPI_FREE_MEM before invoking MPI_FINALIZE:
+
+Process ID: %s
+Hostname:   %s
+PID:        %d
+
+%s
+#
+[some mem leaks]
+The following memory locations were allocated via MPI_ALLOC_MEM but
+not freed via MPI_FREE_MEM before invoking MPI_FINALIZE:
+
+Process ID: %s
+Hostname:   %s
+PID:        %d
+
+%s
+
+%d additional leak%s recorded but %s not displayed here.  Set the MCA
+parameter mpi_show_mpi_alloc_mem_leaks to a larger number to see that
+many leaks, or set it to a negative number to see all leaks.

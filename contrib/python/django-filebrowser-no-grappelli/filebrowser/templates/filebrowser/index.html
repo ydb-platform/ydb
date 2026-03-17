@@ -1,0 +1,173 @@
+{% extends "admin/base_site.html" %}
+
+<!-- LOADING -->
+{% load static i18n fb_tags fb_pagination fb_compat %}
+
+<!-- STYLESHEETS -->
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" type="text/css" href="{% static "admin/css/changelists.css" %}" />
+    <link rel="stylesheet" type="text/css" href="{% static "filebrowser/css/filebrowser.css" %}" />
+{% endblock %}
+
+<!-- JAVASCRIPTS -->
+{% block extrahead %}
+    {{ block.super }}
+    <script type="text/javascript" src="{% static_jquery %}"></script>
+    <script type="text/javascript" src="{% static "admin/js/jquery.init.js" %}"></script>
+    {% if query.pop == '1' %} <!-- FileBrowseField -->
+    <script language="javascript" type="text/javascript" src="{% static "filebrowser/js/FB_FileBrowseField.js" %}"></script>
+    {% endif %}
+    {% if query.pop == '2' %} <!-- TinyMCE -->
+    <script language="javascript" type="text/javascript" src="{% static "tiny_mce/tiny_mce_popup.js" %}"></script>
+    <script language="javascript" type="text/javascript" src="{% static "filebrowser/js/FB_TinyMCE.js" %}"></script>
+    {% if query.mce_rdomain %}<script language="javascript">document.domain = "{{ query.mce_rdomain }}"</script>{% endif %}
+    {% endif %}
+    {% if query.pop == '3' %} <!-- CKeditor (former "FCKeditor") -->
+    <script language="javascript" type="text/javascript" src="{% static "filebrowser/js/FB_CKEditor.js" %}"></script>
+    {% endif %}
+    {% if query.pop == '4' %} <!-- TinyMCE -->
+    <script language="javascript" type="text/javascript" src="{% static "filebrowser/js/FB_TinyMCEv4.js" %}"></script>
+    {% endif %}
+    {% if query.pop == '5' %} <!-- TinyMCE -->
+    <script language="javascript" type="text/javascript" src="{% static "filebrowser/js/FB_TinyMCEv5.js" %}"></script>
+    {% endif %}
+    {{ media }}
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            var openedPulldown = null;
+            function openPulldown(el) {
+                openedPulldown = el;
+                var row = el.parent().parent();
+                var list = el.find(".pulldown-versions");
+
+                openedPulldown.addClass("open");
+                list.addClass("open");
+                row.addClass("selected");
+
+                var listOffset = list.offset();
+                $("body").append(list.detach());
+                list.css("top", listOffset.top).css("left", listOffset.left);
+            }
+
+            function closePulldown() {
+                if (!openedPulldown) {
+                    return;
+                }
+                var row = openedPulldown.parent().parent();
+                var list = $("body").find("> .pulldown-versions");
+
+                openedPulldown.removeClass("open");
+                list.removeClass("open");
+                row.removeClass("selected");
+                openedPulldown.append(list.detach());
+                list.css("top", "").css("left", "");
+
+                openedPulldown = null;
+            }
+
+            $(document).ready(function() {
+                $("a.pulldown-versions-handler").bind("click", function() {
+                    var el = $(this).parent();
+                    if (openedPulldown && openedPulldown.is(el)) {
+                        closePulldown();
+                        return;
+                    }
+                    if (openedPulldown) {
+                        closePulldown();
+                    }
+                    openPulldown(el);
+                });
+                $(window).keydown(function(evt) {
+                    if (evt.keyCode == '27') {
+                        closePulldown();
+                    }
+                })
+                $(document).mousedown(function(evt) {
+                    if (!openedPulldown) {
+                        return;
+                    }
+                    var $target = $(evt.target);
+                    if (!$target.hasClass("pulldown-versions") && $target.parents(".pulldown-versions").length == 0) {
+                        closePulldown();
+                    }
+                })
+            });
+        })(django.jQuery);
+    </script>
+{% endblock %}
+
+<!-- COLTYPE/BODYCLASS -->
+{% block bodyclass %}change-list filebrowser {% if query.pop %} popup{% endif %}{% endblock %}
+{% block coltype %}flex{% endblock %}
+
+<!-- BREADCRUMBS -->
+{% block breadcrumbs %}{% include "filebrowser/include/breadcrumbs.html" %}{% endblock %}
+
+<!-- CONTENT -->
+{% block content %}
+    <div id="content-main">
+        <!-- POP-UP BREADCRUMBS -->
+        {% if query.pop %}
+            <div class="breadcrumbs">
+            {% include "filebrowser/include/breadcrumbs.html" %}
+            </div>
+        {% endif %}
+
+        <!-- OBJECT-TOOLS -->
+        {% block object-tools %}
+            <ul class="object-tools">
+                <li><a href="{% url 'filebrowser:fb_createdir' %}{% query_string '' 'p' %}">{% trans "New Folder" %}</a></li>
+                <li><a href="{% url 'filebrowser:fb_upload' %}{% query_string '' 'p' %}" >{% trans "Upload" %}</a></li>
+            </ul>
+        {% endblock %}
+
+        <div class="module filtered" id="changelist">
+        <div class="changelist-form-container">
+            <!-- SEARCH -->
+            {% block search %}
+                <div id="toolbar"><form id="changelist-search" action="" method="get">
+                <div><!-- DIV needed for valid HTML -->
+                <label for="searchbar"><img src="{% static_search_icon %}" alt="Search" /></label>
+                <input type="text" size="40" name="q" value="{{ query.q }}" id="searchbar" />
+                <input type="submit" value="{% trans 'Search' %}" />
+                {% if query.filter_type %}<input type="hidden" name="filter_type" value="{{ query.filter_type }}" />{% endif %}
+                {% if query.filter_date %}<input type="hidden" name="filter_date" value="{{ query.filter_date }}" />{% endif %}
+                {% if query.o %}<input type="hidden" name="o" value="{{ query.o }}" />{% endif %}
+                {% if query.ot %}<input type="hidden" name="ot" value="{{ query.ot }}" />{% endif %}
+                {% if query.pop %}<input type="hidden" name="pop" value="{{ query.pop }}" />{% endif %}
+                {% if query.type %}<input type="hidden" name="type" value="{{ query.type }}" />{% endif %}
+                {% if query.format %}<input type="hidden" name="format" value="{{ query.format }}" />{% endif %}
+                {% if query.dir %}<input type="hidden" name="dir" value="{{ query.dir|urlencode }}" />{% endif %}
+                {% if query.pop == '3' %} {# Custom CKEditor fields #}
+                    {% if query.CKEditor %}<input type="hidden" name="CKEditor" value="{{ query.CKEditor }}" />{% endif %}
+                    {% if query.CKEditorFuncNum %}<input type="hidden" name="CKEditorFuncNum" value="{{ query.CKEditorFuncNum }}" />{% endif %}
+                {% endif %}
+                </div>
+                </form></div>
+                <script type="text/javascript">document.getElementById("searchbar").focus();</script>
+            {% endblock %}
+
+            <form id="changelist-form" action="" method="post">{% csrf_token %}
+                <!-- RESULTS -->
+                {% if filelisting.results_current %}
+                <div class="results">
+                    <table id="result_list">
+                        {% include "filebrowser/include/tableheader.html" %}
+                        <tbody>
+                        {% include "filebrowser/include/filelisting.html" %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+
+                {% pagination %}
+            </form>
+        </div>
+        {% block filters %}
+            <!-- FILTERS -->
+            {% include "filebrowser/include/filter.html" %}
+        {% endblock %}
+        </div>
+    </div>
+{% endblock %}

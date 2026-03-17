@@ -1,0 +1,18 @@
+--- contrib/python/toloka-kit/toloka/client/primitives/retry.py	(index)
++++ contrib/python/toloka-kit/toloka/client/primitives/retry.py	(working tree)
+@@ -157,6 +157,15 @@ class RetryingOverURLLibRetry(BaseRetrying):
+             **kwargs,
+         )
+ 
++    def copy(self, *args, **kwargs):
++        return self.__class__(
++            base_url=self.base_url,
++            retry=self.urllib3_retry,
++            exception_to_retry=self.exception_to_retry,
++            *args,
++            **kwargs,
++        )
++
+     def wraps(self, f: WrappedFn) -> WrappedFn:
+         # This check contradicts Liskov substitution principle, so it is not enforced by type hints. However, it is
+         # handy to use inheritance here to define SyncRetryingOverURLLibRetry and AsyncRetryingOverURLLibRetry despite

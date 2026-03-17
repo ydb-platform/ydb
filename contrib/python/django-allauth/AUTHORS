@@ -1,0 +1,183 @@
+django-allauth was started by Raymond Penners
+(<raymond.penners@intenct.nl> or @pennersr) in October 2010, inspired
+by and partly based on existing projects such as Pinax (account app),
+Django-Socialauth, django-socialregistration.
+
+Contributors
+============
+
+Aaron van Derlip
+Abhinav Johri
+Abhishek Kumar Jaiswal
+Adam Johnson
+Adam McKerlie
+Agustin Perez Paladini
+Ahmet Emre Aladağ
+Aiden Lu
+Aldiantoro Nugroho
+Alexander Gaevsky
+Andrean Franc
+Andrew Chen Wang
+Andrey Akolpakov
+Andrey Balandin
+Andy Matthews
+Ani Vera
+Anna Sirota
+Antonin Delpeuch
+Aron Griffis
+Bas ten Berge
+Basil Shubin
+Ben Timby
+Benjamin Jorand
+Benjamin Howes
+Bhavani Ravi
+Biel Massot
+Björn Andersson
+Bojan Mihelac
+Bruno Alla
+Chris Beaven
+Chris Davis
+Christian Carter
+Christopher Grebs
+Dani Hodovic
+Daniel Eriksson
+Daniel Widerin
+David Ascher
+David Cain
+David Evans
+David Friedman
+David Hummel
+Dimitris Tsimpitas
+Dmytro Litvinov
+Egor Poderyagin
+Eran Rundstein
+Eric Amador
+Eric Delord
+Fabio Caritas Barrionuevo da Luz
+Facundo Gaich
+Francis Brito
+Frantisek Malina
+Fred Palmer
+Fábio Santos
+Felipe Faria
+George Whewell
+Griffith Rees
+Guignard Javier
+Guilhem Saurel
+Guillaume Schurck
+Guillaume Vincent
+Guoyu Hao
+Haesung Park
+Hatem Nassrat
+Hyunwoo Shim
+Ignacio Ocampo
+Illia Volochii
+J. Erm
+J. Fernando Sánchez
+Jack Shedd
+Jakob Gerhard Martinussen
+James Rivett-Carnac
+James Thompson
+Jannis Leidel
+Jannis Vajen
+Jason Wallace
+Jeff Bowen
+Jeff Triplett
+Jeremy Satterfield
+Jerome Leclanche
+Jesse Gerard Brands
+Jihoon Park
+Jiyoon Ha
+Joe Vanderstelt
+Joel Fernandes
+John Bazik
+John Whitlock
+Jonas Aule
+JoonHwan Kim
+Josh Owen
+Josh Wright
+Joshua Butler
+Joshua Sorenson
+Julen Ruiz Aizpuru
+Justin Michalicek
+Justin Pogrob
+Karthikeyan Singaravelan
+Karun Shrestha
+Kevin Dice
+Koichi Harakawa
+Kun Liu
+Kyle Harrison
+Kimsia Sim
+Lee Semel
+Lev Predan Kowarski
+Luis Diego García
+Luiz Guilherme Pais dos Santos
+Luke Burden
+Luke Crouch
+Maksim Rukomoynikov
+Marcin Skarbek
+Marcin Spoczynski
+Marco Fucci
+Marjori Pomarole
+Markus Kaiserswerth
+Markus Thielen
+Martin Bächtold
+Matt Nishi-Broach
+Mauro Stettler
+Mikhail Mitiaev
+Morgante Pell
+Nariman Gharib
+Nathan Strobbe
+Nicolas Acosta
+Niklas A Emanuelsson
+Oleg Sergeev
+Patrick Paul
+Paul Juergen Fischer
+Paulo Eduardo Neves
+Pavel Oborin
+Pavel Savchenko
+Peter Bittner
+Peter Rowlands
+Peter Stein
+Philip John James
+Rabi Alam
+Radek Czajka
+Rense VanderHoek
+Rick Westera
+Robert Balfre
+Roberto Novaes
+Rod Xavier Bondoc
+Roman Tomjak
+Roumen Antonov
+Ryan Jarvis
+Ryan Verner
+Safwan Rahman
+Sam Solomon
+Sanghyeok Lee
+Seizan Shimazaki
+Serafeim Papastefanos
+Sergey Silaev
+Shane Rice
+Stephen Kent
+Stuart Ross
+Terry Jones
+Tiago Loureiro
+Tim Gates
+Tom Hacohen
+Tomas Babej
+Tomas Marcik
+Trey Corple
+Tuk Bredsdorff
+Udi Oron
+Victor Semionov
+Volodymyr Yatsyk
+Vuong Nguyen
+Vlad Dmitrievich
+Wendy Edwards
+Will Gordon
+Will Ross
+William Li
+Yaroslav Muravsky
+Yuri Kriachko
+Youcef Mammar
+Anton Goncharov

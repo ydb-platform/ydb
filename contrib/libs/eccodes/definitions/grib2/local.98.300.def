@@ -1,0 +1,13 @@
+# Local definition 300: Multi-dimensional parameters
+# Warning: This is now DEPRECATED. See ECC-1440
+
+codetable[1] dimensionType "grib2/dimensionType.table" = "layer" : string_type;
+
+# The n-th dimension (out of total number of dimensions)
+unsigned[2] dimensionNumber;
+alias dimension=dimensionNumber;
+
+# Total number of dimensions
+unsigned[2] totalNumberOfdimensions;
+
+alias extraDimensionPresent=one;

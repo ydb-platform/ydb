@@ -1,0 +1,152 @@
+Metadata-Version: 2.1
+Name: pysftp
+Version: 0.2.9
+Summary: A friendly face on SFTP
+Home-page: https://bitbucket.org/dundeemt/pysftp
+Author: Jeff Hinrichs
+Author-email: jeffh@dundeemt.com
+License: BSD
+Download-URL: https://pypi.python.org/pypi/pysftp
+Keywords: sftp ssh ftp internet
+Platform: any
+Classifier: Development Status :: 4 - Beta
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Requires-Dist: paramiko>=1.17
+
+pysftp
+======
+
+A simple interface to SFTP.  The module offers high level abstractions and
+task based routines to handle your SFTP needs.  Checkout the Cook Book, in the
+docs, to see what pysftp can do for you.
+
+Example
+-------
+
+::
+
+    import pysftp
+
+    with pysftp.Connection('hostname', username='me', password='secret') as sftp:
+        with sftp.cd('public'):             # temporarily chdir to public
+            sftp.put('/my/local/filename')  # upload file to public/ on remote
+            sftp.get('remote_file')         # get a remote file
+
+
+Supports
+--------
+Tested on Python 2.7, 3.2, 3.3, 3.4
+
+.. image:: https://drone.io/bitbucket.org/dundeemt/pysftp/status.png
+    :target: https://drone.io/bitbucket.org/dundeemt/pysftp/latest
+    :alt: Build Status
+
+
+* Project:  https://bitbucket.org/dundeemt/pysftp
+* Download: https://pypi.python.org/pypi/pysftp
+* Documentation: http://pysftp.rtfd.org/
+
+Change Log
+----------
+
+
+* 0.2.9 (current, released 2016-07-04)
+
+  * bugfix: correctly implement hostcheck. Now, be default pysftp will verify
+    the host. See ``pysftp.CnOpts.hostkeys``
+  * added ``pysftp.Connection.remote_server_key`` - used to retrieve the
+    remote hosts server key. 
+  * added support for enabling compression, ``compression`` (J. Kruth)
+  * added ``.active_compression``, to return the active local and remote compression settings as a tuple
+  * fixed an unwanted logging side-effect, after you set logging, it would remain, even if you closed the .Connection and couldn't be changed to something else. Now when Connection closes, any logging handlers are closed and can be changed to something else upon the next .Connection
+  * moved ``log`` parameter of Connection to the new CnOpts connection options object, deprecated the existing ``log`` parameter, will be removed in 0.3.0
+  * modified ``pysftp.Conection.walktree`` to always use posixpath conventions when walking a remote directory per the latest draft-ietf-secsh-filexfer-13.txt. Issue encountered with windows clients (#60)
+  * modified ``pysftp.reparent`` to handle mis-matched pathing, i.e. windows -> posix, better (#61)
+
+* 0.2.8 (released 2014-05-28)
+
+  * created ``pysftp.walktree`` for walking local directories
+  * added param recurse to ``.pysftp.Connection.walktree`` to allow it to do another trick
+  * created ``.put_d`` to put the contents of a local directory to a remote one
+  * created a context manager chdir method, ``pysftp.Connection.cd``
+  * created ``.put_r`` to recursively put the contents of a local directory to a remote one
+  * fixed a bug with ``.st_mode_to_int`` on py3 (#52)
+  * ``.listdir_attr`` now returns a sorted list, sorted on filename
+  * created ``pysftp.cd`` with-context version of ``os.chdir`` for local directories
+  * created docs, cookbook to show off some of the notable features of pysftp
+
+* 0.2.7 (released 2014-05-24)
+
+  * created ``pysftp.Connection.walktree``, recursively walk, depth first, a remote directory structure.  Used as the base of ``.get_r``. See tests/test_walktree.py for examples.
+  * added ``.unlink`` as synonym for ``.remove``
+  * added ``.normalize``
+  * created ``.get_r`` to recursively copy remote directories to a local path
+  * created ``.pwd`` to return the current working directory
+  * created ``.cwd`` as synonym for ``.chdir``
+  * modified ``.listdir`` to return a sorted list instead of an arbitrary one
+  * added ``.readlink``, always returns an absolute path
+  * created ``.get_d`` to copy the remote directory to a local path (non-recursive)
+  * added ``.timeout`` to set the read/write timeout of the underlying channel for pending read/write ops
+  * added ``.listdir_attr``, wrapper for paramiko method
+  * added ``.truncate``, method returns the new file size
+  * improved DRY'ness of test suite
+
+* 0.2.6 (released 2014-05-17)
+
+  * added ``preserve_mtime`` parameter to ``.put``, optionally updates the remote file's st_mtime to match the local file.
+  * added ``preserve_mtime`` parameter to ``.get``, optionally updates the local file's st_mtime to match the remote file
+  * added ``.exists`` and ``.lexists``, use ``.stat`` and ``.lstat`` respectively
+  * added ``.symlink``
+  * created ``.isdir``, ``.isfile``, ``.makedirs``
+  * added ``.chmod``
+  * added ``.chown``
+  * added ``.sftp_client`` which exposes underlying, active ``SFTPClient`` object for advance use
+
+* 0.2.5 (released 2014-05-15)
+
+  * added ``ciphers`` parameter to ``.Connection`` object (D. Reilly)
+  * added ``.active_ciphers`` to return local and remote cipher in use
+  * added ``.security_options``, where you can get available ciphers, among other information
+  * enhanced logging, and added documentation and tests
+
+* 0.2.4 (released 2014-05-13)
+
+  * ``.Connection`` can be used in a ``with`` statement
+  * add ``.remove``
+  * added support for callback and confirm params to ``.put``
+  * added support for callback on ``.get``
+  * added support for ``.open``
+  * fixed password bug and now differentiates between an empty string and None
+  * added support for ``paramiko.AgentKey`` to be passed in as the ``private_key`` for Connection
+  * added support for ``.mkdir``
+  * added support for ``.rmdir``
+  * added support for ``.stat`` and ``.lstat``
+  * added helper function, ``.st_mode_to_int``,to convert the ``st_mode`` value back into a common integer representation
+  * added ``.getfo``
+  * added ``.putfo``
+
+* 0.2.3 (released 2014-05-10)
+
+  * host code on pypi to keep pip happy
+  * move code to bitbucket
+  * enhance testing
+  * README.rst and LICENSE named properly
+  * cleaner error handling
+
+* 0.2.2
+
+  * additions
+
+    * chdir(self, path) - change the current working directory on the remote
+    * getcwd(self) - return the current working directory on the remote
+    * listdir(self, path='.')return a list of files for the given path
+
+

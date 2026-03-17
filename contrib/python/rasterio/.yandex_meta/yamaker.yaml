@@ -1,0 +1,17 @@
+requirements:
+  - contrib/libs/gdal
+mark_as_cython_c:
+  - rasterio/_base.pyx
+  - rasterio/_env.pyx
+  - rasterio/_err.pyx
+  - rasterio/_example.pyx
+  - rasterio/_features.pyx
+  - rasterio/_io.pyx
+  - rasterio/_transform.pyx
+  - rasterio/_version.pyx
+  - rasterio/_vsiopener.pyx
+  - rasterio/cache.pyx
+  - rasterio/crs.pyx
+  - rasterio/shutil.pyx
+cython_directive:
+  - language_level=3

@@ -1,0 +1,11 @@
+# Product discipline 10 - Oceanographic products, parameter category 1: currents
+0 0 Current direction (degree true)
+1 1 Current speed (m/s)
+2 2 u-component of current (m/s)
+3 3 v-component of current (m/s)
+4 4 Rip current occurrence probability (%)
+5 5 Eastward current (m s-1)
+6 6 Northward current (m s-1)
+# 7-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

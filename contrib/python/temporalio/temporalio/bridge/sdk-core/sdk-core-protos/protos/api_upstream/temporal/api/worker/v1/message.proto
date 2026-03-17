@@ -1,0 +1,144 @@
+syntax = "proto3";
+
+package temporal.api.worker.v1;
+
+option go_package = "go.temporal.io/api/worker/v1;worker";
+option java_package = "io.temporal.api.worker.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Worker::V1";
+option csharp_namespace = "Temporalio.Api.Worker.V1";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/api/deployment/v1/message.proto";
+import "temporal/api/enums/v1/common.proto";
+
+message WorkerPollerInfo {
+  // Number of polling RPCs that are currently in flight.
+  int32 current_pollers = 1;
+
+  google.protobuf.Timestamp last_successful_poll_time = 2;
+
+  // Set true if the number of concurrent pollers is auto-scaled
+  bool is_autoscaling = 3;
+}
+
+message WorkerSlotsInfo {
+  // Number of slots available for the worker to specific tasks.
+  // May be -1 if the upper bound is not known.
+  int32 current_available_slots = 1;
+  // Number of slots used by the worker for specific tasks.
+  int32 current_used_slots = 2;
+
+  // Kind of the slot supplier, which is used to determine how the slots are allocated.
+  // Possible values: "Fixed | ResourceBased | Custom String"
+  string slot_supplier_kind = 3;
+
+  // Total number of tasks processed (completed both successfully and unsuccesfully, or any other way)
+  // by the worker since the worker started. This is a cumulative counter.
+  int32 total_processed_tasks = 4;
+  // Total number of failed tasks processed by the worker so far.
+  int32 total_failed_tasks = 5;
+
+  // Number of tasks processed in since the last heartbeat from the worker.
+  // This is a cumulative counter, and it is reset to 0 each time the worker sends a heartbeat.
+  // Contains both successful and failed tasks.
+  int32 last_interval_processed_tasks = 6;
+  // Number of failed tasks processed since the last heartbeat from the worker.
+  int32 last_interval_failure_tasks = 7;
+}
+
+// Holds everything needed to identify the worker host/process context
+message WorkerHostInfo {
+  // Worker host identifier.
+  string host_name = 1;
+
+
+  // Worker process identifier. This id should be unique for all _processes_
+  // running workers in the namespace, and should be shared by all workers
+  // in the same process.
+  // This will be used to build the worker command nexus task queue name:
+  // "temporal-sys/worker-commands/{process_key}"
+  string process_key = 5;
+
+  // Worker process identifier. Unlike process_key, this id only needs to be unique
+  // within one host (so using e.g. a unix pid would be appropriate).
+  string process_id = 2;
+
+  // System used CPU as a float in the range [0.0, 1.0] where 1.0 is defined as all
+  // cores on the host pegged.
+  float current_host_cpu_usage = 3;
+  // System used memory as a float in the range [0.0, 1.0] where 1.0 is defined as
+  // all available memory on the host is used.
+  float current_host_mem_usage = 4;
+}
+
+// Worker info message, contains information about the worker and its current state.
+// All information is provided by the worker itself.
+// (-- api-linter: core::0140::prepositions=disabled
+//     aip.dev/not-precedent: Removing those words make names less clear. --)
+message WorkerHeartbeat {
+  // Worker identifier, should be unique for the namespace.
+  // It is distinct from worker identity, which is not necessarily namespace-unique.
+  string worker_instance_key = 1;
+
+  // Worker identity, set by the client, may not be unique.
+  // Usually host_name+(user group name)+process_id, but can be overwritten by the user.
+  string worker_identity = 2;
+
+  // Worker host information.
+  WorkerHostInfo host_info = 3;
+
+  // Task queue this worker is polling for tasks.
+  string task_queue = 4;
+
+  temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 5;
+
+  string sdk_name = 6;
+  string sdk_version = 7;
+
+  // Worker status. Defined by SDK.
+  temporal.api.enums.v1.WorkerStatus status = 8;
+
+  // Worker start time.
+  // It can be used to determine worker uptime. (current time - start time)
+  google.protobuf.Timestamp start_time = 9;
+
+  // Timestamp of this heartbeat, coming from the worker. Worker should set it to "now".
+  // Note that this timestamp comes directly from the worker and is subject to workers' clock skew.
+  google.protobuf.Timestamp heartbeat_time = 10;
+  // Elapsed time since the last heartbeat from the worker.
+  google.protobuf.Duration elapsed_since_last_heartbeat = 11;
+
+  WorkerSlotsInfo workflow_task_slots_info = 12;
+  WorkerSlotsInfo activity_task_slots_info = 13;
+  WorkerSlotsInfo nexus_task_slots_info = 14;
+  WorkerSlotsInfo local_activity_slots_info = 15;
+
+  WorkerPollerInfo workflow_poller_info = 16;
+  WorkerPollerInfo workflow_sticky_poller_info = 17;
+  WorkerPollerInfo activity_poller_info = 18;
+  WorkerPollerInfo nexus_poller_info = 19;
+
+  // A Workflow Task found a cached Workflow Execution to run against.
+  int32 total_sticky_cache_hit = 20;
+  // A Workflow Task did not find a cached Workflow execution to run against.
+  int32 total_sticky_cache_miss = 21;
+  // Current cache size, expressed in number of Workflow Executions.
+  int32 current_sticky_cache_size = 22;
+
+  // Plugins currently in use by this SDK.
+  repeated PluginInfo plugins = 23;
+}
+
+message WorkerInfo {
+  WorkerHeartbeat worker_heartbeat = 1;
+}
+
+message PluginInfo {
+    // The name of the plugin, required.
+    string name = 1;
+    // The version of the plugin, may be empty.
+    string version = 2;
+}

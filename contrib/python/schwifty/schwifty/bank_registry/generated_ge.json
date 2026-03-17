@@ -1,0 +1,162 @@
+[
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "IBAZGE22",
+    "bank_code": "AZ",
+    "name": "International Bank of Azerbaijan",
+    "short_name": "International Bank of Azerbaijan"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "BAGAGE22",
+    "bank_code": "BG",
+    "name": "JSC \"Bank of Georgia\"",
+    "short_name": "JSC \"Bank of Georgia\""
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "REPLGE22",
+    "bank_code": "BR",
+    "name": "TBC Bank Temporary Code",
+    "short_name": "TBC Bank Temporary Code"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "CBASGE22",
+    "bank_code": "BS",
+    "name": "JSC \"Basisbank\"",
+    "short_name": "JSC \"Basisbank\""
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "DISNGE22",
+    "bank_code": "BT",
+    "name": "Silk Road Bank",
+    "short_name": "Silk Road Bank"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "JSCRGE22",
+    "bank_code": "CD",
+    "name": "Credo Bank",
+    "short_name": "Credo Bank"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "CRTUGE22",
+    "bank_code": "CR",
+    "name": "Cartu Bank",
+    "short_name": "Cartu Bank"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "DEVGGE22",
+    "bank_code": "CS",
+    "name": "Caucasus Development Bank ",
+    "short_name": "Caucasus Development Bank "
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "HABGGE22",
+    "bank_code": "HB",
+    "name": "Halyk Bank Georgia",
+    "short_name": "Halyk Bank Georgia"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "CPTBGE22",
+    "bank_code": "IN",
+    "name": "Capital Bank",
+    "short_name": "Capital Bank"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "ISBKGE22",
+    "bank_code": "IS",
+    "name": "ISBANK Georgia",
+    "short_name": "ISBANK Georgia"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "TEBAGE22",
+    "bank_code": "KS",
+    "name": "JSC \"TeraBank\"",
+    "short_name": "JSC \"TeraBank\""
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "LBRTGE22",
+    "bank_code": "LB",
+    "name": "Liberty Bank",
+    "short_name": "Liberty Bank"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "BNLNGE22",
+    "bank_code": "NB",
+    "name": "National Bank of Georgia",
+    "short_name": "National Bank of Georgia"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "PAHAGE22",
+    "bank_code": "PB",
+    "name": "PASHA Bank Georgia",
+    "short_name": "PASHA Bank Georgia"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "MIBGGE22",
+    "bank_code": "PC",
+    "name": "Procredit Bank",
+    "short_name": "Procredit Bank"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "PRSGGE22",
+    "bank_code": "PG",
+    "name": "Progress Bank",
+    "short_name": "Progress Bank"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "TBCBGE22",
+    "bank_code": "TB",
+    "name": "TBC Bank",
+    "short_name": "TBC Bank"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "UGEBGE22",
+    "bank_code": "VT",
+    "name": "VTB Bank Georgia",
+    "short_name": "VTB Bank Georgia"
+  },
+  {
+    "country_code": "GE",
+    "primary": true,
+    "bic": "TCZBGE22",
+    "bank_code": "ZB",
+    "name": "Ziraat Bank Georgia",
+    "short_name": "Ziraat Bank Georgia"
+  }
+]

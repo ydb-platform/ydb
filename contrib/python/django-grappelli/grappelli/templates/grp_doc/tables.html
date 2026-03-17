@@ -1,0 +1,472 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; Tables{% endblock %}
+
+{% block extrahead %}
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(django.jQuery);
+    </script>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Tables</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Tables</h1>
+    <div class="g-d-c">
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Basic Tables</h1>
+                    <p>Feel free to use everything a table structure allows. To cycle the background-color of rows, use the classes <span class="grp-doc-class">.grp-row-even</span> and <span class="grp-doc-class">.grp-row-odd</span>.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code-source">
+                    <table class="grp-table">
+                        <thead>
+                            <tr>
+                                <th>Prename</th>
+                                <th>Surname</th>
+                                <th>Instrument</th>
+                            </tr>
+                        </thead>
+                        <tfoot>
+                            <tr class="grp-row-even">
+                                <td>Prename</td>
+                                <td>Surname</td>
+                                <td>Instrument</td>
+                            </tr>
+                        </tfoot>
+                        <tbody>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Stéphane</a></th>
+                                <td>Grappelli</td>
+                                <td>Violin</td>
+                            </tr>
+                            <tr class="grp-row-odd">
+                                <th><a href="#">Django</a></th>
+                                <td>Reinhardt</td>
+                                <td>Guitar</td>
+                            </tr>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Eddie</a></th>
+                                <td>South</td>
+                                <td>Violin</td>
+                            </tr>
+                            <tr class="grp-row-odd">
+                                <th><a href="#">Joe</a></td>
+                                <td>Venuti</td>
+                                <td>Violin</td>
+                            </tr>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Stuff</a></th>
+                                <td>Smith</td>
+                                <td>Violin</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<table class="grp-table">
+    <thead>
+        <tr>
+            <th>Prename</th>
+            <th>Surname</th>
+            <th>Instrument</th>
+        </tr>
+    </thead>
+    <tfoot>
+        <tr class="grp-row-even">
+            <td>Prename</td>
+            <td>Surname</td>
+            <td>Instrument</td>
+        </tr>
+    </tfoot>
+    <tbody>
+        <tr class="grp-row-even">
+            <th><a href="#">Stéphane</a></th>
+            <td>Grappelli</td>
+            <td>Violin</td>
+        </tr>
+        <tr class="grp-row-odd">
+            <th><a href="#">Django</a></th>
+            <td>Reinhardt</td>
+            <td>Guitar</td>
+        </tr>
+        <tr class="grp-row-even">
+            <th><a href="#">Eddie</a></th>
+            <td>South</td>
+            <td>Violin</td>
+        </tr>
+        <tr class="grp-row-odd">
+            <th><a href="#">Joe</a></td>
+            <td>Venuti</td>
+            <td>Violin</td>
+        </tr>
+        <tr class="grp-row-even">
+            <th><a href="#">Stuff</a></th>
+            <td>Smith</td>
+            <td>Violin</td>
+        </tr>
+    </tbody>
+</table>
+{% endfilter %}</code></pre></div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h2>Full width table</h2>
+                    <p>Just add <span class="grp-doc-class">.grp-full-width</span>.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code-source">
+                    <table class="grp-table grp-full-width">
+                        <thead>
+                            <tr>
+                                <th>Prename</th>
+                                <th>Surname</th>
+                                <th>Instrument</th>
+                            </tr>
+                        </thead>
+                        <tfoot>
+                            <tr class="grp-row-even">
+                                <td>Prename</td>
+                                <td>Surname</td>
+                                <td>Instrument</td>
+                            </tr>
+                        </tfoot>
+                        <tbody>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Stéphane</a></th>
+                                <td>Grappelli</td>
+                                <td>Violin</td>
+                            </tr>
+                            <tr class="grp-row-odd">
+                                <th><a href="#">Django</a></th>
+                                <td>Reinhardt</td>
+                                <td>Guitar</td>
+                            </tr>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Eddie</a></th>
+                                <td>South</td>
+                                <td>Violin</td>
+                            </tr>
+                            <tr class="grp-row-odd">
+                                <th><a href="#">Joe</a></td>
+                                <td>Venuti</td>
+                                <td>Violin</td>
+                            </tr>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Stuff</a></th>
+                                <td>Smith</td>
+                                <td>Violin</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<table class="grp-table grp-full-width">
+    ...
+</table>
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Sortable Tables</h1>
+                    <p>Tables may be sortable (e.g. with <a href="{% url 'grp_doc_change_list' %}">change-lists</a>) &mdash; to do so, add the class <span class="grp-doc-class">.grp-sortable</span> to the table. To define a <span class="grp-doc-dom"><span>th</span></span> as a sortable header, you have to add  <span class="grp-doc-class">.sortable</span>. If it's already sorted, you further have to add <span class="grp-doc-class">.sorted.ascending</span> or <span class="grp-doc-class">.sorted.descending</span>.</p>
+                    <p>Each <span class="grp-doc-dom"><span>th</span></span> in a sortable table has to contain one or more of the following elements:</p>
+                    <ul>
+                        <li>A <span class="grp-doc-dom"><span>div.grp-text</span></span> containing an <span class="grp-doc-dom"><span>a</span></span> with the title if the <span class="grp-doc-dom"><span>th</span></span> is sortable and a <span class="grp-doc-dom"><span>span</span></span> if it's not. </li>
+                        <li>If it is already sorted, a <span class="grp-doc-dom"><span>div.grp-sortoptions</span></span> containing the following elements:
+                            <ul>
+                                <li>An <span class="grp-doc-dom"><span>a.grp-sortremove</span></span> to remove the sorting</li>
+                                <li>A <span class="grp-doc-dom"><span>span.grp-sortpriority</span></span> showing the priority if more than one <span class="grp-doc-dom"><span>th</span></span> is sorted</li>
+                                <li>An <span class="grp-doc-dom"><span>a.grp-toggle</span></span> with the additional class <span class="grp-doc-class">.grp-ascending</span> or <span class="grp-doc-class">.grp-descending</span> that shows the sorting direction</li>
+                            </ul>
+                        </li>
+                    </ul>
+                    <p>To view the full code of a sortable table take a look at Grappellis change_list_results.html.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code-source">
+                    <table class="grp-table grp-sortable grp-full-width">
+                        <thead>
+                            <tr>
+                                <th class="sortable sorted ascending">
+                                    <div class="grp-sortoptions">
+                                        <a href="#" class="grp-sortremove"></a>
+                                        <span class="grp-sortpriority">2</span>
+                                        <a href="#" class="grp-toggle grp-ascending"></a>
+                                    </div>
+                                    <div class="grp-text"><a href="#">Prename</a></div>
+                                </th>
+                                <th>
+                                    <div class="grp-text"><span>Surname</span></div>
+                                </th>
+                                <th class="sortable sorted descending">
+                                    <div class="grp-sortoptions">
+                                        <a href="#" class="grp-sortremove"></a>
+                                        <span class="grp-sortpriority">1</span>
+                                        <a href="#" class="grp-toggle grp-descending"></a>
+                                    </div>
+                                    <div class="grp-text"><a href="#">Instrument</a></div>
+                                </th>
+                                <th class="sortable">
+                                    <div class="grp-text"><a href="#">Ranking</a></div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Stuff</a></th>
+                                <td>Smith</td>
+                                <td>Violin</td>
+                                <td>5</td>
+                            </tr>
+                            <tr class="grp-row-odd">
+                                <th><a href="#">Stéphane</a></th>
+                                <td>Grappelli</td>
+                                <td>Violin</td>
+                                <td>1</td>
+                            </tr>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Joe</a></td>
+                                <td>Venuti</td>
+                                <td>Violin</td>
+                                <td>3</td>
+                            </tr>
+                            <tr class="grp-row-odd">
+                                <th><a href="#">Eddie</a></th>
+                                <td>South</td>
+                                <td>Violin</td>
+                                <td>4</td>
+                            </tr>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Django</a></th>
+                                <td>Reinhardt</td>
+                                <td>Guitar</td>
+                                <td>2</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<table class="grp-table grp-sortable grp-full-width">
+    <thead>
+        <tr>
+            <th class="sortable sorted ascending">
+                <div class="grp-sortoptions">
+                    <a href="#" class="grp-sortremove"></a>
+                    <span class="grp-sortpriority">2</span>
+                    <a href="#" class="grp-toggle grp-ascending"></a>
+                </div>
+                <div class="grp-text"><a href="#">Prename</a></div>
+            </th>
+            <th>
+                <div class="grp-text"><span>Surname</span></div>
+            </th>
+            <th class="sortable sorted descending">
+                <div class="grp-sortoptions">
+                    <a href="#" class="grp-sortremove"></a>
+                    <span class="grp-sortpriority">1</span>
+                    <a href="#" class="grp-toggle grp-descending"></a>
+                </div>
+                <div class="grp-text"><a href="#">Instrument</a></div>
+            </th>
+            <th class="sortable">
+                <div class="grp-text"><a href="#">Ranking</a></div>
+            </th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr class="grp-row-even">
+            <th><a href="#">Stuff</a></th>
+            <td>Smith</td>
+            <td>Violin</td>
+            <td>5</td>
+        </tr>
+        .
+        .
+        .
+    </tbody>
+</table>
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Form Fields &amp; Errors in Tables</h1>
+                    <p>You may use all types of <a href="{% url 'grp_doc_form_fields' %}">form fields</a> in tables as well as <a href="{% url 'grp_doc_errors' %}">error</a> elements.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code-source">
+                    <p class="errornote">Non-form error with some instruments</p>
+                    <table class="grp-table grp-full-width">
+                        <thead>
+                            <tr>
+                                <th>Prename</th>
+                                <th>Surname</th>
+                                <th>Instrument</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="grp-errors">
+                                <td colspan="4"><ul class="errorlist"><li>Non-field error with Stuffs Violin</li></ul></td>
+                            </tr>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Stuff</a></th>
+                                <td>Smith</td>
+                                <td>Violin</td>
+                                <td>
+                                    <ul class="errorlist">
+                                        <li>Field error: Tuning failed</li>
+                                    </ul>
+                                    <select>
+                                        <option>Tune it ...</option>
+                                        <option selected="selected">... up</option>
+                                        <option>... down</option>
+                                    </select>
+                                    <ul class="errorlist">
+                                        <li>Field error: Not able to tune it up</li>
+                                    </ul>
+                                </td>
+                            </tr>
+                            <tr class="grp-row-odd">
+                                <th><a href="#">Stéphane</a></th>
+                                <td>Grappelli</td>
+                                <td>Violin</td>
+                                <td>
+                                    <select>
+                                        <option>Tune it ...</option>
+                                        <option>... up</option>
+                                        <option>... down</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Joe</a></td>
+                                <td>Venuti</td>
+                                <td>Violin</td>
+                                <td>
+                                    <select>
+                                        <option>Tune it ...</option>
+                                        <option>... up</option>
+                                        <option>... down</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr class="grp-errors">
+                                <td colspan="4"><ul class="errorlist"><li>Non-field error with Eddies Violin</li></ul></td>
+                            </tr>
+                            <tr class="grp-row-odd">
+                                <th><a href="#">Eddie</a></th>
+                                <td>South</td>
+                                <td>Violin</td>
+                                <td>
+                                    <ul class="errorlist">
+                                        <li>Field error: Tuning failed</li>
+                                    </ul>
+                                    <select>
+                                        <option>Tune it ...</option>
+                                        <option selected="selected">... up</option>
+                                        <option>... down</option>
+                                    </select>
+                                    <ul class="errorlist">
+                                        <li>Field error: Not able to tune it up</li>
+                                    </ul>
+                                </td>
+                            </tr>
+                            <tr class="grp-row-even">
+                                <th><a href="#">Django</a></th>
+                                <td>Reinhardt</td>
+                                <td>Guitar</td>
+                                <td>
+                                    <select>
+                                        <option>Tune it ...</option>
+                                        <option>... up</option>
+                                        <option>... down</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+<table class="grp-table grp-full-width">
+    <thead>
+        <tr>
+            <th>Prename</th>
+            <th>Surname</th>
+            <th>Instrument</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr class="grp-errors">
+            <td colspan="4"><ul class="errorlist"><li>Non-field error with Stuffs Violin</li></ul></td>
+        </tr>
+        <tr class="grp-row-even">
+            <th><a href="#">Stuff</a></th>
+            <td>Smith</td>
+            <td>Violin</td>
+            <td>
+                <ul class="errorlist">
+                    <li>Field error: Tuning failed</li>
+                </ul>
+                <select>
+                    <option>Tune it ...</option>
+                    <option selected="selected">... up</option>
+                    <option>... down</option>
+                </select>
+                <ul class="errorlist">
+                    <li>Field error: Not able to tune it up</li>
+                </ul>
+            </td>
+        </tr>
+        .
+        .
+        .
+    </tbody>
+</table>
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+    </div>
+{% endblock %}

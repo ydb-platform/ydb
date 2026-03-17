@@ -1,0 +1,16 @@
+--- contrib/python/pyketama/ketama/ketama.pyx	(index)
++++ contrib/python/pyketama/ketama/ketama.pyx	(working tree)
+@@ -34,10 +34,10 @@ def _bytes(s):
+ 
+ 
+ cdef class Continuum:
+-    cdef public continuum_t _continum
+-    cdef public dict _values
++    cdef continuum_t _continum
++    cdef dict _values
+ 
+-    def __cinit__(self, config=[]):
++    def __cinit__(self, config=()):
+         '''
+         :param config: list, element can be a string, a tuple like (key,  weight) or like (key, value, weight), key should be a string
+         '''

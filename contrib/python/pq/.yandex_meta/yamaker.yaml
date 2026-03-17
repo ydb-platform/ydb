@@ -1,0 +1,5 @@
+requirements:
+  - library/python/resource
+  - psycopg2
+keep:
+  - tests/*

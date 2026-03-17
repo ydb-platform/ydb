@@ -1,0 +1,47 @@
+# (C) Copyright 2005- ECMWF.
+
+# # Members iformation of
+# # SREPS Short-Range EPS
+#
+# Last update: 20070323
+#
+#Description                    Octet   Code    Ksec1   Count
+#-----------                    -----   ----    -----   -----
+#
+#localDefinitionNumber           41      I1      37      -
+#class                           42      I1      38      -
+#type                            43      I1      39      -
+#stream                          44      I2      40      -
+#experimentVersionNumber         46      A4      41      -
+#number                          50      I1      42      -
+#total                           51      I1      43      -
+#Model_Identifier                52      A8      44      -
+#LBC_Initial_Conditions          60      A8      46      -
+#Model_LBC_Member_Identifier     68      A4      48      -
+#Model_Additional_Information    72      A8      49      -
+#zeroForFutureDevelopments       80      PAD     51      20
+#Extra_Data_FreeFormat_(0=none)  100     I2      71      -
+#Data_Descriptor_Bytes           102     BYTES   72      Extra_Data_FreeFormat_(0=none)
+#padToAMultipleOf80Bytes         103     PADFROM n/a     80
+#
+#
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] perturbationNumber : dump;
+alias number = perturbationNumber;
+
+unsigned[1] numberOfForecastsInEnsemble : dump ;
+
+ascii[8]    'Model_Identifier' ;
+ascii[8]    'LBC_Initial_Conditions' ;
+ascii[4]    'Model_LBC_Member_Identifier' ;
+ascii[8]    'Model_Additional_Information' ;
+
+pad padding_loc245_1(20);
+
+unsigned[2]  Extra_Data_FreeFormat_0_none  : dump ;
+position offsetFreeFormData;
+unsigned[1] freeFormData[Extra_Data_FreeFormat_0_none] : dump ;
+
+padtomultiple padding_loc245_2(offsetSection1,80);

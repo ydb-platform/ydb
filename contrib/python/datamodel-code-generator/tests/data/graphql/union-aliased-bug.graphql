@@ -1,0 +1,13 @@
+type GroupMetadata {
+  name: String!
+}
+
+type UserMetadata {
+  name: String!
+}
+
+union Metadata = UserMetadata | GroupMetadata
+
+type Resource {
+  metadata: UserMetadata!
+}

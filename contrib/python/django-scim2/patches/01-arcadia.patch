@@ -1,0 +1,26 @@
+--- contrib/python/django-scim2/django_scim/schemas/__init__.py	(index)
++++ contrib/python/django-scim2/django_scim/schemas/__init__.py	(working tree)
+@@ -1,5 +1,6 @@
+ import json
+ import os
++import importlib.resources
+ 
+ SCHEMAS_DIR = os.path.dirname(os.path.abspath(__file__))
+ SCHEMA_SUB_DIRS = ('core', 'extension')
+@@ -8,11 +9,11 @@ SCHEMA_SUB_DIRS = ('core', 'extension')
+ def load_schemas():
+     schemas = []
+     for dir_ in SCHEMA_SUB_DIRS:
+-        sub_dir = os.path.join(SCHEMAS_DIR, dir_)
+-        files = os.listdir(sub_dir)
+-        files = [os.path.join(sub_dir, f) for f in files if f.lower().endswith('.json')]
+-        for file_ in files:
+-            with open(file_) as fp:
++        sub_dir = importlib.resources.files(__package__) / dir_
++        for file_ in sub_dir.iterdir():
++            if not file_.name.endswith('.json'):
++                continue
++            with file_.open() as fp:
+                 schemas.append(json.load(fp))
+ 
+     return schemas

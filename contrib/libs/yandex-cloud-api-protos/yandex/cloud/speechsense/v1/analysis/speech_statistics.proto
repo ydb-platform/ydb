@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package yandex.cloud.speechsense.v1.analysis;
+
+import "yandex/cloud/speechsense/v1/analysis/statistics_common.proto";
+
+option java_package = "yandex.cloud.api.speechsense.v1.analysis";
+option java_outer_classname = "SpeechStatisticsProto";
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/speechsense/v1/analysis;speechsense";
+
+message SpeechStatistics {
+  // Total simultaneous speech duration in seconds
+  int64 total_simultaneous_speech_duration_seconds = 1;
+
+  // Total simultaneous speech duration in ms
+  int64 total_simultaneous_speech_duration_ms = 2;
+
+  // Simultaneous speech ratio within audio segment
+  double total_simultaneous_speech_ratio = 3;
+
+  // Descriptive statistics for simultaneous speech duration distribution
+  DescriptiveStatistics simultaneous_speech_duration_estimation = 4;
+}

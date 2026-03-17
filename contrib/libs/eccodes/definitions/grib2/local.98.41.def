@@ -1,0 +1,71 @@
+# (C) Copyright 2005- ECMWF.
+
+# Local definition 41 - The Flood Awareness System
+
+# isFillup can be 0, 1 or missing
+# When it is 0, it means "Water Balance"
+unsigned[1] isFillup = missing() : dump, can_be_missing;
+alias local.isFillup = isFillup;
+
+# Forecast Reference Date and Time
+# ECC-1264: When isFillup is missing, these should also be set to missing
+# and dateOfForecast, timeOfForecast, anoffset are not relevant
+unsigned[2] yearOfForecast   = year   : dump, can_be_missing;
+unsigned[1] monthOfForecast  = month  : dump, can_be_missing;
+unsigned[1] dayOfForecast    = day    : dump, can_be_missing;
+unsigned[1] hourOfForecast   = hour   : dump, can_be_missing;
+unsigned[1] minuteOfForecast = minute : dump, can_be_missing;
+constant    secondOfForecast = 0;
+meta dateOfForecast  g2date(yearOfForecast,monthOfForecast, dayOfForecast) : dump;
+meta timeOfForecast  time  (hourOfForecast,minuteOfForecast,secondOfForecast) : dump;
+
+# Calculate the Julian number for the forecast date and time.
+# This will be a floating point number with units of 'day'
+meta julianForecastDay julian_day(dateOfForecast,hourOfForecast,minuteOfForecast,secondOfForecast): hidden;
+# Calculate the difference between the forecast date and reference date
+transient diffInDays = (julianForecastDay - julianDay) : hidden;   # float
+
+# Now convert this to hours. First convert to minutes then round up
+transient diffInHours = (diffInDays * 1440 + 0.5)/60 : hidden;
+meta _anoffset round(diffInHours, 10): dump,long_type;
+transient anoffset = _anoffset; # needed to force anoffset to be integer
+alias local.anoffset = anoffset;
+
+
+# ECC-662
+unsigned[2] anoffsetFirst     = missing(): dump, can_be_missing;
+unsigned[2] anoffsetLast      = missing(): dump, can_be_missing;
+unsigned[2] anoffsetFrequency = missing(): dump, can_be_missing;
+
+# Boolean
+transient lsdate_bug = 1: hidden; # See ECC-707
+
+# Model Cycle Date/Time
+# This is the date of the new official implementation of the EFAS cycle.
+unsigned[2] yearOfModelVersion    = 0 : dump;
+unsigned[1] monthOfModelVersion   = 0 : dump;
+unsigned[1] dayOfModelVersion     = 0 : dump;
+unsigned[1] hourOfModelVersion    = 0 : dump;
+unsigned[1] minuteOfModelVersion  = 0 : dump;
+constant    secondOfModelVersion  = 0;
+meta dateOfModelVersion  g2date(yearOfModelVersion, monthOfModelVersion, dayOfModelVersion) : dump;
+meta timeOfModelVersion  time  (hourOfModelVersion, minuteOfModelVersion, secondOfModelVersion) : dump;
+
+# Note: the key inputOriginatingCentre is in the PDTNs 70, 71, 72 and 73
+#concept efas_forecast {
+#  "griddedobs" = { inputOriginatingCentre=98; marsType = "an"; }
+#  # "reanalysis" = { inputOriginatingCentre=98; marsType = "an"; }
+#
+#  "hres" = { inputOriginatingCentre=98; marsType = "fc"; } # deterministic
+#  "ens"  = { inputOriginatingCentre=98; marsType = "pf"; } # ensemble
+#  "ens"  = { inputOriginatingCentre=98; marsType = "cf"; } # ensemble
+#
+# DWD rules
+#  "global"  = { inputOriginatingCentre=78; inputProcessIdentifier = 1; }
+#  "lam"     = { inputOriginatingCentre=78; inputProcessIdentifier = 2; }
+#
+# TODO: For now anything coming from cnmc (COSMO) is local area
+#  "lam"     = { inputOriginatingCentre=80; }
+#
+#  "unknown" = { dummy = 1; }
+#} : hidden;

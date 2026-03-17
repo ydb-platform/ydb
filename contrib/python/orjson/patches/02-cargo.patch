@@ -1,0 +1,34 @@
+diff --git a/.cargo/config.toml b/.cargo/config.toml
+new file mode 100644
+index 0000000..d47f983
+--- /dev/null
++++ b/.cargo/config.toml
+@@ -0,0 +1,15 @@
++[target.x86_64-apple-darwin]
++linker = "clang"
++rustflags = [
++  "-C", "link-arg=-undefined",
++  "-C", "link-arg=dynamic_lookup",
++  "-C", "target-cpu=x86-64-v2",
++]
++
++[target.aarch64-apple-darwin]
++linker = "clang"
++rustflags = [
++  "-C", "link-arg=-undefined",
++  "-C", "link-arg=dynamic_lookup",
++  "-C", "target-cpu=apple-m1",
++]
+diff --git a/Cargo.toml b/Cargo.toml
+index 92a41d1..5728c18 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -27,7 +27,7 @@ include = [
+
+ [lib]
+ name = "orjson"
+-crate-type = ["cdylib"]
++crate-type = ["cdylib", "staticlib"]
+
+ [features]
+ default = []

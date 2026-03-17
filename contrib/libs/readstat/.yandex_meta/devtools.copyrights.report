@@ -1,0 +1,107 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 143a041c0b3777a63a78d1dde1a4052e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2010 Serge A. Zaitsev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/bin/read_csv/LICENSE [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49d194aab5c0e8c689583468dae83f22
+BELONGS ya.make
+    License text:
+        Copyright (c) 2013-2016 Evan Miller (except where otherwise noted)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4d1027db7881a62285a5ec06b0250058
+BELONGS ya.make
+    License text:
+         Copyright (c) 2012 Jean-Philippe Aumasson <jeanphilippe.aumasson@gmail.com>
+         Copyright (c) 2012 Daniel J. Bernstein <djb@cr.yp.to>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/CKHashTable.c [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7094f207c6b19d3640a7006a20e5de2a
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: src/readstat.h at line 4
+FILE_INCLUDE src/bin/read_csv/LICENSE found in files: src/readstat.h at line 4
+    License text:
+        //  Copyright Evan Miller and ReadStat authors (see LICENSE)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/readstat.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7fe7bc6a558e8e2803c6957f2d53f1f5
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: src/CKHashTable.c at line 2, src/CKHashTable.h at line 2
+FILE_INCLUDE src/bin/read_csv/LICENSE found in files: src/CKHashTable.c at line 2, src/CKHashTable.h at line 2
+    License text:
+        // Copyright 2010-2020 Evan Miller (see LICENSE)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/CKHashTable.c [2:2]
+        src/CKHashTable.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9dc42ce29c2f368120da630a3a38c8e7
+BELONGS ya.make
+    License text:
+         Copyright (c) 2012 Jean-Philippe Aumasson <jeanphilippe.aumasson@gmail.com>
+         Copyright (c) 2012 Daniel J. Bernstein <djb@cr.yp.to>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/CKHashTable.c [9:10]

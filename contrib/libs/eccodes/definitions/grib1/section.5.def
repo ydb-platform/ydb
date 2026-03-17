@@ -1,0 +1,8 @@
+# (C) Copyright 2005- ECMWF.
+
+position offsetSection5;
+constant section5Length=4;
+
+meta section5Pointer section_pointer(offsetSection5,section5Length,5);
+
+ascii[4] '7777' = "7777" : read_only;

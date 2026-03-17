@@ -1,0 +1,32 @@
+Patch from revision 2893200 REVIEW:269057 IMAGES-11892
+
+--- a/coders/psd.c
++++ b/coders/psd.c
+@@ -1910,8 +1910,16 @@ static MagickBooleanType ReadPSDLayersInternal(Image *image,
+           {
+             unsigned char
+               *info;
++            MagickSizeType
++                  offset, blob_size;
+ 
+-            if (length > GetBlobSize(image))
++              blob_size = GetBlobSize(image);
++              offset = TellBlob(image);
++              if (blob_size > 0 && length+offset >= blob_size)
++                  ThrowBinaryException(CorruptImageError,
++                    "ImproperImageHeader",image->filename);
++
++              if (length > blob_size)
+               {
+                 layer_info=DestroyLayerInfo(layer_info,number_layers);
+                 ThrowBinaryException(CorruptImageError,
+@@ -2308,6 +2316,9 @@ static Image *ReadPSDImage(const ImageInfo *image_info,ExceptionInfo *exception)
+       /*
+          Skip the rest of the layer and mask information.
+       */
++      MagickSizeType blob_size = GetBlobSize(image);
++      if (blob_size && offset+length >= blob_size)
++          ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+       (void) SeekBlob(image,offset+length,SEEK_SET);
+     }
+   /*

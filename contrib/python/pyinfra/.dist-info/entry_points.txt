@@ -1,0 +1,12 @@
+[console_scripts]
+pyinfra = pyinfra_cli.main:main
+
+[pyinfra.connectors]
+chroot = pyinfra.connectors.chroot:ChrootConnector
+docker = pyinfra.connectors.docker:DockerConnector
+dockerssh = pyinfra.connectors.dockerssh:DockerSSHConnector
+local = pyinfra.connectors.local:LocalConnector
+podman = pyinfra.connectors.docker:PodmanConnector
+ssh = pyinfra.connectors.ssh:SSHConnector
+terraform = pyinfra.connectors.terraform:TerraformInventoryConnector
+vagrant = pyinfra.connectors.vagrant:VagrantInventoryConnector

@@ -1,0 +1,156 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1;loadtesting";
+option java_package = "yandex.cloud.api.loadtesting.api.v1";
+
+import "google/api/annotations.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/loadtesting/api/v1/test/single_agent_configuration.proto";
+import "yandex/cloud/loadtesting/api/v1/test/details.proto";
+import "yandex/cloud/loadtesting/api/v1/test/test.proto";
+import "yandex/cloud/validation.proto";
+
+// A set of methods for managing tests.
+service TestService {
+  // Creates (runs) a test in the specified folder.
+  rpc Create(CreateTestRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/loadtesting/api/v1/tests" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateTestMetadata"
+      response: "test.Test"
+    };
+  };
+
+  // Returns the specified test.
+  //
+  // To get the list of all available tests, make a [List] request.
+  rpc Get(GetTestRequest) returns (test.Test) {
+    option (google.api.http) = { get: "/loadtesting/api/v1/tests/{test_id}"};
+  }
+
+  // Stops the specified test.
+  rpc Stop(StopTestRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/loadtesting/api/v1/tests/{test_id}:stop" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "StopTestMetadata"
+      response: "test.Test"
+    };
+  }
+
+  // Deletes specified tests.
+  rpc Delete(DeleteTestRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/loadtesting/api/v1/tests/{test_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteTestMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Retrieves the list of test in the specified folder.
+  rpc List(ListTestsRequest) returns (ListTestsResponse) {
+    option (google.api.http) = { get: "/loadtesting/api/v1/tests" };
+  }
+}
+
+message CreateTestRequest {
+  // ID of the folder to create a test in.
+  string folder_id = 1 [(required) = true, (length) = "<=54"];
+
+  // Test configuration associated with agents on which they will be executed.
+  // In case of multiple configurations, a multitest will be created.
+  repeated test.SingleAgentConfiguration configurations = 2;
+
+  // Test details. Name, tags etc.
+  test.Details test_details = 3;
+}
+
+message CreateTestMetadata {
+  // ID of the test that is being created.
+  string test_id = 1;
+}
+
+message GetTestRequest {
+  // ID of the test to return.
+  string test_id = 1 [(required) = true];
+}
+
+message StopTestRequest {
+  // ID of the test to stop.
+  string test_id = 1;
+}
+
+message StopTestMetadata {
+  // ID of the test that is being stopped.
+  string test_id = 1;
+}
+
+message DeleteTestRequest {
+  // ID of the test to delete.
+  string test_id = 1;
+}
+
+message DeleteTestMetadata {
+  // ID of the test that is being deleted.
+  string test_id = 1;
+}
+
+message ListTestsRequest {
+  // ID of the folder to list tests in.
+  string folder_id = 1;
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than `page_size`, the service returns a [ListTestsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  // Default value: 100.
+  int64 page_size = 2;
+
+  // Page token. To get the next page of results, set `page_token` to the 
+  // [ListTestsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3;
+
+  // A filter expression that filters tests listed in the response.
+  //
+  // The filter expression may contain multiple field expressions joined by `AND`.
+  // The field expression must specify:
+  // 1. The field name.
+  // 2. An operator:
+  //    - `=`, `!=`, `<`, `<=`, `>`, `>=`, `CONTAINS`, `:` for single values.
+  //    - `IN` or `NOT IN` for lists of values.
+  // 3. The value. String values must be encosed in `"`, boolean values are {`true`, `false`}, timestamp values in ISO-8601.
+  //
+  // Currently supported fields:
+  // - `id` [yandex.cloud.loadtesting.api.v1.test.Test.id]
+  //   - operators: `=`, `!=`, `IN`, `NOT IN`
+  // - `details.name` [yandex.cloud.loadtesting.api.v1.test.Details.name]
+  //   - operators: `=`, `!=`, `IN`, `NOT IN`, `CONTAINS`
+  // - `details.tags.<TAG_NAME>` [yandex.cloud.loadtesting.api.v1.test.Details.tags]
+  //   - operators: `:`
+  // - `summary.status` [yandex.cloud.loadtesting.api.v1.test.Summary.status]
+  //   - operators: `=`, `!=`, `IN`, `NOT IN`
+  // - `summary.is_finished` [yandex.cloud.loadtesting.api.v1.test.Summary.is_finished]
+  //   - operators: `=`
+  // - `summary.created_at` [yandex.cloud.loadtesting.api.v1.test.Summary.created_at]
+  //   - operators: `<`, `<=`, `>`, `>=`
+  // - `summary.created_by` [yandex.cloud.loadtesting.api.v1.test.Summary.created_by]
+  //   - operators: `=`, `!=`, `IN`, `NOT IN`
+  //
+  // Examples: 
+  // - `summary.status IN ("DONE", "ERROR") AND details.tags.author:"yandex"`
+  // - `summary.is_finished = true AND details.name CONTAINS "nightly-test"`
+  string filter = 4;
+}
+
+message ListTestsResponse {
+  // List of tests in the specified folder.
+  repeated test.Test tests = 1;
+  
+  // Token for getting the next page of the list. If the number of results is greater than
+  // the specified [ListTestsRequest.page_size], use `next_page_token` as the value
+  // for the [ListTestsRequest.page_token] parameter in the next list request.
+  //
+  // Each subsequent page will have its own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}

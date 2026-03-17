@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx
+  version="1.0"
+  creator="GPSBabel - http://www.gpsbabel.org"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns="http://www.topografix.com/GPX/1/0"
+  xsi:schemaLocation="http://www.topografix.com/GPX/1/0 http://www.topografix.com/GPX/1/0/gpx.xsd">
+<time>2010-08-06T10:36:35Z</time>
+<bounds minlat="45.735199945" minlon="14.288633270" maxlat="45.795349991" maxlon="14.377516648"/>
+<wpt lat="45.757933259" lon="14.294899916">
+  <ele>-0.114380</ele>
+  <name>šđčćž</name>
+  <cmt>ŠĐČĆŽ</cmt>
+  <desc>BACK TO THE ROOTS</desc>
+  <sym>City (Small)</sym>
+</wpt>
+<wpt lat="45.735199945" lon="14.377516648">
+  <ele>-0.114380</ele>
+  <name>BIRDS NEST</name>
+  <cmt>BIRDS NEST</cmt>
+  <desc>BIRDS NEST</desc>
+  <sym>City (Small)</sym>
+</wpt>
+<wpt lat="45.791266663" lon="14.293566607">
+  <ele>-0.114380</ele>
+  <name>FAGGIO</name>
+  <cmt>FAGGIO</cmt>
+  <desc>FAGGIO</desc>
+  <sym>City (Small)</sym>
+</wpt>
+<wpt lat="45.795349991" lon="14.288633270">
+  <ele>-0.114380</ele>
+  <name>RAKOV12</name>
+  <cmt>RAKOV12</cmt>
+  <desc>RAKOV12</desc>
+  <sym>City (Small)</sym>
+</wpt>
+<wpt lat="45.791666647" lon="14.305099938">
+  <ele>-0.114380</ele>
+  <name>RAKV SKCJN</name>
+  <cmt>RAKOV SKOCJAN</cmt>
+  <desc>RAKOV SKOCJAN</desc>
+  <sym>City (Small)</sym>
+</wpt>
+<wpt lat="45.765583254" lon="14.361333288">
+  <ele>-0.114380</ele>
+  <name>VANSHNG LK</name>
+  <cmt>VANISHING LAKE</cmt>
+  <desc>VANISHING LAKE</desc>
+  <sym>City (Small)</sym>
+</wpt>
+</gpx>

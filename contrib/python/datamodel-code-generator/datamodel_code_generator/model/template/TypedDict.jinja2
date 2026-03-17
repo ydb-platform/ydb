@@ -1,0 +1,5 @@
+{%- if is_functional_syntax %}
+{% include 'TypedDictFunction.jinja2' %}
+{%- else %}
+{% include 'TypedDictClass.jinja2' %}
+{%- endif %}

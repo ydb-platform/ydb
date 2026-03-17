@@ -1,0 +1,19 @@
+#pragma once
+
+#include "my_config-linux.h"
+
+#undef HAVE_ULONG
+#undef HAVE_ENDIAN_CONVERSION_MACROS
+
+#undef HAVE_FDATASYNC
+#undef HAVE_POSIX_FALLOCATE
+
+#undef HAVE_POSIX_TIMERS
+#define HAVE_KQUEUE_TIMERS 1
+
+#define HAVE_KQUEUE 1
+
+#undef HAVE_PTHREAD_SETNAME_NP_LINUX
+#define HAVE_PTHREAD_SETNAME_NP_MACOS 1
+
+#undef HAVE_O_TMPFILE

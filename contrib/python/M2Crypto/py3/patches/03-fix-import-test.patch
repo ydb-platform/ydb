@@ -1,0 +1,8 @@
+--- contrib/python/M2Crypto/py3/M2Crypto/EVP.py	(index)
++++ contrib/python/M2Crypto/py3/M2Crypto/EVP.py	(working tree)
+@@ -382 +382 @@ class PKey(object):
+-    def assign_ec(self, ec: EC.EC, capture: int = 1) -> int:
++    def assign_ec(self, ec: "EC.EC", capture: int = 1) -> int:
+@@ -402 +402 @@ class PKey(object):
+-    def get_ec(self) -> EC.EC_pub:
++    def get_ec(self) -> "EC.EC_pub":

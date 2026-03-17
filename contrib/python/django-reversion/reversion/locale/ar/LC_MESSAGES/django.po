@@ -1,0 +1,125 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2015-06-15 01:49+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 "
+"&& n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
+
+#: reversion/admin.py:161
+msgid "Initial version."
+msgstr "النسخة الأولية"
+
+#: reversion/admin.py:195 reversion/templates/reversion/change_list.html:7
+#: reversion/templates/reversion/recover_form.html:10
+#: reversion/templates/reversion/recover_list.html:10
+#, python-format
+msgid "Recover deleted %(name)s"
+msgstr "أستعيد المحذوف من %(name)s"
+
+#: reversion/admin.py:312
+#, python-format
+msgid "Reverted to previous version, saved on %(datetime)s"
+msgstr "اُعيد لنسخه سابقه، حُفظ في %(datetime)s"
+
+#: reversion/admin.py:314
+#, python-format
+msgid ""
+"The %(model)s \"%(name)s\" was reverted successfully. You may edit it again "
+"below."
+msgstr ""
+ "تم أعاده %(model)s \"%(name)s\" بنجاح ، يمكنك/ي التعديل مجددا"
+ ""
+
+#: reversion/admin.py:399
+#, python-format
+msgid "Recover %(name)s"
+msgstr "إستعيد %(name)s"
+
+#: reversion/admin.py:413
+#, python-format
+msgid "Revert %(name)s"
+msgstr "أعد %(name)s"
+
+#: reversion/models.py:59
+msgid "date created"
+msgstr "تاريخ الأنشاء"
+
+#: reversion/models.py:66
+msgid "user"
+msgstr "المستخدم"
+
+#: reversion/models.py:70
+msgid "comment"
+msgstr "التعليق"
+
+#: reversion/templates/reversion/object_history.html:8
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr "أختر تاريخ من القائمه أدناه لأعاده نسخه سابقه من هذا الكيان"
+
+#: reversion/templates/reversion/object_history.html:15
+#: reversion/templates/reversion/recover_list.html:23
+msgid "Date/time"
+msgstr "التاريخ/ الوقت"
+
+#: reversion/templates/reversion/object_history.html:16
+msgid "User"
+msgstr "المستخدم"
+
+#: reversion/templates/reversion/object_history.html:17
+msgid "Comment"
+msgstr "التعليق"
+
+#: reversion/templates/reversion/object_history.html:38
+msgid ""
+"This object doesn't have a change history. It probably wasn't added via this "
+"admin site."
+msgstr "لا يوجد تاريخ تعديل لهذا الكيان. ربما لم يُنشأ من موقع الإداره"
+
+#: reversion/templates/reversion/recover_form.html:7
+#: reversion/templates/reversion/recover_list.html:7
+#: reversion/templates/reversion/revision_form.html:7
+msgid "Home"
+msgstr "الرئيسيه"
+
+#: reversion/templates/reversion/recover_form.html:17
+msgid "Press the save button below to recover this version of the object."
+msgstr "أنقر على حفظ أدناه لأسترجاع هذه النسخه"
+
+#: reversion/templates/reversion/recover_list.html:17
+msgid ""
+"Choose a date from the list below to recover a deleted version of an object."
+msgstr "أختر تاريخ من القائمه أدناه لإسترجاع نسخه سابقه من هذا الكيان"
+
+
+#: reversion/templates/reversion/recover_list.html:37
+msgid "There are no deleted objects to recover."
+msgstr "لا يوجد كيانات محذوفه لإسترجاعها"
+
+#: reversion/templates/reversion/revision_form.html:11
+msgid "History"
+msgstr "التاريخ"
+
+#: reversion/templates/reversion/revision_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "إسترجع %(verbose_name)s"
+
+#: reversion/templates/reversion/revision_form.html:25
+msgid "Press the save button below to revert to this version of the object."
+msgstr "أنقر على حفظ أدناه لإعاده هذه النسخه"
+

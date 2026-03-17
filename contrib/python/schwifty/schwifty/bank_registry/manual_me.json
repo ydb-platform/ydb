@@ -1,0 +1,98 @@
+[
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "CBCGMEPG",
+    "bank_code": "907",
+    "name": "Centralna banka Crne Gore",
+    "short_name": "Centralna banka Crne Gore"
+  },
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "CKBCMEPG",
+    "bank_code": "510",
+    "name": "Crnogorska komercijalna banka AD",
+    "short_name": "Crnogorska komercijalna banka AD"
+  },
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "HBBAMEPG",
+    "bank_code": "520",
+    "name": "Hipotekarna banka AD",
+    "short_name": "Hipotekarna banka AD"
+  },
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "MNBAMEPG",
+    "bank_code": "530",
+    "name": "NLB Banka AD",
+    "short_name": "NLB Banka AD"
+  },
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "NIKBMEP2",
+    "bank_code": "535",
+    "name": "Prva banka Crne Gore AD - Osnovana 1901. godine",
+    "short_name": "Prva banka Crne Gore AD - Osnovana 1901. godine"
+  },
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "OPPOMEPG",
+    "bank_code": "540",
+    "name": "Erste bank AD",
+    "short_name": "Erste bank AD"
+  },
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "HAABMEPG",
+    "bank_code": "555",
+    "name": "Addiko Bank AD",
+    "short_name": "Addiko Bank AD"
+  },
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "UNCBMEPG",
+    "bank_code": "560",
+    "name": "Universal Capital Bank AD",
+    "short_name": "Universal Capital Bank AD"
+  },
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "LOVBMEPG",
+    "bank_code": "565",
+    "name": "Lovćen banka AD",
+    "short_name": "Lovćen banka AD"
+  },
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "ZBCGMEPG",
+    "bank_code": "570",
+    "name": "Zapad banka AD",
+    "short_name": "Zapad banka AD"
+  },
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "TCZBMEPG",
+    "bank_code": "575",
+    "name": "ZIRAAT Bank Montenegro AD",
+    "short_name": "ZIRAAT Bank Montenegro AD"
+  },
+  {
+    "country_code": "ME",
+    "primary": true,
+    "bic": "AZMNMEPG",
+    "bank_code": "580",
+    "name": "ADRIATIC BANK AD",
+    "short_name": "ADRIATIC BANK AD"
+  }
+]

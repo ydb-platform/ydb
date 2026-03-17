@@ -1,0 +1,47 @@
+--- contrib/python/openapi-spec-validator/openapi_spec_validator/__init__.py	(index)
++++ contrib/python/openapi-spec-validator/openapi_spec_validator/__init__.py	(working tree)
+@@ -29,6 +29,7 @@ default_handlers = {
+ }
+ 
+ # v2.0 spec
++# XXX: may be problems with schema_v2_url because of Arcadia
+ schema_v2, schema_v2_url = get_openapi_schema('2.0')
+ openapi_v2_validator_factory = JSONSpecValidatorFactory(
+     schema_v2, schema_v2_url,
+@@ -40,6 +41,7 @@ openapi_v2_spec_validator = SpecValidator(
+ )
+ 
+ # v3.0.0 spec
++# XXX: may be problems with schema_v3_url because of Arcadia
+ schema_v3, schema_v3_url = get_openapi_schema('3.0.0')
+ openapi_v3_validator_factory = JSONSpecValidatorFactory(
+     schema_v3, schema_v3_url,
+--- contrib/python/openapi-spec-validator/openapi_spec_validator/schemas.py	(index)
++++ contrib/python/openapi-spec-validator/openapi_spec_validator/schemas.py	(working tree)
+@@ -1,7 +1,9 @@
+ """OpenAIP spec validator schemas module."""
+ import os
+ 
+-from pkg_resources import resource_filename
++from io import BytesIO
++
++from pkgutil import get_data
+ from six.moves.urllib import parse, request
+ from yaml import load
+ 
+@@ -9,11 +11,11 @@ from openapi_spec_validator.loaders import ExtendedSafeLoader
+ 
+ 
+ def get_openapi_schema(version):
++    # XXX: PATCH adaptation schema loading to Arcadia
+     path = 'resources/schemas/v{0}/schema.json'.format(version)
+-    path_resource = resource_filename('openapi_spec_validator', path)
+-    path_full = os.path.join(os.path.dirname(__file__), path_resource)
+-    schema = read_yaml_file(path_full)
+-    schema_url = parse.urljoin('file:', request.pathname2url(path_full))
++    data = get_data('openapi_spec_validator', path)
++    schema = load(BytesIO(data), ExtendedSafeLoader)
++    schema_url = parse.urljoin('file:', request.pathname2url(path))
+     return schema, schema_url
+ 
+ 

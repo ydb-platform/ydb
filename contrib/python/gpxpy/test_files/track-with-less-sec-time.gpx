@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1" xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd http://www.garmin.com/xmlschemas/GpxExtensions/v3 http://www.garmin.com/xmlschemas/GpxExtensionsv3.xsd http://www.garmin.com/xmlschemas/TrackPointExtension/v1 http://www.garmin.com/xmlschemas/TrackPointExtensionv1.xsd" version="1.1" creator="NikePlus GPX Bridge">
+  <trk>
+    <type>run</type>
+    <trkseg>
+      <trkpt lon="9.992872" lat="57.011456">
+        <ele>23.5536</ele>
+        <time>2015-12-11T15:43:13.000+01:00</time>
+      </trkpt>
+      <trkpt lon="9.992874" lat="57.01147">
+        <ele>23.551199</ele>
+        <time>2015-12-11T15:43:13.994+01:00</time>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>

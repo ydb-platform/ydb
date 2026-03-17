@@ -1,0 +1,10 @@
+#!/bin/sh
+
+PSQL=$(which psql)
+if [ "x$PSQL" = "x" ]; then
+    echo "No psql found. postgresql-client package should be installed and
+PATH environment variable should include a path to psql script." >&2
+    exit 1
+fi
+
+exec "$PSQL" "$@"

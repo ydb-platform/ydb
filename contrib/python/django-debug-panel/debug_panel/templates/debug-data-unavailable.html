@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+    <body>
+        <pre>
+Debug data for this request are no more available.
+
+Debug data are stored using the django cache framework.
+You can configure how data are stored and how long they are available by
+creating a 'debug-panel' cache entry into your CACHES setting.
+
+For example :
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+        'LOCATION': '127.0.0.1:11211',
+    },
+
+    # this cache backend will be used by django-debug-panel
+    'debug-panel': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': '/var/tmp/debug-panel-cache',
+        'TIMEOUT': 300,
+        'OPTIONS': {
+            'MAX_ENTRIES': 200
+        }
+    }
+}
+
+If there is no 'debug-panel' cache entry, then the default cache will
+be used. And finally if there is no default cache, a local memory
+cache will be used.
+        </pre>
+    </body>
+</html>

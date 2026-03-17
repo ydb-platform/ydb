@@ -1,0 +1,10 @@
+{
+  "Json": {
+    "type": "object",
+    "properties": {
+      "firstName": {
+        "type": "string"
+      }
+    }
+  }
+}

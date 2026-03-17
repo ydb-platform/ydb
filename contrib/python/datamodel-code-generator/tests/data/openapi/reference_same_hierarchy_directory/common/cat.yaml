@@ -1,0 +1,24 @@
+# ./common/cat.yaml
+CatInfo:
+  type: object
+  required:
+    - cat_id
+  properties:
+    cat_id:
+      type: string
+      description: ID of this cat
+    details:
+      $ref: "#/CatDetails"
+
+CatDetails:
+  type: object
+  required:
+    - name
+    - birthYear
+  properties:
+    name:
+      type: string
+      description: Name of this cat
+    birthYear:
+      type: number
+      description: Year of this cat's birth

@@ -1,0 +1,6 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 3.51, Rotated spherical harmonic coefficients
+
+include "grib2/templates/template.3.spherical_harmonics.def"
+include "grib2/templates/template.3.rotation.def"

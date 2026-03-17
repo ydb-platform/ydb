@@ -1,0 +1,11 @@
+# (C) Copyright 2005- ECMWF.
+# ECMWF reanalysis data
+
+constant GRIBEXSection1Problem = 62 - section1Length ;
+
+template mars_labeling "grib1/mars_labeling.def";
+
+unsigned[1] intervalBetweenTimes  : dump;
+
+constant numberOfIntegers=12;
+unsigned[1] unsignedIntegers[numberOfIntegers] : dump;

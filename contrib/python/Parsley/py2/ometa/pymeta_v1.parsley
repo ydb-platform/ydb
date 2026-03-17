@@ -1,0 +1,81 @@
+comment = '#' (~'\n' anything)*
+hspace = ' ' | '\t' | comment
+vspace =  '\r\n' | '\r' | '\n'
+ws = (hspace | vspace | comment)*
+
+number = ws ('-' barenumber:x -> t.Exactly(-x)
+                |barenumber:x -> t.Exactly(x))
+barenumber = '0' (('x'|'X') <hexdigit+>:hs -> int(hs, 16)
+                    |<octaldigit+>:ds -> int(ds, 8))
+               |<digit+>:ds -> int(ds)
+octaldigit = :x ?(x in '01234567' ) -> x
+hexdigit = :x ?(x in '0123456789ABCDEFabcdef') -> x
+
+escapedChar = '\\' ('n' -> "\n"
+                     |'r' -> "\r"
+                     |'t' -> "\t"
+                     |'b' -> "\b"
+                     |'f' -> "\f"
+                     |'"' -> '"'
+                     |'\'' -> "'"
+                     |'\\' -> "\\")
+
+character = ws '\'' (escapedChar | anything):c ws '\'' -> t.Exactly(c)
+
+string = ws '"' (escapedChar | ~('"') anything)*:c '"' -> t.Exactly(''.join(c))
+
+name = <letter (letterOrDigit | '_')*>
+application = (ws '<' ws name:name
+                  (' ' !(self.applicationArgs(finalChar='>')):args '>'
+                     -> t.Apply(name, self.rulename, args)
+                  |ws '>'
+                     -> t.Apply(name, self.rulename, [])))
+
+expr1 = (application
+          |ruleValue
+          |semanticPredicate
+          |semanticAction
+          |number:n !(self.isTree()) -> n
+          |character
+          |string
+          |ws '(' expr:e ws ')' -> e
+          |(ws '[' expr:e ws ']' !(self.isTree())
+              -> t.List(e)))
+
+expr2 = (ws '~' ('~' expr2:e
+                        -> t.Lookahead(e)
+                    |expr2:e -> t.Not(e))
+        |expr1)
+
+expr3 = expr2:e
+              ('*' -> t.Many(e)
+              |'+' -> t.Many1(e)
+              |'?' -> t.Optional(e)
+              | -> e):r
+           (':' name:n -> t.Bind(n, r)
+           | -> r)
+          | (ws ':' name:n -> t.Bind(n, t.Apply("anything", self.rulename, [])))
+
+expr4 = expr3*:es -> t.And(es)
+
+expr =  expr4:e (ws '|' expr4)*:es
+          -> t.Or([e] + es)
+
+ruleValue = ws '=>' -> self.ruleValueExpr(False)
+
+semanticPredicate =  ws '?(' -> self.semanticPredicateExpr()
+
+semanticAction = ws '!(' -> self.semanticActionExpr()
+
+ruleEnd = (hspace* vspace+) | end
+rulePart :requiredName = ws name:n ?(n == requiredName)
+                            !(setattr(self, "rulename", n))
+                            expr4:args
+                            (ws '::=' expr:e ruleEnd
+                               -> t.And([args, e])
+                            | ruleEnd -> args)
+rule = (ws ~~(name:n) rulePart(n):r
+          (rulePart(n)+:rs -> t.Rule(n, t.Or([r] + rs))
+          |                     -> t.Rule(n, r)))
+
+grammar = rule*:rs ws -> t.Grammar(self.name, self.tree_target, rs)

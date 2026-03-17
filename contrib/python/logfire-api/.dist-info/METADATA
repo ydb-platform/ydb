@@ -1,0 +1,16 @@
+Metadata-Version: 2.4
+Name: logfire-api
+Version: 4.25.0
+Summary: Shim for the Logfire SDK which does nothing unless Logfire is installed
+Author-email: Pydantic Team <engineering@pydantic.dev>, Samuel Colvin <samuel@pydantic.dev>, Hasan Ramezani <hasan@pydantic.dev>, Adrian Garcia Badaracco <adrian@pydantic.dev>, David Montague <david@pydantic.dev>, Marcelo Trylesinski <marcelo@pydantic.dev>, David Hewitt <david.hewitt@pydantic.dev>, Alex Hall <alex@pydantic.dev>
+License-Expression: MIT
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+
+# logfire-api
+
+Shim for the logfire SDK Python API which does nothing unless logfire is installed.
+
+This package is designed to be used by packages that want to provide opt-in integration with [Logfire](https://github.com/pydantic/logfire).
+
+The package provides a clone of the Python API exposed by the `logfire` package which does nothing if the `logfire` package is not installed, but makes real calls when it is.

@@ -1,0 +1,89 @@
+# SECTION 2, Grid description section
+
+# Length of section
+position offsetSection2;
+section_length[3] section2Length ;
+meta section2Pointer section_pointer(offsetSection2,section2Length,2);
+transient radius=6367470;
+alias radiusOfTheEarth=radius;
+alias radiusInMetres=radius;
+transient shapeOfTheEarth=0: hidden; #ECC-811
+
+# NV -- number of vertical coordinate parameters
+unsigned[1] numberOfVerticalCoordinateValues : dump ;
+
+constant neitherPresent = 255;
+
+alias NV = numberOfVerticalCoordinateValues;
+alias numberOfCoordinatesValues= numberOfVerticalCoordinateValues;
+
+# PV -- location (octet number)
+unsigned[1] pvlLocation = 255;
+
+# Data representation type
+codetable[1] dataRepresentationType 'grib1/6.table' = 0;
+meta gridDefinitionDescription codetable_title(dataRepresentationType);
+
+# Grid definition (according to data representation type - octet 6 above)
+alias isRotatedGrid = false;
+
+if (dataRepresentationType < 192) {
+  template dataRepresentation "grib1/grid_definition_[dataRepresentationType:l].def";
+} else {
+  template dataRepresentation "grib1/grid_definition_[dataRepresentationType:l].[centre:l].def";
+}
+position endGridDefinition;
+
+position offsetBeforePV;
+transient PVPresent = ( NV > 0);
+
+if (pvlLocation != neitherPresent) {
+  padto padding_sec2_2(offsetSection2 + pvlLocation - 1);
+} else {
+  padto padding_sec2_2(offsetSection2 + 32 );
+}
+
+if (PVPresent ) {
+  ibmfloat pv[NV] : dump;
+  alias vertical.pv=pv;
+}
+
+position offsetBeforePL;
+
+transient PLPresent = (section2Length > (offsetBeforePL - offsetSection2))
+      && (section2Length >= (Nj * 2 + offsetBeforePL - offsetSection2));
+
+if (PLPresent) {
+  # For grib 1 -> 2
+  constant numberOfOctectsForNumberOfPoints = 2;
+  constant interpretationOfNumberOfPoints = 1;
+
+  unsigned[2] pl[Nj] : dump;
+  alias geography.pl=pl;
+}
+
+if (PVPresent == 0 && PLPresent == 0) {
+  # pad to the end of the grid definiton as in documentation
+  # ( gribex compatibility )
+  padto padding_sec2_1(offsetSection2 + 32);
+}
+
+#when (PVPresent == 0)  {  set NV = 0;}
+when ((PVPresent == 1) or (PLPresent==1)) {
+  set pvlLocation = offsetBeforePV - offsetSection2 + 1;
+}
+when ((PVPresent == 0) and (PLPresent==0)) { set pvlLocation = 255; }
+
+alias reducedGrid = PLPresent;
+
+# GRIB-534: To easily remove vertical coordinates, set this key to 1
+concept_nofail deletePV(unknown) {
+   "1" = { PVPresent=0; NV=0; }
+}
+
+padtoeven padding_sec2_3(offsetSection2,section2Length);
+
+meta md5Section2 md5(offsetSection2,section2Length);
+alias md5GridSection = md5Section2;
+
+constant isSpectral = !isGridded : constraint;

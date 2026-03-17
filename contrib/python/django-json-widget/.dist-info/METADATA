@@ -1,0 +1,242 @@
+Metadata-Version: 2.4
+Name: django-json-widget
+Version: 2.1.1
+Summary: Django json widget is an alternative widget that makes it easy to edit the jsonfield field of django.
+Home-page: https://github.com/jmrivas86/django-json-widget
+Author: José Manuel Rivas
+Author-email: jmrivas86@gmail.com
+License: MIT
+Keywords: django-json-widget
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Framework :: Django
+Classifier: Framework :: Django :: 3.2
+Classifier: Framework :: Django :: 4.2
+Classifier: Framework :: Django :: 5.0
+Classifier: Framework :: Django :: 5.2
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+License-File: LICENSE
+License-File: AUTHORS.rst
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: summary
+
+=============================
+django-json-widget
+=============================
+
+.. image:: https://badge.fury.io/py/django-json-widget.svg
+    :target: https://badge.fury.io/py/django-json-widget
+
+
+An alternative widget that makes it easy to edit the new Django's field JSONField (PostgreSQL specific model fields)
+
+
+Quickstart
+----------
+
+Install django-json-widget::
+
+    pip install django-json-widget
+
+Add it to your `INSTALLED_APPS`:
+
+.. code-block:: python
+
+    INSTALLED_APPS = (
+        ...
+        'django_json_widget',
+        ...
+    )
+
+Add the widget in your admin.py:
+
+.. code-block:: python
+
+    from django.contrib import admin
+    from django.db.models import JSONField
+    from django_json_widget.widgets import JSONEditorWidget
+    from .models import YourModel
+
+
+    @admin.register(YourModel)
+    class YourModelAdmin(admin.ModelAdmin):
+        formfield_overrides = {
+            JSONField: {'widget': JSONEditorWidget},
+        }
+
+You can also add the widget in your forms.py:
+
+.. code-block:: python
+
+    from django import forms
+    from django_json_widget.widgets import JSONEditorWidget
+    from .models import YourModel
+
+
+    class YourForm(forms.ModelForm):
+        class Meta:
+            model = YourModel
+
+            fields = ('jsonfield',)
+
+            widgets = {
+                'jsonfield': JSONEditorWidget
+            }
+
+Configuration
+-------------
+
+You can customize the JSONEditorWidget with the following options:
+
+* **width**: Width of the editor as a string with CSS size units (px, em, % etc). Defaults to ``90%``.
+* **height**: Height of the editor as a string CSS size units. Defaults to ``550px``.
+* **options**: A dict of options accepted by the `JSON editor`_. Options that require functions (eg. onError) are not supported.
+* **mode (deprecated)**: The default editor mode. This argument is redundant because it can be specified as a part of ``options``.  Preserved for backwards compatibility with version 0.2.0.
+* **attrs**: HTML attributes to be applied to the wrapper element. See the `Django Widget documentation`_.
+
+Accessing JsonEditor Instance
+-----------------------------
+
+The JsonEditor instance is automatically exposed for external access through two methods:
+
+1. **Window object**: Available as ``window['FIELD_ID_editor']`` where FIELD_ID is the field's HTML ID
+2. **DOM element**: Available as ``container.jsonEditor`` property on the widget's container element
+
+Example usage for external JavaScript access:
+
+.. code-block:: javascript
+
+    // Access via window object
+    var editor = window['id_jsonfield_editor'];
+    editor.set({'key': 'new value'});
+    
+    // Access via DOM element
+    var container = document.getElementById('id_jsonfield');
+    var editor = container.jsonEditor;
+    editor.set({'key': 'new value'});
+
+This allows you to programmatically call JsonEditor methods like ``set()``, ``get()``, ``update()``, etc. from custom JavaScript code running in your admin pages or forms.
+
+.. _json editor: https://github.com/josdejong/jsoneditor/blob/master/docs/api.md#configuration-options
+.. _Django Widget documentation: https://docs.djangoproject.com/en/2.1/ref/forms/widgets/#django.forms.Widget.attrs
+
+
+JSONEditorWidget widget
+-----------------------
+
+Before:
+
+.. image:: https://raw.githubusercontent.com/jmrivas86/django-json-widget/master/imgs/jsonfield_0.png
+
+After:
+
+.. image:: https://raw.githubusercontent.com/jmrivas86/django-json-widget/master/imgs/jsonfield_1.png
+
+
+Development Guide
+-----------------
+
+Read the contribution guide.
+
+
+Credits
+-------
+
+Tools used in rendering this package:
+
+*  Cookiecutter_
+*  `cookiecutter-djangopackage`_
+
+.. _Cookiecutter: https://github.com/audreyr/cookiecutter
+.. _`cookiecutter-djangopackage`: https://github.com/pydanny/cookiecutter-djangopackage
+
+
+=========
+Changelog
+=========
+
+2.1.1 (2025-12-12)
+------------------
+
+* Issue #108: respect Django admin color scheme setting for JSON editor.
+
+2.1.0 (2025-10-24)
+------------------
+
+* Issue #114: expose editor instance to window object and DOM element.
+
+2.0.4 (2025-10-11)
+------------------
+
+* Fix dark mode CSS support #107
+
+2.0.3 (2025-07-29)
+------------------
+
+2.0.2 (2025-07-28)
+------------------
+
+* Fix Version 2.0.1 causes rendering HTML scripts issue #80
+
+2.0.1 (2024-03-02)
+------------------=
+
+* Fixed Version 2.0.0 causes issues with Django 4.x due to missing sourcemaps issue #83
+
+2.0.0 (2024-03-24)
+------------------
+
+* Fix default paths for static files #53
+* Stop declaring support for Django versions before 3.2 #65
+* Avoid HTML injection via unsafe JSON injection #64
+* Remove source map reference from JS bundle #70
+* Add dark mode CSS support #82
+* Updated documentation
+
+1.1.1 (2021-02-17)
+------------------
+
+* Fix for issue #51, updates the bundled libs to 9.1.9 and additional notes for Django 3.1 changes
+
+1.1.0 (2021-02-05)
+------------------
+
+* Added functionality to override version of JSONEditor to use
+* update readme for django 3.1
+
+1.0.1 (2020-04-17)
+------------------
+
+* Stop resolving paths to the static files
+
+1.0.0 (2020-01-16)
+------------------
+
+* Update Makefile
+* Make Stable the project
+
+
+0.3.0 (2020-01-16)
+------------------
+
+* Update requirements.txt
+* Fixed static to work with CDN tools like django-storages
+* Make widget more configurable
+* Fixed an incompatibility with Python 2.7
+* update jsoneditor to latest version
+
+

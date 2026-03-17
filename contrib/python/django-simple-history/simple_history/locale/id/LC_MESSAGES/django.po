@@ -1,0 +1,135 @@
+# Indonesian translation for django-simple-history
+# Copyright (C) 2023
+# This file is distributed under the same license as the django-simple-history package.
+# Kira <kiraware@github.com>, 2023.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-simple-history\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2023-06-30 15:21+0800\n"
+"PO-Revision-Date: 2023-06-30 15:21+0800\n"
+"Last-Translator: Kira <kiraware@github.com>\n"
+"Language-Team: Indonesian <django-commons@github.com>\n"
+"Language: id\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: .\simple_history\admin.py:102
+#, python-format
+msgid "View history: %s"
+msgstr "Lihat riwayat: %s"
+
+#: .\simple_history\admin.py:104
+#, python-format
+msgid "Change history: %s"
+msgstr "Ubah riwayat: %s"
+
+#: .\simple_history\admin.py:110
+#, python-format
+msgid "The %(name)s \"%(obj)s\" was changed successfully."
+msgstr "%(name)s \"%(obj)s\" berhasil diubah."
+
+#: .\simple_history\admin.py:116
+msgid "You may edit it again below"
+msgstr "Anda dapat mengeditnya lagi di bawah ini"
+
+#: .\simple_history\admin.py:217
+#, python-format
+msgid "View %s"
+msgstr "Lihat %s"
+
+#: .\simple_history\admin.py:219
+#, python-format
+msgid "Revert %s"
+msgstr "Kembalikan %s"
+
+#: .\simple_history\models.py:552
+msgid "Created"
+msgstr "Dibuat"
+
+#: .\simple_history\models.py:552
+msgid "Changed"
+msgstr "Diubah"
+
+#: .\simple_history\models.py:552
+msgid "Deleted"
+msgstr "Dihapus"
+
+#: .\simple_history\templates\simple_history\object_history.html:11
+msgid ""
+"Choose a date from the list below to revert to a previous version of this "
+"object."
+msgstr ""
+"Pilih tanggal dari daftar di bawah ini untuk kembali ke versi sebelumnya "
+"dari objek ini."
+
+#: .\simple_history\templates\simple_history\object_history.html:16
+msgid "This object doesn't have a change history."
+msgstr "Objek ini tidak memiliki riwayat perubahan."
+
+#: .\simple_history\templates\simple_history\object_history_form.html:7
+msgid "Home"
+msgstr "Beranda"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:11
+msgid "History"
+msgstr "Riwayat"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:12
+#, python-format
+msgid "View %(verbose_name)s"
+msgstr "Lihat %(verbose_name)s"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:12
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Kembalikan %(verbose_name)s"
+
+#: .\simple_history\templates\simple_history\object_history_form.html:25
+msgid ""
+"Press the 'Revert' button below to revert to this version of the object."
+msgstr ""
+"Tekan tombol 'Kembalikan' di bawah ini untuk kembali ke versi objek ini."
+
+#: .\simple_history\templates\simple_history\object_history_form.html:25
+msgid "Press the 'Change History' button below to edit the history."
+msgstr "Tekan tombol 'Ubah Riwayat' di bawah ini untuk mengubah riwayat."
+
+#: .\simple_history\templates\simple_history\object_history_list.html:9
+msgid "Object"
+msgstr "Objek"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:13
+msgid "Date/time"
+msgstr "Tanggal/waktu"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:14
+msgid "Comment"
+msgstr "Komentar"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:15
+msgid "Changed by"
+msgstr "Diubah oleh"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:16
+msgid "Change reason"
+msgstr "Alasan perubahan"
+
+#: .\simple_history\templates\simple_history\object_history_list.html:42
+msgid "None"
+msgstr "Tidak ada"
+
+#: .\simple_history\templates\simple_history\submit_line.html:4
+msgid "Revert"
+msgstr "Kembalikan"
+
+#: .\simple_history\templates\simple_history\submit_line.html:6
+msgid "Change History"
+msgstr "Ubah Riwayat"
+
+#: .\simple_history\templates\simple_history\submit_line.html:7
+msgid "Close"
+msgstr "Tutup"

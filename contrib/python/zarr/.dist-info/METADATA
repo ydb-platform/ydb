@@ -1,0 +1,208 @@
+Metadata-Version: 2.4
+Name: zarr
+Version: 3.1.5
+Summary: An implementation of chunked, compressed, N-dimensional arrays for Python
+Project-URL: issues, https://github.com/zarr-developers/zarr-python/issues
+Project-URL: changelog, https://zarr.readthedocs.io/en/stable/release-notes.html
+Project-URL: Discussions, https://github.com/zarr-developers/zarr-python/discussions
+Project-URL: documentation, https://zarr.readthedocs.io/
+Project-URL: homepage, https://github.com/zarr-developers/zarr-python
+Author-email: Alistair Miles <alimanfoo@googlemail.com>
+Maintainer: jakirkham, Norman Rzepka, Ryan Abernathey, David Stansby, Deepak Cherian
+Maintainer-email: Davis Bennett <davis.v.bennett@gmail.com>, Josh Moore <josh@openmicroscopy.org>, Joe Hamman <joe@earthmover.io>, Juan Nunez-Iglesias <juan.nunez-iglesias@monash.edu>, Martin Durant <mdurant@anaconda.com>, Tom Augspurger <tom.w.augspurger@gmail.com>
+License-Expression: MIT
+License-File: LICENSE.txt
+Keywords: Python,compressed,ndimensional-arrays,zarr
+Classifier: Development Status :: 6 - Mature
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: Science/Research
+Classifier: Operating System :: Unix
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.11
+Requires-Dist: donfig>=0.8
+Requires-Dist: google-crc32c>=1.5
+Requires-Dist: numcodecs>=0.14
+Requires-Dist: numpy>=1.26
+Requires-Dist: packaging>=22.0
+Requires-Dist: typing-extensions>=4.9
+Provides-Extra: cli
+Requires-Dist: typer; extra == 'cli'
+Provides-Extra: docs
+Requires-Dist: astroid<4; extra == 'docs'
+Requires-Dist: griffe-inherited-docstrings; extra == 'docs'
+Requires-Dist: markdown-exec[ansi]; extra == 'docs'
+Requires-Dist: mike>=2.1.3; extra == 'docs'
+Requires-Dist: mkdocs-material[imaging]>=9.6.14; extra == 'docs'
+Requires-Dist: mkdocs-redirects>=1.2.0; extra == 'docs'
+Requires-Dist: mkdocs>=1.6.1; extra == 'docs'
+Requires-Dist: mkdocstrings-python>=1.16.10; extra == 'docs'
+Requires-Dist: mkdocstrings>=0.29.1; extra == 'docs'
+Requires-Dist: numcodecs[msgpack]; extra == 'docs'
+Requires-Dist: pytest; extra == 'docs'
+Requires-Dist: rich; extra == 'docs'
+Requires-Dist: ruff; extra == 'docs'
+Requires-Dist: s3fs>=2023.10.0; extra == 'docs'
+Requires-Dist: towncrier; extra == 'docs'
+Provides-Extra: gpu
+Requires-Dist: cupy-cuda12x; extra == 'gpu'
+Provides-Extra: optional
+Requires-Dist: rich; extra == 'optional'
+Requires-Dist: universal-pathlib; extra == 'optional'
+Provides-Extra: remote
+Requires-Dist: fsspec>=2023.10.0; extra == 'remote'
+Requires-Dist: obstore>=0.5.1; extra == 'remote'
+Provides-Extra: remote-tests
+Requires-Dist: botocore; extra == 'remote-tests'
+Requires-Dist: fsspec>=2023.10.0; extra == 'remote-tests'
+Requires-Dist: moto[s3,server]; extra == 'remote-tests'
+Requires-Dist: obstore>=0.5.1; extra == 'remote-tests'
+Requires-Dist: requests; extra == 'remote-tests'
+Requires-Dist: s3fs>=2023.10.0; extra == 'remote-tests'
+Provides-Extra: test
+Requires-Dist: coverage>=7.10; extra == 'test'
+Requires-Dist: hypothesis; extra == 'test'
+Requires-Dist: mypy; extra == 'test'
+Requires-Dist: numpydoc; extra == 'test'
+Requires-Dist: packaging; extra == 'test'
+Requires-Dist: pytest-accept; extra == 'test'
+Requires-Dist: pytest-asyncio; extra == 'test'
+Requires-Dist: pytest-cov; extra == 'test'
+Requires-Dist: pytest-xdist; extra == 'test'
+Requires-Dist: pytest<8.4; extra == 'test'
+Requires-Dist: rich; extra == 'test'
+Requires-Dist: tomlkit; extra == 'test'
+Requires-Dist: uv; extra == 'test'
+Description-Content-Type: text/markdown
+
+<div align="center">
+  <img src="https://raw.githubusercontent.com/zarr-developers/community/main/logos/logo2.png"><br>
+</div>
+
+# Zarr
+
+<table>
+<tr>
+  <td>Latest Release</td>
+  <td>
+    <a href="https://pypi.org/project/zarr/">
+    <img src="https://badge.fury.io/py/zarr.svg" alt="latest release" />
+    </a>
+  </td>
+</tr>
+  <td></td>
+  <td>
+    <a href="https://anaconda.org/anaconda/zarr/">
+    <img src="https://anaconda.org/conda-forge/zarr/badges/version.svg" alt="latest release" />
+    </a>
+</td>
+</tr>
+<tr>
+  <td>Package Status</td>
+  <td>
+		<a href="https://pypi.org/project/zarr/">
+		<img src="https://img.shields.io/pypi/status/zarr.svg" alt="status" />
+		</a>
+  </td>
+</tr>
+<tr>
+  <td>License</td>
+  <td>
+    <a href="https://github.com/zarr-developers/zarr-python/blob/main/LICENSE.txt">
+    <img src="https://img.shields.io/pypi/l/zarr.svg" alt="license" />
+    </a>
+</td>
+</tr>
+<tr>
+  <td>Build Status</td>
+  <td>
+    <a href="https://github.com/zarr-developers/zarr-python/blob/main/.github/workflows/python-package.yml">
+    <img src="https://github.com/zarr-developers/zarr-python/actions/workflows/python-package.yml/badge.svg" alt="build status" />
+    </a>
+  </td>
+</tr>
+<tr>
+  <td>Pre-commit Status</td>
+  <td>
+    <a href=""https://github.com/zarr-developers/zarr-python/blob/main/.pre-commit-config.yaml">
+    <img src="https://results.pre-commit.ci/badge/github/zarr-developers/zarr-python/main.svg" alt="pre-commit status" />
+    </a>
+  </td>
+</tr>
+
+<tr>
+  <td>Coverage</td>
+  <td>
+    <a href="https://codecov.io/gh/zarr-developers/zarr-python">
+    <img src="https://codecov.io/gh/zarr-developers/zarr-python/branch/main/graph/badge.svg"/ alt="coverage">
+    </a>
+  </td>
+</tr>
+<tr>
+  <td>Downloads</td>
+  <td>
+    <a href="https://zarr.readthedocs.io">
+    <img src="https://pepy.tech/badge/zarr" alt="pypi downloads" />
+    </a>
+  </td>
+</tr>
+<tr>
+	<td>Developer Chat</td>
+	<td>
+		<a href="https://ossci.zulipchat.com/">
+		<img src="https://img.shields.io/badge/zulip-join_chat-brightgreen.svg" />
+		</a>
+	</td>
+</tr>
+<tr>
+	<td>Funding</td>
+	<td>
+		<a href="https://chanzuckerberg.com/eoss/">
+			<img src="https://img.shields.io/badge/funded%20by-EOSS-FF414B.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0NSIgaGVpZ2h0PSI0NSI+PHBhdGggZD0iTTIyLjA5OCAyMS4wNzRjLTEuMjM1Ljg2LTIuNjggMS4zOTktNC42ODggMS40MzgtMi40MjYuMDUtNC4yMzgtMS41NTEtNC40MDYtMy45MThhNC40NjUgNC40NjUgMCAwIDEgMS4xODctMy4zOCA0LjQ4IDQuNDggMCAwIDEgMy4yODYtMS40NDQgNC42NzQgNC42NzQgMCAwIDEgMS44OTQuMzc1cy0uMTU2IDEuMzItLjIxIDEuOTE0bDEuOTg3LjAxNS4zNTYtMi45NzYtLjU2My0uMzU2YTYuNTQxIDYuNTQxIDAgMCAwLTMuNDg0LS45NjkgNi41OTMgNi41OTMgMCAwIDAtNC43NSAyLjA4NiA2LjQxNSA2LjQxNSAwIDAgMC0xLjcxNSA0Ljg3NWMuMTEzIDEuNjEuODA5IDMuMDc4IDEuOTUgNC4xNDEgMS4xNTYgMS4wNyAyLjcxNCAxLjY0NSA0LjM5OCAxLjYzMy4wMzkgMCAuMDc4IDAgLjEyNS0uMDA0YTkuOTE4IDkuOTE4IDAgMCAwIDMuNDMzLS43MjNsMS40MzQtMi43ODlzLS4wMjctLjA2Mi0uMjM0LjA3OCIgc3R5bGU9InN0cm9rZTpub25lO2ZpbGwtcnVsZTpub256ZXJvO2ZpbGw6I2ZmZjtmaWxsLW9wYWNpdHk6MSIvPjxwYXRoIGQ9Im0yOC44NjMgMjguMjE1LS4yNDIgMi43NDJ2LjAzMWMtLjEwMSAxLjAzNS0uNjUyIDEuOTE0LTEuNDg0IDIuMzUyLS42Ni4zNDctMS4zOC4zNDctMi4wMjgtLjAwOC0uNjc1LS4zNjMtLjk5Mi0uOTE4LTEuMTE3LTEuNjEzLS4xODctMS4xMDIuNDM4LTIuMjU0IDEuMjkzLTIuODMybDEzLjM1Mi04LjY4OGMuMDk3LjczOC4xNTIgMS40ODUuMTUyIDIuMjUgMCA4Ljk5Mi03LjMwOSAxNi4zMDUtMTYuMjkzIDE2LjMwNS04Ljk4OCAwLTE2LjI4OS03LjMxMy0xNi4yODktMTYuMzA1IDAtOC45ODggNy4zMDUtMTYuMyAxNi4yOTMtMTYuM3MxMi40OTYgNC4wOSAxNC45ODQgOS45MUwzOS4xMTQgMTVDMzYuMjYxIDguNjY0IDI5Ljg5MyA0LjIzNCAyMi41IDQuMjM0Yy03LjM5NSAwLTE4LjIxNSA4LjE3Mi0xOC4yMTUgMTguMjE1IDAgMTAuMDQ3IDguMTcyIDE4LjIxMSAxOC4yMTEgMTguMjExIDEwLjA0IDAgMTguMjE1LTguMTcyIDE4LjIxNS0xOC4yMSAwLTEwLjA0LS4xMS0yLjI5NC0uMzEzLTMuMzkxYTE5Ljk5NyAxOS45OTcgMCAwIDAtLjQ1My0xLjgzMmwtMy43OTMgMi4zNy01LjAyIDMuMThjLS4xNzUtLjY2OC0uNTgxLTEuMzQzLTEuNDQtMS43My0xLjAxMi0uNDY1LTIuNjYtLjExLTMuODY4LjU4MiAwIDAgMy4zMDUtNi40MDIgMy44Ni03LjQ1LjAzNS0uMDY2LS4wMTYtLjE0OC0uMDk4LS4xNDhoLTYuMThsLS4yNSAyLjA2N0gyNi41MDhsLTQuNzMgOS4wNjJjLS4wOTQuMTc2LjA5Ny4zNjMuMjc3LjI3NGwyLjUyMy0xLjM0YzEuMjE5LS42MjUgMy4yNS0xLjkxIDQuMjU0LTEuMTY4LjE0NS4xMS4zMzIuMzk4LjM0OC42OTVhLjM1Ny4zNTcgMCAwIDEtLjE0OS4yOTNsLTUuMDQzIDMuNDA2Yy0xLjYzNiAxLjE2OC0yLjI3NyAyLjkxLTIuMTIgNC41NTUuMTI0IDEuMzc1Ljk4NCAyLjU2NiAyLjI1NyAzLjI2MmE0LjE3IDQuMTcgMCAwIDAgMi4xMTMuNTE1IDQuMTY5IDQuMTY5IDAgMCAwIDEuODY0LS41YzEuNDM3LS43NTQgMi4zOTQtMi4yMzQgMi41NjItMy45NDVsLjQwMi00LjYxMy0yLjE5OSAxLjYzM1ptMCAwIiBzdHlsZT0ic3Ryb2tlOm5vbmU7ZmlsbC1ydWxlOm5vbnplcm87ZmlsbDojZmZmO2ZpbGwtb3BhY2l0eToxIi8+PC9zdmc+" alt="CZI's Essential Open Source Software for Science">
+		</a>
+	</td>
+</tr>
+	<td>Citation</td>
+	<td>
+		<a href="https://doi.org/10.5281/zenodo.3773450">
+			<img src="https://zenodo.org/badge/DOI/10.5281/zenodo.3773450.svg" alt="DOI">
+		</a>
+	</td>
+</tr>
+
+</table>
+
+## What is it?
+
+Zarr is a Python package providing an implementation of compressed, chunked, N-dimensional arrays, designed for use in parallel computing. See the [documentation](https://zarr.readthedocs.io) for more information.
+
+## Main Features
+
+- [**Create**](https://zarr.readthedocs.io/en/stable/user-guide/arrays.html#creating-an-array) N-dimensional arrays with any NumPy `dtype`.
+- [**Chunk arrays**](https://zarr.readthedocs.io/en/stable/user-guide/performance.html#chunk-optimizations) along any dimension.
+- [**Compress**](https://zarr.readthedocs.io/en/stable/user-guide/arrays.html#compressors) and/or filter chunks using any NumCodecs codec.
+- [**Store arrays**](https://zarr.readthedocs.io/en/stable/user-guide/storage.html) in memory, on disk, inside a zip file, on S3, etc...
+- [**Read**](https://zarr.readthedocs.io/en/stable/user-guide/arrays.html#reading-and-writing-data) an array [**concurrently**](https://zarr.readthedocs.io/en/stable/user-guide/performance.html#parallel-computing-and-synchronization) from multiple threads or processes.
+- [**Write**](https://zarr.readthedocs.io/en/stable/user-guide/arrays.html#reading-and-writing-data) to an array concurrently from multiple threads or processes.
+- Organize arrays into hierarchies via [**groups**](https://zarr.readthedocs.io/en/stable/quickstart.html#hierarchical-groups).
+
+## Where to get it
+
+Zarr can be installed from PyPI using `pip`:
+
+```bash
+pip install zarr
+```
+
+or via `conda`:
+
+```bash
+conda install -c conda-forge zarr
+```
+
+For more details, including how to install from source, see the [installation documentation](https://zarr.readthedocs.io/en/stable/index.html#installation).

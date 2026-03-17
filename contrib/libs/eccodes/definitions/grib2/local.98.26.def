@@ -1,0 +1,9 @@
+# Local definition 26: MARS labelling or ensemble forecast data (with hindcast support)
+
+unsigned[4] referenceDate : dump;
+unsigned[4] climateDateFrom : dump;
+unsigned[4] climateDateTo : dump;
+
+alias local.referenceDate= referenceDate;
+alias local.climateDateFrom= climateDateFrom;
+alias local.climateDateTo= climateDateTo;

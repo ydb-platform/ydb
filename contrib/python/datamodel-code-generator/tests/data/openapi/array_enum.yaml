@@ -1,0 +1,18 @@
+openapi: 3.0.0
+info:
+  title: datamodel-code-generator bug example
+components:
+  schemas:
+    Type1:
+      type: array
+      items:
+        type: string
+        enum:
+          - enumOne
+          - enumTwo
+
+    Type2:
+      type: string
+      enum:
+        - enumFour
+        - enumFive

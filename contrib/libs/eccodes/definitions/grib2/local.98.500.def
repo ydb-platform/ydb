@@ -1,0 +1,53 @@
+# mars labeling
+
+#  Year
+# (4 digits)
+#unsigned[2] year ;
+
+#  Month
+#unsigned[1] month ;
+
+#  Day
+#unsigned[1] day ;
+
+#  Hour
+#unsigned[1] hour ;
+
+#  Minute
+#unsigned[1] minute ;
+
+#  Second
+#unsigned[1] second ;
+
+#meta    dataDate    g2date(year,month,day) : dump;
+#alias mars.date=dataDate;
+
+#meta      dataTime    time(hour,minute,second) : dump;
+#alias mars.time = dataTime;
+
+codetable[2] observationType "grib2/tables/local/ecmf/obstat.2.0.table";
+
+codetable[2] codeType "grib2/tables/local/ecmf/obstat.3.0.table";
+
+codetable[2] varno "grib2/tables/local/ecmf/obstat.varno.table";
+
+codetable[2] reportType "grib2/tables/local/ecmf/obstat.reporttype.table";
+
+unsigned[1] phase;
+
+codetable[2] platform "grib2/tables/local/ecmf/obstat.4.0.table";
+
+codetable[2] instrument "grib2/tables/local/ecmf/obstat.5.0.table";
+
+codetable[2] dataStream "grib2/tables/local/ecmf/obstat.6.0.table";
+
+#  include "grib2/templates/template.4.horizontal.def"
+
+codetable[2] observationDiagnostic "grib2/tables/local/ecmf/obstat.9.0.table";
+
+codetable[2] dataSelection "grib2/tables/local/ecmf/obstat.10.0.table";
+
+unsigned[2] scanPosition;
+
+codetable[1] mask "grib2/tables/local/ecmf/obstat.8.0.table";
+

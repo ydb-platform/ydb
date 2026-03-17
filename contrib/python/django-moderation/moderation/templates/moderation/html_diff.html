@@ -1,0 +1,20 @@
+{% spaceless %}
+{% for operation in diff_operations %}
+	{% ifequal operation.operation "replace" %}
+		<del class="diff modified">{{ operation.deleted }}</del>
+		<ins class="diff modified">{{ operation.inserted }}</ins>
+	{% endifequal %}
+	
+	{% ifequal operation.operation "delete" %}
+		<del class="diff">{{ operation.deleted }}</del>
+	{% endifequal %}
+	
+	{% ifequal operation.operation "insert" %}
+		<ins class="diff">{{ operation.inserted }}</ins>
+	{% endifequal %}
+	
+	{% ifequal operation.operation "equal" %}
+		<span>{{ operation.inserted }}</span>
+	{% endifequal %}
+{% endfor %}
+{% endspaceless %}

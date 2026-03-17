@@ -1,0 +1,2 @@
+[celery.beat_schedulers]
+django = django_celery_beat.schedulers:DatabaseScheduler

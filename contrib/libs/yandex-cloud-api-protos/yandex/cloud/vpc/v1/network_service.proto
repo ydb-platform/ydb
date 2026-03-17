@@ -1,0 +1,312 @@
+syntax = "proto3";
+
+package yandex.cloud.vpc.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/vpc/v1/network.proto";
+import "yandex/cloud/vpc/v1/subnet.proto";
+import "yandex/cloud/vpc/v1/security_group.proto";
+import "yandex/cloud/vpc/v1/route_table.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1;vpc";
+option java_package = "yandex.cloud.api.vpc.v1";
+
+// A set of methods for managing Network resources.
+service NetworkService {
+  // Returns the specified Network resource.
+  //
+  // Get the list of available Network resources by making a [List] request.
+  rpc Get (GetNetworkRequest) returns (Network) {
+    option (google.api.http) = { get: "/vpc/v1/networks/{network_id}" };
+  }
+
+  // Retrieves the list of Network resources in the specified folder.
+  rpc List (ListNetworksRequest) returns (ListNetworksResponse) {
+    option (google.api.http) = { get: "/vpc/v1/networks" };
+  }
+
+  // Creates a network in the specified folder using the data specified in the request.
+  // Method starts an asynchronous operation that can be cancelled while it is in progress.
+  rpc Create (CreateNetworkRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/vpc/v1/networks" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateNetworkMetadata"
+      response: "Network"
+    };
+  }
+
+  // Updates the specified network.
+  // Method starts an asynchronous operation that can be cancelled while it is in progress.
+  rpc Update (UpdateNetworkRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/vpc/v1/networks/{network_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateNetworkMetadata"
+      response: "Network"
+    };
+  }
+
+  // Deletes the specified network.
+  rpc Delete (DeleteNetworkRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/vpc/v1/networks/{network_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteNetworkMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Lists subnets from the specified network.
+  rpc ListSubnets (ListNetworkSubnetsRequest) returns (ListNetworkSubnetsResponse) {
+    option (google.api.http) = { get: "/vpc/v1/networks/{network_id}/subnets" };
+  }
+
+  // Lists security groups from the specified network.
+  rpc ListSecurityGroups (ListNetworkSecurityGroupsRequest) returns (ListNetworkSecurityGroupsResponse) {
+    option (google.api.http) = { get: "/vpc/v1/networks/{network_id}/security_groups" };
+  }
+
+  // Lists route tables from the specified network.
+  rpc ListRouteTables (ListNetworkRouteTablesRequest) returns (ListNetworkRouteTablesResponse) {
+    option (google.api.http) = { get: "/vpc/v1/networks/{network_id}/route_tables" };
+  }
+
+  // Lists operations for the specified network.
+  rpc ListOperations (ListNetworkOperationsRequest) returns (ListNetworkOperationsResponse) {
+    option (google.api.http) = { get: "/vpc/v1/networks/{network_id}/operations" };
+  }
+
+  // Move network to another folder.
+  rpc Move (MoveNetworkRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/vpc/v1/networks/{network_id}:move" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "MoveNetworkMetadata"
+      response: "Network"
+    };
+  }
+}
+
+message GetNetworkRequest {
+  // ID of the Network resource to return.
+  // To get the network ID, use a [NetworkService.List] request.
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListNetworksRequest {
+  // ID of the folder to list networks in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListNetworksResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests. Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListNetworksResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression must specify:
+  // 1. The field name. Currently you can use filtering only on the [Network.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 3-63 characters long and match the regular expression `[a-z][-a-z0-9]{1,61}[a-z0-9]`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListNetworksResponse {
+  // List of Network resources.
+  repeated Network networks = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListNetworksRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListNetworksRequest.page_token] query parameter
+  // in the next list request. Subsequent list requests will have their own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateNetworkRequest {
+  // ID of the folder for this request to create a network in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Name of the network.
+  // The name must be unique within the folder.
+  string name = 2 [(pattern) = "|[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?"];
+
+  // Description of the network.
+  string description = 3 [(length) = "<=256"];
+
+  // Resource labels as `` key:value `` pairs.
+  map<string, string> labels = 4 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+}
+
+message CreateNetworkMetadata {
+  // ID of the Network that is being created.
+  string network_id = 1;
+}
+
+message UpdateNetworkRequest {
+  // ID of the Network resource to update.
+  // To get the network ID use a [NetworkService.List] request.
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask that specifies which fields of the Network resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the network.
+  // The name must be unique within the folder.
+  string name = 3 [(pattern) = "|[a-zA-Z]([-_a-zA-Z0-9]{0,61}[a-zA-Z0-9])?"];
+
+  // Description of the network.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `` key:value `` pairs.
+  map<string, string> labels = 5 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+}
+
+message UpdateNetworkMetadata {
+  // ID of the Network resource that is being updated.
+  string network_id = 1;
+}
+
+message DeleteNetworkRequest {
+  // ID of the Network resource to update.
+  // To get the network ID, use a [NetworkService.List] request.
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteNetworkMetadata {
+  // ID of the network that is being deleted.
+  string network_id = 1;
+}
+
+message ListNetworkSubnetsRequest {
+  // ID of the Network resource to list subnets for.
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListNetworkSubnetsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests. Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. Set [page_token]
+  // to the [ListNetworkSubnetsResponse.next_page_token]
+  // returned by a previous list request to get the next page of results.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListNetworkSubnetsResponse {
+  // List of subnets that belong to the network which is specified in the request.
+  repeated Subnet subnets = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListNetworkSubnetsRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListNetworkSubnetsRequest.page_token] query parameter
+  // in the next list request. Subsequent list requests will have their own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListNetworkSecurityGroupsRequest {
+  // ID of the Network resource to list security groups for.
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListNetworkSecurityGroupsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests. Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. Set [page_token]
+  // to the [ListNetworkSecurityGroupsResponse.next_page_token]
+  // returned by a previous list request to get the next page of results.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListNetworkSecurityGroupsResponse {
+  // List of security groups that belong to the network which is specified in the request.
+  repeated SecurityGroup security_groups = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListNetworkSecurityGroupsRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListNetworkSecurityGroupsRequest.page_token] query parameter
+  // in the next list request. Subsequent list requests will have their own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListNetworkRouteTablesRequest {
+  // ID of the Network resource to list route tables for.
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListNetworkRouteTablesResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests. Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. Set [page_token]
+  // to the [ListNetworkRouteTablesResponse.next_page_token]
+  // returned by a previous list request to get the next page of results.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListNetworkRouteTablesResponse {
+  // List of route tables that belong to the network which is specified in the request.
+  repeated RouteTable route_tables = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListNetworkRouteTablesRequest.page_size], use
+  // the [next_page_token] as the value
+  // for the [ListNetworkRouteTablesRequest.page_token] query parameter
+  // in the next list request. Subsequent list requests will have their own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message ListNetworkOperationsRequest {
+  // ID of the Network resource to list operations for.
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than [page_size], the service returns a [ListNetworkOperationsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests. Default value: 100.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the
+  // [ListNetworkOperationsResponse.next_page_token] returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListNetworkOperationsResponse {
+  // List of operations for the specified network.
+  repeated operation.Operation operations = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListNetworkOperationsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListNetworkOperationsRequest.page_token] query parameter in the next list request.
+  // Each subsequent list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message MoveNetworkRequest {
+  // ID of the Network resource to move.
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+
+  // ID of the destination folder.
+  string destination_folder_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message MoveNetworkMetadata {
+  // ID of the network that is being moved.
+  string network_id = 1;
+}

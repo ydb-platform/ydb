@@ -1,0 +1,66 @@
+--- contrib/python/betamax/tests/conftest.py	(index)
++++ contrib/python/betamax/tests/conftest.py	(working tree)
+@@ -1,8 +1,10 @@
+-import os
+-import sys
+ import betamax
++import pytest
+ 
+-sys.path.insert(0, os.path.abspath('.'))
++import yatest.common
+ 
+-with betamax.Betamax.configure() as config:
+-    config.cassette_library_dir = 'tests/cassettes/'
++
++@pytest.fixture(scope="session", autouse=True)
++def betamax_config():
++    with betamax.Betamax.configure() as config:
++        config.cassette_library_dir = yatest.common.source_path("contrib/python/betamax/tests/cassettes/")
+--- contrib/python/betamax/tests/unit/test_adapter.py	(index)
++++ contrib/python/betamax/tests/unit/test_adapter.py	(working tree)
+@@ -8,6 +8,8 @@ except ImportError:
+ from betamax.adapter import BetamaxAdapter
+ from requests.adapters import HTTPAdapter
+ 
++from yatest import common
++
+ 
+ class TestBetamaxAdapter(unittest.TestCase):
+     def setUp(self):
+@@ -31,7 +33,7 @@ class TestBetamaxAdapter(unittest.TestCase):
+         filename = 'test'
+         self.adapter.load_cassette(filename, 'json', {
+             'record': 'none',
+-            'cassette_library_dir': 'tests/cassettes/'
++            'cassette_library_dir': common.source_path("contrib/python/betamax/tests/cassettes/"),
+         })
+         assert self.adapter.cassette is not None
+         assert self.adapter.cassette_name == filename
+--- contrib/python/betamax/tests/unit/test_recorder.py	(index)
++++ contrib/python/betamax/tests/unit/test_recorder.py	(working tree)
+@@ -1,8 +1,9 @@
++import copy
+ import unittest
+ 
+ from betamax import matchers, serializers
+ from betamax.adapter import BetamaxAdapter
+-from betamax.cassette import cassette
++from betamax.cassette import Cassette, cassette
+ from betamax.recorder import Betamax
+ from requests import Session
+ from requests.adapters import HTTPAdapter
+@@ -12,6 +13,14 @@ class TestBetamax(unittest.TestCase):
+     def setUp(self):
+         self.session = Session()
+         self.vcr = Betamax(self.session)
++        self.cassette_options = copy.deepcopy(
++            Cassette.default_cassette_options
++        )
++
++    def tearDown(self):
++        self.session = Session()
++        self.vcr = Betamax(self.session)
++        Cassette.default_cassette_options = self.cassette_options
+ 
+     def test_initialization_does_not_alter_the_session(self):
+         for v in self.session.adapters.values():

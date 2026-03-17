@@ -1,0 +1,33 @@
+#------------------------------------------------------------------------------
+# $File: etf,v 1.1 2015/04/19 22:40:04 christos Exp $
+# elf:  file(1) magic for Erlang External Term Format magic
+# http://erlang.org/doc/apps/erts/erl_ext_dist.html
+# This magic is too weak so it is not enabled by default
+0	byte	131
+>1	byte	80
+>>2	belong	>0	Erlang External Term Format, compressed, original size = %d
+>1	byte	70	Erlang External Term Format, starts with NEW_FLOAT_EXT
+>1	byte	77	Erlang External Term Format, starts with BIT_BINARY_EXT
+>1	byte	97	Erlang External Term Format, starts with SMALL_INTEGER_EXT
+>1	byte	98	Erlang External Term Format, starts with INTEGER_EXT
+>1	byte	99	Erlang External Term Format, starts with FLOAT_EXT
+>1	byte	100	Erlang External Term Format, starts with ATOM_EXT
+>1	byte	101	Erlang External Term Format, starts with REFERENCE_EXT
+>1	byte	102	Erlang External Term Format, starts with PORT_EXT
+>1	byte	103	Erlang External Term Format, starts with PID_EXT
+>1	byte	104	Erlang External Term Format, starts with SMALL_TUPLE_EXT
+>1	byte	105	Erlang External Term Format, starts with LARGE_TUPLE_EXT
+>1	byte	106	Erlang External Term Format, starts with NIL_EXT
+>1	byte	107	Erlang External Term Format, starts with STRING_EXT
+>1	byte	108	Erlang External Term Format, starts with LIST_EXT
+>1	byte	109	Erlang External Term Format, starts with BINARY_EXT
+>1	byte	110	Erlang External Term Format, starts with SMALL_BIG_EXT
+>1	byte	111	Erlang External Term Format, starts with LARGE_BIG_EXT
+>1	byte	112	Erlang External Term Format, starts with NEW_FUN_EXT
+>1	byte	113	Erlang External Term Format, starts with EXPORT_EXT
+>1	byte	114	Erlang External Term Format, starts with NEW_REFERENCE_EXT
+>1	byte	115	Erlang External Term Format, starts with SMALL_ATOM_EXT
+>1	byte	116	Erlang External Term Format, starts with MAP_EXT
+>1	byte	117	Erlang External Term Format, starts with FUN_EXT
+>1	byte	118	Erlang External Term Format, starts with ATOM_UTF8_EXT
+>1	byte	119	Erlang External Term Format, starts with SMALL_ATOM_UTF8_EXT

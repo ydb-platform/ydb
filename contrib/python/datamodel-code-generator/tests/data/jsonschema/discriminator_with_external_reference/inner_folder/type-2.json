@@ -1,0 +1,15 @@
+{
+  "properties": {
+    "type_": {
+      "const": "b",
+      "default": "b",
+      "title": "Type "
+    },
+    "ref_type": {
+      "$ref": "./artificial_folder/type-1.json",
+      "description": "A referenced type."
+    }
+  },
+  "title": "Type2",
+  "type": "object"
+}

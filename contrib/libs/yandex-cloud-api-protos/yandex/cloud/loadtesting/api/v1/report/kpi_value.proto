@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.report;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/report;report";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.report";
+
+// An actual value of test's KPI.
+message KpiValue {
+    // ID of a test.
+    string test_id = 1;
+
+    // Value of KPI.
+    double value = 2;
+
+    // A flag indicating whether the value satisfies KPI threshold condition.
+    bool is_ok = 3;
+}

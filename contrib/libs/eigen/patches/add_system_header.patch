@@ -1,0 +1,11 @@
+--- a/unsupported/Eigen/CXX11/src/Tensor/TensorContractionThreadPool.h
++++ b/unsupported/Eigen/CXX11/src/Tensor/TensorContractionThreadPool.h
+@@ -13,6 +13,8 @@
+ // evaluator for thread pool device
+ #ifdef EIGEN_USE_THREADS
+
++#pragma clang system_header
++
+ namespace Eigen {
+
+ template<typename Indices, typename LeftArgType, typename RightArgType, typename OutputKernelType>

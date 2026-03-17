@@ -1,0 +1,16 @@
+generators:
+  default:
+    - annet_generators.example
+    - annet_generators.mesh_example
+    - annet_generators.rpl_example
+
+storage:
+  default:
+    adapter: netbox
+
+context:
+  default:
+    generators: default
+    storage: default
+
+selected_context: default

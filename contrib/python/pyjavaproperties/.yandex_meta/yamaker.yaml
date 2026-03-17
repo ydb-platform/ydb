@@ -1,0 +1,4 @@
+keep:
+  - tests/testdata/*
+mark_as_tests:
+  - pyjavaproperties_test.py

@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package yandex.cloud.searchapi.v2;
+
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/searchapi/v2;searchapi";
+option java_package = "yandex.cloud.api.search.v2";
+
+message SearchQuery {
+  enum SearchType {
+    SEARCH_TYPE_UNSPECIFIED = 0;
+    // Russian search type (default), yandex.ru search domain name will be used.
+    SEARCH_TYPE_RU = 1;
+    // Turkish search type, yandex.tr search domain name will be used.
+    SEARCH_TYPE_TR = 2;
+    // International search type, yandex.com search domain name will be used.
+    SEARCH_TYPE_COM = 3;
+    // Kazakh search type, yandex.kz search domain name will be used.
+    SEARCH_TYPE_KK = 4;
+    // Belarusian search type, yandex.by search domain name will be used.
+    SEARCH_TYPE_BE = 5;
+    // Uzbek search type, yandex.uz search domain name will be used.
+    SEARCH_TYPE_UZ = 6;
+  }
+
+  enum FamilyMode {
+    FAMILY_MODE_UNSPECIFIED = 0;
+    // Filtering is disabled. Search results include any documents regardless of their contents.
+    FAMILY_MODE_NONE = 1;
+    // Moderate filter (default value). Documents of the Adult category are excluded from search results
+    // unless a query is explicitly made for searching resources of this category.
+    FAMILY_MODE_MODERATE = 2;
+    // Regardless of a search query, documents of the Adult category
+    // and those with profanity are excluded from search results.
+    FAMILY_MODE_STRICT = 3;
+  }
+
+  enum FixTypoMode {
+    FIX_TYPO_MODE_UNSPECIFIED = 0;
+    // Automatically correct typos (default value).
+    FIX_TYPO_MODE_ON = 1;
+    // Autocorrection is off.
+    FIX_TYPO_MODE_OFF = 2;
+  }
+
+  // Search type that determines the domain name that will be used for the search queries.
+  SearchType search_type = 1 [(required) = true];
+  // Search query text
+  string query_text = 2 [(required) = true, (length) = "<=400"];
+  // Rule for filtering search results and determines whether any documents should be excluded.
+  FamilyMode family_mode = 3;
+  // The number of a requested page with search results
+  int64 page = 4 [(value) = ">=0"];
+  // Typos autocorrections mode
+  FixTypoMode fix_typo_mode = 5;
+}
+
+message SearchMetadata {
+  // Search flags, `key:value` pairs.
+  // No more than 64.
+  // The maximum string length in characters for each value is 63.
+  // Each value must match the regular expression `[-_0-9a-z]*`.
+  // The string length in characters for each key must be 1-63.
+  // Each key must match the regular expression `[a-z][-_0-9a-z]*`.
+  map<string, string> fields = 1 [(yandex.cloud.size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+}

@@ -1,0 +1,12 @@
+scalar Date
+
+"DateTime (ISO8601, example: 2020-01-01T10:11:12+00:00)"
+scalar DateTime
+
+scalar MyCustomClass
+
+type A {
+  a: Date!
+  b: DateTime!
+  c: MyCustomClass!
+}

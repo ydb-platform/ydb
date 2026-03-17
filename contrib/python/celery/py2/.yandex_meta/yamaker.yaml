@@ -1,0 +1,6 @@
+exclude_from_macros:
+  - celery/utils/dispatch/LICENSE.python
+  - celery/utils/dispatch/license.txt
+keep:
+  - celery/utils/dispatch/LICENSE.python
+  - celery/utils/dispatch/license.txt

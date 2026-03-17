@@ -1,0 +1,17 @@
+# Local definition 18: Multianalysis ensemble data
+
+codetable[1] dataOrigin "common/c-1.table" : dump;
+alias mars.origin=dataOrigin;
+
+ascii[4] modelIdentifier : dump ;
+
+unsigned[1] consensusCount : dump ;
+
+consensus list(consensusCount)
+{
+  ascii[4] ccccIdentifiers  : dump;
+}
+
+alias local.dataOrigin=dataOrigin;
+alias local.modelIdentifier=modelIdentifier;
+alias local.consensusCount=consensusCount;

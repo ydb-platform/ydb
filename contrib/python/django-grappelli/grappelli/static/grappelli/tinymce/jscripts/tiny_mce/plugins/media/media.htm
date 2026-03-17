@@ -1,0 +1,819 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>{#media_dlg.title}</title>
+    <script type="text/javascript" src="../../tiny_mce_popup.js"></script>
+    <script type="text/javascript" src="js/media.js"></script>
+    <script type="text/javascript" src="../../utils/mctabs.js"></script>
+    <script type="text/javascript" src="../../utils/validate.js"></script>
+    <script type="text/javascript" src="../../utils/form_utils.js"></script>
+    <script type="text/javascript" src="../../utils/editable_selects.js"></script>
+    <!-- <link href="css/media.css" rel="stylesheet" type="text/css" /> -->
+</head>
+<body style="display: none" class="tinyMCE">
+    <form onsubmit="Media.insert();return false;" action="#">
+        <div class="tabs">
+            <ul>
+                <li id="general_tab" class="current" aria-controls="general_panel"><span><a href="javascript:mcTabs.displayTab('general_tab','general_panel');Media.formToData();" onmousedown="return false;">{#media_dlg.general}</a></span></li>
+                <li id="advanced_tab" aria-controls="advanced_panel"><span><a href="javascript:mcTabs.displayTab('advanced_tab','advanced_panel');Media.formToData();" onmousedown="return false;">{#media_dlg.advanced}</a></span></li>
+                <li id="source_tab" aria-controls="source_panel"><span><a href="javascript:mcTabs.displayTab('source_tab','source_panel');Media.formToData('source');" onmousedown="return false;">{#media_dlg.source}</a></span></li>
+            </ul>
+        </div>
+        <div class="panel_wrapper">
+            <div id="general_panel" class="panel current">
+                <fieldset class="grp-module">
+                    <legend>{#media_dlg.general}</legend>
+                    <div class="grp-row grp-first">
+                        <div class="l-2c-fluid l-d-4">
+                            <div class="c-1"><label for="media_type">{#media_dlg.type}</label></div>
+                            <div class="c-2">
+                                <select id="media_type"></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grp-row">
+                        <div class="l-2c-fluid l-d-4">
+                            <div class="c-1"><label for="src">{#media_dlg.file}</label></div>
+                            <div class="c-2">
+                                <input id="src" name="src" type="text" value="" class="mceFocus" onchange="Media.formToData();" />
+                                <div id="filebrowsercontainer">&nbsp;</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grp-row" id="linklistrow">
+                        <div class="l-2c-fluid l-d-4">
+                            <div class="c-1"><label for="linklist">{#media_dlg.list}</label></div>
+                            <div class="c-2"><div id="linklistcontainer"><select id="linklist"><option value=""></option></select></div></div>
+                        </div>
+                    </div>
+                    <div class="grp-row">
+                        <div class="l-2c-fluid l-d-4">
+                            <div class="c-1"><label for="width">{#media_dlg.size}</label></div>
+                            <div class="c-2">
+                                <input type="text" id="width" name="width" value="" class="size" onchange="Media.formToData('width');" onfocus="Media.beforeResize();" /> x 
+                                <input type="text" id="height" name="height" value="" class="size" onfocus="Media.beforeResize();" onchange="Media.formToData('height');" /> px
+                                <p class="constrain">
+                                    <input id="constrain" type="checkbox" name="constrain" class="checkbox" checked="checked" />
+                                    <label id="constrainlabel" for="constrain">{#media_dlg.constrain_proportions}</label>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grp-row grp-last">
+                        <div class="l-2c-fluid l-d-4">
+                            <fieldset style="border:none;">
+                                <div class="c-1"><label>{#media_dlg.preview}</label></div>
+                                <div class="c-2">
+                                    <div id="prev"></div>
+                                </div>
+                            </fieldset>
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+
+            <div id="advanced_panel" class="panel">
+                <fieldset class="grp-module">
+                    <legend>{#media_dlg.advanced}</legend>
+                    <div class="grp-row grp-first">
+                        <div class="l-2c-fluid l-d-4">
+                            <div class="c-1"><label for="id">{#media_dlg.id}</label></div>
+                            <div class="c-2"><input type="text" id="id" name="id" onchange="Media.formToData();" /></div>
+                        </div>
+                    </div>
+                    <div class="grp-row">
+                        <div class="l-2c-fluid l-d-4">
+                            <div class="c-1"><label for="name">{#media_dlg.name}</label></div>
+                            <div class="c-2"><input type="text" id="name" name="name" onchange="Media.formToData();" /></div>
+                        </div>
+                    </div>
+                    <div class="grp-row">
+                        <div class="l-2c-fluid l-d-4">
+                            <div class="c-1"><label for="align">{#media_dlg.align}</label></div>
+                            <div class="c-2">
+                                <select id="align" name="align" onchange="Media.formToData();">
+                                    <option value="">{#not_set}</option> 
+                                    <option value="top">{#media_dlg.align_top}</option>
+                                    <option value="right">{#media_dlg.align_right}</option>
+                                    <option value="bottom">{#media_dlg.align_bottom}</option>
+                                    <option value="left">{#media_dlg.align_left}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grp-row">
+                        <div class="l-2c-fluid l-d-4">
+                            <div class="c-1"><label for="bgcolor">{#media_dlg.bgcolor}</label></div>
+                            <div class="c-2">
+                                <input id="bgcolor" name="bgcolor" type="text" value="" size="9" onchange="updateColor('bgcolor_pick','bgcolor');Media.formToData();" />
+                                <div id="bgcolor_pickcontainer" style="display: none">&nbsp;</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grp-row combine">
+                        <div class="l-2c-fluid l-d-4">
+                            <div class="c-1"><label for="vspace">{#media_dlg.vspace}</label></div>
+                            <div class="c-2"><input type="text" id="vspace" name="vspace" class="number" onchange="Media.formToData();" /></div>
+                        </div>
+                    </div>
+                    <div class="grp-row grp-last">
+                        <div class="l-2c-fluid l-d-4">
+                            <div class="c-1"><label for="hspace">{#media_dlg.hspace}</label></div>
+                            <div class="c-2"><input type="text" id="hspace" name="hspace" class="number" onchange="Media.formToData();" /></div>
+                        </div>
+                    </div>
+                </fieldset><br />
+
+                <div id="video_options">
+                    <fieldset class="grp-module">
+                        <h2>{#media_dlg.html5_video_options}</h2>
+                        <div class="grp-row grp-first">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="video_altsource1">{#media_dlg.altsource1}</label></div>
+                                <div class="c-2">
+                                    <input type="text" id="video_altsource1" name="video_altsource1" onchange="Media.formToData();" />
+                                    <div id="video_altsource1_filebrowser">&nbsp;</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="video_altsource2">{#media_dlg.altsource2}</label></div>
+                                <div class="c-2">
+                                    <input type="text" id="video_altsource2" name="video_altsource2" onchange="Media.formToData();" />
+                                    <div id="video_altsource2_filebrowser">&nbsp;</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="video_poster">{#media_dlg.poster}</label></div>
+                                <div class="c-2">
+                                    <input type="text" id="video_poster" name="video_poster" onchange="Media.formToData();" />
+                                    <div id="video_poster_filebrowser">&nbsp;</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="video_preload">{#media_dlg.preload}</label></div>
+                                <div class="c-2">
+                                    <select id="video_preload" name="video_preload" onchange="Media.formToData();">
+                                        <option value="none">{#media_dlg.preload_none}</option> 
+                                        <option value="metadata">{#media_dlg.preload_metadata}</option>
+                                        <option value="auto">{#media_dlg.preload_auto}</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="video_autoplay">{#media_dlg.play}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="video_autoplay" name="video_autoplay" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="video_muted">{#media_dlg.mute}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="video_muted" name="video_muted" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="video_loop">{#media_dlg.loop}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="video_loop" name="video_loop" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row grp-last">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="video_controls">{#media_dlg.controls}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="video_controls" name="video_controls" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div>
+                    </fieldset><br />
+                </div>
+
+                <div id="embeddedaudio_options">
+                    <fieldset class="grp-module">
+                        <h2>{#media_dlg.embedded_audio_options}</h2>
+                        <div class="grp-row grp-first">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="audio_autoplay">{#media_dlg.play}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="embeddedaudio_autoplay" name="audio_autoplay" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="audio_loop">{#media_dlg.loop}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="embeddedaudio_loop" name="audio_loop" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row grp-last">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="audio_controls">{#media_dlg.controls}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="embeddedaudio_controls" name="audio_controls" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div>
+                    </fieldset><br />
+                </div>
+
+                <div id="audio_options">
+                    <fieldset class="grp-module">
+                        <h2>{#media_dlg.html5_audio_options}</h2>
+                        <div class="grp-row grp-first">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="audio_altsource1">{#media_dlg.altsource1}</label></div>
+                                <div class="c-2">
+                                    <input type="text" id="audio_altsource1" name="audio_altsource1" onchange="Media.formToData();" style="width: 240px" />
+                                    <div id="audio_altsource1_filebrowser">&nbsp;</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="audio_altsource2">{#media_dlg.altsource2}</label></div>
+                                <div class="c-2">
+                                    <input type="text" id="audio_altsource2" name="audio_altsource2" onchange="Media.formToData();" style="width: 240px" />
+                                    <div id="audio_altsource2_filebrowser">&nbsp;</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="audio_preload">{#media_dlg.preload}</label></div>
+                                <div class="c-2">
+                                    <select id="audio_preload" name="audio_preload" onchange="Media.formToData();">
+                                        <option value="none">{#media_dlg.preload_none}</option>
+                                        <option value="metadata">{#media_dlg.preload_metadata}</option>
+                                        <option value="auto">{#media_dlg.preload_auto}</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="audio_autoplay">{#media_dlg.play}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="audio_autoplay" name="audio_autoplay" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="audio_loop">{#media_dlg.loop}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="audio_loop" name="audio_loop" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row grp-last">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="audio_controls">{#media_dlg.controls}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="audio_controls" name="audio_controls" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div> 
+                    </fieldset><br />
+                </div>
+                
+                <div id="flash_options">
+                    <fieldset class="grp-module">
+                        <h2>{#media_dlg.flash_options}</h2>
+                        <div class="grp-row grp-first">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="flash_quality">{#media_dlg.quality}</label></div>
+                                <div class="c-2">
+                                    <select id="flash_quality" name="flash_quality" onchange="Media.formToData();">
+                                        <option value="">{#not_set}</option> 
+                                        <option value="high">high</option>
+                                        <option value="low">low</option>
+                                        <option value="autolow">autolow</option>
+                                        <option value="autohigh">autohigh</option>
+                                        <option value="best">best</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="flash_scale">{#media_dlg.scale}</label></div>
+                                <div class="c-2">
+                                    <select id="flash_scale" name="flash_scale" onchange="Media.formToData();">
+                                        <option value="">{#not_set}</option> 
+                                        <option value="showall">showall</option>
+                                        <option value="noborder">noborder</option>
+                                        <option value="exactfit">exactfit</option>
+                                        <option value="noscale">noscale</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="flash_wmode">{#media_dlg.wmode}</label></div>
+                                <div class="c-2">
+                                    <select id="flash_wmode" name="flash_wmode" onchange="Media.formToData();">
+                                        <option value="">{#not_set}</option> 
+                                        <option value="window">window</option>
+                                        <option value="opaque">opaque</option>
+                                        <option value="transparent">transparent</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="flash_salign">{#media_dlg.salign}</label></div>
+                                <div class="c-2">
+                                    <select id="flash_salign" name="flash_salign" onchange="Media.formToData();">
+                                        <option value="">{#not_set}</option> 
+                                        <option value="l">{#media_dlg.align_left}</option>
+                                        <option value="t">{#media_dlg.align_top}</option>
+                                        <option value="r">{#media_dlg.align_right}</option>
+                                        <option value="b">{#media_dlg.align_bottom}</option>
+                                        <option value="tl">{#media_dlg.align_top_left}</option>
+                                        <option value="tr">{#media_dlg.align_top_right}</option>
+                                        <option value="bl">{#media_dlg.align_bottom_left}</option>
+                                        <option value="br">{#media_dlg.align_bottom_right}</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="flash_play">{#media_dlg.play}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="flash_play" name="flash_play" checked="checked" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="flash_loop">{#media_dlg.loop}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="flash_loop" name="flash_loop" checked="checked" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="flash_menu">{#media_dlg.menu}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="flash_menu" name="flash_menu" checked="checked" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="flash_swliveconnect">{#media_dlg.liveconnect}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="flash_swliveconnect" name="flash_swliveconnect" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="flash_base">{#media_dlg.base}</label></div>
+                                <div class="c-2"><input type="text" id="flash_base" name="flash_base" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row grp-last">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="flash_flashvars">{#media_dlg.flashvars}</label></div>
+                                <div class="c-2"><input type="text" id="flash_flashvars" name="flash_flashvars" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                    </fieldset><br />
+                </div>
+
+                <div id="quicktime_options">
+                    <fieldset class="grp-module">
+                        <h2>{#media_dlg.qt_options}</h2>
+                        <div class="grp-row grp-first">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_loop">{#media_dlg.loop}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="quicktime_loop" name="quicktime_loop" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_autoplay">{#media_dlg.play}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="quicktime_autoplay" name="quicktime_autoplay" checked="checked" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_cache">{#media_dlg.cache}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="quicktime_cache" name="quicktime_cache" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_controller">{#media_dlg.controller}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="quicktime_controller" name="quicktime_controller" checked="checked" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_correction">{#media_dlg.correction}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="quicktime_correction" name="quicktime_correction" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_enablejavascript">{#media_dlg.enablejavascript}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="quicktime_enablejavascript" name="quicktime_enablejavascript" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_kioskmode">{#media_dlg.kioskmode}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="quicktime_kioskmode" name="quicktime_kioskmode" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_autohref">{#media_dlg.autohref}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="quicktime_autohref" name="quicktime_autohref" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_playeveryframe">{#media_dlg.playeveryframe}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="quicktime_playeveryframe" name="quicktime_playeveryframe" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_targetcache">{#media_dlg.targetcache}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="quicktime_targetcache" name="quicktime_targetcache" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_scale">{#media_dlg.scale}</label></div>
+                                <div class="c-2">
+                                    <select id="quicktime_scale" name="quicktime_scale" class="mceEditableSelect" onchange="Media.formToData();">
+                                        <option value="">{#not_set}</option> 
+                                        <option value="tofit">tofit</option>
+                                        <option value="aspect">aspect</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_starttime">{#media_dlg.starttime}</label></div>
+                                <div class="c-2"><input type="text" id="quicktime_starttime" name="quicktime_starttime" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_endtime">{#media_dlg.endtime}</label></div>
+                                <div class="c-2"><input type="text" id="quicktime_endtime" name="quicktime_endtime" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_target">{#media_dlg.target}</label></div>
+                                <div class="c-2"><input type="text" id="quicktime_target" name="quicktime_target" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_href">{#media_dlg.href}</label></div>
+                                <div class="c-2"><input type="text" id="quicktime_href" name="quicktime_href" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_qtsrcchokespeed">{#media_dlg.qtsrcchokespeed}</label></div>
+                                <div class="c-2"><input type="text" id="quicktime_qtsrcchokespeed" name="quicktime_qtsrcchokespeed" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_volume">{#media_dlg.volume}</label></div>
+                                <div class="c-2"><input type="text" id="quicktime_volume" name="quicktime_volume" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row grp-last">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="quicktime_qtsrc">{#media_dlg.qtsrc}</label></div>
+                                <div class="c-2">
+                                    <input type="text" id="quicktime_qtsrc" name="quicktime_qtsrc" onchange="Media.formToData();" />
+                                    <div id="qtsrcfilebrowsercontainer">&nbsp;</div>
+                                </div>
+                            </div>
+                        </div>
+                    </fieldset><br />
+                </div>
+
+                <div id="windowsmedia_options">
+                    <fieldset class="grp-module">
+                        <h2>{#media_dlg.wmp_options}</h2>
+                        <div class="grp-row grp-first">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_autostart">{#media_dlg.autostart}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="windowsmedia_autostart" name="windowsmedia_autostart" checked="checked" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_enabled">{#media_dlg.enabled}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="windowsmedia_enabled" name="windowsmedia_enabled" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_enablecontextmenu">{#media_dlg.menu}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="windowsmedia_enablecontextmenu" name="windowsmedia_enablecontextmenu" checked="checked" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_fullscreen">{#media_dlg.fullscreen}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="windowsmedia_fullscreen" name="windowsmedia_fullscreen" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_invokeurls">{#media_dlg.invokeurls}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="windowsmedia_invokeurls" name="windowsmedia_invokeurls" checked="checked" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_mute">{#media_dlg.mute}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="windowsmedia_mute" name="windowsmedia_mute" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_stretchtofit">{#media_dlg.stretchtofit}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="windowsmedia_stretchtofit" name="windowsmedia_stretchtofit" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_windowlessvideo">{#media_dlg.windowlessvideo}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="windowsmedia_windowlessvideo" name="windowsmedia_windowlessvideo" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_balance">{#media_dlg.balance}</label></div>
+                                <div class="c-2"><input type="text" id="windowsmedia_balance" name="windowsmedia_balance" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_baseurl">{#media_dlg.baseurl}</label></div>
+                                <div class="c-2"><input type="text" id="windowsmedia_baseurl" name="windowsmedia_baseurl" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_captioningid">{#media_dlg.captioningid}</label></div>
+                                <div class="c-2"><input type="text" id="windowsmedia_captioningid" name="windowsmedia_captioningid" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_currentmarker">{#media_dlg.currentmarker}</label></div>
+                                <div class="c-2"><input type="text" id="windowsmedia_currentmarker" name="windowsmedia_currentmarker" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_currentposition">{#media_dlg.currentposition}</label></div>
+                                <div class="c-2"><input type="text" id="windowsmedia_currentposition" name="windowsmedia_currentposition" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_defaultframe">{#media_dlg.defaultframe}</label></div>
+                                <div class="c-2"><input type="text" id="windowsmedia_defaultframe" name="windowsmedia_defaultframe" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_playcount">{#media_dlg.playcount}</label></div>
+                                <div class="c-2"><input type="text" id="windowsmedia_playcount" name="windowsmedia_playcount" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_rate">{#media_dlg.rate}</label></div>
+                                <div class="c-2"><input type="text" id="windowsmedia_rate" name="windowsmedia_rate" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_uimode">{#media_dlg.uimode}</label></div>
+                                <div class="c-2"><input type="text" id="windowsmedia_uimode" name="windowsmedia_uimode" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row grp-last">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="windowsmedia_volume">{#media_dlg.volume}</label></div>
+                                <div class="c-2"><input type="text" id="windowsmedia_volume" name="windowsmedia_volume" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                    </fieldset><br />
+                </div>
+
+                <div id="realmedia_options">
+                    <fieldset class="grp-module">
+                        <h2>{#media_dlg.rmp_options}</h2>
+                        <div class="grp-row grp-first">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_autostart">{#media_dlg.autostart}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="realmedia_autostart" name="realmedia_autostart" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_loop">{#media_dlg.loop}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="realmedia_loop" name="realmedia_loop" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_autogotourl">{#media_dlg.autogotourl}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="realmedia_autogotourl" name="realmedia_autogotourl" checked="checked" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_center">{#media_dlg.center}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="realmedia_center" name="realmedia_center" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_imagestatus">{#media_dlg.imagestatus}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="realmedia_imagestatus" name="realmedia_imagestatus" checked="checked" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_maintainaspect">{#media_dlg.maintainaspect}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="realmedia_maintainaspect" name="realmedia_maintainaspect" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_nojava">{#media_dlg.nojava}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="realmedia_nojava" name="realmedia_nojava" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div> 
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_prefetch">{#media_dlg.prefetch}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="realmedia_prefetch" name="realmedia_prefetch" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>                   
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_shuffle">{#media_dlg.shuffle}</label></div>
+                                <div class="c-2"><input type="checkbox" class="checkbox" id="realmedia_shuffle" name="realmedia_shuffle" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_console">{#media_dlg.console}</label></div>
+                                <div class="c-2"><input type="text" id="realmedia_console" name="realmedia_console" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_controls">{#media_dlg.controls}</label></div>
+                                <div class="c-2"><input type="text" id="realmedia_controls" name="realmedia_controls" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_numloop">{#media_dlg.numloop}</label></div>
+                                <div class="c-2"><input type="text" id="realmedia_numloop" name="realmedia_numloop" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                        <div class="grp-row grp-last">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="realmedia_scriptcallbacks">{#media_dlg.scriptcallbacks}</label></div>
+                                <div class="c-2"><input type="text" id="realmedia_scriptcallbacks" name="realmedia_scriptcallbacks" onchange="Media.formToData();" /></div>
+                            </div>
+                        </div>
+                    </fieldset><br />
+                </div>
+
+                <div id="shockwave_options">
+                    <fieldset class="grp-module">
+                       <h2>{#media_dlg.shockwave_options}</h2>
+                        <div class="grp-row grp-first">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="shockwave_swstretchstyle">{#media_dlg.swstretchstyle}</label></div>
+                                <div class="c-2">
+                                    <select id="shockwave_swstretchstyle" name="shockwave_swstretchstyle" onchange="Media.formToData();">
+                                        <option value="none">{#not_set}</option>
+                                        <option value="meet">Meet</option>
+                                        <option value="fill">Fill</option>
+                                        <option value="stage">Stage</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="shockwave_swvolume">{#media_dlg.volume}</label></div>
+                                <div class="c-2">
+                                    <input type="text" id="shockwave_swvolume" name="shockwave_swvolume" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="shockwave_swstretchhalign">{#media_dlg.swstretchhalign}</label></div>
+                                <div class="c-2">
+                                    <select id="shockwave_swstretchhalign" name="shockwave_swstretchhalign" onchange="Media.formToData();">
+                                        <option value="none">{#not_set}</option>
+                                        <option value="left">{#media_dlg.align_left}</option>
+                                        <option value="center">{#media_dlg.align_center}</option>
+                                        <option value="right">{#media_dlg.align_right}</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="shockwave_swstretchvalign">{#media_dlg.swstretchvalign}</label></div>
+                                <div class="c-2">
+                                    <select id="shockwave_swstretchvalign" name="shockwave_swstretchvalign" onchange="Media.formToData();">
+                                        <option value="none">{#not_set}</option>
+                                        <option value="meet">Meet</option>
+                                        <option value="fill">Fill</option>
+                                        <option value="stage">Stage</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="shockwave_autostart">{#media_dlg.autostart}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="shockwave_autostart" name="shockwave_autostart" onchange="Media.formToData();" checked="checked" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="shockwave_sound">{#media_dlg.sound}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="shockwave_sound" name="shockwave_sound" onchange="Media.formToData();" checked="checked" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="shockwave_swliveconnect">{#media_dlg.liveconnect}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="shockwave_swliveconnect" name="shockwave_swliveconnect" onchange="Media.formToData();" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grp-row grp-last">
+                            <div class="l-2c-fluid l-d-4">
+                                <div class="c-1"><label for="shockwave_progress">{#media_dlg.progress}</label></div>
+                                <div class="c-2">
+                                    <input type="checkbox" class="checkbox" id="shockwave_progress" name="shockwave_progress" onchange="Media.formToData();" checked="checked" />
+                                </div>
+                            </div>
+                        </div>
+                    </fieldset><br />
+                </div>
+            </div>
+
+            <div id="source_panel" class="panel">
+                <fieldset>
+                    <legend>{#media_dlg.source}</legend>
+                    <textarea id="source" style="width: 100%; height: 275px"></textarea>
+                </fieldset>
+            </div>
+        
+        </div>
+        <div class="mceActionPanel grp-module grp-submit-row">
+            <ul>
+                <li class="grp-float-left"><input type="button" id="cancel" class="grp-button grp-cancel-link" name="cancel" value="{#cancel}" onclick="tinyMCEPopup.close();" /></li>
+                <li><input type="submit" id="insert" class="grp-button grp-default" name="insert" value="{#insert}" /></li>
+            </ul>
+        </div><br clear="all" /><br /><br />
+    </form>
+</body>
+</html>

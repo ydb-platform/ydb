@@ -1,0 +1,34 @@
+Metadata-Version: 2.1
+Name: meld3
+Version: 2.0.1
+Summary: Unmaintained templating system used by old versions of Supervisor
+Home-page: https://github.com/supervisor/meld3
+Author: Chris McDonough
+Author-email: chrism@plope.com
+Maintainer: Chris McDonough
+Maintainer-email: chrism@plope.com
+License: BSD-derived (http://www.repoze.org/LICENSE.txt)
+Platform: UNKNOWN
+Classifier: Development Status :: 7 - Inactive
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: POSIX
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Topic :: Text Processing :: Markup :: HTML
+
+
+No further development of the meld3 package is planned.  The meld3 package
+should be considered unmaintained as of April 2020.  Since 2007, meld3
+received only minimal updates to keep compatible with newer Python versions.
+It was only maintained because it was a dependency of the Supervisor package.
+Since Supervisor 4.1.0 (released in October 2019), the meld3 package is
+no longer a dependency of Supervisor.
+
+

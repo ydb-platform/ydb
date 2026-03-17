@@ -1,0 +1,8 @@
+[*] XYZ 2.1-Page1 red bold -> 1  # XYZ [100.0, 100.0, 2.1]
+[*] Fit-Page2 green Italic -> 2  # Fit []
+[*] FitB Italic&Bold b -> 3  # FitB []
+[*] FitV Page4 -> 4  # FitV [500.0]
+[*] FitH Page5 -> 5  # FitH [600.0]
+[*] FitR Page6 -> 6  # FitR [100.0, 100.0, 200.0, 200.0]
+[*] FitBH Page7 -> 7  # FitBH [100.0]
+[*] FitBV Page8 -> 8  # FitBV [100.0]

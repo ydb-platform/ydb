@@ -1,0 +1,1212 @@
+====================Apache-2.0====================
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+
+====================Apache-2.0====================
+        checkout and have not downloaded Apache 2, then get these 3 libraries
+
+
+====================Apache-2.0====================
+      Apache 2
+
+
+====================Apache-2.0====================
+      Fire up apache 2:
+
+
+====================Apache-2.0====================
+      If Apache 2 has been built and the server modules are required then
+
+
+====================Apache-2.0====================
+      file, Apache 2 has not been built so gen-make.py must be run:
+
+
+====================Apache-2.0====================
+      using all options so it requires Apache 2 source and the other optional
+
+
+====================Apache-2.0====================
+  * fix detection of Apache <2.0.56 (r38290, -3, -4)
+
+
+====================Apache-2.0====================
+ *    Licensed to the Apache Software Foundation (ASF) under one
+ *    or more contributor license agreements.  See the NOTICE file
+ *    distributed with this work for additional information
+ *    regarding copyright ownership.  The ASF licenses this file
+ *    to you under the Apache License, Version 2.0 (the
+ *    "License"); you may not use this file except in compliance
+ *    with the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing,
+ *    software distributed under the License is distributed on an
+ *    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ *    KIND, either express or implied.  See the License for the
+ *    specific language governing permissions and limitations
+ *    under the License.
+
+
+====================Apache-2.0====================
+ * now require APR/APU 0.9.5 (ships in Apache 2.0.48)
+
+
+====================Apache-2.0====================
+ * now require apache 2.0.47 (and apr 0.9.4)
+
+
+====================Apache-2.0====================
+ * require apache 2.0.42
+
+
+====================Apache-2.0====================
+ I.  Licensed to the Apache Software Foundation (ASF) under one
+     or more contributor license agreements.  See the NOTICE file
+     distributed with this work for additional information
+     regarding copyright ownership.  The ASF licenses this file
+     to you under the Apache License, Version 2.0 (the
+     "License"); you may not use this file except in compliance
+     with the License.  You may obtain a copy of the License at
+ 
+       http://www.apache.org/licenses/LICENSE-2.0
+ 
+     Unless required by applicable law or agreed to in writing,
+     software distributed under the License is distributed on an
+     "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     KIND, either express or implied.  See the License for the
+     specific language governing permissions and limitations
+     under the License.    
+
+
+====================Apache-2.0====================
+This product includes software developed by many people, and distributed
+under Contributor License Agreements to The Apache Software Foundation
+(http://www.apache.org/).  See the accompanying COMMITTERS file and the
+revision logs for an exact contribution history.
+
+
+====================BSD-2-Clause====================
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  * Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+  TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+  NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-2-Clause====================
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  * Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+  THE POSSIBILITY OF SUCH DAMAGE.
+
+====================BSD-2-Clause====================
+under a BSD 2-Clause license, see LICENSE.
+
+====================BSD-3-Clause====================
+     Redistribution and use in source and binary forms, with or without
+     modification, are permitted provided that the following conditions
+     are met:
+ 
+     1. Redistributions of source code must retain the above copyright
+        notice, this list of conditions and the following disclaimer.
+     2. Redistributions in binary form must reproduce the above copyright
+        notice, this list of conditions and the following disclaimer in the
+        the documentation and/or other materials provided with the
+        distribution.
+     3. The name of the author may not be used to endorse or promote
+        products derived from this software without specific prior written
+        permission.
+ 
+     THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS" AND ANY EXPRESS
+     OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+     WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+     ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+     DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+     DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+     GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+     INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+     IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+     OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+     IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
+ *  are met:
+ *
+ *    * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *    * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *    * Neither the names of PolarSSL or XySSL nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ *  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+ *  TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *  NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================BSD-3-Clause====================
+This software contains code derived from TropicSSL under a BSD 3-Clause
+license, see LICENSE.
+
+
+====================COPYRIGHT====================
+  Copyright (c) 1991-2007 Unicode, Inc. All rights reserved. Distributed
+  under the Terms of Use in http://www.unicode.org/copyright.html.
+
+
+====================COPYRIGHT====================
+  Copyright (c) 2009 Public Software Group e. V., Berlin, Germany
+
+
+====================COPYRIGHT====================
+  Copyright (c) 2010-2014, Salvatore Sanfilippo <antirez at gmail dot com>
+  Copyright (c) 2010-2013, Pieter Noordhuis <pcnoordhuis at gmail dot com>
+
+
+====================COPYRIGHT====================
+  Copyright (c) 2011-2016, Yann Collet
+  All rights reserved.
+
+
+====================COPYRIGHT====================
+ *  Based on XySSL: Copyright (C) 2006-2008   Christophe Devine
+
+
+====================COPYRIGHT====================
+ *  Copyright (C) 2009  Paul Bakker <polarssl_maintainer at polarssl dot org>
+
+
+====================COPYRIGHT====================
+ II. Copyright (C) 2003, 2004, 2005 Edgewall Software
+     Copyright (C) 2003, 2004, 2005 Jonas Borgström <jonas@edgewall.com>
+     Copyright (C) 2005 Christopher Lenz <cmlenz@gmx.de>
+
+
+====================COPYRIGHT====================
+Copyright 2019 The Apache Software Foundation
+
+
+====================COPYRIGHT====================
+Portions of the test suite for Subversion's Python bindings are copyrighted
+by Edgewall Software, Jonas Borgström and Christopher Lenz.
+For more information, see LICENSE.
+
+
+====================File: COMMITTERS====================
+The following people have commit access to the Subversion sources.
+Note that this is not a full list of Subversion's authors, however --
+for that, you'd need to look over the log messages to see all the
+patch contributors.
+
+If you have a question or comment, it's probably best to mail
+dev@subversion.apache.org, rather than mailing any of these people
+directly.
+
+Blanket commit access:
+
+          jimb   Jim Blandy <jimb@red-bean.com>
+       sussman   Ben Collins-Sussman <sussman@red-bean.com>
+        kfogel   Karl Fogel <kfogel@red-bean.com>
+        gstein   Greg Stein <gstein@gmail.com>
+         brane   Branko Čibej <brane@apache.org>
+        jorton   Joe Orton <joe@manyfish.co.uk>
+       ghudson   Greg Hudson <ghudson@mit.edu>
+          fitz   Brian W. Fitzpatrick <fitz@red-bean.com>
+        daniel   Daniel Stenberg <daniel@haxx.se>
+      cmpilato   C. Michael Pilato <cmpilato@collab.net>
+        philip   Philip Martin <philip@apache.org>
+   jerenkrantz   Justin Erenkrantz <justin@erenkrantz.com>
+        rooneg   Garrett Rooney <rooneg@electricjellyfish.net>
+         blair   Blair Zajac <blair@orcaware.com>
+       striker   Sander Striker <striker@apache.org>
+           dlr   Daniel Rall <dlr@finemaltcoding.com>
+           mbk   Mark Benedetto King <mbk@lowlatency.com>
+           jaa   Jani Averbach <jaa@iki.fi>
+    julianfoad   Julian Foad <julianfoad@apache.org>
+  jszakmeister   John Szakmeister <john@szakmeister.net>
+           ehu   Erik Hülsmann <ehuels@gmail.com>
+        breser   Ben Reser <ben@reser.org>
+          maxb   Max Bowsher <maxb1@ukf.net>
+       dberlin   Daniel Berlin <dberlin@dberlin.org>
+     danderson   David Anderson <david.anderson@natulte.net>
+        djames   David James <james@cs.toronto.edu>
+        pburba   Paul Burba <pburba@collab.net>
+       glasser   David Glasser <glasser@davidglasser.net>
+           lgo   Lieven Govaerts <lgo@mobsol.be>
+       hwright   Hyrum Wright <hyrum@hyrumwright.org>
+    vgeorgescu   Vlad Georgescu <vgeorgescu@gmail.com>
+       kameshj   Kamesh Jayachandran <kamesh.jayachandran@gmail.com>
+      markphip   Mark Phippard <mphippard@collab.net>
+      arfrever   Arfrever Frehtes Taifersar Arahesis <arfrever.fta@gmail.com>
+          stsp   Stefan Sperling <stsp@elego.de>
+           kou   Kouhei Sutou <kou@cozmixng.org>
+      danielsh   Daniel Shahaf <d.s@daniel.shahaf.name>
+        peters   Peter Samuelson <peter@p12n.org>
+      rhuijben   Bert Huijben <rhuijben@apache.org>
+      stylesen   Senthil Kumaran S <stylesen@gmail.com>
+     steveking   Stefan Küng <tortoisesvn@gmail.com>
+         neels   Neels J. Hofmeyr <neels@hofmeyr.de>
+     jwhitlock   Jeremy Whitlock <jcscoobyrs@gmail.com>
+       sbutler   Stephen Butler <sbutler@elego.de>
+        dannas   Daniel Näslund <dannas@dannas.name>
+       stefan2   Stefan Fuhrmann <stefan2@apache.org>
+       jcorvel   Johan Corveleyn <jcorvel@gmail.com>
+         trent   Trent Nelson <trent@snakebite.org>
+        kotkov   Evgeny Kotkov <evgeny.kotkov@visualsvn.com>
+      astieger   Andreas Stieger <andreas.stieger@gmx.de>
+      jamessan   James McCoy <jamessan@jamessan.com>
+      luke1410   Stefan Hett <luke1410@posteo.de>
+
+[[END ACTIVE FULL COMMITTERS.  LEAVE THIS LINE HERE; SCRIPTS LOOK FOR IT.]]
+
+Full committers who have asked to be listed as dormant:
+
+        bdenny   Brian Estlin <brian@implementality.com>
+           epg   Eric Gillespie <epg@pretzelnet.org>
+         kraai   Matt Kraai <kraai@alumni.cmu.edu>
+      bcollins   Ben Collins <bcollins@debian.org>
+           djh   D.J. Heap <djheap@gmail.com>
+       dwhedon   David Kimdon <dwhedon@debian.org>
+       jpieper   Josh Pieper <jjp@pobox.com>
+         kevin   Kevin Pilch-Bisson <kevin@pilch-bisson.net>
+      lundblad   Peter N. Lundblad <peter@famlundblad.se>
+       malcolm   Malcolm Rowe <malcolm-svn-dev@farside.org.uk>
+         naked   Nuutti Kotivuori <naked@iki.fi>
+     ringstrom   Tobias Ringström <tobias@ringstrom.mine.nu>
+          ivan   Ivan Zhakov <chemodax@gmail.com>
+
+
+Partial committers who have asked to be listed as dormant:
+
+           kon   Kalle Olavi Niemitalo <kon@iki.fi>          (psvn.el)
+      rassilon   Bill Tutt <bill@tutts.org> (Win32, COM, issue-1003-dev br.)
+           pll   Paul lussier <p.lussier@comcast.net>        (releases)
+        rdonch   Роман Донченко <dpb@corrigendum.ru>         (Swig-Python b.)
+      karolszk   Karol Szkudlarek <karol@mikronika.com.pl>   (po: pl)
+
+
+Commit access for specific areas:
+
+  Bindings:
+
+       pmayweg   Patrick Mayweg <mayweg@qint.de>             (JavaHL bindings)
+          rey4   Russell Yanofsky <rey4@columbia.edu>        (Swig bindings)
+         clkao   Chia-liang Kao <clkao@clkao.org>            (Swig-Perl b.)
+    joeswatosh   Joe Swatosh <joe.swatosh@gmail.com>         (Swig-Ruby b.)
+    jrvernooij   Jelmer Vernooij <jelmer@samba.org>          (Python bindings)
+          sage   Sage LaTorra <sagelt@gmail.com>             (Ctypes-Python b.)
+          vmpn   Vladimir Berezniker <vmpn@hitechman.com>    (JavaHL bindings)
+       rschupp   Roderich Schupp <roderich.schupp@gmail.com> (Swig bindings)
+        stilor   Alexey Neyman <stilor@att.net>              (Python bindings,
+                                                             svn-vendor.py)
+  troycurtisjr   Troy Curtis, Jr <troycurtisjr@gmail.com>    (Swig bindings)
+
+  Packages:
+
+           dws   David Summers <david@summersoft.fay.ar.us>  (RPMs)
+       ebswift   Troy Simpson <troy@ebswift.com>             (windows-innosetup)
+
+  Miscellaneous:
+
+      kbohling   Kirby C. Bohling <kbohling@birddog.com>     (tools/dev) [EMAIL
+                                                             IS BOUNCING]
+           nsd   Nick Duffek <nick@duffek.com>               (doc)
+        xsteve   Stefan Reichör <stefan@xsteve.at>           (psvn.el)
+      josander   Jostein Andersen <jostein@vait.se>          (various)
+      niemeyer   Gustavo Niemeyer <niemeyer@conectiva.com>   (svnperms.py)
+                                                             [EMAIL IS BOUNCING]
+        zbrown   Zack Brown <zbrown@tumblerings.org>         (doc) [EMAIL IS
+                                                             BOUNCING]
+        mprice   Michael Price <ectospheno@gmail.com>        (releases)
+    jrepenning   Jack Repenning <jrepenning@collab.net>      (tools/dev)
+      jlonestar   Martin Maurer <martin.maurer@email.de>      (svnshow) [EMAIL
+                                                             IS BOUNCING]
+       shlomif   Shlomi Fish <shlomif@shlomifish.org>        (svn-push)
+       mthelen   Michael W Thelen <mike@pietdepsi.com>       (doc)
+  jeremybettis   Jeremy Bettis <jeremy@deadbeef.com>         (case-insensitive)
+      martinto   Martin Tomes <lists@tomes.org>              (case-insensitive)
+        danpat   Daniel Patterson <danpat@danpat.net>        (svn-graph.pl)
+   archiecobbs   Archie Cobbs <archie@awarix.com>            (svnmerge) [EMAIL
+                                                             IS BOUNCING]
+  giovannibajo   Giovanni Bajo <rasky@develer.com>           (svnmerge)
+        offby1   Eric Hanchrow <offby1@blarg.net>            (doc)
+       nomis80   Simon Perreault <nomis80@nomis80.org>       (svn-clean)
+      jlvarner   Joshua Varner <jlvarner@gmail.com>          (doc)
+          nori   Kobayashi Noritada <nori1@dolphin.c.u-tokyo.ac.jp> (Ruby tools,
+                                                              po: ja) [EMAIL IS
+                                                              BOUNCING]
+            mf   Martin Furter <mf@apache.org>               (svnmirror.sh
+                                                          svn-backup-dumps.py)
+       adejong   Arthur de Jong <arthur@ch.tudelft.nl>       (svn2cl)
+      wsanchez   Wilfredo Sánchez <wsanchez@wsanchez.net>    (various contrib)
+       mhagger   Michael Haggerty <mhagger@alum.mit.edu>     (svntest)
+       madanus   Madan U S <madan@collab.net>                (svnmerge) [EMAIL
+                                                             IS BOUNCING]
+          wein   Mathias Weinert <wein@mccw.de>              (mailer)
+        bhuvan   Bhuvaneswaran A <bhuvan@apache.org>         (svn2feed.py,
+                                                              build/hudson)
+        aogier   Anthony Ogier <aogier@iorga.com>            (svn-merge-vendor.py)
+      dkagedal   David Kågedal <davidk@lysator.liu.se>       (dsvn.el)
+      mattiase   Mattias Engdegård <mattiase@acm.org>        (dsvn.el)
+        dustin   Dustin J. Mitchell <dustin@zmanda.com>      (svnmerge)
+   rocketraman   Raman Gupta <rocketraman@fastmail.fm>       (svnmerge)
+       rhansen   Richard Hansen <rhansen@bbn.com>            (svnstsw)
+        larrys   Larry Shatzer, Jr. <larrys@gmail.com>       (svn-keyword-check.pl)
+         nmiyo   MIYOKAWA, Nobuyoshi <n-miyo@tempus.org>     (www: ja)
+       rocksun   Rock Sun <daijun@gmail.com>                 (www: zh)
+       kmradke   Kevin Radke <kmradke@gmail.com>             (add-needs-lock.py)
+           esr   Eric S. Raymond <esr@thyrsus.com>           (svncutter)
+     gmcdonald   Gavin McDonald <gavin@16degrees.com.au>     (build/hudson,
+                                                              tools/buildbot)
+      artagnon   Ramkumar Ramachandra <artagnon@gmail.com>   (svnrdump, svntest)
+         arwin   Arwin Arni <arwin@collab.net>               (svn-bisect)
+          joes   Joe Schaefer <joe_schaefer@yahoo.com>       (svnpubsub)
+     humbedooh   Daniel Gruno <humbedooh@apache.org>         (svnpubsub)
+      prabhugs   Prabhu Gnana Sundar <pprabhugs@gmail.com>   (verify-keep-going)
+        schabi   Markus Schaber <schabi@apache.org>          (testsuite)
+           gbg   Gabriela Gibson <gabriela.gibson@gmail.com> (gtest)
+     lyalyakin   Pavel Lyalyakin <pavel.lyalyakin@visualsvn.com> (site)
+
+  Translation of message files:
+
+       niqueco   Nicolás Lichtmaier <nick@reloco.com.ar>     (po: es)
+        luebbe   Lübbe Onken <luebbe@tigris.org>             (po: de)
+    jensseidel   Jens Seidel <jensseidel@users.sf.net>       (po: de)
+      oyvindmo   Øyvind Møll <svn@moll.no>                   (po: nb)
+      sunny256   Øyvind A. Holm <sunny@sunbase.org>          (po: nb)
+        jzgoda   Jaroslaw Zgoda <jzgoda@o2.pl>               (po: pl)
+        plasma   Wei-Hon Chen <plasma@ms9.hinet.net>         (po: zh_TW)
+       jihuang   June-Yen Huang <jihuang@iis.sinica.edu.tw>  (po: zh_TW) [EMAIL
+                                                             IS BOUNCING]
+       marcosc   Marcos Chaves <marcos.nospam@gmail.com>     (po: pt_BR)
+        pynoos   Hojin Choi <hojin.choi@gmail.com>           (po: ko)
+       blueboh   Jeong Seolin <blueboh@gmail.com>            (po: ko)
+     dongsheng   Dongsheng Song <songdongsheng@live.cn>      (po: zh_CN)
+        hynnet   YingNing Huang <hyn@bao.hynnet.com>         (po: zh_CN) [EMAIL
+                                                             IS BOUNCING]
+          lark   Wang Jian <lark@linux.net.cn>               (po: zh_CN) [EMAIL
+                                                             IS BOUNCING]
+giorgio_valoti   Giorgio Valoti <giorgio_v@mac.com>          (po: it)
+        nebiac   Federico Nebiacolombo <cint1@amsjv.it>      (po: it)
+        fabien   Fabien Coelho <fabien@coelho.net>           (po: fr)
+       marcelg   Marcel Gosselin <marcel.gosselin@polymtl.ca> (po: fr)
+      mattiase   Mattias Engdegård <mattiase@acm.org>        (po: sv)
+
+  Experimental branches:
+
+         ashod   Ashod Nakashian <ashod@apache.org>          (compressed-
+                                                                 pristines br.)
+     gthompson   Glenn A. Thompson <gthompson@cdr.net>       (pluggable-db br.)
+       sigfred   Sigfred Håversen <bsdlist@mumak.com>        (svnserve-ssl br.)
+                                                             [EMAIL IS BOUNCING]
+        pmarek   Ph. Marek <philipp@marek.priv.at>           (meta-data-v br.)
+      jpeacock   John Peacock <jpeacock@rowman.com>          (perl-bindings-
+                                                              improvements br.)
+    nikclayton   Nik Clayton <nik@ngo.org.uk>                (perl-bindings-
+                                                              improvements br.)
+       cacknin   Charles Acknin <charlesacknin@gmail.com>    (svnpatch-diff 
+                                                              br.)
+        holden   Holden Karau <holden@pigscanfly.ca>         (scheme-bindings br.)
+         moklo   Morten Kloster <morklo@gmail.com>           (diff-improvements br.)
+          vmpn   Vladimir Berezniker <vmpn@hitechman.com>    (javahl-ra br.)
+
+  Subprojects that are complete, abandoned or have moved elsewhere:
+
+          xela   Alexander Müller <alex@littleblue.de>       (Java JNI b.)
+       yoshiki   Yoshiki Hayashi <yoshiki@xemacs.org>        (Non-SWIG Ruby b.)
+        mmacek   Marko Maček <Marko.Macek@gmx.net>           (cvs2svn branch)
+          mass   David Waite <mass@akuma.org>                (certs branch)
+      sergeyli   Sergey A. Lipnevich <sergey@optimaltec.com> (neon-0.24 port)
+      ballbach   Michael Ballbach <ballbach@rten.net>        (Old Mandrake RPM)
+        morten   Morten Ludvigsen <morten@2ps.dk>            (Swig-Java b.)
+      jespersm   Jesper Steen Møller <jesper@selskabet.org>  (Swig-Java b.)
+        knacke   Kai Nacke <kai.nacke@redstar.de>            (Swig-Java b.)
+       fmatias   Féliciano Matias <feliciano.matias@free.fr> (doc: fr)
+      dimentiy   Dmitriy O. Popkov <dimentiy@dimentiy.info>  (doc: ru)
+    khmarbaise   Karl Heinz Marbaise <khmarbaise@gmx.de>     (doc: de)
+  gerhardoettl   Gerhard Oettl <gerhard.oettl.ml@oesoft.at>  (doc: de)
+     beerfrick   Ariel Arjona <beerfrick@gmail.com>          (doc: es)
+        gradha   Grzegorz A. Hankiewicz <gradha@titanium.sabren.com> (doc: es)
+         ruben   Rubén Gómez <rugoli@euskalnet.net>          (doc: es)
+      dbrouard   Diego Brouard <dbrouard@gmail.com>          (doc: es)
+    firemeteor   Guo Rui <timmyguo@mail.ustc.edu.cn>         (issue-2843-dev
+                                                              br.)
+
+
+## Local Variables:
+## coding:utf-8
+## End:
+## vim:fileencoding=utf8
+
+
+====================File: LICENSE====================
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+
+SUBVERSION SUBCOMPONENTS: 
+
+Subversion includes a number of subcomponents with separate copyright
+notices and license terms. Your use of the source code for the these
+subcomponents is subject to the terms and conditions of the following
+licenses.
+
+For portions of the Python bindings test suite at
+subversion/bindings/swig/python/tests/trac/:
+
+ I.  Licensed to the Apache Software Foundation (ASF) under one
+     or more contributor license agreements.  See the NOTICE file
+     distributed with this work for additional information
+     regarding copyright ownership.  The ASF licenses this file
+     to you under the Apache License, Version 2.0 (the
+     "License"); you may not use this file except in compliance
+     with the License.  You may obtain a copy of the License at
+ 
+       http://www.apache.org/licenses/LICENSE-2.0
+ 
+     Unless required by applicable law or agreed to in writing,
+     software distributed under the License is distributed on an
+     "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     KIND, either express or implied.  See the License for the
+     specific language governing permissions and limitations
+     under the License.    
+ 
+ II. Copyright (C) 2003, 2004, 2005 Edgewall Software
+     Copyright (C) 2003, 2004, 2005 Jonas Borgström <jonas@edgewall.com>
+     Copyright (C) 2005 Christopher Lenz <cmlenz@gmx.de>
+
+     All rights reserved.
+ 
+     Redistribution and use in source and binary forms, with or without
+     modification, are permitted provided that the following conditions
+     are met:
+ 
+     1. Redistributions of source code must retain the above copyright
+        notice, this list of conditions and the following disclaimer.
+     2. Redistributions in binary form must reproduce the above copyright
+        notice, this list of conditions and the following disclaimer in the
+        the documentation and/or other materials provided with the
+        distribution.
+     3. The name of the author may not be used to endorse or promote
+        products derived from this software without specific prior written
+        permission.
+ 
+     THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS" AND ANY EXPRESS
+     OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+     WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+     ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+     DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+     DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+     GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+     INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+     IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+     OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+     IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+For the file subversion/libsvn_subr/utf_width.c
+
+ * Markus Kuhn -- 2007-05-26 (Unicode 5.0)
+ *
+ * Permission to use, copy, modify, and distribute this software
+ * for any purpose and without fee is hereby granted. The author
+ * disclaims all warranties with regard to this software.
+
+For the (modified) utf8proc library in subversion/libsvn_subr/utf8proc
+
+  Copyright (c) 2009 Public Software Group e. V., Berlin, Germany
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the "Software"),
+  to deal in the Software without restriction, including without limitation
+  the rights to use, copy, modify, merge, publish, distribute, sublicense,
+  and/or sell copies of the Software, and to permit persons to whom the
+  Software is furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+  DEALINGS IN THE SOFTWARE.
+
+
+  This software distribution contains derived data from a modified version of
+  the Unicode data files. The following license applies to that data:
+
+  COPYRIGHT AND PERMISSION NOTICE
+
+  Copyright (c) 1991-2007 Unicode, Inc. All rights reserved. Distributed
+  under the Terms of Use in http://www.unicode.org/copyright.html.
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of the Unicode data files and any associated documentation (the "Data
+  Files") or Unicode software and any associated documentation (the
+  "Software") to deal in the Data Files or Software without restriction,
+  including without limitation the rights to use, copy, modify, merge,
+  publish, distribute, and/or sell copies of the Data Files or Software, and
+  to permit persons to whom the Data Files or Software are furnished to do
+  so, provided that (a) the above copyright notice(s) and this permission
+  notice appear with all copies of the Data Files or Software, (b) both the
+  above copyright notice(s) and this permission notice appear in associated
+  documentation, and (c) there is clear notice in each modified Data File or
+  in the Software as well as in the documentation associated with the Data
+  File(s) or Software that the data or software has been modified.
+
+  THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+  KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF
+  THIRD PARTY RIGHTS. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS
+  INCLUDED IN THIS NOTICE BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR
+  CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+  USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+  TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+  PERFORMANCE OF THE DATA FILES OR SOFTWARE.
+
+  Except as contained in this notice, the name of a copyright holder shall
+  not be used in advertising or otherwise to promote the sale, use or other
+  dealings in these Data Files or Software without prior written
+  authorization of the copyright holder.
+
+  Unicode and the Unicode logo are trademarks of Unicode, Inc., and may be
+  registered in some jurisdictions. All other trademarks and registered
+  trademarks mentioned herein are the property of their respective owners.
+
+For the files subversion/libsvn_subr/x509parse.c and
+subversion/libsvn_subr/x509.h
+
+ *  Based on XySSL: Copyright (C) 2006-2008   Christophe Devine
+ *
+ *  Copyright (C) 2009  Paul Bakker <polarssl_maintainer at polarssl dot org>
+ *
+ *  All rights reserved.
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
+ *  are met:
+ *
+ *    * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *    * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *    * Neither the names of PolarSSL or XySSL nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ *  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+ *  TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ *  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ *  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *  NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+For the (modified) 'linenoise' library in tools/dev/svnmover/linenoise
+
+  Copyright (c) 2010-2014, Salvatore Sanfilippo <antirez at gmail dot com>
+  Copyright (c) 2010-2013, Pieter Noordhuis <pcnoordhuis at gmail dot com>
+
+  All rights reserved.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  * Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+  TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+  NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+For the (modified) LZ4 library files in subversion/libsvn_subr/lz4
+
+  LZ4 Library
+  Copyright (c) 2011-2016, Yann Collet
+  All rights reserved.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  * Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+  THE POSSIBILITY OF SUCH DAMAGE.
+
+
+====================File: NOTICE====================
+Apache Subversion
+Copyright 2019 The Apache Software Foundation
+
+This product includes software developed by many people, and distributed
+under Contributor License Agreements to The Apache Software Foundation
+(http://www.apache.org/).  See the accompanying COMMITTERS file and the
+revision logs for an exact contribution history.
+
+Portions of the test suite for Subversion's Python bindings are copyrighted
+by Edgewall Software, Jonas Borgström and Christopher Lenz.
+For more information, see LICENSE.
+
+This product includes software developed under the X Consortium License
+see: build/install-sh
+
+This product includes software developed by Markus Kuhn under a permissive
+license, see LICENSE.
+
+This software contains code derived from the RSA Data Security
+Inc. MD5 Message-Digest Algorithm, including various
+modifications by Spyglass Inc., Carnegie Mellon University, and
+Bell Communications Research, Inc (Bellcore).
+
+This product includes software developed by Public Software Group e. V.
+under a permissive license, see LICENSE.
+
+This software contains code derived from TropicSSL under a BSD 3-Clause
+license, see LICENSE.
+
+This product includes code derived from the software developed by Yann Collet
+under a BSD 2-Clause license, see LICENSE.
+
+
+====================MIT====================
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the "Software"),
+  to deal in the Software without restriction, including without limitation
+  the rights to use, copy, modify, merge, publish, distribute, sublicense,
+  and/or sell copies of the Software, and to permit persons to whom the
+  Software is furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+  DEALINGS IN THE SOFTWARE.
+
+
+====================Unicode====================
+  Copyright (c) 1991-2007 Unicode, Inc. All rights reserved. Distributed
+  under the Terms of Use in http://www.unicode.org/copyright.html.
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of the Unicode data files and any associated documentation (the "Data
+  Files") or Unicode software and any associated documentation (the
+  "Software") to deal in the Data Files or Software without restriction,
+  including without limitation the rights to use, copy, modify, merge,
+  publish, distribute, and/or sell copies of the Data Files or Software, and
+  to permit persons to whom the Data Files or Software are furnished to do
+  so, provided that (a) the above copyright notice(s) and this permission
+  notice appear with all copies of the Data Files or Software, (b) both the
+  above copyright notice(s) and this permission notice appear in associated
+  documentation, and (c) there is clear notice in each modified Data File or
+  in the Software as well as in the documentation associated with the Data
+  File(s) or Software that the data or software has been modified.
+
+  THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+  KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF
+  THIRD PARTY RIGHTS. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS
+  INCLUDED IN THIS NOTICE BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR
+  CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+  USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+  TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+  PERFORMANCE OF THE DATA FILES OR SOFTWARE.
+
+  Except as contained in this notice, the name of a copyright holder shall
+  not be used in advertising or otherwise to promote the sale, use or other
+  dealings in these Data Files or Software without prior written
+  authorization of the copyright holder.
+
+  Unicode and the Unicode logo are trademarks of Unicode, Inc., and may be
+  registered in some jurisdictions. All other trademarks and registered
+  trademarks mentioned herein are the property of their respective owners.
+
+
+====================X11====================
+This product includes software developed under the X Consortium License
+see: build/install-sh

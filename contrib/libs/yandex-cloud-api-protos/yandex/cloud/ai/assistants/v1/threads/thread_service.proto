@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package yandex.cloud.ai.assistants.v1.threads;
+
+import "yandex/cloud/ai/common/common.proto";
+import "yandex/cloud/ai/assistants/v1/common.proto";
+import "yandex/cloud/ai/assistants/v1/threads/message.proto";
+import "yandex/cloud/ai/assistants/v1/threads/thread.proto";
+import "yandex/cloud/validation.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/ai/assistants/v1/threads;threads";
+option java_package = "yandex.cloud.api.ai.assistants.v1.threads";
+
+// ThreadService provides operations for managing threads.
+service ThreadService {
+  // Create a new thread.
+  rpc Create (CreateThreadRequest) returns (Thread) {
+    option (google.api.http) = {post: "/assistants/v1/threads" body: "*"};
+  }
+
+  // Retrieve details of a specific thread by its ID.
+  rpc Get(GetThreadRequest) returns (Thread) {
+    option (google.api.http) = {get: "/assistants/v1/threads/{thread_id}"};
+  }
+
+  // Update an existing thread.
+  rpc Update(UpdateThreadRequest) returns (Thread) {
+    option (google.api.http) = {patch: "/assistants/v1/threads/{thread_id}" body: "*"};
+  }
+
+  // Delete a thread by its ID.
+  rpc Delete(DeleteThreadRequest) returns (DeleteThreadResponse) {
+    option (google.api.http) = {delete: "/assistants/v1/threads/{thread_id}"};
+  }
+
+  // List threads in a specific folder.
+  rpc List(ListThreadsRequest) returns (ListThreadsResponse) {
+    option (google.api.http) = {get: "/assistants/v1/threads"};
+  }
+}
+
+// Request message for creating a new thread.
+message CreateThreadRequest {
+  string folder_id = 1 [(required) = true];
+
+  // List of messages to initialize the thread.
+  repeated MessageData messages = 2;
+
+  // Name of the thread.
+  string name = 3;
+
+  // Description of the thread.
+  string description = 4;
+
+  // Default user ID that will be used as the author for thread messages if no other author is specified.
+  string default_message_author_id = 5;
+
+  // Expiration configuration for the thread.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 6;
+
+  // Set of key-value pairs to label the thread.
+  map<string, string> labels = 7;
+
+  // List of tools that are available for assistants to use in this thread.
+  repeated yandex.cloud.ai.assistants.v1.Tool tools = 8;
+}
+
+// Request message for retrieving a thread by ID.
+message GetThreadRequest {
+  // ID of the thread to retrieve.
+  string thread_id = 1 [(required) = true];
+}
+
+// Request message for updating an existing thread.
+message UpdateThreadRequest {
+  // ID of the thread to update.
+  string thread_id = 1 [(required) = true];
+
+  // Field mask specifying which fields to update.
+  google.protobuf.FieldMask update_mask = 2 [(required) = true];
+
+  // New name for the thread.
+  string name = 3;
+
+  // New description for the thread.
+  string description = 4;
+
+  // New expiration configuration for the thread.
+  yandex.cloud.ai.common.ExpirationConfig expiration_config = 5;
+
+  // New set of labels for the thread.
+  map<string, string> labels = 6;
+
+  // A new list of tools that are available for assistants to use in this thread.
+  repeated yandex.cloud.ai.assistants.v1.Tool tools = 7;
+}
+
+// Request message for deleting a thread by ID.
+message DeleteThreadRequest {
+  // ID of the thread to delete.
+  string thread_id = 1 [(required) = true];
+}
+
+// Response message for the delete operation.
+message DeleteThreadResponse {
+}
+
+// Request message for listing threads in a specific folder.
+message ListThreadsRequest {
+  // Folder ID from which to list threads.
+  string folder_id = 1 [(required) = true];
+
+  // Maximum number of threads to return per page.
+  int64 page_size = 2;
+
+  // Token to retrieve the next page of results.
+  string page_token = 3;
+}
+
+// Response message for the list operation.
+message ListThreadsResponse {
+  // List of threads in the specified folder.
+  repeated Thread threads = 1;
+
+  // Token to retrieve the next page of results.
+  string next_page_token = 2;
+}

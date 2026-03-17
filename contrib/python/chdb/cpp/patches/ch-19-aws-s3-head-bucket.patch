@@ -1,0 +1,12 @@
+--- contrib/python/chdb/cpp/src/IO/S3/Client.cpp	(index)
++++ contrib/python/chdb/cpp/src/IO/S3/Client.cpp	(working tree)
+@@ -753,7 +753,9 @@ std::string Client::getRegionForBucket(const std::string & bucket, bool force_de
+     if (outcome.IsSuccess())
+     {
+         const auto & result = outcome.GetResult();
++#if 0
+         region = result.GetBucketRegion();
++#endif
+     }
+     else
+     {

@@ -1,0 +1,15 @@
+from devtools.yamaker import tree_sitter
+from devtools.yamaker.project import NixSourceProject
+
+tree_sitter_javascript = NixSourceProject(
+    owners=["g:codesearch", "g:cpp-contrib"],
+    arcdir="contrib/libs/tree_sitter/grammars/javascript",
+    nixattr="tree-sitter-grammars.tree-sitter-javascript",
+    nixsrcdir="source",
+    copy_sources=[
+        "src/**/*.h",
+        "src/**/*.c",
+        "src/**/*.cc",
+    ],
+    post_install=tree_sitter.grammar_post_install,
+)

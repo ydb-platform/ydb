@@ -1,0 +1,10 @@
+{
+  "$id": "https://example.com/external_files_in_directory/definitions/drinnk/tea.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Tea",
+  "type": "string",
+    "enum": [
+        "Oolong",
+        "Green"
+    ]
+}

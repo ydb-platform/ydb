@@ -1,0 +1,11 @@
+--- contrib/python/chdb/cpp/src/Common/FrequencyHolder.cpp	(index)
++++ contrib/python/chdb/cpp/src/Common/FrequencyHolder.cpp	(working tree)
+@@ -2,7 +2,7 @@
+ 
+ #if USE_NLP
+ 
+-#include <incbin.h>
++#error include <incbin.h>
+ 
+ /// Embedded SQL definitions
+ INCBIN(resource_charset_zst, SOURCE_DIR "/contrib/nlp-data/charset.zst");

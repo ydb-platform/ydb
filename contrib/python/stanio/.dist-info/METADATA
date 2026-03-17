@@ -1,0 +1,37 @@
+Metadata-Version: 2.1
+Name: stanio
+Version: 0.5.1
+Summary: Utilities for preparing Stan inputs and processing Stan outputs
+Author: Stan Dev Team
+License: BSD-3-Clause
+Project-URL: Homepage, https://github.com/stan-dev/stanio
+Project-URL: Bug Tracker, https://github.com/stan-dev/stanio/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Development Status :: 4 - Beta
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy
+Provides-Extra: test
+Requires-Dist: pandas ; extra == 'test'
+Requires-Dist: pytest ; extra == 'test'
+Requires-Dist: pytest-cov ; extra == 'test'
+Provides-Extra: ujson
+Requires-Dist: ujson >=5.5.0 ; extra == 'ujson'
+
+# StanIO
+
+[![codecov](https://codecov.io/gh/stan-dev/stanio/graph/badge.svg?token=P93MLO21FK)](https://codecov.io/gh/stan-dev/stanio) [![Tests](https://github.com/stan-dev/stanio/actions/workflows/test.yaml/badge.svg)](https://github.com/stan-dev/stanio/actions/workflows/test.yaml)
+
+A set of Python functions for data-wrangling in the formats used by
+the [Stan](https://mc-stan.org) probabalistic programming language.
+
+It is primarily developed for use in [cmdstanpy](https://github.com/stan-dev/cmdstanpy).
+
+## Features
+
+- Writing Python dictionaries to Stan-compatible JSON (with optional support for using `ujson` for faster serialization)
+- Basic reading of StanCSV files into numpy arrays
+- Parameter extraction from numpy arrays based on StanCSV headers
+  - e.g., if you have a `matrix[2,3] x` in a Stan program, extracting `x` will give you a `(num_draws, 2, 3)` numpy array

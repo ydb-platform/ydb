@@ -1,0 +1,81 @@
+--- contrib/python/behave/behave/reporter/junit.py	(index)
++++ contrib/python/behave/behave/reporter/junit.py	(working tree)
+@@ -72,6 +72,8 @@ Best sources are:
+ from __future__ import absolute_import
+ import os.path
+ import codecs
++import re
++import sys
+ from xml.etree import ElementTree
+ from datetime import datetime
+ from behave.reporter.base import Reporter
+@@ -87,6 +89,7 @@ if six.PY2:
+     import traceback2 as traceback
+ else:
+     import traceback
++    unichr = chr
+ 
+ 
+ def CDATA(text=None):   # pylint: disable=invalid-name
+@@ -95,6 +98,42 @@ def CDATA(text=None):   # pylint: disable=invalid-name
+     element.text = ansi_escapes.strip_escapes(text)
+     return element
+ 
++def _compile_invalid_re():
++    # http://stackoverflow.com/questions/1707890/fast-way-to-filter-illegal-xml-unicode-chars-in-python
++    illegal_unichrs = [
++        (0x00, 0x08), (0x0B, 0x1F), (0x7F, 0x84), (0x86, 0x9F),
++        (0xD800, 0xDFFF), (0xFDD0, 0xFDDF), (0xFFFE, 0xFFFF),
++        (0x1FFFE, 0x1FFFF), (0x2FFFE, 0x2FFFF), (0x3FFFE, 0x3FFFF),
++        (0x4FFFE, 0x4FFFF), (0x5FFFE, 0x5FFFF), (0x6FFFE, 0x6FFFF),
++        (0x7FFFE, 0x7FFFF), (0x8FFFE, 0x8FFFF), (0x9FFFE, 0x9FFFF),
++        (0xAFFFE, 0xAFFFF), (0xBFFFE, 0xBFFFF), (0xCFFFE, 0xCFFFF),
++        (0xDFFFE, 0xDFFFF), (0xEFFFE, 0xEFFFF), (0xFFFFE, 0xFFFFF),
++        (0x10FFFE, 0x10FFFF),
++    ]
++
++    illegal_ranges = [
++        "%s-%s" % (unichr(low), unichr(high))
++        for (low, high) in illegal_unichrs
++        if low < sys.maxunicode]
++
++    return re.compile(u'[%s]' % u''.join(illegal_ranges))
++
++
++_invalid_re = _compile_invalid_re()
++
++def _escape_invalid_xml_chars(text):
++    # replace invalid chars with Unicode hex
++    return _invalid_re.subn(lambda c: u'U+{0:0=4}'.format(ord(c.group())), text)[0]
++
++
++def escape_CDATA(text):  # pylint: disable=invalid-name
++    # -- issue #510 escape text in CDATA
++    # CDATA cannot contain the string "]]>" anywhere in the XML document.
++    if not text:
++        return text
++    text = text.replace(u']]>', u']]&gt;')
++    return _escape_invalid_xml_chars(text)
++
+ 
+ class ElementTreeWithCDATA(ElementTree.ElementTree):
+     # pylint: disable=redefined-builtin, no-member
+@@ -114,7 +153,7 @@ if hasattr(ElementTree, '_serialize'):
+                         orig=ElementTree._serialize_xml):
+         if elem.tag == '![CDATA[':
+             write("\n<%s%s]]>\n" % \
+-                  (elem.tag, elem.text.encode(encoding, "xmlcharrefreplace")))
++                  (elem.tag, escape_CDATA(elem.text).encode(encoding, "xmlcharrefreplace")))
+             return
+         return orig(write, elem, encoding, qnames, namespaces)
+ 
+@@ -123,7 +162,7 @@ if hasattr(ElementTree, '_serialize'):
+                         orig=ElementTree._serialize_xml):
+         if elem.tag == '![CDATA[':
+             write("\n<{tag}{text}]]>\n".format(
+-                tag=elem.tag, text=elem.text))
++                tag=elem.tag, text=escape_CDATA(elem.text)))
+             return
+         if short_empty_elements:
+             # python >=3.3
+

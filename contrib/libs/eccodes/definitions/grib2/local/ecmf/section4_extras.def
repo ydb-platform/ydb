@@ -1,0 +1,15 @@
+# (C) Copyright 2005- ECMWF.
+
+# See ECC-1846
+# This is only read when centre=ecmf, so can remove if statement that was here
+# This is ecmf local so we shouldnt use MasterDir. Instead we look for pseudocentre (conceptsDir2) then centre (conceptsLocalDirAll)
+
+concept modelName(unknown, "modelNameConcept.def", conceptsDir2, conceptsLocalDirAll): no_copy, dump;
+
+if (modelName isnot "unknown") {
+   concept modelVersion(unknown, "modelVersionConcept.[modelName].def", conceptsDir2, conceptsLocalDirAll): no_copy, dump, read_only;
+   if ( defined(marsClass) && (marsClass is "ai" || marsClass is "ml") ) {
+      alias ls.model = modelName;
+      alias mars.model = modelName;
+   }
+}

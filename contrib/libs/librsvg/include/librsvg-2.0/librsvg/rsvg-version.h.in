@@ -1,0 +1,1 @@
+#include "../../librsvg/rsvg-version.h.in" /* generated while patching */

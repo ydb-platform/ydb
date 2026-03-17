@@ -1,0 +1,14 @@
+--- contrib/python/bcrypt/py2/ya.make	(index)
++++ contrib/python/bcrypt/py2/ya.make	(working tree)
+@@ -39,4 +39,11 @@ PY_SRCS(
+     bcrypt/__init__.py
+ )
++
++RUN_PROGRAM(
++    contrib/python/cffi/py2/gen build_bcrypt.py:ffi bcrypt._bcrypt.cffi.py2.c
++    IN build_bcrypt.py
++    OUT bcrypt._bcrypt.cffi.py2.c
++    OUTPUT_INCLUDES pycabcrypt.h
++)
+ 
+ RESOURCE_FILES(

@@ -1,0 +1,123 @@
+# (C) Copyright 2005- ECMWF.
+
+transient timeRangeIndicator=0 : no_copy,hidden;
+transient is_localtime=0 : no_copy,hidden;
+
+position offsetSection4;
+section_length[4] section4Length ;
+meta section4Pointer section_pointer(offsetSection4,section4Length,4);
+
+unsigned[1] numberOfSection = 4:read_only;
+
+unsigned[2] NV : dump ;
+alias numberOfVerticalCoordinateValues=NV ;
+alias numberOfCoordinatesValues=NV;
+# For table 4.5, code 150 Generalized vertical height coordinate
+alias numberOfVerticalGridDescriptors=NV ;
+
+transient neitherPresent = 0;
+
+# if (centre==7 || centre==46) {
+#    alias disableGrib1LocalSection=true;
+# }
+
+concept datasetForLocal(unknown) {
+  "tigge"       = {productionStatusOfProcessedData=4;}
+  "tigge"       = {productionStatusOfProcessedData=5;}
+  "s2s"         = {productionStatusOfProcessedData=6;}
+  "s2s"         = {productionStatusOfProcessedData=7;}
+  "cerise"      = {marsClass="ci";}
+  "era6"        = {marsClass="e6";} # for ERA6 parameters with constituentType
+  "hydro"       = {marsClass="ce";} # EFAS/GLOFAS
+  "hydro"       = {marsClass="ul";} # ULYSSES
+  "fire"        = {marsClass="gw";} # Global Wildfire awareness system
+  "uerra"       = {productionStatusOfProcessedData=8;} # UERRA
+  "uerra"       = {productionStatusOfProcessedData=9;}
+  "uerra"       = {productionStatusOfProcessedData=10;} # CARRA/CERRA
+  "uerra"       = {productionStatusOfProcessedData=11;}
+  "destine"     = {productionStatusOfProcessedData=12;} # Destination Earth
+  "destine"     = {productionStatusOfProcessedData=13;}
+  "destinegen1" = {productionStatusOfProcessedData=12;generation=1;} # DestinE ClimateDT Generation 1
+  "destinegen1" = {productionStatusOfProcessedData=13;generation=1;}
+  "era"         = {marsClass="e2";}
+  "era"         = {marsClass="e4";}
+  "era"         = {marsClass="ea";}
+  "era"         = {marsClass="ei";}
+  "era"         = {marsClass="em";}
+  "era"         = {marsClass="ep";}
+  "era"         = {marsClass="er";}
+  "era"         = {marsClass="et";}
+  "era"         = {marsClass="l5";}
+  "nextgems"    = {marsClass="ng";}
+  "unknown"     = { dummy=1; }
+}
+
+# meta MTG2SwitchDefault mtg2_switch_default(tablesVersion, tablesVersionMTG2Switch, marsClass, datasetForLocal) : hidden, read_only;
+
+# ECC-2002
+# if datasetForLocal is not "unknown", we remap conceptsDir1 and conceptsDir2
+# See the g2_concept_dir accessor
+
+codetable[2] productDefinitionTemplateNumber('4.0.table',masterDir,localDir) : dump;
+
+if (section2Used == 1) {
+   when (new()) {
+      set_nofail productDefinitionTemplateNumber=productDefinitionTemplateNumberInternal;
+   }
+}
+transient genVertHeightCoords = 0;
+
+if (productDefinitionTemplateNumber >= 32768) {
+   template productDefinition "grib2/local/[centreForLocal]/template.4.[productDefinitionTemplateNumber:l].def";
+} else {
+   template productDefinition "grib2/templates/template.4.[productDefinitionTemplateNumber:l].def";
+}
+
+if (defined(marsStream) && defined(marsType)) {
+   template_nofail marsKeywords1 "mars/grib.[marsStream:s].[marsType:s].def";
+}
+
+concept productDefinitionTemplateName(unknown, "productDefinitionTemplateConcept.def", conceptsDir2,conceptsDir1): no_copy;
+
+template parameters "grib2/parameters.def";
+
+# Hook for local extras
+template_nofail extras "grib2/local/[centre]/section4_extras.def";
+
+# Detect if this is for Generalized vertical height coordinates
+if (defined(typeOfFirstFixedSurface)) {
+   if (typeOfFirstFixedSurface == 150) {
+      transient genVertHeightCoords = 1;
+      transient PVPresent = 0;
+   }
+}
+
+if (genVertHeightCoords) {
+   # Generalized vertical height coordinate case
+   ieeefloat nlev : dump ;
+   ieeefloat numberOfVGridUsed : dump;
+   byte[16] uuidOfVGrid : dump;
+
+   alias numberOfVerticalCoordinateValues = nlev;
+   alias numberOfCoordinatesValues = nlev;
+   alias numberOfVerticalGridDescriptors = nlev;
+}
+else {
+   if (NV == 0){
+      transient PVPresent = 0;
+   } else {
+      transient PVPresent = 1;
+   }
+   # See GRIB-547
+   if (PVPresent || NV>0){
+      ieeefloat pv[numberOfCoordinatesValues] : dump;
+      alias vertical.pv=pv;
+   }
+
+   # GRIB-534: To easily remove vertical coordinates, set this key to 1
+   concept_nofail deletePV(unknown) {
+      "1" = { PVPresent=0; NV=0; }
+   }
+}
+
+meta md5Section4 md5(offsetSection4,section4Length);

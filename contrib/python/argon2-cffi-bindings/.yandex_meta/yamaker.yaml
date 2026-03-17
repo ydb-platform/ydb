@@ -1,0 +1,4 @@
+requirements:
+  - contrib/deprecated/argon2
+exclude_from_macros:
+  - _argon2_cffi_bindings/_ffi_build.py

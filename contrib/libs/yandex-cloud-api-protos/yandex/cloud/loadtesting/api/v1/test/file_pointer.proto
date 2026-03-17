@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package yandex.cloud.loadtesting.api.v1.test;
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/loadtesting/api/v1/test;test";
+option java_package = "yandex.cloud.api.loadtesting.api.v1.test";
+
+import "yandex/cloud/loadtesting/api/v1/test/object_storage.proto";
+
+// Variant-like structure for referencing files in different sources.
+message FilePointer {
+  oneof file_pointer{
+    // Reference to a file in Object Storage.
+    ObjectStorage object_storage = 1;
+  }
+}

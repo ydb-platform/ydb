@@ -1,0 +1,264 @@
+Metadata-Version: 2.1
+Name: phpserialize
+Version: 1.3
+Summary: a port of the serialize and unserialize functions of php to python.
+Home-page: http://dev.pocoo.org/hg/phpserialize-main
+Author: Armin Ronacher
+Author-email: armin.ronacher@active-4.com
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: PHP
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+
+phpserialize
+~~~~~~~~~~~~
+
+a port of the ``serialize`` and ``unserialize`` functions of
+php to python.  This module implements the python serialization
+interface (eg: provides `dumps`, `loads` and similar functions).
+
+Usage
+=====
+
+>>> from phpserialize import *
+>>> obj = dumps("Hello World")
+>>> loads(obj)
+'Hello World'
+
+Due to the fact that PHP doesn't know the concept of lists, lists
+are serialized like hash-maps in PHP.  As a matter of fact the
+reverse value of a serialized list is a dict:
+
+>>> loads(dumps(range(2)))
+{0: 0, 1: 1}
+
+If you want to have a list again, you can use the `dict_to_list`
+helper function:
+
+>>> dict_to_list(loads(dumps(range(2))))
+[0, 1]
+
+It's also possible to convert into a tuple by using the `dict_to_tuple`
+function:
+
+>>> dict_to_tuple(loads(dumps((1, 2, 3))))
+(1, 2, 3)
+
+Another problem are unicode strings.  By default unicode strings are
+encoded to 'utf-8' but not decoded on `unserialize`.  The reason for
+this is that phpserialize can't guess if you have binary or text data
+in the strings:
+
+>>> loads(dumps(u'Hello W\xf6rld'))
+'Hello W\xc3\xb6rld'
+
+If you know that you have only text data of a known charset in the result
+you can decode strings by setting `decode_strings` to True when calling
+loads:
+
+>>> loads(dumps(u'Hello W\xf6rld'), decode_strings=True)
+u'Hello W\xf6rld'
+
+Dictionary keys are limited to strings and integers.  `None` is converted
+into an empty string and floats and booleans into integers for PHP
+compatibility:
+
+>>> loads(dumps({None: 14, 42.23: 'foo', True: [1, 2, 3]}))
+{'': 14, 1: {0: 1, 1: 2, 2: 3}, 42: 'foo'}
+
+It also provides functions to read from file-like objects:
+
+>>> from StringIO import StringIO
+>>> stream = StringIO('a:2:{i:0;i:1;i:1;i:2;}')
+>>> dict_to_list(load(stream))
+[1, 2]
+
+And to write to those:
+
+>>> stream = StringIO()
+>>> dump([1, 2], stream)
+>>> stream.getvalue()
+'a:2:{i:0;i:1;i:1;i:2;}'
+
+Like `pickle` chaining of objects is supported:
+
+>>> stream = StringIO()
+>>> dump([1, 2], stream)
+>>> dump("foo", stream)
+>>> stream.seek(0)
+>>> load(stream)
+{0: 1, 1: 2}
+>>> load(stream)
+'foo'
+
+This feature however is not supported in PHP.  PHP will only unserialize
+the first object.
+
+Array Serialization
+===================
+
+Starting with 1.2 you can provide an array hook to the unserialization
+functions that are invoked with a list of pairs to return a real array
+object.  By default `dict` is used as array object which however means
+that the information about the order is lost for associative arrays.
+
+For example you can pass the ordered dictionary to the unserilization
+functions:
+
+>>> from collections import OrderedDict
+>>> loads('a:2:{s:3:"foo";i:1;s:3:"bar";i:2;}',
+...       array_hook=OrderedDict)
+collections.OrderedDict([('foo', 1), ('bar', 2)])
+
+Object Serialization
+====================
+
+PHP supports serialization of objects.  Starting with 1.2 of phpserialize
+it is possible to both serialize and unserialize objects.  Because class
+names in PHP and Python usually do not map, there is a separate
+`object_hook` parameter that is responsible for creating these classes.
+
+For a simple test example the `phpserialize.phpobject` class can be used:
+
+>>> data = 'O:7:"WP_User":1:{s:8:"username";s:5:"admin";}'
+>>> user = loads(data, object_hook=phpobject)
+>>> user.username
+'admin'
+>>> user.__name__
+'WP_User'
+
+An object hook is a function that takes the name of the class and a dict
+with the instance data as arguments.  The instance data keys are in PHP
+format which usually is not what you want.  To convert it into Python
+identifiers you can use the `convert_member_dict` function.  For more
+information about that, have a look at the next section.  Here an
+example for a simple object hook:
+
+>>> class User(object):
+...     def __init__(self, username):
+...         self.username = username
+...
+>>> def object_hook(name, d):
+...     cls = {'WP_User': User}[name]
+...     return cls(**d)
+...
+>>> user = loads(data, object_hook=object_hook)
+>>> user.username
+'admin'
+
+To serialize objects you can use the `object_hook` of the dump functions
+and return instances of `phpobject`:
+
+>>> def object_hook(obj):
+...     if isinstance(obj, User):
+...         return phpobject('WP_User', {'username': obj.username})
+...     raise LookupError('unknown object')
+...
+>>> dumps(user, object_hook=object_hook)
+'O:7:"WP_User":1:{s:8:"username";s:5:"admin";}'
+
+PHP's Object System
+===================
+
+The PHP object system is derived from compiled languages such as Java
+and C#.  Attributes can be protected from external access by setting
+them to `protected` or `private`.  This does not only serve the purpose
+to encapsulate internals but also to avoid name clashes.
+
+In PHP each class in the inheritance chain can have a private variable
+with the same name, without causing clashes.  (This is similar to the
+Python `__var` name mangling system).
+
+This PHP class::
+
+    class WP_UserBase {
+        protected $username;
+
+        public function __construct($username) {
+            $this->username = $username;
+        }
+    }
+
+    class WP_User extends WP_UserBase {
+        private $password;
+        public $flag;
+
+        public function __construct($username, $password) {
+            parent::__construct($username);
+            $this->password = $password;
+            $this->flag = 0;
+        }
+    }
+
+Is serialized with a member data dict that looks like this:
+
+>>> data = {
+...     ' * username':          'the username',
+...     ' WP_User password':    'the password',
+...     'flag':                 'the flag'
+... }
+
+Because this access system does not exist in Python, the
+`convert_member_dict` can convert this dict:
+
+>>> d = convert_member_dict(data)
+>>> d['username']
+'the username'
+>>> d['password']
+'the password'
+
+The `phpobject` class does this conversion on the fly.  What is
+serialized is the special `__php_vars__` dict of the class:
+
+>>> user = phpobject('WP_User', data)
+>>> user.username
+'the username'
+>>> user.username = 'admin'
+>>> user.__php_vars__[' * username']
+'admin'
+
+As you can see, reassigning attributes on a php object will try
+to change a private or protected attribute with the same name.
+Setting an unknown one will create a new public attribute:
+
+>>> user.is_admin = True
+>>> user.__php_vars__['is_admin']
+True
+
+To convert the phpobject into a dict, you can use the `_asdict`
+method:
+
+>>> d = user._asdict()
+>>> d['username']
+'admin'
+
+Python 3 Notes
+==============
+
+Because the unicode support in Python 3 no longer transparently
+handles bytes and unicode objects we had to change the way the
+decoding works.  On Python 3 you most likely want to always
+decode strings.  Because this would totally fail on binary data
+phpserialize uses the "surrogateescape" method to not fail on
+invalid data.  See the documentation in Python 3 for more
+information.
+
+Changelog
+=========
+
+1.3
+    -   added support for Python 3
+
+1.2
+    -   added support for object serialization
+    -   added support for array hooks
+
+1.1
+    -   added `dict_to_list` and `dict_to_tuple`
+    -   added support for unicode
+    -   allowed chaining of objects like pickle does
+
+
+

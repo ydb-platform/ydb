@@ -1,0 +1,62 @@
+{
+  "$defs": {
+    "Type1": {
+      "properties": {
+        "type_": {
+          "const": "a",
+          "default": "a",
+          "title": "Type "
+        }
+      },
+      "title": "Type1",
+      "type": "object"
+    },
+    "Type2": {
+      "properties": {
+        "type_": {
+          "const": "b",
+          "default": "b",
+          "title": "Type "
+        }
+      },
+      "title": "Type2",
+      "type": "object"
+    },
+    "UnrelatedType": {
+      "properties": {
+        "info": {
+          "default": "Unrelated type, not involved in the discriminated union",
+          "title": "A way to check for side effects",
+          "type": "string"
+        }
+      },
+      "title": "UnrelatedType",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "inner": {
+      "discriminator": {
+        "mapping": {
+          "a": "#/$defs/Type1",
+          "b": "#/$defs/Type2"
+        },
+        "propertyName": "type_"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Type1"
+        },
+        {
+          "$ref": "#/$defs/Type2"
+        }
+      ],
+      "title": "Inner"
+    }
+  },
+  "required": [
+    "inner"
+  ],
+  "title": "Response",
+  "type": "object"
+}

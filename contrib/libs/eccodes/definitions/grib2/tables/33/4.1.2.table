@@ -1,0 +1,11 @@
+# Product discipline 2 - Land surface products
+0 0 Vegetation/biomass
+1 1 Agri-/aquacultural special products
+2 2 Transportation-related products
+3 3 Soil products
+4 4 Fire weather products
+5 5 Glaciers and inland ice
+6 6 Urban areas
+# 7-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

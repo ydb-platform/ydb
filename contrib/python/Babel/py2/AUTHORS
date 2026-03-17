@@ -1,0 +1,131 @@
+
+Babel is written and maintained by the Babel team and various contributors:
+
+- Aarni Koskela
+- Christopher Lenz
+- Armin Ronacher
+- Alex Morega
+- Lasse Schuirmann
+- Felix Schwarz
+- Pedro Algarvio
+- Jeroen Ruigrok van der Werven
+- Philip Jenvey
+- benselme
+- Isaac Jurado
+- Tobias Bieniek
+- Erick Wilder
+- Michael Birtwell
+- Jonas Borgström
+- Kevin Deldycke
+- Jon Dufresne
+- Ville Skyttä
+- Hugo
+- Heungsub Lee
+- Jakob Schnitzer
+- Sachin Paliwal
+- Alex Willmer
+- Daniel Neuhäuser
+- Miro Hrončok
+- Cédric Krier
+- Luke Plant
+- Jennifer Wang
+- Lukas Balaga
+- sudheesh001
+- Niklas Hambüchen
+- Changaco
+- Xavier Fernandez
+- KO. Mattsson
+- Sébastien Diemer
+- alexbodn@gmail.com
+- saurabhiiit
+- srisankethu
+- Erik Romijn
+- Lukas B
+- Ryan J Ollos
+- Arturas Moskvinas
+- Leonardo Pistone
+- Jun Omae
+- Hyunjun Kim
+- Alessio Bogon
+- Nikiforov Konstantin
+- Abdullah Javed Nesar
+- Brad Martin
+- Tyler Kennedy
+- CyanNani123
+- sebleblanc
+- He Chen
+- Steve (Gadget) Barnes
+- Romuald Brunet
+- Mario Frasca
+- BT-sschmid
+- Alberto Mardegan
+- mondeja
+- NotAFile
+- Julien Palard
+- Brian Cappello
+- Serban Constantin
+- Bryn Truscott
+- Chris
+- Charly C
+- PTrottier
+- xmo-odoo
+- StevenJ
+- Jungmo Ku
+- Simeon Visser
+- Narendra Vardi
+- Stefane Fermigier
+- Narayan Acharya
+- François Magimel
+- Wolfgang Doll
+- Roy Williams
+- Marc-André Dufresne
+- Abhishek Tiwari
+- David Baumgold
+- Alex Kuzmenko
+- Georg Schölly
+- ldwoolley
+- Rodrigo Ramírez Norambuena
+- Jakub Wilk
+- Roman Rader
+- Max Shenfield
+- Nicolas Grilly
+- Kenny Root
+- Adam Chainz
+- Sébastien Fievet
+- Anthony Sottile
+- Yuriy Shatrov
+- iamshubh22
+- Sven Anderson
+- Eoin Nugent
+- Roman Imankulov
+- David Stanek
+- Roy Wellington Ⅳ
+- Florian Schulze
+- Todd M. Guerra
+- Joseph Breihan
+- Craig Loftus
+- The Gitter Badger
+- Régis Behmo
+- Julen Ruiz Aizpuru
+- astaric
+- Felix Yan
+- Philip_Tzou
+- Jesús Espino
+- Jeremy Weinstein
+- James Page
+- masklinn
+- Sjoerd Langkemper
+- Matt Iversen
+- Alexander A. Dyshev
+- Dirkjan Ochtman
+- Nick Retallack
+- Thomas Waldmann
+- xen
+
+Babel was previously developed under the Copyright of Edgewall Software.  The
+following copyright notice holds true for releases before 2013: "Copyright (c)
+2007 - 2011 by Edgewall Software"
+
+In addition to the regular contributions Babel includes a fork of Lennart
+Regebro's tzlocal that originally was licensed under the CC0 license.  The
+original copyright of that project is "Copyright 2013 by Lennart Regebro".

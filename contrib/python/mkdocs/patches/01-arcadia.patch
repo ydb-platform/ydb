@@ -1,0 +1,194 @@
+--- contrib/python/mkdocs/.dist-info/entry_points.txt	(index)
++++ contrib/python/mkdocs/.dist-info/entry_points.txt	(working tree)
+@@ -2,7 +2,7 @@
+ mkdocs = mkdocs.__main__:cli
+ 
+ [mkdocs.plugins]
+-search = mkdocs.contrib.search:SearchPlugin
++search = mkdocs.contrib.search.yandex_search:SearchPlugin
+ 
+ [mkdocs.themes]
+ mkdocs = mkdocs.themes.mkdocs
+--- contrib/python/mkdocs/mkdocs/config/config_options.py	(index)
++++ contrib/python/mkdocs/mkdocs/config/config_options.py	(working tree)
+@@ -527,7 +527,7 @@ class Theme(BaseConfigOption):
+         if 'locale' in theme_config and not isinstance(theme_config['locale'], str):
+             raise ValidationError(f"'{theme_config['name']}.locale' must be a string.")
+ 
+-        config[key_name] = theme.Theme(**theme_config)
++        config[key_name] = theme.YandexTheme(**theme_config)
+ 
+ 
+ class Nav(OptionallyRequired):
+--- contrib/python/mkdocs/mkdocs/contrib/search/__init__.py	(index)
++++ contrib/python/mkdocs/mkdocs/contrib/search/__init__.py	(working tree)
+@@ -55,7 +55,7 @@ class SearchPlugin(BasePlugin):
+         if 'include_search_page' in config['theme'] and config['theme']['include_search_page']:
+             config['theme'].static_templates.add('search.html')
+         if not ('search_index_only' in config['theme'] and config['theme']['search_index_only']):
+-            path = os.path.join(base_path, 'templates')
++            path = self.get_theme_media_path()
+             config['theme'].dirs.append(path)
+             if 'search/main.js' not in config['extra_javascript']:
+                 config['extra_javascript'].append('search/main.js')
+@@ -72,6 +72,9 @@
+             )
+         return config
+ 
++    def get_theme_media_path(self):
++        return os.path.join(base_path, 'templates')
++
+     def on_pre_build(self, config, **kwargs):
+         "Create search index instance for later use."
+         self.search_index = SearchIndex(**self.config)
+@@ -101,7 +104,10 @@ class SearchPlugin(BasePlugin):
+                 if (lang != 'en'):
+                     files.append(f'lunr.{lang}.js')
+ 
+-            for filename in files:
+-                from_path = os.path.join(base_path, 'lunr-language', filename)
+-                to_path = os.path.join(output_base_path, filename)
+-                utils.copy_file(from_path, to_path)
++            self.copy_files_on_post_build(files, output_base_path)
++
++    def copy_files_on_post_build(self, files, output_base_path):
++        for filename in files:
++            from_path = os.path.join(base_path, 'lunr-language', filename)
++            to_path = os.path.join(output_base_path, filename)
++            utils.copy_file(from_path, to_path)
+--- contrib/python/mkdocs/mkdocs/structure/files.py	(index)
++++ contrib/python/mkdocs/mkdocs/structure/files.py	(working tree)
+@@ -183,7 +183,7 @@ class File:
+         if dirty and not self.is_modified():
+             log.debug(f"Skip copying unmodified file: '{self.src_path}'")
+         else:
+-            log.debug(f"Copying media file: '{self.src_path}'")
++            log.debug(f"Copying media file: '{self.src_path}' to '{self.abs_dest_path}'")
+             utils.copy_file(self.abs_src_path, self.abs_dest_path)
+ 
+     def is_modified(self):
+--- contrib/python/mkdocs/mkdocs/structure/nav.py	(index)
++++ contrib/python/mkdocs/mkdocs/structure/nav.py	(working tree)
+@@ -113,7 +113,8 @@ def get_navigation(files, config):
+     if missing_from_config:
+         log.info(
+             'The following pages exist in the docs directory, but are not '
+-            'included in the "nav" configuration:\n  - {}'.format(
++            'included in the "nav" configuration\n{}:\n  - {}'.format(
++                config['nav'],
+                 '\n  - '.join([file.src_path for file in missing_from_config]))
+         )
+         # Any documentation files not found in the nav should still have an associated page, so we
+--- contrib/python/mkdocs/mkdocs/structure/pages.py	(index)
++++ contrib/python/mkdocs/mkdocs/structure/pages.py	(working tree)
+@@ -107,7 +107,7 @@ class Page:
+             # Ensure urljoin behavior is correct
+             if not edit_uri.startswith(('?', '#')) and not repo_url.endswith('/'):
+                 repo_url += '/'
+-            self.edit_url = urljoin(repo_url, edit_uri + src_path)
++            self.edit_url = urljoin(repo_url, edit_uri + src_path + '?edit=true')
+         else:
+             self.edit_url = None
+ 
+--- contrib/python/mkdocs/mkdocs/theme.py	(index)
++++ contrib/python/mkdocs/mkdocs/theme.py	(working tree)
+@@ -4,6 +4,7 @@ import logging
+ 
+ from mkdocs import utils
+ from mkdocs.utils import filters
++from mkdocs.utils import yandex
+ from mkdocs.config.base import ValidationError
+ from mkdocs import localization
+ 
+@@ -31,8 +31,7 @@ class Theme:
+         self._vars = {'locale': 'en'}
+ 
+         # MkDocs provided static templates are always included
+-        package_dir = os.path.abspath(os.path.dirname(__file__))
+-        mkdocs_templates = os.path.join(package_dir, 'templates')
++        mkdocs_templates = self.get_mkdocs_templates_dir()
+         self.static_templates = set(os.listdir(mkdocs_templates))
+ 
+         # Build self.dirs from various sources in order of precedence
+@@ -54,6 +53,10 @@ class Theme:
+         # Validate locale and convert to Locale object
+         self._vars['locale'] = localization.parse_locale(self._vars['locale'])
+ 
++    def get_mkdocs_templates_dir(self):
++        package_dir = os.path.abspath(os.path.dirname(__file__))
++        return os.path.join(package_dir, 'templates')
++
+     def __repr__(self):
+         return "{}(name='{}', dirs={}, static_templates={}, {})".format(
+             self.__class__.__name__, self.name, self.dirs, list(self.static_templates),
+@@ -115,3 +119,40 @@ class Theme:
+         env.filters['url'] = filters.url_filter
+         localization.install_translations(env, self._vars['locale'], self.dirs)
+         return env
++
++
++DEFAULT_PREFIX = 'mkdocs/templates'
++
++
++class YandexTheme(Theme):
++
++    def get_mkdocs_templates_dir(self):
++        default_dir = os.path.join(utils.themes_dir_root, 'mkdocs', 'templates')
++        if not os.path.exists(default_dir):
++            os.makedirs(default_dir)
++            static_templates, errors = yandex.unpack_resource_files(default_dir, False, DEFAULT_PREFIX)
++
++            if static_templates:
++                log.debug('Theme %s provided Mkdocs templates to dir %s', self.name, default_dir)
++            if errors:
++                raise ValidationError('Theme {} requires resource files {} but they were not found'.format(
++                    self.name, ', '.join(errors)
++                ))
++
++        return default_dir
++
++    def _load_theme_config(self, name):
++        """ Recursively load theme and any parent themes. """
++        self.dir = theme_dir = utils.get_theme_dir(name)
++        if not os.path.exists(theme_dir):
++            theme_prefix = os.path.relpath(theme_dir, utils.themes_dir_root).replace(os.path.sep, '/')
++            theme_files, errors = yandex.unpack_resource_files(theme_dir, True, theme_prefix)
++
++            if theme_files:
++                log.debug('Theme %s filled its dir %s', name, theme_dir)
++            if errors:
++                raise ValidationError('Theme {} requires resource files {} but they were not found'.format(
++                    self.name, ', '.join(errors)
++                ))
++
++        super(YandexTheme, self)._load_theme_config(name)
+--- contrib/python/mkdocs/mkdocs/utils/__init__.py	(index)
++++ contrib/python/mkdocs/mkdocs/utils/__init__.py	(working tree)
+@@ -13,6 +13,7 @@ import re
+ import yaml
+ import fnmatch
+ import posixpath
++import tempfile
+ import functools
+ import importlib_metadata
+ from collections import defaultdict
+@@ -33,6 +34,8 @@ markdown_extensions = [
+     '.md'
+ ]
+ 
++themes_dir_root = tempfile.mkdtemp('mkdocs_themes')
++
+ 
+ def get_yaml_loader(loader=yaml.Loader):
+     """ Wrap PyYaml's loader so we can extend it to suit our needs. """
+@@ -314,7 +317,9 @@ def get_theme_dir(name):
+     """ Return the directory of an installed theme by name. """
+ 
+     theme = get_themes()[name]
+-    return os.path.dirname(os.path.abspath(theme.load().__file__))
++    from . import yandex as yandex_utils
++    theme_prefix = yandex_utils.entry_point_prefix(theme)
++    return os.path.join(themes_dir_root, os.path.normpath(theme_prefix))
+ 
+ 
+ def get_themes():

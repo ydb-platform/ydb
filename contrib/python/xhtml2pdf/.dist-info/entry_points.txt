@@ -1,0 +1,3 @@
+[console_scripts]
+pisa = xhtml2pdf.pisa:command
+xhtml2pdf = xhtml2pdf.pisa:command

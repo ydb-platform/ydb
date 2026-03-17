@@ -1,0 +1,48 @@
+# (C) Copyright 2005- ECMWF.
+
+# See https://healpix.jpl.nasa.gov/pdf/intro.pdf
+
+constant isGridded = true;
+
+# Number of grid points along one side of one of the 12 base resolution pixels (>=1)
+# The number of data points should be = 12 * Nside * Nside
+unsigned[4] Nside : edition_specific,dump;
+alias N = Nside;
+alias numberOfPointsAlongASide = Nside;
+alias geography.Nside = Nside;
+
+# Longitude of the centre line of the first rhomboid
+unsigned[4] longitudeOfFirstGridPoint = 45000000 : edition_specific,dump;
+alias Lo = longitudeOfFirstGridPoint;
+meta geography.longitudeOfFirstGridPointInDegrees
+    scale(longitudeOfFirstGridPoint,one,grib2divider,truncateDegrees) : dump;
+
+# Position of the points. Default = Grid points at centres of shape
+codetable[1] gridPointPosition ('3.8.table',masterDir,localDir) = 4 : edition_specific,dump;
+alias geography.gridPointPosition = gridPointPosition;
+
+# Ordering convention of points. Default = ring
+codetable[1] ordering ('3.12.table',masterDir,localDir) = 0 : edition_specific,dump;
+concept orderingConvention(unknown) {
+ "ring"   = { ordering = 0; }
+ "nested" = { ordering = 1; }
+} : dump;
+alias geography.orderingConvention = orderingConvention;
+
+flags[1] scanningMode 'grib2/tables/[tablesVersion]/3.13.table';
+flagbit iScansNegatively(scanningMode,7) : dump; # WMO bit 1
+flagbit jScansPositively(scanningMode,6) : dump; # WMO bit 2
+transient iScansPositively = !iScansNegatively : constraint, read_only;
+transient jScansNegatively = !jScansPositively : constraint, read_only;
+
+iterator healpix(numberOfPoints,missingValue,values,Nside,orderingConvention);
+nearest healpix(values,radius,Nx,Ny);
+
+meta latLonValues latlonvalues(values);
+alias latitudeLongitudeValues=latLonValues;
+meta latitudes latitudes(values,0);
+meta longitudes longitudes(values,0);
+meta distinctLatitudes latitudes(values,1);
+meta distinctLongitudes longitudes(values,1);
+
+meta gridName sprintf("H%d", N) : no_copy;

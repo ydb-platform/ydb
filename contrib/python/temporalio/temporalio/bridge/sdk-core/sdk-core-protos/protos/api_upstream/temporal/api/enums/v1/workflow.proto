@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package temporal.api.enums.v1;
+
+option go_package = "go.temporal.io/api/enums/v1;enums";
+option java_package = "io.temporal.api.enums.v1";
+option java_multiple_files = true;
+option java_outer_classname = "WorkflowProto";
+option ruby_package = "Temporalio::Api::Enums::V1";
+option csharp_namespace = "Temporalio.Api.Enums.V1";
+
+// Defines whether to allow re-using a workflow id from a previously *closed* workflow.
+// If the request is denied, the server returns a `WorkflowExecutionAlreadyStartedFailure` error.
+//
+// See `WorkflowIdConflictPolicy` for handling workflow id duplication with a *running* workflow.
+enum WorkflowIdReusePolicy {
+    WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED = 0;
+    // Allow starting a workflow execution using the same workflow id.
+    WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE = 1;
+    // Allow starting a workflow execution using the same workflow id, only when the last
+    // execution's final state is one of [terminated, cancelled, timed out, failed].
+    WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY = 2;
+    // Do not permit re-use of the workflow id for this workflow. Future start workflow requests
+    // could potentially change the policy, allowing re-use of the workflow id.
+    WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE = 3;
+    // This option belongs in WorkflowIdConflictPolicy but is here for backwards compatibility.
+    // If specified, it acts like ALLOW_DUPLICATE, but also the WorkflowId*Conflict*Policy on
+    // the request is treated as WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING.
+    // If no running workflow, then the behavior is the same as ALLOW_DUPLICATE.
+    WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING = 4;
+}
+
+// Defines what to do when trying to start a workflow with the same workflow id as a *running* workflow.
+// Note that it is *never* valid to have two actively running instances of the same workflow id.
+//
+// See `WorkflowIdReusePolicy` for handling workflow id duplication with a *closed* workflow.
+enum WorkflowIdConflictPolicy {
+    WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED = 0;
+    // Don't start a new workflow; instead return `WorkflowExecutionAlreadyStartedFailure`.
+    WORKFLOW_ID_CONFLICT_POLICY_FAIL = 1;
+    // Don't start a new workflow; instead return a workflow handle for the running workflow.
+    WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING = 2;
+    // Terminate the running workflow before starting a new one.
+    WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING = 3;
+}
+
+// Defines how child workflows will react to their parent completing
+enum ParentClosePolicy {
+    PARENT_CLOSE_POLICY_UNSPECIFIED = 0;
+    // The child workflow will also terminate
+    PARENT_CLOSE_POLICY_TERMINATE = 1;
+    // The child workflow will do nothing
+    PARENT_CLOSE_POLICY_ABANDON = 2;
+    // Cancellation will be requested of the child workflow
+    PARENT_CLOSE_POLICY_REQUEST_CANCEL = 3;
+}
+
+enum ContinueAsNewInitiator {
+    CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED = 0;
+    // The workflow itself requested to continue as new
+    CONTINUE_AS_NEW_INITIATOR_WORKFLOW = 1;
+    // The workflow continued as new because it is retrying
+    CONTINUE_AS_NEW_INITIATOR_RETRY = 2;
+    // The workflow continued as new because cron has triggered a new execution
+    CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE = 3;
+}
+
+// (-- api-linter: core::0216::synonyms=disabled
+//     aip.dev/not-precedent: There is WorkflowExecutionState already in another package. --)
+enum WorkflowExecutionStatus {
+    WORKFLOW_EXECUTION_STATUS_UNSPECIFIED = 0;
+    // Value 1 is hardcoded in SQL persistence.
+    WORKFLOW_EXECUTION_STATUS_RUNNING = 1;
+    WORKFLOW_EXECUTION_STATUS_COMPLETED = 2;
+    WORKFLOW_EXECUTION_STATUS_FAILED = 3;
+    WORKFLOW_EXECUTION_STATUS_CANCELED = 4;
+    WORKFLOW_EXECUTION_STATUS_TERMINATED = 5;
+    WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW = 6;
+    WORKFLOW_EXECUTION_STATUS_TIMED_OUT = 7;
+}
+
+enum PendingActivityState {
+    PENDING_ACTIVITY_STATE_UNSPECIFIED = 0;
+    PENDING_ACTIVITY_STATE_SCHEDULED = 1;
+    PENDING_ACTIVITY_STATE_STARTED = 2;
+    PENDING_ACTIVITY_STATE_CANCEL_REQUESTED = 3;
+    // PAUSED means activity is paused on the server, and is not running in the worker
+    PENDING_ACTIVITY_STATE_PAUSED = 4;
+    // PAUSE_REQUESTED means activity is currently running on the worker, but paused on the server
+    PENDING_ACTIVITY_STATE_PAUSE_REQUESTED = 5;
+}
+
+enum PendingWorkflowTaskState {
+    PENDING_WORKFLOW_TASK_STATE_UNSPECIFIED = 0;
+    PENDING_WORKFLOW_TASK_STATE_SCHEDULED = 1;
+    PENDING_WORKFLOW_TASK_STATE_STARTED = 2;
+}
+
+enum HistoryEventFilterType {
+    HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED = 0;
+    HISTORY_EVENT_FILTER_TYPE_ALL_EVENT = 1;
+    HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT = 2;
+}
+
+enum RetryState {
+    RETRY_STATE_UNSPECIFIED = 0;
+    RETRY_STATE_IN_PROGRESS = 1;
+    RETRY_STATE_NON_RETRYABLE_FAILURE = 2;
+    RETRY_STATE_TIMEOUT = 3;
+    RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED = 4;
+    RETRY_STATE_RETRY_POLICY_NOT_SET = 5;
+    RETRY_STATE_INTERNAL_SERVER_ERROR = 6;
+    RETRY_STATE_CANCEL_REQUESTED = 7;
+}
+
+enum TimeoutType {
+    TIMEOUT_TYPE_UNSPECIFIED = 0;
+    TIMEOUT_TYPE_START_TO_CLOSE = 1;
+    TIMEOUT_TYPE_SCHEDULE_TO_START = 2;
+    TIMEOUT_TYPE_SCHEDULE_TO_CLOSE = 3;
+    TIMEOUT_TYPE_HEARTBEAT = 4;
+}
+
+// Versioning Behavior specifies if and how a workflow execution moves between Worker Deployment
+// Versions. The Versioning Behavior of a workflow execution is typically specified by the worker
+// who completes the first task of the execution, but is also overridable manually for new and
+// existing workflows (see VersioningOverride).
+// Experimental. Worker Deployments are experimental and might significantly change in the future.
+enum VersioningBehavior {
+    // Workflow execution does not have a Versioning Behavior and is called Unversioned. This is the
+    // legacy behavior. An Unversioned workflow's task can go to any Unversioned worker (see
+    // `WorkerVersioningMode`.)
+    // User needs to use Patching to keep the new code compatible with prior versions when dealing
+    // with Unversioned workflows.
+    VERSIONING_BEHAVIOR_UNSPECIFIED = 0;
+    // Workflow will start on the Current Deployment Version of its Task Queue, and then
+    // will be pinned to that same Deployment Version until completion (the Version that
+    // this Workflow is pinned to is specified in `versioning_info.version`).
+    // This behavior eliminates most of compatibility concerns users face when changing their code.
+    // Patching is not needed when pinned workflows code change.
+    // Can be overridden explicitly via `UpdateWorkflowExecutionOptions` API to move the
+    // execution to another Deployment Version.
+    // Activities of `PINNED` workflows are sent to the same Deployment Version. Exception to this
+    // would be when the activity Task Queue workers are not present in the workflow's Deployment
+    // Version, in which case the activity will be sent to the Current Deployment Version of its own
+    // task queue.
+    VERSIONING_BEHAVIOR_PINNED = 1;
+    // Workflow will automatically move to the Current Deployment Version of its Task Queue when the
+    // next workflow task is dispatched.
+    // AutoUpgrade behavior is suitable for long-running workflows as it allows them to move to the
+    // latest Deployment Version, but the user still needs to use Patching to keep the new code
+    // compatible with prior versions for changed workflow types.
+    // Activities of `AUTO_UPGRADE` workflows are sent to the Deployment Version of the workflow
+    // execution (as specified in versioning_info.version based on the last completed
+    // workflow task). Exception to this would be when the activity Task Queue workers are not
+    // present in the workflow's Deployment Version, in which case, the activity will be sent to a
+    // different Deployment Version according to the Current Deployment Version of its own task
+    // queue.
+    // Workflows stuck on a backlogged activity will still auto-upgrade if the Current Deployment
+    // Version of their Task Queue changes, without having to wait for the backlogged activity to
+    // complete on the old Version.
+    VERSIONING_BEHAVIOR_AUTO_UPGRADE = 2;
+}

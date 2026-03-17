@@ -1,0 +1,20 @@
+--- a/astroid/nodes/scoped_nodes/scoped_nodes.py	(index)
++++ b/astroid/nodes/scoped_nodes/scoped_nodes.py	(working tree)
+@@ -2102,7 +2102,7 @@ class ClassDef(  # pylint: disable=too-many-instance-attributes
+                     bases.append(
+                         node_classes.EvaluatedObject(original=base, value=inferred)
+                     )
+-            result.bases = bases
++            result.bases = bases or class_bases.itered()
+         else:
+             # There is currently no AST node that can represent an 'unknown'
+             # node (Uninferable is not an AST node), therefore we simply return Uninferable here
+--- a/astroid/__init__.py	(index)
++++ b/astroid/__init__.py	(working tree)
+@@ -185,3 +185,6 @@ if (
+     )
+     warnings.warn(msg, DeprecationWarning, stacklevel=2)
+     return val
++
++from astroid import arcadia
++arcadia.patch_all()

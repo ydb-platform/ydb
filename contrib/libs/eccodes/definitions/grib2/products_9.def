@@ -1,0 +1,9 @@
+# (C) Copyright 2005- ECMWF.
+
+# Uncertainties in ensembles of regional re-analysis project test (UERRA)
+if(localUsePresent == 0){
+constant marsExpver = 'test';
+} else {
+constant marsExpver = experimentVersionNumber;
+}
+include "grib2/products_uerra.def"

@@ -1,0 +1,5 @@
+# Code table 5.26 - packing mode for axes
+0 0 Spectral coefficients for axes are packed
+1 1 Spectral coefficients for axes included in the unpacked subset
+# 2-254 Reserved
+255 255 Missing

@@ -1,0 +1,16 @@
+--- contrib/python/unicodecsv/py3/unicodecsv/test.py	(index)
++++ contrib/python/unicodecsv/py3/unicodecsv/test.py	(working tree)
+@@ -247,9 +247,10 @@ class Test_Csv(unittest.TestCase):
+         self._read_test([b''], [[]])
+         self.assertRaises(csv.Error, self._read_test,
+                           [b'"ab"c'], None, strict=1)
+-        # cannot handle null bytes for the moment
+-        self.assertRaises(csv.Error, self._read_test,
+-                          [b'ab\0c'], None, strict=1)
++        if sys.version_info < (3, 11):
++            # cannot handle null bytes for the moment
++            self.assertRaises(csv.Error, self._read_test,
++                              [b'ab\0c'], None, strict=1)
+         self._read_test([b'"ab"c'], [['abc']], doublequote=0)
+ 
+     def test_read_eol(self):

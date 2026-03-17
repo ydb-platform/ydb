@@ -1,0 +1,47 @@
+<?xml version='1.0'?>
+<schema xmlns="http://www.w3.org/2001/XMLSchema"
+        targetNamespace="http://www.w3.org/2001/XMLSchema-hasFacetAndProperty"
+        xmlns:hfp="http://www.w3.org/2001/XMLSchema-hasFacetAndProperty">
+ <!-- A minimal schema that not requires the loading of xhtml namespace -->
+
+ <element name="hasFacet">
+  <complexType>
+   <attribute name="name" use="required">
+    <simpleType>
+     <restriction base="NMTOKEN">
+      <enumeration value="length"/>
+      <enumeration value="minLength"/>
+      <enumeration value="maxLength"/>
+      <enumeration value="pattern"/>
+      <enumeration value="enumeration"/>
+      <enumeration value="maxInclusive"/>
+      <enumeration value="maxExclusive"/>
+      <enumeration value="minInclusive"/>
+      <enumeration value="minExclusive"/>
+      <enumeration value="totalDigits"/>
+      <enumeration value="fractionDigits"/>
+      <enumeration value="whiteSpace"/>
+      <enumeration value="maxScale"/>
+      <enumeration value="minScale"/>
+     </restriction>
+    </simpleType>
+   </attribute>
+  </complexType>
+ </element>
+
+ <element name="hasProperty">
+  <complexType>
+   <attribute name="name" use="required">
+    <simpleType>
+     <restriction base="NMTOKEN">
+      <enumeration value="ordered"/>
+      <enumeration value="bounded"/>
+      <enumeration value="cardinality"/>
+      <enumeration value="numeric"/>
+     </restriction>
+    </simpleType>
+   </attribute>
+   <attribute name="value" type="normalizedString" use="required"/>
+  </complexType>
+ </element>
+</schema>

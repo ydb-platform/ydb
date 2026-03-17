@@ -1,0 +1,342 @@
+{
+    "_attachments": {
+        "ff930385d83e83ca24731a6d1515fa1f6152b305.xml": {
+            "content_type": "application/xml",
+            "digest": "md5-Tm/ldqpYk8uCJgKnJWoO4g==",
+            "length": 1126,
+            "revpos": 10,
+            "stub": true
+        }
+    },
+    "_id": "f2915ef4a890682962ae41f3f0bcc765",
+    "_rev": "20-604f92e665920f4db6bcacc4c6c44bac",
+    "admin_password": null,
+    "admin_password_charset": "n",
+    "application_version": "2.0",
+    "attribution_notes": null,
+    "build_comment": null,
+    "build_langs": [
+        "en"
+    ],
+    "build_signed": true,
+    "build_spec": {
+        "build_number": null,
+        "doc_type": "BuildSpec",
+        "latest": true,
+        "version": "2.3.0"
+    },
+    "built_on": null,
+    "built_with": {
+        "build_number": null,
+        "datetime": null,
+        "doc_type": "BuildRecord",
+        "latest": null,
+        "signed": true,
+        "version": null
+    },
+    "cached_properties": {},
+    "case_sharing": false,
+    "cloudcare_enabled": false,
+    "comment_from": null,
+    "copy_history": [],
+    "copy_of": null,
+    "deployment_date": null,
+    "description": null,
+    "doc_type": "Application",
+    "domain": "droberts",
+    "force_http": false,
+    "include_media_resources": false,
+    "is_released": false,
+    "langs": [
+        "en"
+    ],
+    "modules": [
+        {
+            "case_label": {
+                "en": "Cases"
+            },
+            "case_list": {
+                "doc_type": "CaseList",
+                "label": {
+                    "en": "x"
+                },
+                "show": false
+            },
+            "case_type": "x",
+            "details": [
+                {
+                    "columns": [],
+                    "doc_type": "Detail",
+                    "type": "case_short"
+                },
+                {
+                    "columns": [],
+                    "doc_type": "Detail",
+                    "type": "case_long"
+                },
+                {
+                    "columns": [],
+                    "doc_type": "Detail",
+                    "type": "ref_short"
+                },
+                {
+                    "columns": [],
+                    "doc_type": "Detail",
+                    "type": "ref_long"
+                }
+            ],
+            "doc_type": "Module",
+            "forms": [
+                {
+                    "actions": {
+                        "case_preload": {
+                            "condition": {
+                                "answer": null,
+                                "question": null,
+                                "type": "never"
+                            },
+                            "preload": {}
+                        },
+                        "close_case": {
+                            "condition": {
+                                "answer": null,
+                                "doc_type": "FormActionCondition",
+                                "question": null,
+                                "type": "never"
+                            }
+                        },
+                        "close_referral": {
+                            "condition": {
+                                "answer": null,
+                                "doc_type": "FormActionCondition",
+                                "question": null,
+                                "type": "never"
+                            },
+                            "doc_type": "FormAction"
+                        },
+                        "open_case": {
+                            "condition": {
+                                "answer": null,
+                                "doc_type": "FormActionCondition",
+                                "question": null,
+                                "type": "never"
+                            },
+                            "external_id": null,
+                            "name_path": null
+                        },
+                        "open_referral": {
+                            "condition": {
+                                "answer": null,
+                                "doc_type": "FormActionCondition",
+                                "question": null,
+                                "type": "never"
+                            },
+                            "doc_type": "OpenReferralAction",
+                            "followup_date": null,
+                            "name_path": null
+                        },
+                        "referral_preload": {
+                            "condition": {
+                                "answer": null,
+                                "doc_type": "FormActionCondition",
+                                "question": null,
+                                "type": "never"
+                            },
+                            "doc_type": "PreloadAction",
+                            "preload": {}
+                        },
+                        "subcases": [],
+                        "update_case": {
+                            "condition": {
+                                "answer": null,
+                                "question": null,
+                                "type": "never"
+                            },
+                            "update": {
+                                "question": "/data/question"
+                            }
+                        },
+                        "update_referral": {
+                            "condition": {
+                                "answer": null,
+                                "doc_type": "FormActionCondition",
+                                "question": null,
+                                "type": "never"
+                            },
+                            "doc_type": "UpdateReferralAction",
+                            "followup_date": null
+                        }
+                    },
+                    "doc_type": "Form",
+                    "form_filter": "",
+                    "media_audio": null,
+                    "media_image": null,
+                    "name": {
+                        "en": "Form"
+                    },
+                    "requires": "none",
+                    "show_count": false,
+                    "unique_id": "ff930385d83e83ca24731a6d1515fa1f6152b305",
+                    "version": null,
+                    "xmlns": "http://openrosa.org/formdesigner/1D49DAA1-C2D6-4CFB-A005-CE2151CD632A"
+                }
+            ],
+            "media_audio": null,
+            "media_image": null,
+            "name": {
+                "en": "Module"
+            },
+            "put_in_root": false,
+            "referral_label": {
+                "en": "Referrals"
+            },
+            "referral_list": {
+                "doc_type": "CaseList",
+                "label": {},
+                "show": false
+            },
+            "task_list": {
+                "doc_type": "CaseList",
+                "label": {},
+                "show": false
+            }
+        }
+    ],
+    "multimedia_map": {},
+    "name": "Minimum Viable Application",
+    "phone_model": null,
+    "platform": "nokia/s40",
+    "profile": {
+        "features": {
+            "sense": "false",
+            "users": "true"
+        },
+        "properties": {
+            "ViewStyle": "v_chatterbox",
+            "cc-autoup-freq": "freq-never",
+            "cc-content-valid": "no",
+            "cc-entry-mode": "cc-entry-quick",
+            "cc-review-days": "7",
+            "cc-send-procedure": "cc-send-http",
+            "cc-send-unsent": "cc-su-auto",
+            "cc-user-mode": "cc-u-normal",
+            "extra_key_action": "audio",
+            "log_prop_daily": "log_never",
+            "log_prop_weekly": "log_short",
+            "logenabled": "Enabled",
+            "loose_media": "no",
+            "password_format": "n",
+            "purge-freq": "0",
+            "restore-tolerance": "loose",
+            "server-tether": "push-only",
+            "unsent-number-limit": "5",
+            "user_reg_server": "required"
+        }
+    },
+    "recipients": "",
+    "short_odk_url": null,
+    "short_url": null,
+    "show_user_registration": false,
+    "success_message": {},
+    "text_input": "roman",
+    "translations": {},
+    "use_custom_suite": false,
+    "user_registration": {
+        "actions": {
+            "case_preload": {
+                "condition": {
+                    "answer": null,
+                    "doc_type": "FormActionCondition",
+                    "question": null,
+                    "type": "never"
+                },
+                "doc_type": "PreloadAction",
+                "preload": {}
+            },
+            "close_case": {
+                "condition": {
+                    "answer": null,
+                    "doc_type": "FormActionCondition",
+                    "question": null,
+                    "type": "never"
+                },
+                "doc_type": "FormAction"
+            },
+            "close_referral": {
+                "condition": {
+                    "answer": null,
+                    "doc_type": "FormActionCondition",
+                    "question": null,
+                    "type": "never"
+                },
+                "doc_type": "FormAction"
+            },
+            "doc_type": "FormActions",
+            "open_case": {
+                "condition": {
+                    "answer": null,
+                    "doc_type": "FormActionCondition",
+                    "question": null,
+                    "type": "never"
+                },
+                "doc_type": "OpenCaseAction",
+                "external_id": null,
+                "name_path": null
+            },
+            "open_referral": {
+                "condition": {
+                    "answer": null,
+                    "doc_type": "FormActionCondition",
+                    "question": null,
+                    "type": "never"
+                },
+                "doc_type": "OpenReferralAction",
+                "followup_date": null,
+                "name_path": null
+            },
+            "referral_preload": {
+                "condition": {
+                    "answer": null,
+                    "doc_type": "FormActionCondition",
+                    "question": null,
+                    "type": "never"
+                },
+                "doc_type": "PreloadAction",
+                "preload": {}
+            },
+            "subcases": [],
+            "update_case": {
+                "condition": {
+                    "answer": null,
+                    "doc_type": "FormActionCondition",
+                    "question": null,
+                    "type": "never"
+                },
+                "doc_type": "UpdateCaseAction",
+                "update": {}
+            },
+            "update_referral": {
+                "condition": {
+                    "answer": null,
+                    "doc_type": "FormActionCondition",
+                    "question": null,
+                    "type": "never"
+                },
+                "doc_type": "UpdateReferralAction",
+                "followup_date": null
+            }
+        },
+        "data_paths": {},
+        "doc_type": "UserRegistrationForm",
+        "name": {},
+        "password_path": "password",
+        "requires": "none",
+        "show_count": false,
+        "unique_id": null,
+        "username_path": "username",
+        "version": null,
+        "xmlns": null
+    },
+    "user_type": null,
+    "version": 17
+}

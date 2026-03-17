@@ -1,0 +1,11 @@
+--- contrib/deprecated/python/ujson/py3/python/objToJSON.c	(673237a56b8ff6400c6bdbe44384219ceb32d03e)
++++ contrib/deprecated/python/ujson/py3/python/objToJSON.c	(working tree)
+@@ -727,7 +727,7 @@ void Object_beginTypeContext (JSOBJ _obj, JSONTypeContext *tc, JSONObjectEncoder
+     return;
+   }
+   else
+-  if (PyString_Check(obj) && !PyObject_HasAttrString(obj, "__json__"))
++  if (PyString_Check(obj))
+   {
+     PRINTMARK();
+     pc->PyTypeToJSON = PyStringToUTF8; tc->type = JT_UTF8;

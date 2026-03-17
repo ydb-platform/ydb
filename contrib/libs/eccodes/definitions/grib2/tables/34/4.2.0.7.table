@@ -1,0 +1,25 @@
+# Product discipline 0 - Meteorological products, parameter category 7: thermodynamic stability indices
+0 0 Parcel lifted index (to 500 hPa) (K)
+1 1 Best lifted index (to 500 hPa) (K)
+2 2 K index (K)
+3 3 KO index (K)
+4 4 Total totals index (K)
+5 5 Sweat index (Numeric)
+6 6 Convective available potential energy (J/kg)
+7 7 Convective inhibition (J/kg)
+8 8 Storm relative helicity (J/kg)
+9 9 Energy helicity index (Numeric)
+10 10 Surface lifted index (K)
+11 11 Best (4-layer) lifted index (K)
+12 12 Richardson number (Numeric)
+13 13 Showalter index (K)
+14 14 Reserved
+15 15 Updraught helicity (m2 s-2)
+16 16 Bulk Richardson number (Numeric)
+17 17 Gradient Richardson number (Numeric)
+18 18 Flux Richardson number (Numeric)
+19 19 Convective available potential energy - shear (m2 s-2)
+20 20 Thunderstorm intensity index (Code table 4.246)
+# 21-191 Reserved
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,13 @@
+# Local table for type of analysis of category
+#
+# Notes:
+# (1) The data values of the GRIB message are the category levels itselves.
+# (2) Level and index of a category are defined by template.
+#
+0 0 None (see Note 1)
+1 1 Probability of occurrence (in %) of a specified category (specified by level, see Note 2)
+2 2 Probability of occurrence (in %) of a specified category (specified by index, see Note 2)
+3 3 Probability of occurrence (in %) of any category with level >= level of a specified category (specified by level, see Note 2)
+4 4 Probability of occurrence (in %) of any category with levle >= level of a specified category (specified by index, see Note 2)
+255 255 Conforms to Missing
+65535 65535 Missing

@@ -1,0 +1,119 @@
+--- contrib/python/APScheduler/py3/tests/test_job.py	(index)
++++ contrib/python/APScheduler/py3/tests/test_job.py	(working tree)
+@@ -124,9 +124,9 @@ def test_private_modify_bad_func(job):
+ 
+ def test_private_modify_func_ref(job):
+     """Tests that the target callable can be given as a textual reference."""
+-    job._modify(func="tests.test_job:dummyfunc")
++    job._modify(func="__tests__.test_job:dummyfunc")
+     assert job.func is dummyfunc
+-    assert job.func_ref == "tests.test_job:dummyfunc"
++    assert job.func_ref == "__tests__.test_job:dummyfunc"
+ 
+ 
+ def test_private_modify_unreachable_func(job):
+@@ -207,1 +207,1 @@ def test_private_modify_bad_argument(job):
+-        func="tests.test_job:dummyfunc",
++        func="__tests__.test_job:dummyfunc",
+@@ -217,1 +217,1 @@ def test_setstate(job, timezone):
+-        func="tests.test_job:dummyfunc",
++        func="__tests__.test_job:dummyfunc",
+@@ -227,1 +227,1 @@ def test_setstate(job, timezone):
+-    assert job.func_ref == "tests.test_job:dummyfunc"
++    assert job.func_ref == "__tests__.test_job:dummyfunc"
+--- contrib/python/APScheduler/py3/tests/test_jobstores.py	(index)
++++ contrib/python/APScheduler/py3/tests/test_jobstores.py	(working tree)
+@@ -62,6 +62,9 @@ def rethinkdbjobstore():
+
+ @pytest.fixture
+ def mongodbjobstore():
++    # Yandex specific
++    pytest.skip("Using mongo skipped in arcadia tests")
++    # End yandex specific
+     mongodb = pytest.importorskip("apscheduler.jobstores.mongodb")
+     store = mongodb.MongoDBJobStore(database="apscheduler_unittest")
+     store.start(None, "mongodb")
+@@ -72,6 +75,9 @@ def mongodbjobstore():
+
+ @pytest.fixture
+ def redisjobstore():
++    # Yandex specific
++    pytest.skip("Using redis skipped in arcadia tests")
++    # End yandex specific
+     redis = pytest.importorskip("apscheduler.jobstores.redis")
+     store = redis.RedisJobStore()
+     store.start(None, "redis")
+@@ -82,6 +82,9 @@ def redisjobstore():
+
+ @pytest.fixture
+ def zookeeperjobstore():
++    # Yandex specific
++    pytest.skip("Using zookeeper skipped in arcadia tests")
++    # End yandex specific
+     zookeeper = pytest.importorskip("apscheduler.jobstores.zookeeper")
+     store = zookeeper.ZooKeeperJobStore(path="/apscheduler_unittest")
+     store.start(None, "zookeeper")
+@@ -133,1 +136,1 @@ def test_add_callable_class_method_job(jobstore, create_add_job):
+-        "tests.test_jobstores:dummy_instance.dummy_method",
++        "__tests__.test_jobstores:dummy_instance.dummy_method",
+@@ -140,1 +140,1 @@ def test_add_callable_class_method_job(jobstore, create_add_job):
+-        "tests.test_jobstores:DummyClass.dummy_classmethod",
++        "__tests__.test_jobstores:DummyClass.dummy_classmethod",
+@@ -363,6 +366,7 @@ def test_mongodb_client_ref():
+
+ def test_zookeeper_client_ref():
+     global zookeeper_client
++    pytest.skip("Using zookeeper skipped in arcadia tests")
+     zookeeper = pytest.importorskip("apscheduler.jobstores.zookeeper")
+     zookeeper_client = zookeeper.KazooClient()
+     try:
+@@ -378,6 +382,7 @@ def test_zookeeper_client_ref():
+
+ def test_zookeeper_client_keep_open():
+     global zookeeper_client
++    pytest.skip("Using zookeeper skipped in arcadia tests")
+     zookeeper = pytest.importorskip("apscheduler.jobstores.zookeeper")
+     zookeeper_client = zookeeper.KazooClient()
+     try:
+--- contrib/python/APScheduler/py3/tests/test_schedulers.py	(index)
++++ contrib/python/APScheduler/py3/tests/test_schedulers.py	(working tree)
+@@ -811,6 +811,7 @@ class TestProcessJobs(object):
+ 
+         """
+         caplog.set_level(logging.ERROR)
++        caplog.clear()
+         scheduler.remove_executor("default")
+         assert scheduler._process_jobs() is None
+         jobstore.remove_job.assert_called_once_with(999)
+@@ -822,6 +823,7 @@ class TestProcessJobs(object):
+     def test_max_instances_reached(self, scheduler, job, jobstore, executor, caplog):
+         """Tests that a warning is logged when the maximum instances of a job is reached."""
+         caplog.set_level(logging.WARNING)
++        caplog.clear()
+         executor.submit_job = MagicMock(side_effect=MaxInstancesReachedError(job))
+ 
+         assert scheduler._process_jobs() is None
+@@ -832,6 +834,7 @@ class TestProcessJobs(object):
+     def test_executor_error(self, scheduler, jobstore, executor, caplog):
+         """Tests that if any exception is raised in executor.submit(), it is logged."""
+         caplog.set_level(logging.ERROR)
++        caplog.clear()
+         executor.submit_job = MagicMock(side_effect=Exception("test message"))
+ 
+         assert scheduler._process_jobs() is None
+@@ -1254 +1254 @@ class TestGeventScheduler(SchedulerImplementationTestBase):
+-            "apscheduler.schedulers.gevent", exc_type=ImportError
++            "apscheduler.schedulers.gevent"
+--- contrib/python/APScheduler/py3/tests/test_util.py	(index)
++++ contrib/python/APScheduler/py3/tests/test_util.py	(working tree)
+@@ -217,2 +217,2 @@ class TestObjToRef(object):
+-            (DummyClass.meth, "tests.test_util:DummyClass.meth"),
+-            (DummyClass.classmeth, "tests.test_util:DummyClass.classmeth"),
++            (DummyClass.meth, "__tests__.test_util:DummyClass.meth"),
++            (DummyClass.classmeth, "__tests__.test_util:DummyClass.classmeth"),
+@@ -220,1 +220,1 @@ class TestObjToRef(object):
+-                "tests.test_util:DummyClass.InnerDummyClass.innerclassmeth",
++                "__tests__.test_util:DummyClass.InnerDummyClass.innerclassmeth",
+@@ -225,1 +225,1 @@ class TestObjToRef(object):
+-                "tests.test_util:DummyClass.staticmeth",
++                "__tests__.test_util:DummyClass.staticmeth",

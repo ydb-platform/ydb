@@ -1,0 +1,29 @@
+Without this patch geos will segfault due to precision loss in 
+geos::algorithm::RobustDeterminant::signOfDet2x2 
+for collinear vectors
+
+--- a/src/geomgraph/DirectedEdgeStar.cpp    (index)
++++ b/src/geomgraph/DirectedEdgeStar.cpp    (working tree)
+@@ -436,6 +436,22 @@ DirectedEdgeStar::computeDepths(DirectedEdge *de)
+     assert(de);
+ 
+     EdgeEndStar::iterator edgeIterator = find(de);
++    //The LT operator used for building std::set
++    //uses geos::algorithm::RobustDeterminant::signOfDet2x2  to compute and compare
++    //direction of two edges. Which becomes unstable and looses commutativity
++    //on almost collinear edges. So set becomes broken in terms of less
++    //and find(de) fails, when de is taken from set itself
++    //but finding element is still possible using normal iteration.
++    if (edgeIterator == end()) {
++        for (edgeIterator = begin(); edgeIterator != end(); ++edgeIterator) {
++            if ((*edgeIterator)->compareTo(de) == 0) {
++                break;
++            }
++        }
++        if (edgeIterator == end()) {
++            throw util::TopologyException("Precision error comparing edges at ", de->getCoordinate());
++        }
++    }
+ 
+     int startDepth = de->getDepth(Position::LEFT);
+     int targetLastDepth = de->getDepth(Position::RIGHT);

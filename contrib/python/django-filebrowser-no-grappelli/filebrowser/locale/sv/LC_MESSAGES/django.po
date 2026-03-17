@@ -1,0 +1,451 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# 
+# Translators:
+# Jonathan Lindén, 2013
+msgid ""
+msgstr ""
+"Project-Id-Version: django-filebrowser\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2013-11-30 18:48+0100\n"
+"PO-Revision-Date: 2013-12-06 08:13+0000\n"
+"Last-Translator: Patrick Kranzlmueller <patrick@vonautomatisch.at>\n"
+"Language-Team: Swedish (http://www.transifex.com/projects/p/django-filebrowser/language/sv/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: sv\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: actions.py:53
+#, python-format
+msgid "Action applied successfully to '%s'"
+msgstr "Åtgärden utfördes på '%s'"
+
+#: actions.py:59 forms.py:20
+msgid "Flip horizontal"
+msgstr "Vänd horisontellt"
+
+#: actions.py:66 forms.py:21
+msgid "Flip vertical"
+msgstr "Vänd vertikalt"
+
+#: actions.py:73 forms.py:22
+msgid "Rotate 90° CW"
+msgstr "Rotera 90° medsols"
+
+#: actions.py:80 forms.py:23
+msgid "Rotate 90° CCW"
+msgstr "Rotera 90° motsols"
+
+#: actions.py:87 forms.py:24
+msgid "Rotate 180°"
+msgstr "Rotera 180°"
+
+#: decorators.py:39
+msgid ""
+"Error finding Upload-Folder (site.storage.location + site.directory). Maybe "
+"it does not exist?"
+msgstr "Kunde inte hitta uppladdningsmappen (site.storage.location + site.directory). Den kanske inte existerar?"
+
+#: decorators.py:41
+msgid "The requested Folder does not exist."
+msgstr "Den valda mappen existerar inte."
+
+#: decorators.py:55
+msgid "The requested File does not exist."
+msgstr "Den valda filen existerar inte."
+
+#: decorators.py:61
+msgid "You do not have permission to access this file!"
+msgstr "Du har inte behörighet att komma åt denna filen!"
+
+#: fields.py:63
+#, python-format
+msgid "Extension %(ext)s is not allowed. Only %(allowed)s is allowed."
+msgstr "Filändelsen %(ext)s är inte tillåten. Endast %(allowed)s är tillåtna."
+
+#: forms.py:57 forms.py:82
+msgid "Name"
+msgstr "Namn"
+
+#: forms.py:57 forms.py:69 forms.py:82 forms.py:101
+msgid "Only letters, numbers, underscores, spaces and hyphens are allowed."
+msgstr "Endast bokstäver, understreck, mellanslag och bindestreck är tillåtna."
+
+#: forms.py:72 forms.py:104
+msgid "The Folder already exists."
+msgstr "Mappen existerar redan."
+
+#: forms.py:81
+msgid "Actions"
+msgstr "Åtgärder"
+
+#: forms.py:106
+msgid "The File already exists."
+msgstr "Filen existerar redan."
+
+#: settings.py:110 templates/filebrowser/include/tableheader.html:21
+#: templates/filebrowser/include/tableheader.html:22
+msgid "Folder"
+msgstr "Mapp"
+
+#: settings.py:111
+msgid "Image"
+msgstr "Bild"
+
+#: settings.py:112
+msgid "Video"
+msgstr "Video"
+
+#: settings.py:113
+msgid "Document"
+msgstr "Dokument"
+
+#: settings.py:114
+msgid "Audio"
+msgstr "Ljud"
+
+#: sites.py:348 templates/filebrowser/include/breadcrumbs.html:9
+#: templates/filebrowser/include/breadcrumbs.html:11
+msgid "FileBrowser"
+msgstr "FileBrowser"
+
+#: sites.py:369
+#, python-format
+msgid "The Folder %s was successfully created."
+msgstr "Mappen %s skapades."
+
+#: sites.py:374
+msgid "Permission denied."
+msgstr "Behörigheter saknas."
+
+#: sites.py:376
+msgid "Error creating folder."
+msgstr "Något blev fel när mappen skapades."
+
+#: sites.py:383 sites.py:386 templates/filebrowser/index.html:80
+msgid "New Folder"
+msgstr "Ny mapp"
+
+#: sites.py:396
+msgid "Select files to upload"
+msgstr "Välj filer att ladda upp"
+
+#: sites.py:399 templates/filebrowser/index.html:81
+msgid "Upload"
+msgstr "Ladda upp"
+
+#: sites.py:429 sites.py:432
+msgid "Confirm delete"
+msgstr "Bekräfta radering"
+
+#: sites.py:448
+#, python-format
+msgid "Successfully deleted %s"
+msgstr "%s raderades"
+
+#: sites.py:485
+msgid "Renaming was successful."
+msgstr "Namnändringen lyckades."
+
+#: sites.py:494
+msgid "Error."
+msgstr "Fel."
+
+#: widgets.py:17 widgets.py:50
+msgid "Currently"
+msgstr "Nuvarande"
+
+#: widgets.py:18 widgets.py:51
+#: templates/filebrowser/include/filelisting.html:131
+msgid "Change"
+msgstr "Ändra"
+
+#: widgets.py:19 widgets.py:52
+msgid "Clear"
+msgstr "Rensa"
+
+#: templates/filebrowser/createdir.html:23
+#: templates/filebrowser/detail.html:48
+msgid "Please correct the following errors."
+msgstr "Var vänlig korrigera följande fel."
+
+#: templates/filebrowser/createdir.html:36
+#: templates/filebrowser/upload.html:147
+msgid ""
+"The Name will be normalized by converting or stripping all non-standard "
+"characters."
+msgstr "Namnet kommer normaliseras genom att konvertera eller ta bort alla otillåtna tecken."
+
+#: templates/filebrowser/createdir.html:39
+#: templates/filebrowser/upload.html:150
+msgid ""
+"The Name will be converted to lowercase. Spaces will be replaced with "
+"underscores."
+msgstr "Namnet kommer konverteras till gemener. Mellanslag ersätts med understreck."
+
+#: templates/filebrowser/createdir.html:50
+msgid "Submit"
+msgstr "Skicka"
+
+#: templates/filebrowser/custom_field.html:26
+#: templates/filebrowser/widgets/clearablefileinput.html:11
+#: templates/filebrowser/widgets/fileinput.html:11
+msgid "File not found"
+msgstr "Filen hittades inte"
+
+#: templates/filebrowser/delete_confirm.html:30
+#, python-format
+msgid ""
+"Are you sure you want to delete \"%(escaped_object)s\"? All of the following"
+" items will be deleted:"
+msgstr "Är du säker att du vill radera \"%(escaped_object)s\"? Alla dessa objekt kommer raderas:"
+
+#: templates/filebrowser/delete_confirm.html:43
+#, python-format
+msgid "... and %(escaped_object)s more Files."
+msgstr "... och ytterligare %(escaped_object)s filer."
+
+#: templates/filebrowser/delete_confirm.html:50
+#: templates/filebrowser/upload.html:51
+msgid "Cancel"
+msgstr "Avbryt"
+
+#: templates/filebrowser/delete_confirm.html:51
+msgid "Yes, I'm sure"
+msgstr "Ja, jag är säker"
+
+#: templates/filebrowser/detail.html:63
+msgid "Edit"
+msgstr "Redigera"
+
+#: templates/filebrowser/detail.html:78
+msgid "Folder Information"
+msgstr "Mappinformation"
+
+#: templates/filebrowser/detail.html:81 templates/filebrowser/detail.html:116
+#: templates/filebrowser/include/tableheader.html:28
+#: templates/filebrowser/include/tableheader.html:29
+msgid "Date"
+msgstr "Datum"
+
+#: templates/filebrowser/detail.html:93
+msgid "File Information"
+msgstr "Filinformation"
+
+#: templates/filebrowser/detail.html:96
+msgid "URL"
+msgstr "URL"
+
+#: templates/filebrowser/detail.html:106
+msgid "Filesize"
+msgstr "Filstorlek"
+
+#: templates/filebrowser/detail.html:127
+#: templates/filebrowser/include/tableheader.html:25
+#: templates/filebrowser/include/tableheader.html:26
+msgid "Size"
+msgstr "Storlek"
+
+#: templates/filebrowser/detail.html:140
+msgid "Image Versions"
+msgstr "Bildversioner"
+
+#: templates/filebrowser/detail.html:144
+#: templates/filebrowser/include/tableheader.html:15
+msgid "Thumbnail"
+msgstr "Miniatyrbild"
+
+#: templates/filebrowser/detail.html:146
+#: templates/filebrowser/include/filelisting.html:101
+msgid "View Image"
+msgstr "Visa bild"
+
+#: templates/filebrowser/detail.html:170
+msgid "Delete"
+msgstr "Radera"
+
+#: templates/filebrowser/detail.html:171
+msgid "Save"
+msgstr "Spara"
+
+#: templates/filebrowser/detail.html:172
+msgid "Save and continue editing"
+msgstr "Spara och fortsätt redigera"
+
+#: templates/filebrowser/upload.html:42
+msgid "Drop files here to upload"
+msgstr "Välj filer att ladda upp"
+
+#: templates/filebrowser/upload.html:43
+msgid "Upload a file"
+msgstr "Ladda upp"
+
+#: templates/filebrowser/upload.html:52
+msgid "Failed"
+msgstr "Misslyckades"
+
+#: templates/filebrowser/upload.html:66
+msgid "{file} has invalid extension. Only {extensions} are allowed."
+msgstr "{file} har en ogiltig filändelse. Endast {extensions} är tillåtna."
+
+#: templates/filebrowser/upload.html:67
+msgid "{file} is too large, maximum file size is {sizeLimit}."
+msgstr "{file} är för stor, maximal filstorlek är {sizeLimit}."
+
+#: templates/filebrowser/upload.html:68
+msgid "{file} is too small, minimum file size is {minSizeLimit}."
+msgstr "{file} är för liten, minsta filstorlek är {minSizeLimit}."
+
+#: templates/filebrowser/upload.html:69
+msgid "{file} is empty, please select files again without it."
+msgstr "{file} är tom, var vänlig välj filer igen utan den."
+
+#: templates/filebrowser/upload.html:70
+msgid ""
+"The files are being uploaded, if you leave now the upload will be cancelled."
+msgstr "Filerna laddas upp just nu, om du lämnar sidan kommer uppladdningen avbrytas."
+
+#: templates/filebrowser/upload.html:115
+msgid "Please enable Javascript to upload files."
+msgstr "Aktivera JavaScript för att ladda upp filer."
+
+#: templates/filebrowser/upload.html:120
+msgid "Help"
+msgstr "Hjälp"
+
+#: templates/filebrowser/upload.html:123
+msgid "Allowed"
+msgstr "Tillåten"
+
+#: templates/filebrowser/upload.html:137
+msgid "Max. Filesize"
+msgstr "Maximal filstorlek"
+
+#: templates/filebrowser/upload.html:144
+#: templates/filebrowser/include/tableheader.html:17
+#: templates/filebrowser/include/tableheader.html:18
+msgid "Filename"
+msgstr "Filnamn"
+
+#: templates/filebrowser/include/breadcrumbs.html:6
+msgid "Home"
+msgstr "Hem"
+
+#: templates/filebrowser/include/filelisting.html:19
+#: templates/filebrowser/include/filelisting.html:45
+#: templates/filebrowser/include/filelisting.html:70
+msgid "Select"
+msgstr "Välj"
+
+#: templates/filebrowser/include/filelisting.html:23
+#: templates/filebrowser/include/filelisting.html:49
+#: templates/filebrowser/include/filelisting.html:74
+msgid "Versions"
+msgstr "Versioner"
+
+#: templates/filebrowser/include/filter.html:5
+msgid "Filter"
+msgstr "Filtrera"
+
+#: templates/filebrowser/include/filter.html:9
+msgid "By Date"
+msgstr "På datum"
+
+#: templates/filebrowser/include/filter.html:11
+msgid "Any Date"
+msgstr "Alla datum"
+
+#: templates/filebrowser/include/filter.html:12
+msgid "Today"
+msgstr "Idag"
+
+#: templates/filebrowser/include/filter.html:13
+msgid "Past 7 days"
+msgstr "Senaste 7 dagarna"
+
+#: templates/filebrowser/include/filter.html:14
+msgid "This Month"
+msgstr "Denna månad"
+
+#: templates/filebrowser/include/filter.html:15
+msgid "This year"
+msgstr "I år"
+
+#: templates/filebrowser/include/filter.html:21
+msgid "By Type"
+msgstr "På typ"
+
+#: templates/filebrowser/include/filter.html:23
+msgid "All"
+msgstr "Alla"
+
+#: templates/filebrowser/include/paginator.html:6
+msgid "result"
+msgstr "träff"
+
+#: templates/filebrowser/include/paginator.html:6
+msgid "results"
+msgstr "träffar"
+
+#: templates/filebrowser/include/paginator.html:10
+#: templates/filebrowser/include/paginator.html:12
+msgid "total"
+msgstr "totalt"
+
+#: templates/filebrowser/include/tableheader.html:12
+#: templates/filebrowser/include/tableheader.html:13
+msgid "Type"
+msgstr "Typ"
+
+#: templates/filebrowser/include/toolbar.html:6
+msgid "Results"
+msgstr "Träffar"
+
+#: templates/filebrowser/include/toolbar.html:8
+#, python-format
+msgid "%(counter)s result"
+msgid_plural "%(counter)s results"
+msgstr[0] "%(counter)s träff"
+msgstr[1] "%(counter)s träffar"
+
+#: templates/filebrowser/include/toolbar.html:9
+#, python-format
+msgid "%(full_result_count)s total"
+msgstr "%(full_result_count)s totalt"
+
+#: templates/filebrowser/include/toolbar.html:16
+msgid "Search"
+msgstr "Sök"
+
+#~ msgid "BROWSE"
+#~ msgstr "BROWSE"
+
+#~ msgid "An Error occured"
+#~ msgstr "An Error occured"
+
+#~ msgid "Completed"
+#~ msgstr "Completed"
+
+#~ msgid "Do you want to replace the file"
+#~ msgstr "Do you want to replace the file"
+
+#~ msgid "KB"
+#~ msgstr "KB"
+
+#~ msgid "MB"
+#~ msgstr "MB"
+
+#~ msgid "Clear Queue"
+#~ msgstr "Clear Queue"
+
+#~ msgid "Flip/Rotate"
+#~ msgstr "Flip/Rotate"
+
+#~ msgid "Transposing was successful."
+#~ msgstr "Transposing was successful."
+
+#~ msgid "SELECT FILES"
+#~ msgstr "SELECT FILES"

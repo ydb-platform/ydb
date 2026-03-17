@@ -1,0 +1,114 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2009-08-29 13:04+0200\n"
+"PO-Revision-Date: 2009-08-29 13:44+0100\n"
+"Last-Translator: Partec <beto@tangerinalab.com>\n"
+"Language-Team: Tangerina Lab <beto@tangerinalab.com>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: .\admin.py:128
+#: .\templates\reversion\change_list.html.py:7
+#: .\templates\reversion\recover_list.html.py:10
+msgid "Recover deleted %(name)s"
+msgstr "Recuperar %(name)s excluído"
+
+#: .\admin.py:173
+#, python-format
+msgid "Reverted to previous version, saved on %(datetime)s"
+msgstr "Revertido para versão anterior, salva em %(datetime)s"
+
+#: .\admin.py:175
+#, python-format
+msgid "The %(model)s \"%(name)s\" was reverted successfully. You may edit it again below."
+msgstr "%(model)s \"%(name)s\" foi revertido com sucesso. Você pode editar novamente abaixo."
+
+#: .\admin.py:271
+#, python-format
+msgid "Recover %(name)s"
+msgstr "Recuperar %(name)s"
+
+#: .\admin.py:281
+#, python-format
+msgid "Revert %(name)s"
+msgstr "Reverter %(name)s"
+
+#: .\templates\reversion\change_list.html.py:9
+#, python-format
+msgid "Add %(name)s"
+msgstr "Adicionar %(name)s"
+
+#: .\templates\reversion\object_history.html.py:8
+msgid "Choose a date from the list below to revert to a previous version of this object."
+msgstr "Escolha uma data da lista abaixo para reverter para uma versão anterior deste objeto."
+
+#: .\templates\reversion\object_history.html.py:15
+#: .\templates\reversion\recover_list.html.py:23
+msgid "Date/time"
+msgstr "Data/hora"
+
+#: .\templates\reversion\object_history.html.py:16
+msgid "User"
+msgstr "Usuário"
+
+#: .\templates\reversion\object_history.html.py:17
+msgid "Comment"
+msgstr "Comentário"
+
+#: .\templates\reversion\object_history.html.py:23
+#: .\templates\reversion\recover_list.html.py:30
+msgid "DATETIME_FORMAT"
+msgstr "d/m/Y, G:i"
+
+#: .\templates\reversion\object_history.html.py:31
+msgid "This object doesn't have a change history. It probably wasn't added via this admin site."
+msgstr "Este objeto não possui um histórico de mudanças. Ele provavelmente não foi adicionado por este site de admin."
+
+#: .\templates\reversion\recover_form.html.py:14
+#: .\templates\reversion\recover_list.html.py:7
+#: .\templates\reversion\revision_form.html.py:14
+msgid "Home"
+msgstr "Home"
+
+#: .\templates\reversion\recover_form.html.py:17
+#, python-format
+msgid "Recover deleted %(verbose_name)s"
+msgstr "Recuperar %(verbose_name)s excluído"
+
+#: .\templates\reversion\recover_form.html.py:24
+msgid "Press the save button below to recover this version of the object."
+msgstr "Pressione o botão salvar, abaixo, para recuperar essa versão do objeto."
+
+#: .\templates\reversion\recover_list.html.py:17
+msgid "Choose a date from the list below to recover a deleted version of an object."
+msgstr "Escolha uma data da lista abaixo para recuperar uma versão excluída de um objeto."
+
+#: .\templates\reversion\recover_list.html.py:37
+msgid "There are no deleted objects to recover."
+msgstr "Não há objetos excluídos para recuperar."
+
+#: .\templates\reversion\revision_form.html.py:18
+msgid "History"
+msgstr "Histórico"
+
+#: .\templates\reversion\revision_form.html.py:19
+#, python-format
+msgid "Revert %(verbose_name)s"
+msgstr "Reverter %(verbose_name)s"
+
+#: .\templates\reversion\revision_form.html.py:32
+msgid "Press the save button below to revert to this version of the object."
+msgstr "Pressione o botão salvar, abaixo, para reverter para essa versão do objeto."
+
+#~ msgid "Recover %s"
+#~ msgstr "Recuperar %s"
+

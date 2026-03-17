@@ -1,0 +1,6 @@
+requirements:
+  - pymongo: contrib/deprecated/python/pymongo
+keep:
+  - test_mongolock.py
+exclude_from_macros:
+  - test_mongolock.py

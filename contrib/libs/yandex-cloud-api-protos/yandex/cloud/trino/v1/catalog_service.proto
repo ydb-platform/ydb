@@ -1,0 +1,179 @@
+syntax = "proto3";
+
+package yandex.cloud.trino.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/operation/operation.proto";
+import "yandex/cloud/trino/v1/catalog.proto";
+import "yandex/cloud/validation.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/trino/v1;trino";
+option java_package = "yandex.cloud.api.trino.v1";
+
+// A set of methods for managing Trino Cluster Catalog resources.
+service CatalogService {
+  // Returns the specified Trino Catalog resource.
+  rpc Get (GetCatalogRequest) returns (Catalog) {
+    option (google.api.http) = {get: "/managed-trino/v1/clusters/{cluster_id}/catalogs/{catalog_id}"};
+  }
+
+  // Retrieves a list of Trino Catalog resources.
+  rpc List (ListCatalogsRequest) returns (ListCatalogsResponse) {
+    option (google.api.http) = {get: "/managed-trino/v1/clusters/{cluster_id}/catalogs"};
+  }
+
+  // Creates a new Trino Catalog.
+  rpc Create (CreateCatalogRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      post: "/managed-trino/v1/clusters/{cluster_id}/catalogs"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateCatalogMetadata"
+      response: "Catalog"
+    };
+  }
+
+  // Updates the specified Trino Catalog.
+  rpc Update (UpdateCatalogRequest) returns (operation.Operation) {
+    option (google.api.http) = {
+      patch: "/managed-trino/v1/clusters/{cluster_id}/catalogs/{catalog_id}"
+      body: "*"
+    };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateCatalogMetadata"
+      response: "Catalog"
+    };
+  }
+
+  // Deletes the specified Trino Catalog.
+  rpc Delete (DeleteCatalogRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/managed-trino/v1/clusters/{cluster_id}/catalogs/{catalog_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteCatalogMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetCatalogRequest {
+  // ID of the Trino Cluster resource which contains the requested catalog.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the Trino Catalog resource.
+  string catalog_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message ListCatalogsRequest {
+  // ID of the cluster to list Trino Catalogs in.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size], the service returns a [ListCatalogsResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results, set [page_token] to the [ListCatalogsResponse.next_page_token]
+  // returned by the previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // The expression must specify:
+  // 1. The field name. Currently you can only use filtering with the [Catalog.name] field.
+  // 2. An `=` operator.
+  // 3. The value in double quotes (`"`). Must be 1-63 characters long and match the regular expression `[a-zA-Z0-9_-]+`.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListCatalogsResponse {
+  // List of Trino Catalog resources.
+  repeated Catalog catalogs = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListCatalogsRequest.page_size], use the [next_page_token] as the value
+  // for the [ListCatalogsRequest.page_token] parameter in the next list request. Each subsequent
+  // list request will have its own [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateCatalogRequest {
+  // ID of the Trino Cluster where the catalog should be created.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Specification of the catalog to be created.
+  CatalogSpec catalog = 2 [
+    (required) = true
+  ];
+}
+
+message CreateCatalogMetadata {
+  // ID of the Trino cluster where a catalog is being created.
+  string cluster_id = 1;
+
+  // ID of the catalog that is being created.
+  string catalog_id = 2;
+}
+
+message UpdateCatalogRequest {
+  // ID of the Trino Cluster that contains the catalog to update.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the catalog to update.
+  string catalog_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // Field mask that specifies which fields of the catalog should be updated.
+  google.protobuf.FieldMask update_mask = 3 [(required) = true];
+
+  // New values for the specified fields.
+  CatalogUpdateSpec catalog = 4 [(required) = true];
+}
+
+message UpdateCatalogMetadata {
+  // ID of the Trino cluster where a catalog is being updated.
+  string cluster_id = 1;
+
+  // ID of the catalog that is being updated.
+  string catalog_id = 2;
+}
+
+message DeleteCatalogRequest {
+  // ID of the Trino Cluster resource which contains the requested catalog.
+  string cluster_id = 1 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+
+  // ID of the Trino Catalog resource.
+  string catalog_id = 2 [
+    (required) = true,
+    (length) = "<=50"
+  ];
+}
+
+message DeleteCatalogMetadata {
+  // ID of the Trino cluster where a catalog is being deleted.
+  string cluster_id = 1;
+
+  // ID of the catalog that is being deleted.
+  string catalog_id = 2;
+}

@@ -1,0 +1,129 @@
+1 p P Pressure Pa
+2 msl MSL Mean sea level pressure Pa
+3 3 None Pressure tendency Pa s**-1
+4 pv PV Potential vorticity K m**2 kg**-1 s**-1
+5 5 None ICAO Standard Atmosphere reference height m
+6 z Z Geopotential m**2 s**-2
+7 gh GH Geopotential height gpm
+8 h H Geometrical height m
+9 9 None Standard deviation of height m
+10 tco3 TCO3 Total (column) ozone Dobson (kg m**-2)
+11 t T Temperature K
+12 12 None Virtual temperature K
+13 13 None Potential temperature K
+14 14 None Pseudo-adiabatic potential temperature K
+15 15 None Maximum temperature K
+16 16 None Minimum temperature K
+17 17 None Dew-point temperature K
+18 18 None Dew-point depression (or deficit) K
+19 19 None Lapse rate K s**-1
+20 20 None Visibility m
+21 21 None Radar spectra (1) -
+22 22 None Radar spectra (2) -
+23 23 None Radar spectra (3) -
+24 24 None Parcel lifted index (to 500 hPa) K
+25 25 None Temperature anomaly K
+26 26 None Pressure anomaly Pa
+27 27 None Geopotential height anomaly gpm
+28 28 None Wave spectra (1) -
+29 29 None Wave spectra (2) -
+30 30 None Wave spectra (3) -
+31 31 None Wind direction Degree true
+32 32 None Wind speed m s**-1
+33 u U U-component of wind m s**-1
+34 v V V-component of wind m s**-1
+35 35 None Stream Function m**2 s**-1
+36 36 None Velocity Potential m**2 s**-1
+37 37 None Montgomery stream Function m**2 s**-1
+38 38 None Sigma coordinate vertical velocity s**-1
+39 w W Vertical velocity Pa s**-1
+40 40 None Vertical velocity m s**-1
+41 41 None Absolute vorticity s**-1
+42 42 None Absolute divergence s**-1
+43 vo VO Relative vorticity s**-1
+44 d D Relative divergence s**-1
+45 45 None Vertical u-component shear s**-1
+46 46 None Vertical v-component shear s**-1
+47 47 None Direction of current Degree true
+48 48 None Speed of current m s**-1
+49 49 None U-component of current m s**-1
+50 50 None V-component of current m s**-1
+51 q Q Specific humidity kg kg**-1
+52 r R Relative humidity %
+53 53 None Humidity mixing ratio kg m**-2
+54 54 None Precipitable water kg m**-2
+55 55 None Vapour pressure Pa
+56 56 None Saturation deficit Pa
+57 e E Evaporation kg m**-2
+58 ciwc CIWC Cloud ice kg m**-2
+59 59 None Precipitation rate kg m**-2 s**-1
+60 60 None Thunderstorm probability %
+61 tp TP Total precipitation kg m**-2
+62 62 LSP Large scale precipitation kg m**-2
+63 63 None Convective precipitation (water) kg m**-2
+64 64 None Snow fall rate water equivalent kg m**-2 s**-1
+65 sf SF Water equivalentof accumulated snow depth kg m**-2
+66 sd SD Snow depth m (of water equivalent)
+67 67 None Mixed layer depth m
+68 68 None Transient thermocline depth m
+69 69 None Main thermocline depth m
+70 70 None Main thermocline anomaly m
+71 tcc TCC Total cloud cover %
+72 ccc CCC Convective cloud cover %
+73 lcc LCC Low cloud cover %
+74 mcc MCC Medium cloud cover %
+75 hcc HCC High cloud cover %
+76 clwc CLWC Cloud liquid water content kg kg**-1
+77 77 None Best lifted index (to 500 hPa) K
+78 csf CSF Convective snow-fall kg m**-2
+79 lsf LSF Large scale snow-fall kg m**-2
+80 80 None Water temperature K
+81 lsm LSM Land cover (1=land, 0=sea) (0 - 1)
+82 82 None Deviation of sea-level from mean m
+83 sr SR Surface roughness m
+84 al AL Albedo -
+85 st ST Surface temperature of soil K
+86 ssw SSW Soil moisture content kg m**-2
+87 veg VEG Percentage of vegetation %
+88 88 None Salinity kg kg**-1
+89 89 None Density kg m**-3
+90 ro RO Water run-off kg m**-2
+91 91 None Ice cover (1=land, 0=sea) (0 - 1)
+92 92 None Ice thickness m
+93 93 None Direction of ice drift Degree true
+94 94 None Speed of ice drift m s*-1
+95 95 None U-component of ice drift m s**-1
+96 96 None V-component of ice drift m s**-1
+97 97 None Ice growth rate m s**-1
+98 98 None Ice divergence s**-1
+99 99 None Snow melt kg m**-2
+100 swh SWH Signific.height,combined wind waves+swell m
+101 mdww MDWW Mean direction of wind waves Degree true
+102 shww SHWW Significant height of wind waves m
+103 mpww MPWW Mean period of wind waves s
+104 104 None Direction of swell waves Degree true
+105 105 None Significant height of swell waves m
+106 106 None Mean period of swell waves s
+107 mdps MDPS Mean direction of primary swell Degree true
+108 mpps MPPS Mean period of primary swell s
+109 109 None Secondary wave direction Degree true
+110 110 None Secondary wave period s
+111 111 None Net short-wave radiation flux (surface) W m**-2
+112 112 None Net long-wave radiation flux (surface) W m**-2
+113 113 None Net short-wave radiation flux(atmosph.top) W m**-2
+114 114 None Net long-wave radiation flux(atmosph.top) W m**-2
+115 115 None Long-wave radiation flux W m**-2
+116 116 None Short-wave radiation flux W m**-2
+117 117 None Global radiation flux W m**-2
+118 118 None Brightness temperature K
+119 119 None Radiance (with respect to wave number) W m**-1 sr**-1
+120 120 None Radiance (with respect to wave length) W m**-1 sr**-1
+121 slhf SLHF (surface) Latent heat flux W m**-2
+122 sshf SSHF (surface) Sensible heat flux W m**-2
+123 bld BLD Boundary layer dissipation W m**-2
+124 124 None Momentum flux, u-component N m**-2
+125 125 None Momentum flux, v-component N m**-2
+126 126 None Wind mixing energy J
+127 127 None Image data -
+160 160 Unknown
+255 - - Indicates a missing value -

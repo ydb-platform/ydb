@@ -1,0 +1,116 @@
+# -*- text -*-
+#
+# Copyright (c) 2009 Cisco Systems, Inc.  All rights reserved.
+# Copyright (c) 2017      Intel, Inc.  All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+# This is the US/English general help file for Open MPI.
+#
+[stacktrace signal override]
+Open MPI was inserting a signal handler for signal %d but noticed
+that there is already a non-default handler installed.  Open MPI's
+handler was therefore not installed; your job will continue.  This
+warning message will only be displayed once, even if Open MPI
+encounters this situation again.
+
+To avoid displaying this warning message, you can either not install
+the error handler for signal %d or you can have Open MPI not try to
+install its own signal handler for this signal by setting the
+"opal_signals" MCA parameter.
+
+  Signal: %d
+  Current opal_signal value: %s
+#
+[stacktrace bad signal]
+Open MPI was inserting a signal handler but was given an invalid
+signal number:
+
+  Signal string: %s
+  Bad value:     %s
+
+The given value must be an integer within the signal number
+range. Please correct the value and try again.
+#
+[malformed net_private_ipv4]
+Open MPI has detected at least one malformed IP address or netmask in
+the value of the opal_net_private_ipv4 MCA parameter.  The
+opal_net_private_ipv4 MCA parameter accepts a semicolon-delimited list
+of Classless Inter-Domain Routing (CIDR) notation specifications, each
+of the form <ipaddress>/<mask>.  For example:
+
+     10.0.0.0/8;172.16.0.0/12;192.168.0.0/16;169.254.0.0/16
+
+The first detected malformed entry was %s.
+#
+[invalid-net-mask]
+Open MPI has detected a malformed IPv4 address or netmask:
+
+  Value provided: %s
+
+Accepted values follow the Classless Inter-Domain
+Routing (CIDR) notation specifications. For example:
+
+     10.0.0.0/8
+     172.16/12
+     192.168
+     169.254.0.0/16
+#
+[malformed-uri]
+Open MPI has detected a malformed URI:
+
+  URI:  %s
+
+Accepted values follow IETF RFC3986, e.g. file://192.168.1.1/over/there
+#
+[relative-path]
+When creating a URI, all files must be specified in absolute paths:
+
+  Value provided: %s
+
+Please update your application to provide the full path to the file.
+#
+[sys-limit-failed]
+Per request, Open MPI attempted to set a system resource
+limit to a given value:
+
+  Resource:  %s
+  Limit:     %s
+
+The system has refused to allow this operation. This is likely
+due to a permission limitation, or specifying an unsupported
+value. Please check the system or remove the request and try
+again.
+#
+[sys-limit-unrecognized]
+Open MPI received a request to set a system resource limit.
+Sadly, OMPI does not recognize or currently support the specified
+resource:
+
+  Resource:  %s
+  Limit:     %s
+
+Please correct the request and try again.
+#
+[dir-mode]
+While working through a directory tree, we were unable to set
+a directory to the desired mode:
+
+  Directory:  %s
+  Mode:       %0x
+  Error:      %s
+
+Please check to ensure you have adequate permissions to perform
+the desired operation.
+#
+[mkdir-failed]
+A call to mkdir was unable to create the desired directory:
+
+  Directory: %s
+  Error:     %s
+
+Please check to ensure you have adequate permissions to perform
+the desired operation.

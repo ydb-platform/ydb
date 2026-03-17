@@ -1,0 +1,45 @@
+# Операторы:
+#   *  Один аргумент в undo
+#   ~  Несколько аргументов (минимум один) в undo
+#
+# Параметры:
+#   %global         Команда действует на любом уровне ниже
+#   %logic=...      Кастомная функция обработки правила
+#   %diff_logic=... Кастомная функция построения диффа.
+#                   данная функция работает для подблоков (в отличие от %logic)
+#   %comment=...    Добавить коммент после строки который будет видно с опцией patch --add-comments
+#                   Сделано в основном для того чтобы генерировать специальные команды для наливки
+# -----
+
+
+user
+    ~
+    group
+        add ~
+
+file
+    print file=*
+    set * %logic=routeros.file.change
+
+system
+    logging
+        action
+            set ~
+            add ~
+        set ~
+        add ~
+
+interface
+    gre
+        add
+
+interface
+    list
+        member
+            add
+
+ip
+    address
+        add ~
+
+~ %global

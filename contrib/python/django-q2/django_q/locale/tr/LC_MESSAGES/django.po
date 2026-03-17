@@ -1,0 +1,502 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2023-01-26 01:38+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Ethem Güner <ethemguener@gmail.com>\n"
+"Language-Team: \n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: admin.py:43
+msgid "Resubmit selected tasks to queue"
+msgstr "Seçili işleri kuyruğa tekrar gönder"
+
+#: admin.py:107 models.py:293
+#, fuzzy
+#| msgid "Success"
+msgid "success"
+msgstr "başarılı olanlar"
+
+#: admin.py:119 models.py:295
+msgid "last_run"
+msgstr ""
+
+#: cluster.py:79
+#, python-format
+msgid "Q Cluster %(name)s starting."
+msgstr "Q Cluster %(name)s başlatılıyor."
+
+#: cluster.py:87
+#, python-format
+msgid "Q Cluster %(name)s stopping."
+msgstr "Q Cluster %(name)s durduruluyor."
+
+#: cluster.py:90
+#, python-format
+msgid "Q Cluster %(name)s has stopped."
+msgstr "Q Cluster %(name)s durduruldu."
+
+#: cluster.py:97
+#, python-format
+msgid "%(name)s got signal %(signal)s"
+msgstr "%(name)s, %(signal)s pid'inde izleniyor/monitoring yapılıyor."
+
+#: cluster.py:224
+#, python-format
+msgid "reincarnated monitor %(name)s after sudden death"
+msgstr "Monitor %(name)s ani ölüm sonrası tekrar dirildi"
+
+#: cluster.py:230
+#, python-format
+msgid "reincarnated pusher %(name)s after sudden death"
+msgstr "Pusher %(name)s ani ölüm sonrası tekrar dirildi"
+
+#: cluster.py:250
+#, fuzzy, python-format
+#| msgid "reincarnated worker %(name)s after timeout"
+msgid ""
+"reincarnated worker %(name)s after timeout while processing task "
+"%(task_name)s"
+msgstr "Worker %(name)s zaman aşımı sonrası tekrar dirildi"
+
+#: cluster.py:255
+#, python-format
+msgid "reincarnated worker %(name)s after timeout"
+msgstr "Worker %(name)s zaman aşımı sonrası tekrar dirildi"
+
+#: cluster.py:260
+#, python-format
+msgid "recycled worker %(name)s"
+msgstr "Worker %(name)s geri döndürüldü"
+
+#: cluster.py:263
+#, python-format
+msgid "reincarnated worker %(name)s after death"
+msgstr "Worker %(name)s ani ölüm sonrası tekrar dirildi"
+
+#: cluster.py:287
+#, python-format
+msgid "%(name)s guarding cluster %(cluster_name)s"
+msgstr "%(name)s, %(cluster_name)s cluster'ını koruyor"
+
+#: cluster.py:296
+#, python-format
+msgid "Q Cluster %(cluster_name)s running."
+msgstr "Q Cluster %(cluster_name)s başlatılıyor."
+
+#: cluster.py:332
+#, python-format
+msgid "%(name)s stopping cluster processes"
+msgstr "Cluster %(name)s işlemleri durduruluyor."
+
+#: cluster.py:357
+#, python-format
+msgid "%(name)s waiting for the monitor."
+msgstr "%(name)s monitor için bekliyor."
+
+#: cluster.py:383
+#, fuzzy, python-format
+#| msgid "%(process_name)s pushing tasks at %(id)s"
+msgid "%(name)s pushing tasks at %(id)s"
+msgstr "%(process_name)s, işleri %(id)s pid'ine gönderiyor."
+
+#: cluster.py:407
+#, python-format
+msgid "queueing from %(list_key)s"
+msgstr ""
+
+#: cluster.py:411
+#, python-format
+msgid "%(name)s stopped pushing tasks"
+msgstr "%(name)s işleri göndermeyi durdurdu"
+
+#: cluster.py:426
+#, python-format
+msgid "%(name)s monitoring at %(id)s"
+msgstr "%(name)s, %(id)s pid'inde izleniyor/monitoring yapılıyor."
+
+#: cluster.py:445
+#, python-format
+msgid "Processed '%(info_name)s' (%(task_name)s)"
+msgstr "[%(task_name)s] - '%(info_name)s işlendi."
+
+#: cluster.py:451
+#, python-format
+msgid "Failed '%(info_name)s' (%(task_name)s) - %(task_result)s"
+msgstr "[%(task_name)s] - '%(info_name)s' - %(task_result)s başarısız oldu"
+
+#: cluster.py:458
+#, python-format
+msgid "%(name)s stopped monitoring results"
+msgstr "%(name)s sonuçları göstermeyi bıraktı"
+
+#: cluster.py:474
+#, python-format
+msgid "%(proc_name)s ready for work at %(id)s"
+msgstr "%(proc_name)s, %(id)s pid'inde çalışmaya hazır"
+
+#: cluster.py:494
+#, fuzzy, python-format
+#| msgid "%(proc_name)s processing '%(func_name)s' (%(task_name)s)"
+msgid "%(proc_name)s processing %(task_name)s '%(func_name)s'"
+msgstr "%(proc_name)s, '%(func_name)s' [%(task_name)s] işlerini işiyor"
+
+#: cluster.py:546
+#, python-format
+msgid "%(proc_name)s stopped doing work"
+msgstr "%(proc_name)s çalışmayı bıraktı"
+
+#: cluster.py:751
+#, python-format
+msgid "%(process_name)s failed to create a task from schedule [%(schedule)s]"
+msgstr "%(process_name)s programdan bir görev oluşturamadı [%(schedule)s]"
+
+#: cluster.py:762
+#, fuzzy, python-format
+#| msgid "%(process_name)s created a task from schedule [%(schedule)s]"
+msgid ""
+"%(process_name)s created task %(task_name)s from schedule [%(schedule)s]"
+msgstr "%(process_name)s programdan bir görev oluşturamadı [%(schedule)s]"
+
+#: cluster.py:808
+msgid "Skipping cpu affinity because psutil was not found."
+msgstr "Psutil bulunamadığı için cpu benzeşimi atlanıyor."
+
+#: cluster.py:813
+msgid "Faking cpu affinity because it is not supported on this platform"
+msgstr "Bu platformda desteklenmediği için sahte cpu benzeşimi"
+
+#: cluster.py:835
+#, python-format
+msgid "%(pid)s will use cpu %(affinity)s"
+msgstr "%(pid)s cpu %(affinity)s kullanacaktır"
+
+#: conf.py:90
+#, python-format
+msgid ""
+"SAVE_LIMIT_PER (%(option)s) is not a valid option. Options are: 'group', "
+"'name', 'func' and None. Default is None."
+msgstr ""
+"SAVE_LIMIT_PER (%(option)s) geçerli bir seçenek değil. Seçenekler şunlardır: "
+"'group', 'name', 'func' ve None. Varsayılan değer None'dır."
+
+#. Translators: Cluster status descriptions
+#: conf.py:207
+msgid "Starting"
+msgstr "Başlıyor"
+
+#: conf.py:208
+msgid "Working"
+msgstr "Çalışıyor"
+
+#: conf.py:209
+msgid "Idle"
+msgstr "Boşta"
+
+#: conf.py:210
+msgid "Stopped"
+msgstr "Durdu"
+
+#: conf.py:211
+msgid "Stopping"
+msgstr "Durduruluyor"
+
+#. Translators: help text for qcluster management command
+#: management/commands/qcluster.py:9
+msgid "Starts a Django Q Cluster."
+msgstr "Bir Django Q Cluster çalıştırır."
+
+#. Translators: help text for qinfo management command
+#: management/commands/qinfo.py:11
+msgid "General information over all clusters."
+msgstr "Tüm cluster'lar için genel bilgiler."
+
+#. Translators: help text for qmemory management command
+#: management/commands/qmemory.py:9
+msgid "Monitors Q Cluster memory usage"
+msgstr "Q Cluster'ın bellek kullanımını izler"
+
+#. Translators: help text for qmonitor management command
+#: management/commands/qmonitor.py:9
+msgid "Monitors Q Cluster activity"
+msgstr "Q Cluster'ın aktivitelerini izler"
+
+#: models.py:125
+msgid "Successful task"
+msgstr "Başarılı iş"
+
+#: models.py:126
+msgid "Successful tasks"
+msgstr "Başarılı işler"
+
+#: models.py:141
+msgid "Failed task"
+msgstr "Başarısız iş"
+
+#: models.py:142
+msgid "Failed tasks"
+msgstr "Başarısız işler"
+
+#: models.py:150 models.py:234
+msgid "Please install croniter to enable cron expressions"
+msgstr "Cron expressions'ları açmak için croniter yükleyin"
+
+#: models.py:170
+msgid "e.g. 1, 2, 'John'"
+msgstr "Örneğin: 1, 2, 'Melih'"
+
+#: models.py:172
+msgid "e.g. x=1, y=2, name='John'"
+msgstr "Örneğin: x=1, y=2, name='Melih'"
+
+#: models.py:186
+msgid "Once"
+msgstr "Bir kere"
+
+#: models.py:187
+msgid "Minutes"
+msgstr "Dakika"
+
+#: models.py:188
+msgid "Hourly"
+msgstr "Saatlik"
+
+#: models.py:189
+msgid "Daily"
+msgstr "Günlük"
+
+#: models.py:190
+msgid "Weekly"
+msgstr "Haftalık"
+
+#: models.py:191
+#, fuzzy
+#| msgid "Weekly"
+msgid "Biweekly"
+msgstr "İki haftada bir"
+
+#: models.py:192
+msgid "Monthly"
+msgstr "Aylık"
+
+#: models.py:193
+#, fuzzy
+#| msgid "Monthly"
+msgid "Bimonthly"
+msgstr "İki ayda bir"
+
+#: models.py:194
+msgid "Quarterly"
+msgstr "Bir Çeyrek (3 Ay)"
+
+#: models.py:195
+msgid "Yearly"
+msgstr "Yıllık"
+
+#: models.py:196
+msgid "Cron"
+msgstr ""
+
+#: models.py:199
+msgid "Schedule Type"
+msgstr "Zamanlama Tipi"
+
+#: models.py:202
+msgid "Number of minutes for the Minutes type"
+msgstr "Dakika tipine göre dakika sayısı"
+
+#: models.py:205
+msgid "Repeats"
+msgstr "Tekrar eder"
+
+#: models.py:205
+msgid "n = n times, -1 = forever"
+msgstr "n = n kere, -1 = sonsuza kadar"
+
+#: models.py:208
+msgid "Next Run"
+msgstr "Bir dahaki çalışma tarihi"
+
+#: models.py:215
+msgid "Cron expression"
+msgstr ""
+
+#: models.py:224
+msgid "Name of kwarg to pass intended schedule date"
+msgstr "Geçilecek kwarg'ın adı öngörülen program tarihi"
+
+#: models.py:299
+msgid "Scheduled task"
+msgstr "Zamanlanmış iş"
+
+#: models.py:300
+msgid "Scheduled tasks"
+msgstr "Zamanlanmış işler"
+
+#: models.py:326
+msgid "Queued task"
+msgstr "Sıraya alınmış iş"
+
+#: models.py:327
+msgid "Queued tasks"
+msgstr "Sıraya alınmış işler"
+
+#: monitor.py:64 monitor.py:348
+msgid "Host"
+msgstr ""
+
+#: monitor.py:68 monitor.py:352 monitor.py:459
+msgid "Id"
+msgstr ""
+
+#: monitor.py:72
+msgid "State"
+msgstr "Durum"
+
+#: monitor.py:76
+msgid "Pool"
+msgstr "Havuz"
+
+#: monitor.py:80
+msgid "TQ"
+msgstr ""
+
+#: monitor.py:84
+msgid "RQ"
+msgstr ""
+
+#: monitor.py:88
+msgid "RC"
+msgstr ""
+
+#: monitor.py:92
+msgid "Up"
+msgstr ""
+
+#: monitor.py:172 monitor.py:286
+msgid "Queued"
+msgstr "Sıraya alınmış"
+
+#: monitor.py:180
+msgid "Success"
+msgstr "Başarılı olanlar"
+
+#: monitor.py:190 monitor.py:294
+msgid "Failures"
+msgstr "Başarısız olanlar"
+
+#: monitor.py:201 monitor.py:498
+msgid "[Press q to quit]"
+msgstr "[Çıkmak için q'ya basın]"
+
+#: monitor.py:227
+msgid "day"
+msgstr "gün"
+
+#: monitor.py:248
+msgid "second"
+msgstr "saniye"
+
+#: monitor.py:251
+msgid "minute"
+msgstr "dakika"
+
+#: monitor.py:254
+msgid "hour"
+msgstr "saat"
+
+#: monitor.py:263
+#, python-format
+msgid "-- %(prefix)s %(version)s on %(info)s --"
+msgstr "-- %(prefix)s %(version)s üzerinde %(info)s --"
+
+#: monitor.py:273
+msgid "Clusters"
+msgstr ""
+
+#: monitor.py:277
+msgid "Workers"
+msgstr ""
+
+#: monitor.py:281
+msgid "Restarts"
+msgstr "Yeniden çalıştırmalar"
+
+#: monitor.py:290
+msgid "Successes"
+msgstr "Başarılı olanlar"
+
+#: monitor.py:299
+msgid "Schedules"
+msgstr "Zamanlanmışlar"
+
+#: monitor.py:303
+#, python-format
+msgid "Tasks/%(per)s"
+msgstr "İş/%(per)s"
+
+#: monitor.py:307
+msgid "Avg time"
+msgstr "Ortalama süre"
+
+#: monitor.py:357
+msgid "Available (%)"
+msgstr "Müsait (%) "
+
+#: monitor.py:363
+msgid "Available (MB)"
+msgstr "Müsait (MB)"
+
+#: monitor.py:368
+msgid "Total (MB)"
+msgstr "Toplam (MB)"
+
+#: monitor.py:373
+msgid "Sentinel (MB)"
+msgstr ""
+
+#: monitor.py:379
+msgid "Monitor (MB)"
+msgstr "İzleme (MB)"
+
+#: monitor.py:385
+msgid "Workers (MB)"
+msgstr ""
+
+#: monitor.py:487
+#, python-format
+msgid "Available lowest (): %(memory_percent)s ((at)s)"
+msgstr "Mevcut en düşük (): %(memory_percent)s ((at)s)"
+
+#: monitor.py:509
+msgid "No clusters appear to be running."
+msgstr "Hiçbir küme çalışıyor görünmüyor."
+
+#: signals.py:22
+#, python-format
+msgid "malformed return hook '%(hook)s' for [%(name)s]"
+msgstr ""
+
+#: signals.py:30
+#, python-format
+msgid "return hook %(hook)s failed on [%(name)s] because %(error)s"
+msgstr ""
+
+#, python-format
+#~ msgid ""
+#~ "Could not process '%(func_name)s'. Check the location of the function and "
+#~ "the args/kwargs."
+#~ msgstr ""
+#~ "%(func_name)s' işlenemedi. İşlevin konumunu ve args/kwargs öğelerini "
+#~ "kontrol edin."

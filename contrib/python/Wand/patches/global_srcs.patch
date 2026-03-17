@@ -1,0 +1,11 @@
+--- a/ya.make	(index)
++++ b/ya.make	(working tree)
+@@ -19,7 +19,7 @@ ADDINCL(
+ )
+ 
+ SRCS(
+-    syms.cpp
++    GLOBAL syms.cpp
+ )
+ 
+ PY_SRCS(

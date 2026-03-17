@@ -1,0 +1,22 @@
+--- contrib/python/falcon/py3/falcon/media/handlers.py	(index)
++++ contrib/python/falcon/py3/falcon/media/handlers.py	(working tree)
+@@ -11,7 +11,7 @@ from falcon.media.multipart import MultipartParseOptions
+ from falcon.media.urlencoded import URLEncodedFormHandler
+ from falcon.util import deprecation
+ from falcon.util import misc
+-from falcon.vendor import mimeparse
++import mimeparse
+ 
+ 
+ class MissingDependencyHandler:
+--- contrib/python/falcon/py3/falcon/request.py	(index)
++++ contrib/python/falcon/py3/falcon/request.py	(working tree)
+@@ -33,7 +33,7 @@ from falcon.util import structures
+ from falcon.util.misc import isascii
+ from falcon.util.uri import parse_host
+ from falcon.util.uri import parse_query_string
+-from falcon.vendor import mimeparse
++import mimeparse
+ 
+ DEFAULT_ERROR_LOG_FORMAT = '{0:%Y-%m-%d %H:%M:%S} [FALCON] [ERROR] {1} {2}{3} => '
+ 

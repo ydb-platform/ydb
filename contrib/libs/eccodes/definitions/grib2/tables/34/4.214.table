@@ -1,0 +1,11 @@
+# Code table 4.214 - Environmental Factor Qualifier
+0 0 Worst
+1 1 Very poor
+2 2 Poor
+3 3 Average
+4 4 Good
+5 5 Excellent
+# 6-190 Reserved
+191 191 Unknown
+# 192-254 Reserved for local use
+255 255 Missing

@@ -1,0 +1,4 @@
+[console_scripts]
+xmlschema-json2xml = xmlschema.cli:json2xml
+xmlschema-validate = xmlschema.cli:validate
+xmlschema-xml2json = xmlschema.cli:xml2json

@@ -1,0 +1,6 @@
+exclude_from_macros:
+  - CHANGELOG.md
+exclude:
+  - isort/_vendored/*
+requirements:
+  - setuptools

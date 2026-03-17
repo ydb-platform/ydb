@@ -1,0 +1,99 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2017-06-13 19:40+0530\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: admin.py:113
+#, python-format
+msgid ""
+"Default value type must be equal to declared config parameter type. Please "
+"fix the default value of '%(name)s'."
+msgstr ""
+"Vaikimisi väärtus peab olema vastav seade parameetri tüübile. Palun "
+"sisestagekorrekne vaikimisi väärtus väljale '%(name)s'"
+
+#: admin.py:123
+#, python-format
+msgid ""
+"Constance doesn't support config values of the type %(config_type)s. Please "
+"fix the value of '%(name)s'."
+msgstr ""
+"Constance ei toeta seadete seda tüüpi %(config_type) seadete väärtusi. "
+"Palunsisestage korrektne väärtus väljale '%(name)s'."
+
+#: admin.py:147
+msgid ""
+"The settings have been modified by someone else. Please reload the form and "
+"resubmit your changes."
+msgstr ""
+"Seadeid on vahepeal muudetud, palun esitage oma muudatused peale seda kui "
+"olete lehe uuesti laadinud"
+
+#: admin.py:160
+msgid ""
+"CONSTANCE_CONFIG_FIELDSETS does not contain fields that exist in "
+"CONSTANCE_CONFIG."
+msgstr ""
+
+#: admin.py:224
+msgid "Live settings updated successfully."
+msgstr "Seaded edukalt muudetud."
+
+#: admin.py:285
+msgid "config"
+msgstr "konfiguratsioon"
+
+#: apps.py:8
+msgid "Constance"
+msgstr "Seaded"
+
+#: backends/database/models.py:19
+msgid "constance"
+msgstr "seaded"
+
+#: backends/database/models.py:20
+msgid "constances"
+msgstr "seaded"
+
+#: management/commands/constance.py:30
+msgid "Get/Set In-database config settings handled by Constance"
+msgstr "Loe/salvesta andmebaasi põhiseid seadeid"
+
+#: templates/admin/constance/change_list.html:75
+msgid "Save"
+msgstr "Salvesta"
+
+#: templates/admin/constance/change_list.html:84
+msgid "Home"
+msgstr ""
+
+#: templates/admin/constance/includes/results_list.html:5
+msgid "Name"
+msgstr "Nimi"
+
+#: templates/admin/constance/includes/results_list.html:6
+msgid "Default"
+msgstr "Vaikimisi"
+
+#: templates/admin/constance/includes/results_list.html:7
+msgid "Value"
+msgstr "Väärtus"
+
+#: templates/admin/constance/includes/results_list.html:8
+msgid "Is modified"
+msgstr "Muudetud"

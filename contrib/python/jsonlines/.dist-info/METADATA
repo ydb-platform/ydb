@@ -1,0 +1,48 @@
+Metadata-Version: 2.1
+Name: jsonlines
+Version: 4.0.0
+Summary: Library with helpers for the jsonlines file format
+Home-page: https://github.com/wbolster/jsonlines
+Author: wouter bolsterlee
+Author-email: wouter@bolsterl.ee
+License: BSD
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Topic :: Internet :: Log Analysis
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Logging
+Classifier: Topic :: Utilities
+Requires-Python: >=3.8
+License-File: LICENSE.rst
+Requires-Dist: attrs >=19.2.0
+
+.. image:: https://pepy.tech/badge/jsonlines
+   :target: https://pepy.tech/project/jsonlines
+
+.. image:: https://pepy.tech/badge/jsonlines/month
+   :target: https://pepy.tech/project/jsonlines
+
+.. image:: https://anaconda.org/anaconda/anaconda/badges/installer/conda.svg
+   :target: https://anaconda.org/anaconda/jsonlines
+
+=========
+jsonlines
+=========
+
+``jsonlines`` is a Python library to simplify working with jsonlines_
+and ndjson_ data.
+
+.. _jsonlines: http://jsonlines.org/
+.. _ndjson: http://ndjson.org/
+
+* Documentation: https://jsonlines.readthedocs.io/
+
+* Python Package Index (PyPI): https://pypi.python.org/pypi/jsonlines/
+
+* Source code and issue tracker: https://github.com/wbolster/jsonlines
+

@@ -1,0 +1,50 @@
+Use strlcat from libc_compat instead of a copy-pasted version
+===================================================================
+--- a/mysys/crypt_genhash_impl.cc	(rev 0)
++++ b/mysys/crypt_genhash_impl.cc	(working copy)
+@@ -43,8 +43,10 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <contrib/libs/libc_compat/string.h>
+ #include <time.h>
+ 
++
+ #include "crypt_genhash_impl.h"
+ #include "m_string.h"
+ 
+@@ -95,34 +97,6 @@ static const char crypt_alg_magic[] = "$5";
+ #define MIN(a, b) (((a) < (b)) ? (a) : (b))
+ #endif
+ 
+-#ifndef HAVE_STRLCAT
+-/**
+-  Size-bounded string copying and concatenation
+-  This is a replacement for STRLCPY(3)
+-*/
+-
+-static size_t strlcat(char *dst, const char *src, size_t siz) {
+-  char *d = dst;
+-  const char *s = src;
+-  size_t n = siz;
+-  size_t dlen;
+-  /* Find the end of dst and adjust bytes left but don't go past end */
+-  while (n-- != 0 && *d != '\0') d++;
+-  dlen = d - dst;
+-  n = siz - dlen;
+-  if (n == 0) return (dlen + siz);
+-  while (*s != '\0') {
+-    if (n != 1) {
+-      *d++ = *s;
+-      n--;
+-    }
+-    s++;
+-  }
+-  *d = '\0';
+-  return (dlen + (s - src)); /* count does not include NUL */
+-}
+-#endif
+-
+ static const int crypt_alg_magic_len = sizeof(crypt_alg_magic) - 1;
+ 
+ static unsigned char b64t[] = /* 0 ... 63 => ascii - 64 */

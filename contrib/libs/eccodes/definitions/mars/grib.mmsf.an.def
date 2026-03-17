@@ -1,0 +1,20 @@
+if (class is "od" || class is "me" || class is "en" ||
+    class is "c3" || class is "ci")
+{
+   alias mars.system = systemNumber;
+}
+
+alias mars.number = perturbationNumber;
+alias mars.method = methodNumber;
+
+if (class isnot "gw") { # ECC-1448
+    alias mars.origin = centre;
+}
+
+# See ECC-624
+if (centre == 80 && subCentre == 98 && (class is "c3" || class is "ci")) {
+  constant cnmc_cmcc = 'cmcc';
+  alias mars.origin = cnmc_cmcc;
+}
+
+if (class is "ci") { unalias mars.method; }

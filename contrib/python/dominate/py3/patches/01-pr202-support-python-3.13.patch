@@ -1,0 +1,37 @@
+From 58f7d7fdb171f80ed6ce97e6ca4409723975c47f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20G=C3=B3rny?= <mgorny@gentoo.org>
+Date: Sat, 3 Aug 2024 16:07:38 +0200
+Subject: [PATCH] Update tests for docstring dedenting in Python 3.13
+
+Update the `get_expected()` function to account for the fact that
+Python 3.13 automatically dedents all the docstrings, and therefore
+does not require explicitly removing the indent (which effectively
+removes too much indent).
+
+Fixes #199
+---
+ tests/test_svg.py | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/tests/test_svg.py b/tests/test_svg.py
+index e5bbec3..ea7d98f 100644
+--- a/tests/test_svg.py
++++ b/tests/test_svg.py
+@@ -1,3 +1,5 @@
++import sys
++
+ import dominate.svg
+ from dominate.tags import *
+ from dominate.svg import *
+@@ -14,7 +16,10 @@ def base():
+ 
+ 
+ def get_expected(func):
+-  return func.__doc__.replace('\n  ', '\n').strip()
++  doc = func.__doc__
++  if sys.version_info < (3, 13):
++      doc = doc.replace('\n  ', '\n')
++  return doc.strip()
+ 
+ 
+ def output_test(func):

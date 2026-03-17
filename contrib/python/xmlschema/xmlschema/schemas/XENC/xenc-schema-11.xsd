@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Fallback schema for http://www.w3.org/2009/xmlenc11# namespace:
+ - DTD commented out for processing the schema with the safe parser
+ - Imports of other namespaces redirected to fallback schemas
+-->
+
+<!--
+#
+# Copyright ©[2011] World Wide Web Consortium 
+# (Massachusetts Institute of Technology,  
+#  European Research Consortium for Informatics and Mathematics, 
+#  Keio University). All Rights Reserved.  
+# This work is distributed under the W3C® Software License [1] in the
+# hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+# the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+# PURPOSE. 
+# [1] http://www.w3.org/Consortium/Legal/2002/copyright-software-20021231
+#
+-->
+
+<!--
+<!DOCTYPE schema  PUBLIC "-//W3C//DTD XMLSchema 200102//EN"
+ "http://www.w3.org/2001/XMLSchema.dtd"
+ [
+	<!ATTLIST schema
+     xmlns:xenc CDATA #FIXED 'http://www.w3.org/2001/04/xmlenc#'
+     xmlns:ds CDATA #FIXED 'http://www.w3.org/2000/09/xmldsig#'
+     xmlns:xenc11 CDATA #FIXED 'http://www.w3.org/2009/xmlenc11#'>
+	<!ENTITY xenc 'http://www.w3.org/2001/04/xmlenc#'>
+	<!ENTITY % p ''>
+	<!ENTITY % s ''>
+]>
+-->
+
+<schema xmlns='http://www.w3.org/2001/XMLSchema' version='1.0'
+        xmlns:xenc='http://www.w3.org/2001/04/xmlenc#'
+        xmlns:xenc11='http://www.w3.org/2009/xmlenc11#'
+        xmlns:ds='http://www.w3.org/2000/09/xmldsig#'
+        targetNamespace='http://www.w3.org/2009/xmlenc11#'
+        elementFormDefault='qualified'>
+
+	<import namespace='http://www.w3.org/2000/09/xmldsig#'
+			schemaLocation='../DSIG/xmldsig-core-schema.xsd'/>
+
+	<import namespace='http://www.w3.org/2001/04/xmlenc#'
+			schemaLocation='xenc-schema.xsd'/>
+
+	<element name="ConcatKDFParams" type="xenc11:ConcatKDFParamsType"/>
+	<complexType name="ConcatKDFParamsType">
+		<sequence>
+			<element ref="ds:DigestMethod"/>
+		</sequence>
+		<attribute name="AlgorithmID" type="hexBinary"/>
+		<attribute name="PartyUInfo" type="hexBinary"/>
+		<attribute name="PartyVInfo" type="hexBinary"/>
+		<attribute name="SuppPubInfo" type="hexBinary"/>
+		<attribute name="SuppPrivInfo" type="hexBinary"/>
+	</complexType>
+
+	<element name="DerivedKey" type="xenc11:DerivedKeyType"/>
+	<complexType name="DerivedKeyType">
+		<sequence>
+			<element ref="xenc11:KeyDerivationMethod" minOccurs="0"/>
+			<element ref="xenc:ReferenceList" minOccurs="0"/>
+			<element name="DerivedKeyName" type="string" minOccurs="0"/>
+			<element name="MasterKeyName" type="string" minOccurs="0"/>
+		</sequence>
+		<attribute name="Recipient" type="string" use="optional"/>
+		<attribute name="Id" type="ID" use="optional"/>
+		<attribute name="Type" type="anyURI" use="optional"/>
+	</complexType>
+
+	<element name="KeyDerivationMethod" type="xenc11:KeyDerivationMethodType"/>
+	<complexType name="KeyDerivationMethodType">
+		<sequence>
+			<any namespace="##any" minOccurs="0" maxOccurs="unbounded"/>
+		</sequence>
+		<attribute name="Algorithm" type="anyURI" use="required"/>
+	</complexType>
+
+	<element name="PBKDF2-params" type="xenc11:PBKDF2ParameterType"/>
+
+	<complexType name="AlgorithmIdentifierType">
+		<sequence>
+			<element name="Parameters" type="anyType" minOccurs="0"/>
+		</sequence>
+        <attribute name="Algorithm" type="anyURI" use="required" />
+	</complexType>
+
+	<complexType name="PRFAlgorithmIdentifierType">
+		<complexContent>
+          <restriction base="xenc11:AlgorithmIdentifierType">
+            <attribute name="Algorithm" type="anyURI" use="required" />
+          </restriction>
+        </complexContent>
+	</complexType>
+
+	<complexType name="PBKDF2ParameterType">
+		<sequence>
+			<element name="Salt">
+				<complexType>
+					<choice>
+						<element name="Specified" type="base64Binary"/>
+						<element name="OtherSource" type="xenc11:AlgorithmIdentifierType"/>
+					</choice>
+				</complexType>
+			</element>
+			<element name="IterationCount" type="positiveInteger"/>
+			<element name="KeyLength" type="positiveInteger"/>
+			<element name="PRF" type="xenc11:PRFAlgorithmIdentifierType"/>
+		</sequence>
+	</complexType>
+
+    <element name="MGF" type="xenc11:MGFType"/>
+    <complexType name="MGFType">
+      <complexContent>
+        <restriction base="xenc11:AlgorithmIdentifierType">
+          <attribute name="Algorithm" type="anyURI" use="required" />
+        </restriction>
+      </complexContent>
+    </complexType>
+
+</schema>
+
+

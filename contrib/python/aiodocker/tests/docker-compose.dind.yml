@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  docker-dind:
+    image: docker:dind
+    privileged: true
+    environment:
+      # Use overlay2 storage driver for better performance
+      DOCKER_DRIVER: overlay2
+      # Enable Docker API on TCP
+      DOCKER_TLS_CERTDIR: ""
+    ports:
+      - "2375:2375"
+    command:
+      - dockerd
+      - --host=tcp://0.0.0.0:2375
+      - --host=unix:///var/run/docker.sock
+      - --tls=false
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - aiodocker-test-network
+
+networks:
+  aiodocker-test-network:
+    driver: bridge

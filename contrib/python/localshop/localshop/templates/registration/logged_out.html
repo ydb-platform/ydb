@@ -1,0 +1,7 @@
+{% extends "layout.base.html" %}
+{% load i18n %}
+
+{% block content %}
+    <h1 class="page-header">{% trans "You are now logged out." %}</h1>
+    <a href="/">{% trans 'Log in again' %}</a>
+{% endblock %}

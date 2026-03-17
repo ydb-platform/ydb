@@ -1,0 +1,2 @@
+alias mars.step   = stepRange;
+alias mars.number = number;

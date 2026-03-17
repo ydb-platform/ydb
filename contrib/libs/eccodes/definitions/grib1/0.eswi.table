@@ -1,0 +1,10 @@
+#########################
+##
+## author: Sebastien Villaume
+## created: 6 Oct 2011
+## modified: 13 May 2013
+##
+# identification of subcenters for eswi centre (SMHI)
+0  none not set
+96 96 HIRLAM data (non-standard, deprecated)
+98 98 previously used to tag SMHI data that is ECMWF compliant (deprecated)

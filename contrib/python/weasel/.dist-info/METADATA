@@ -1,0 +1,97 @@
+Metadata-Version: 2.4
+Name: weasel
+Version: 0.4.3
+Summary: Weasel: A small and easy workflow system
+Home-page: https://github.com/explosion/weasel/
+Author: Explosion
+Author-email: contact@explosion.ai
+License: MIT
+Project-URL: Release notes, https://github.com/explosion/weasel/releases
+Project-URL: Source, https://github.com/explosion/weasel/
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Scientific/Engineering
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: confection<0.2.0,>=0.0.4
+Requires-Dist: packaging>=20.0
+Requires-Dist: wasabi<1.2.0,>=0.9.1
+Requires-Dist: srsly<3.0.0,>=2.4.3
+Requires-Dist: typer-slim<1.0.0,>=0.3.0
+Requires-Dist: cloudpathlib<1.0.0,>=0.7.0
+Requires-Dist: smart-open<8.0.0,>=5.2.1
+Requires-Dist: requests<3.0.0,>=2.13.0
+Requires-Dist: pydantic!=1.8,!=1.8.1,<3.0.0,>=1.7.4
+Dynamic: license-file
+
+<a href="https://explosion.ai"><img src="https://explosion.ai/assets/img/logo.svg" width="125" height="125" align="right" /></a>
+
+# Weasel: A small and easy workflow system
+
+Weasel lets you manage and share **end-to-end workflows** for
+different **use cases and domains**, and orchestrate training, packaging and
+serving your custom pipelines. You can start off by cloning a pre-defined
+project template, adjust it to fit your needs, load in your data, train a
+pipeline, export it as a Python package, upload your outputs to a remote storage
+and share your results with your team. Weasel can be used via the
+[`weasel`](https://github.com/explosion/weasel/blob/main/docs/cli.md) command and we provide templates in our
+[`projects`](https://github.com/explosion/projects) repo.
+
+![Illustration of project workflow and commands](https://raw.githubusercontent.com/explosion/weasel/main/docs/assets/images/projects.svg)
+
+## 💡 Example: Get started with a project template
+
+The easiest way to get started is to clone a project template and run it – for
+example, this [end-to-end template](https://github.com/explosion/projects/tree/v3/pipelines/tagger_parser_ud)
+that lets you train a spaCy **part-of-speech
+tagger** and **dependency parser** on a Universal Dependencies treebank.
+
+```shell
+python -m weasel clone pipelines/tagger_parser_ud
+```
+
+> **Note**
+>
+> Our [`projects`](https://github.com/explosion/projects) repo includes various
+> project templates for different NLP tasks, models, workflows and integrations
+> that you can clone and run. The easiest way to get started is to pick a
+> template, clone it and start modifying it!
+
+## 📕 Documentation
+
+Get started with the documentation:
+
+- [Learn how to create a Weasel workflow](https://github.com/explosion/weasel/blob/main/docs/tutorial/workflow.md)
+- [Working with directory and assets](https://github.com/explosion/weasel/blob/main/docs/tutorial/directory-and-assets.md)
+- [Running custom scripts](https://github.com/explosion/weasel/blob/main/docs/tutorial/custom-scripts.md)
+- [Using remote storage](https://github.com/explosion/weasel/blob/main/docs/tutorial/remote-storage.md)
+- [Weasel integrations](https://github.com/explosion/weasel/blob/main/docs/tutorial/integrations.md)
+- [Command line interface description](https://github.com/explosion/weasel/blob/main/docs/cli.md)
+
+## Migrating from spaCy Projects
+
+Weasel is a standalone replacement for spaCy Projects.
+There are a few backward incompatibilities that you should be aware of:
+
+- The `SPACY_CONFIG_OVERRIDES` environment variable is no longer checked.
+  You can set configuration overrides using `WEASEL_CONFIG_OVERRIDES`.
+- Support for the `spacy_version` configuration key has been dropped.
+- Support for the `check_requirements` configuration key has been dropped.
+- Support for `SPACY_PROJECT_USE_GIT_VERSION` environment variable has been dropped.
+- Error codes are now Weasel-specific, and do not follow spaCy error codes.
+
+Weasel checks for the first three incompatibilities and will issue a
+warning if you're using it with spaCy-specific configuration options.

@@ -1,0 +1,30 @@
+openapi: 3.0.0
+info:
+  title: "no title"
+  version: "no version"
+paths: {}
+components:
+  schemas:
+    Foo:
+      type: object
+      required:
+        - a
+        - b
+      properties:
+        a:
+          type: string
+        b:
+          type: string
+
+    Bar:
+      type: object
+      properties:
+        type:
+          type: string
+          pattern: service
+        name:
+          type: string
+      allOf:
+        - $ref: '#/components/schemas/Foo'
+        - required:
+            - type

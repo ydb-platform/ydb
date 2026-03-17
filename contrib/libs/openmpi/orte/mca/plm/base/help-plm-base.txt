@@ -1,0 +1,175 @@
+# -*- text -*-
+#
+# Copyright (c) 2004-2006 The Trustees of Indiana University and Indiana
+#                         University Research and Technology
+#                         Corporation.  All rights reserved.
+# Copyright (c) 2004-2006 The University of Tennessee and The University
+#                         of Tennessee Research Foundation.  All rights
+#                         reserved.
+# Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
+#                         University of Stuttgart.  All rights reserved.
+# Copyright (c) 2004-2005 The Regents of the University of California.
+#                         All rights reserved.
+# Copyright (c) 2015-2017 Intel, Inc. All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+[no-available-pls]
+No available launching agents were found.
+
+This is an unusual error; it means that Open RTE was unable to find
+any mechanism to launch proceses, and therefore is unable to start the
+process(es) required by your application.
+#
+[daemon-no-assigned-node]
+A daemon has no recorded node:
+
+  Daemon:  %s
+  Reported from nodename:  %s
+
+This usually indicates a difference between the names of nodes in the
+allocation versus what is returned on the node by get_hostname.
+#
+[daemon-died-no-signal]
+A daemon died unexpectedly with status %d while attempting
+to launch so we are aborting.
+
+There may be more information reported by the environment (see above).
+
+This may be because the daemon was unable to find all the needed shared
+libraries on the remote node. You may set your LD_LIBRARY_PATH to have the
+location of the shared libraries on the remote nodes and this will
+automatically be forwarded to the remote nodes.
+#
+[daemon-died-signal-core]
+A daemon died unexpectedly on signal %d (with core) while
+attempting to launch so we are aborting.
+
+There may be more information reported by the environment (see above).
+
+This may be because the daemon was unable to find all the needed shared
+libraries on the remote node. You may set your LD_LIBRARY_PATH to have the
+location of the shared libraries on the remote nodes and this will
+automatically be forwarded to the remote nodes.
+#
+[daemon-died-signal]
+A daemon died unexpectedly on signal %d  while attempting to
+launch so we are aborting.
+
+There may be more information reported by the environment (see above).
+
+This may be because the daemon was unable to find all the needed shared
+libraries on the remote node. You may set your LD_LIBRARY_PATH to have the
+location of the shared libraries on the remote nodes and this will
+automatically be forwarded to the remote nodes.
+#
+[incomplete-exit-cmd]
+One or more daemons could not be ordered to exit. This can be caused by a
+number of rather rare problems, but typically is caused by a daemon having
+died due to the failure of a node or its communications. This could result
+in an incomplete cleanup on the affected nodes. Please see below for a list
+of nodes which may require additional cleanup.
+
+We are truly sorry for the inconvenience.
+#
+[incomplete-kill-procs-cmd]
+One or more daemons could not be ordered to kill their local processes.
+This can be caused by a number of rather rare problems, but typically
+is caused by a daemon having died due to the failure of a node or its
+communications. This could result in an incomplete cleanup on the affected
+nodes. Additional information may be available below.
+
+We are truly sorry for the inconvenience.
+#
+[stdin-target-out-of-range]
+The requested stdin target is out of range for this job - it points
+to a process rank that is greater than the number of processes in the
+job.
+
+Specified target: %s
+Number of procs: %s
+
+This could be caused by specifying a negative number for the stdin
+target, or by mistyping the desired rank. Remember that MPI ranks begin
+with 0, not 1.
+
+Please correct the cmd line and try again.
+#
+[too-many-hosts]
+A call was made to launch a local slave process, but more than one
+target host was provided. Currently, each launch of a local slave
+can only be to a single host. To launch slaves on multiple hosts,
+you must issue one call/host.
+
+Num hosts specified: %d
+
+#
+[abs-path-reqd]
+A call was made to launch a local slave process that requested the
+binaries be pre-positioned on the remote host. However, an absolute
+path to the target directory was either not specified, or was provided
+in a relative path format.
+
+Path provided: %s
+
+The path to the target directory must be given as an absolute path. The
+target directory does NOT need to exist - the path to the target will
+be created, if required.
+
+#
+[exec-not-found]
+A call was made to launch a local slave process, but the specified
+executable could not be found:
+
+Exec: %s
+
+Please either specify an absolute path to the executable, or check
+that the executable is in your PATH.
+
+#
+[cp-not-found]
+A call was made to launch a local slave process that requested the
+binaries be pre-positioned on the remote host. However, we could not
+find the %s command in your path.
+
+Please check that %s is in your PATH and try again.
+
+#
+[file-not-found]
+A call was made to launch a local slave process that requested pre-positioning
+of one or more files, but the specified files could not be found:
+
+File: %s
+Source directory: %s
+
+Please either specify an absolute path to the file, or check
+that the file is in your current working directory...and ensure
+that you have read permissions on the file.
+
+#
+[deprecated-amca]
+You're using the --am option. Please be advised that this option is deprecated;
+you should use --tune instead. The --tune option allows one to specify mca
+parameters as well as environment variables from within a file using the same
+command line syntax (e.g. -mca var val -mca var "val" -x var=val -x var).
+The --am option will be removed in a future release.
+#
+[no-oob]
+A call was made to launch additional processes, but this process has
+no active out-of-band transports and therefore cannot execute this call.
+Please check to see if you have the "oob" MCA parameter set and ensure
+that it is either unset or at least includes the tcp transport.
+#
+[multi-endian]
+Open MPI does not currently support multi-endian operations. We have
+detected that the following node differs in endianness:
+
+
+  Nodename:      %s
+  Endian:        %s
+  Local endian:  %s
+
+Please correct the situation and try again.

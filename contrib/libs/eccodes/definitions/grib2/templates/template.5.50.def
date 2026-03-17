@@ -1,0 +1,7 @@
+# (C) Copyright 2005- ECMWF.
+
+# TEMPLATE 5.50, Spectral data - simple packing
+include "grib2/templates/template.5.packing.def"
+
+# Real part of (0,0)
+ieeefloat realPartOf00;

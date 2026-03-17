@@ -1,0 +1,175 @@
+{
+	"aria": {
+		"sortAscending": ": Sütunu artan sıralamak için etkinleştir",
+		"sortDescending": ": Sütunu azalan sıralamak için etkinleştir"
+	},
+	"buttons": {
+		"collection": "Koleksiyon <span class='ui-button-icon-primary ui-icon ui-icon-triangle-1-s'/>",
+		"colvis": "Göster/Gizle",
+		"colvisRestore": "Görünürlüğü eski haline getir",
+		"copy": "Kopyala",
+		"copyKeys": "Ctrl veya u2318 + C tuşlarına basarak tablo verilerini panonuza kopyalayın.<br><br>İptal etmek için bu mesaja tıklayın veya escape tuşuna basın.",
+		"copySuccess": {
+			"1": "Bir satır panoya kopyalandı",
+			"_": "%d satır panoya kopyalandı"
+		},
+		"copyTitle": "Panoya Kopyala",
+		"createState": "Durum Oluştur",
+		"csv": "CSV",
+		"excel": "Excel",
+		"pageLength": {
+			"-1": "Tüm satırları göster",
+			"_": "%d satır göster"
+		},
+		"pdf": "PDF",
+		"print": "Yazdır",
+		"removeAllStates": "Tüm Durumları Kaldır",
+		"removeState": "Kaldır",
+		"renameState": "Yeniden Adlandır",
+		"savedStates": "Kaydedilen Durumlar",
+		"stateRestore": "Durum %d",
+		"updateState": "Güncelle"
+	},
+	"datetime": {
+		"amPm": [
+			"ÖÖ",
+			"ÖS"
+		],
+		"hours": "Saat",
+		"minutes": "Dakika",
+		"months": [
+			"Oca",
+			"Şub",
+			"Mar",
+			"Nis",
+			"May",
+			"Haz",
+			"Tem",
+			"Ağu",
+			"Eyl",
+			"Eki",
+			"Kas",
+			"Ara"
+		],
+		"next": "Sonraki",
+		"previous": "Önceki",
+		"seconds": "Saniye",
+		"unknown": "-",
+		"weekdays": [
+			"Paz",
+			"Pzt",
+			"Sal",
+			"Çar",
+			"Per",
+			"Cum",
+			"Cmt"
+		]
+	},
+	"decimal": ".",
+	"emptyTable": "Tabloda veri yok",
+	"info": "_START_ ile _END_ arası _TOTAL_ kayıt gösteriliyor",
+	"infoEmpty": "0 ile 0 arası 0 kayıt gösteriliyor",
+	"infoFiltered": "(_MAX_ kayıt içerisinden bulunanlar)",
+	"infoThousands": ",",
+	"lengthMenu": "Sayfada _MENU_ kayıt göster",
+	"loadingRecords": "Yükleniyor...",
+	"paginate": {
+		"first": "İlk",
+		"last": "Son",
+		"next": "Sonraki",
+		"previous": "Önceki"
+	},
+	"processing": "İşleniyor...",
+	"search": "Ara:",
+	"searchBuilder": {
+		"add": "Koşul Ekle",
+		"button": {
+			"0": "<i class=\"fa-solid fa-filter\"></i> Filtre",
+			"_": "<i class=\"fa-solid fa-filter\"></i> Filtre (%d)"
+		},
+		"clearAll": "Sıfırla",
+		"condition": "Koşul",
+		"conditions": {
+			"array": {
+				"contains": "İçerir",
+				"empty": "Boş",
+				"equals": "Eşittir",
+				"not": "Değildir",
+				"notEmpty": "Boş Değil",
+				"without": "Olmadan"
+			},
+			"date": {
+				"after": "Sonra",
+				"before": "Önce",
+				"between": "Arasında",
+				"empty": "Boş",
+				"equals": "Eşittir",
+				"not": "Değildir",
+				"notBetween": "Arasında Değil",
+				"notEmpty": "Boş Değil"
+			},
+			"number": {
+				"between": "Arasında",
+				"empty": "Boş",
+				"equals": "Eşittir",
+				"gt": "Büyüktür",
+				"gte": "Büyük Eşittir",
+				"lt": "Küçüktür",
+				"lte": "Küçük Eşittir",
+				"not": "Değildir",
+				"notBetween": "Arasında Değil",
+				"notEmpty": "Boş Değil"
+			},
+			"string": {
+				"contains": "İçerir",
+				"empty": "Boş",
+				"endsWith": "İle Biter",
+				"equals": "Eşittir",
+				"not": "Değildir",
+				"notContains": "İçermez",
+				"notEmpty": "Boş Değil",
+				"notEndsWith": "İle Bitmez",
+				"notStartsWith": "İle Başlamaz",
+				"startsWith": "İle Başlar"
+			}
+		},
+		"data": "Sütun",
+		"deleteTitle": "Filtreleme kuralını sil",
+		"leftTitle": "Koşulu Dışa Taşı",
+		"logicAnd": "Ve",
+		"logicOr": "Veya",
+		"rightTitle": "Koşulu İçe Taşı",
+		"title": {
+			"0": "Filtre",
+			"_": "Filtre (%d)"
+		},
+		"value": "Değer"
+	},
+	"select": {
+		"cells": {
+			"1": "1 hücre seçildi",
+			"_": "%d hücre seçildi"
+		},
+		"columns": {
+			"1": "1 sütun seçildi",
+			"_": "%d sütun seçildi"
+		},
+		"rows": {
+			"1": "1 satır seçildi",
+			"_": "%d satır seçildi"
+		}
+	},
+	"starlette-admin": {
+		"buttons": {
+			"export": "Dışarı Aktar"
+		},
+		"conditions": {
+			"empty": "Boş",
+			"false": "Yanlış",
+			"notEmpty": "Boş Değil",
+			"true": "Doğru"
+		}
+	},
+	"thousands": ",",
+	"zeroRecords": "Eşleşen kayıt bulunamadı"
+}

@@ -1,0 +1,49 @@
+--- a/Eigen/src/Core/StableNorm.h
++++ b/Eigen/src/Core/StableNorm.h
+@@ -53,28 +53,16 @@
+ template<typename VectorType, typename RealScalar>
+ void stable_norm_impl_inner_step(const VectorType &vec, RealScalar& ssq, RealScalar& scale, RealScalar& invScale)
+ {
+-  typedef typename VectorType::Scalar Scalar;
+   const Index blockSize = 4096;
+-  
+-  typedef typename internal::nested_eval<VectorType,2>::type VectorTypeCopy;
+-  typedef typename internal::remove_all<VectorTypeCopy>::type VectorTypeCopyClean;
+-  const VectorTypeCopy copy(vec);
+-  
+-  enum {
+-    CanAlign = (   (int(VectorTypeCopyClean::Flags)&DirectAccessBit)
+-                || (int(internal::evaluator<VectorTypeCopyClean>::Alignment)>0) // FIXME Alignment)>0 might not be enough
+-               ) && (blockSize*sizeof(Scalar)*2<EIGEN_STACK_ALLOCATION_LIMIT)
+-                 && (EIGEN_MAX_STATIC_ALIGN_BYTES>0) // if we cannot allocate on the stack, then let's not bother about this optimization
+-  };
+-  typedef typename internal::conditional<CanAlign, Ref<const Matrix<Scalar,Dynamic,1,0,blockSize,1>, internal::evaluator<VectorTypeCopyClean>::Alignment>,
+-                                                   typename VectorTypeCopyClean::ConstSegmentReturnType>::type SegmentWrapper;
++
+   Index n = vec.size();
+-  
+-  Index bi = internal::first_default_aligned(copy);
+-  if (bi>0)
+-    internal::stable_norm_kernel(copy.head(bi), ssq, scale, invScale);
+-  for (; bi<n; bi+=blockSize)
+-    internal::stable_norm_kernel(SegmentWrapper(copy.segment(bi,numext::mini(blockSize, n - bi))), ssq, scale, invScale);
++  Index blockEnd = numext::round_down(n, blockSize);
++  for (Index i = 0; i < blockEnd; i += blockSize) {
++    internal::stable_norm_kernel(vec.template segment<blockSize>(i), ssq, scale, invScale);
++  }
++  if (n > blockEnd) {
++    internal::stable_norm_kernel(vec.tail(n - blockEnd), ssq, scale, invScale);
++  }
+ }
+ 
+ template<typename VectorType>
+@@ -86,8 +74,7 @@
+ 
+   Index n = vec.size();
+ 
+-  if(n==1)
+-    return abs(vec.coeff(0));
++  if (EIGEN_PREDICT_FALSE(n == 1)) return abs(vec.coeff(0));
+ 
+   typedef typename VectorType::RealScalar RealScalar;
+   RealScalar scale(0);

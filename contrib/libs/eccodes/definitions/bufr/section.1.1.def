@@ -1,0 +1,22 @@
+# (C) Copyright 2005- ECMWF.
+
+codetable[2] bufrHeaderCentre 'common/c-1.table' : dump;
+unsigned[1]  updateSequenceNumber;
+
+flags[1]     section1Flags 'bufr/section1_flags.table' = 128 : hidden ; # = section 2 present
+
+unsigned[1] dataCategory : dump;
+unsigned[1] dataSubCategory : dump;
+unsigned[2] localTablesVersionNumber : dump;
+
+unsigned[1] yearOfCentury : dump;
+unsigned[1] month : dump;
+unsigned[1] day : dump;
+unsigned[1] hour : dump;
+unsigned[1] minute : dump;
+unsigned[1] masterTablesVersionNumber : dump;
+
+alias masterTableNumber = editionNumber; # ?
+
+alias ls.masterTablesVersionNumber=masterTablesVersionNumber;
+alias ls.localTablesVersionNumber=localTablesVersionNumber;

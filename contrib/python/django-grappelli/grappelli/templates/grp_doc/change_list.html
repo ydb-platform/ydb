@@ -1,0 +1,499 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{% block bodyclass %}grp-doc{% endblock %}
+{% block content-class %}{% endblock %}
+{% block title %}Grappelli Documentation &raquo; Change List{% endblock %}
+
+{% block extrahead %}
+    <script type="text/javascript" charset="utf-8">
+        (function($) {
+            $(document).ready(function() {
+                $("#grp-content-container .grp-group").grp_collapsible_group();
+                $("#grp-content-container .grp-collapse").grp_collapsible({
+                    on_init: function(elem, options) {
+                        // open collapse (and all collapse parents) in case of errors
+                        if (elem.find("ul.errorlist").length > 0) {
+                            elem.removeClass("grp-closed")
+                                .addClass("grp-open");
+                            elem.parents(".grp-collapse")
+                                .removeClass("grp-closed")
+                                .addClass("grp-open");
+                        }
+                    }
+                });
+            });
+        })(django.jQuery);
+    </script>
+{% endblock %}
+
+{% block breadcrumbs %}
+    <ul>
+        <li><a href="../">Grappelli Documentation</a></li>
+        <li>Change List</li>
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <h1>Change List</h1>
+    <div class="g-d-c">
+        <div class="g-d-24">
+            <div class="grp-doc-description">
+                <p>A change-list lists objects of a model. Its basic structure and most important components are explained below. At the end of the page, you'll find a complete change-list template. Make sure to read about <a href="{% url 'grp_doc_basic_page_structure' %}">how a custom template is built</a> first to gain basic understanding.</p>
+            </div>
+        </div>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Extend the Base, Load Stuff You Need, Define the Body-Class</h1>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} extends "admin/base_site.html" {% templatetag closeblock %}
+{% templatetag openblock %} load i18n static admin_modify grp_tags {% templatetag closeblock %}
+{% templatetag openblock %} block bodyclass {% templatetag closeblock %}grp-change-list{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Custom Stylesheets, Javascripts</h1>
+                    <p>Link custom stylesheets if needed. Regarding javascripts, you should take a look at Grappellis change_list.html &mdash; mentioned below are just the parts you need for the actions.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} block stylesheets {% templatetag closeblock %}
+    {% endfilter %}&#123;&#123; block.super &#125;&#125;{% filter force_escape %}
+    {% endfilter %}&#123;&#123; media.css &#125;&#125;{% filter force_escape %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% templatetag openblock %} block extrastyle {% templatetag closeblock %}
+    <link href="Path to your custom stylesheet" rel="stylesheet" type="text/css" />
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% templatetag openblock %} block javascripts {% templatetag closeblock %}
+    {% endfilter %}&#123;&#123; block.super &#125;&#125;{% filter force_escape %}
+    {% endfilter %}&#123;&#123; media.js &#125;&#125;{% filter force_escape %}
+    {% templatetag openblock %} if cl.formset or action_form {% templatetag closeblock %}
+        {% templatetag openblock %} url 'admin:jsi18n' as jsi18nurl {% templatetag closeblock %}
+        <script type="text/javascript" src="{% endfilter %}&#123;&#123; jsi18nurl|default:'../../jsi18n/' &#125;&#125;{% filter force_escape %}"></script>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+    {% templatetag openblock %} if action_form {% templatetag closeblock %}
+        <script type="text/javascript" charset="utf-8">
+            (function($) {
+                $(document).ready(function() {
+                    $("tr input.action-select").actions();
+                });
+            })(grp.jQuery);
+        </script>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+    {% templatetag openblock %} if cl.formset {% templatetag closeblock %}
+        <script type="text/javascript" charset="utf-8">
+            (function($) {
+                $(document).ready(function() {
+
+                    Take a look at Grappellis change_list.html to find out what js you might need
+
+                });
+            })(grp.jQuery);
+        </script>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Breadcrumbs</h1>
+                    <p>A detailed explanation on how breadcrumbs are built can be found <a href="{% url 'grp_doc_context_navigation' %}">here</a>.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} block breadcrumbs {% templatetag closeblock %}
+    {% templatetag openblock %} if not is_popup {% templatetag closeblock %}
+        <ul>
+            <li><a href="../../">{% templatetag openblock %} trans "Home" {% templatetag closeblock %}</a></li>
+            <li><a href="../">{% templatetag openblock %} opts.app_config.verbose_name {% templatetag closeblock %}</a></li>
+            <li>{% endfilter %}&#123;&#123; opts.verbose_name_plural|capfirst &#125;&#125;{% filter force_escape %}</li>
+        </ul>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Content Title</h1>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} block content_title {% templatetag closeblock %}
+    <h1>{% endfilter %}&#123;&#123; cl.opts.verbose_name_plural|capfirst &#125;&#125;{% filter force_escape %}</h1>
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Object Tools</h1>
+                    <p>A detailed explanation on how object-tools are built can be found <a href="{% url 'grp_doc_object_tools' %}">here</a>.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} block object-tools {% templatetag closeblock %}
+    {% templatetag openblock %} if has_add_permission {% templatetag closeblock %}
+        <ul class="grp-object-tools">
+            {% templatetag openblock %} block object-tools-items {% templatetag closeblock %}
+                <li>
+                    <a href="add/{% templatetag openblock %} if is_popup {% templatetag closeblock %}?_popup=1{% templatetag openblock %} endif {% templatetag closeblock %}" class="grp-add-link grp-state-focus">
+                        {% templatetag openblock %} blocktrans with cl.opts.verbose_name as name {% templatetag closeblock %}Add {% endfilter %}&#123;&#123; name &#125;&#125;{% filter force_escape %}{% templatetag openblock %} endblocktrans {% templatetag closeblock %}
+                    </a>
+                </li>
+            {% templatetag openblock %} endblock {% templatetag closeblock %}
+        </ul>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Content</h1>
+                    <p>Within the content block, there are some components which are explained separately. Use the following links: <a href="{% url 'grp_doc_pagination' %}">Pagination</a>, <a href="{% url 'grp_doc_search_form' %}">Search-Form</a>, <a href="{% url 'grp_doc_filter' %}">Filter</a>, <a href="{% url 'grp_doc_date_hierarchy' %}">Date-Hierarchy</a>, <a href="{% url 'grp_doc_tables' %}">Tables (Result-List)</a> and <a href="{% url 'grp_doc_submit_rows' %}">Submit-Rows</a>.</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} block content {% templatetag closeblock %}
+
+    – Pagination, Searchfield, Filters, Date Hierarchy
+    – Result-List
+    – Pagination
+    – Submit-Row
+
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>Content Example</h1>
+                    <p>Based on Grappellis change_list.html, the content looks like this:</p>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} block content {% templatetag closeblock %}
+
+    <!-- Pagination, Searchfield, Filters, Date Hierarchy -->
+    {% templatetag openblock %} if cl.search_fields or cl.has_filters or cl.date_hierarchy {% templatetag closeblock %}
+        <div class="grp-module">
+            <div class="grp-row">
+                <div class="l-2cr-fluid
+                    {% templatetag openblock %} if cl.has_filters and cl.search_fields {% templatetag closeblock %}
+                        l-d-12
+                    {% templatetag openblock %} else {% templatetag closeblock %}
+                        {% templatetag openblock %} if cl.has_filters or cl.search_fields {% templatetag closeblock %}l-d-6{% templatetag openblock %} endif {% templatetag closeblock %}
+                    {% templatetag openblock %} endif {% templatetag closeblock %}
+                    ">
+                    {% templatetag openblock %} if cl.has_filters or cl.search_fields {% templatetag closeblock %}
+                        {% templatetag openblock %} block aside {% templatetag closeblock %}
+                            <aside class="c-1">
+                                <header style="display:none"><h1>Search &amp; Filters</h1></header>
+                                <!-- SEARCH -->
+                                {% templatetag openblock %} if cl.search_fields {% templatetag closeblock %}
+                                    {% templatetag openblock %} block search {% templatetag closeblock %}
+                                        <div id="search" class="g-d-6 g-d-f">
+                                            {% templatetag openblock %} search_form cl {% templatetag closeblock %}
+                                        </div>
+                                    {% templatetag openblock %} endblock {% templatetag closeblock %}
+                                {% templatetag openblock %} endif {% templatetag closeblock %}
+                                <!-- FILTERS -->
+                                {% templatetag openblock %} if cl.has_filters {% templatetag closeblock %}
+                                    {% templatetag openblock %} block filters {% templatetag closeblock %}
+                                        <div id="grp-filters" class="filter g-d-6 g-d-l">
+                                            <div class="grp-pulldown-container">
+                                                <a href="javascript://" class="grp-button grp-pulldown-handler">
+                                                    {% templatetag openblock %} trans 'Filter' {% templatetag closeblock %}
+                                                </a>
+                                                <ul class="grp-pulldown-content" style="display: none">
+                                                    {% templatetag openblock %} for spec in cl.filter_specs {% templatetag closeblock %}
+                                                        {% templatetag openblock %} admin_list_filter cl spec %}
+                                                    {% templatetag openblock %} endfor {% templatetag closeblock %}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    {% templatetag openblock %} endblock {% templatetag closeblock %}
+                                {% templatetag openblock %} endif {% templatetag closeblock %}
+                            </aside>
+                        {% templatetag openblock %} endblock {% templatetag closeblock %}
+                    {% templatetag openblock %} endif {% templatetag closeblock %}
+                    {% templatetag openblock %} block pagination_top {% templatetag closeblock %}
+                        <div class="c-2">
+                            <!-- PAGINATION TOP -->
+                            {% templatetag openblock %} pagination cl {% templatetag closeblock %}
+                        </div>
+                    {% templatetag openblock %} endblock {% templatetag closeblock %}
+                </div>
+            </div>
+            <!-- DATE HIERARCHY -->
+            {% templatetag openblock %} if cl.date_hierarchy {% templatetag closeblock %}
+                {% templatetag openblock %} block date_hierarchy %}<div class="grp-row">{% templatetag openblock %} date_hierarchy cl {% templatetag closeblock %}</div>{% templatetag openblock %} endblock %}
+            {% templatetag openblock %} endif {% templatetag closeblock %}
+        </div>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+
+    <!-- CHANGE-LIST RESULTS -->
+    <form id="grp-changelist-form" action="" method="post"
+        {% templatetag openblock %} if cl.formset.is_multipart {% templatetag closeblock %} enctype="multipart/form-data"{% templatetag openblock %} endif {% templatetag closeblock %}
+    >{% templatetag openblock %} csrf_token {% templatetag closeblock %}
+        <section id="grp-changelist" class="{% templatetag openblock %} if cl.list_editable {% templatetag closeblock %} grp-editable{% templatetag openblock %} endif {% templatetag closeblock %}">
+            <header style="display:none"><h1>Results</h1></header>
+            <!-- POPUP -->
+            {% templatetag openblock %} if is_popup %}<input type="hidden" name="_popup" value="1" />{% templatetag openblock %} endif {% templatetag closeblock %}
+            <!-- ERRORS -->
+            {% templatetag openblock %} if cl.formset.errors {% templatetag closeblock %}
+                <p class="errornote">
+                    {% templatetag openblock %} blocktrans count cl.formset.errors|length as counter {% templatetag closeblock %}
+                        Please correct the error below.
+                    {% templatetag openblock %} plural {% templatetag closeblock %}
+                        Please correct the errors below.
+                    {% templatetag openblock %} endblocktrans {% templatetag closeblock %}
+                </p>
+                {% endfilter %}&#123;&#123; cl.formset.non_form_errors &#125;&#125;{% filter force_escape %}
+            {% templatetag openblock %} endif {% templatetag closeblock %}
+            <!-- MANAGEMENT FORM -->
+            {% templatetag openblock %} if cl.formset {% templatetag closeblock %}
+                {% endfilter %}&#123;&#123; cl.formset.management_form &#125;&#125;{% filter force_escape %}
+            {% templatetag openblock %} endif {% templatetag closeblock %}
+            <!-- CHANGELIST-RESULTS -->
+            {% templatetag openblock %} block result_list {% templatetag closeblock %}
+                {% templatetag openblock %} result_list cl {% templatetag closeblock %}
+            {% templatetag openblock %} endblock {% templatetag closeblock %}
+        </section>
+        <!-- PAGINATION BOTTOM -->
+        {% templatetag openblock %} if not cl.result_count == 0 {% templatetag closeblock %}
+            {% templatetag openblock %} block pagination_bottom {% templatetag closeblock %}
+                <div class="grp-module">
+                    <div class="grp-row">{% templatetag openblock %} pagination cl {% templatetag closeblock %}</div>
+                </div>
+            {% templatetag openblock %} endblock {% templatetag closeblock %}
+        {% templatetag openblock %} endif {% templatetag closeblock %}
+        <!-- SUBMIT ROW -->
+        {% templatetag openblock %} if cl.formset or action_form {% templatetag closeblock %}
+            <footer id="submit" class="grp-module grp-submit-row grp-fixed-footer">
+                <header style="display:none"><h1>Submit Options</h1></header>
+                <ul>
+                    {% templatetag openblock %} if action_form {% templatetag closeblock %}
+                        <li class="grp-float-left grp-changelist-actions">{% templatetag openblock %} admin_actions {% templatetag closeblock %}</li>
+                    {% templatetag openblock %} endif {% templatetag closeblock %}
+                    {% templatetag openblock %} if cl.formset {% templatetag closeblock %}
+                        <li><input type="submit" class="grp-button grp-default" name="_save" value="Save"/></li>
+                    {% templatetag openblock %} endif {% templatetag closeblock %}
+                </ul>
+            </footer>
+        {% templatetag openblock %} endif {% templatetag closeblock %}
+    </form>
+
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+            </div>
+        </section>
+        <section>
+            <div class="g-d-24">
+                <div class="grp-doc-description">
+                    <h1>The complete change–list template</h1>
+                </div>
+            </div>
+            <div class="g-d-24">
+                <div class="grp-doc-code"><pre><code>{% filter force_escape %}
+{% templatetag openblock %} extends "admin/base_site.html" {% templatetag closeblock %}
+{% templatetag openblock %} load i18n static admin_modify grp_tags {% templatetag closeblock %}
+{% templatetag openblock %} block bodyclass {% templatetag closeblock %}grp-change-list{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+{% templatetag openblock %} block stylesheets {% templatetag closeblock %}
+    {% endfilter %}&#123;&#123; block.super &#125;&#125;{% filter force_escape %}
+    {% endfilter %}&#123;&#123; media.css &#125;&#125;{% filter force_escape %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% templatetag openblock %} block extrastyle {% templatetag closeblock %}
+    <link href="Path to your custom stylesheet" rel="stylesheet" type="text/css" />
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% templatetag openblock %} block javascripts {% templatetag closeblock %}
+    {% endfilter %}&#123;&#123; block.super &#125;&#125;{% filter force_escape %}
+    {% endfilter %}&#123;&#123; media.js &#125;&#125;{% filter force_escape %}
+    {% templatetag openblock %} if cl.formset or action_form {% templatetag closeblock %}
+        {% templatetag openblock %} url 'admin:jsi18n' as jsi18nurl {% templatetag closeblock %}
+        <script type="text/javascript" src="{% endfilter %}&#123;&#123; jsi18nurl|default:'../../jsi18n/' &#125;&#125;{% filter force_escape %}"></script>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+    {% templatetag openblock %} if action_form {% templatetag closeblock %}
+        <script type="text/javascript" charset="utf-8">
+            (function($) {
+                $(document).ready(function() {
+                    $("tr input.action-select").actions();
+                });
+            })(grp.jQuery);
+        </script>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+    {% templatetag openblock %} if cl.formset {% templatetag closeblock %}
+        <script type="text/javascript" charset="utf-8">
+            (function($) {
+                $(document).ready(function() {
+
+                    Take a look at Grappellis change_list.html to find out what js you might need
+
+                });
+            })(grp.jQuery);
+        </script>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+{% templatetag openblock %} block breadcrumbs {% templatetag closeblock %}
+    {% templatetag openblock %} if not is_popup {% templatetag closeblock %}
+        <ul>
+            <li><a href="../../">{% templatetag openblock %} trans "Home" {% templatetag closeblock %}</a></li>
+            <li><a href="../">{% templatetag openblock %} opts.app_config.verbose_name {% templatetag closeblock %}</a></li>
+            <li>{% endfilter %}&#123;&#123; opts.verbose_name_plural|capfirst &#125;&#125;{% filter force_escape %}</li>
+        </ul>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+{% templatetag openblock %} block content_title {% templatetag closeblock %}
+    <h1>{% endfilter %}&#123;&#123; cl.opts.verbose_name_plural|capfirst &#125;&#125;{% filter force_escape %}</h1>
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+{% templatetag openblock %} block object-tools {% templatetag closeblock %}
+    {% templatetag openblock %} if has_add_permission {% templatetag closeblock %}
+        <ul class="grp-object-tools">
+            {% templatetag openblock %} block object-tools-items {% templatetag closeblock %}
+                <li>
+                    <a href="add/{% templatetag openblock %} if is_popup {% templatetag closeblock %}?_popup=1{% templatetag openblock %} endif {% templatetag closeblock %}" class="grp-add-link grp-state-focus">
+                        {% templatetag openblock %} blocktrans with cl.opts.verbose_name as name {% templatetag closeblock %}Add {% endfilter %}&#123;&#123; name &#125;&#125;{% filter force_escape %}{% templatetag openblock %} endblocktrans {% templatetag closeblock %}
+                    </a>
+                </li>
+            {% templatetag openblock %} endblock {% templatetag closeblock %}
+        </ul>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+
+{% templatetag openblock %} block content {% templatetag closeblock %}
+
+    <!-- Pagination, Searchfield, Filters, Date Hierarchy -->
+    {% templatetag openblock %} if cl.search_fields or cl.has_filters or cl.date_hierarchy {% templatetag closeblock %}
+        <div class="grp-module">
+            <div class="grp-row">
+                <div class="l-2cr-fluid
+                    {% templatetag openblock %} if cl.has_filters and cl.search_fields {% templatetag closeblock %}
+                        l-d-12
+                    {% templatetag openblock %} else {% templatetag closeblock %}
+                        {% templatetag openblock %} if cl.has_filters or cl.search_fields {% templatetag closeblock %}l-d-6{% templatetag openblock %} endif {% templatetag closeblock %}
+                    {% templatetag openblock %} endif {% templatetag closeblock %}
+                    ">
+                    {% templatetag openblock %} if cl.has_filters or cl.search_fields {% templatetag closeblock %}
+                        {% templatetag openblock %} block aside {% templatetag closeblock %}
+                            <aside class="c-1">
+                                <header style="display:none"><h1>Search &amp; Filters</h1></header>
+                                <!-- SEARCH -->
+                                {% templatetag openblock %} if cl.search_fields {% templatetag closeblock %}
+                                    {% templatetag openblock %} block search {% templatetag closeblock %}
+                                        <div id="search" class="g-d-6 g-d-f">
+                                            {% templatetag openblock %} search_form cl {% templatetag closeblock %}
+                                        </div>
+                                    {% templatetag openblock %} endblock {% templatetag closeblock %}
+                                {% templatetag openblock %} endif {% templatetag closeblock %}
+                                <!-- FILTERS -->
+                                {% templatetag openblock %} if cl.has_filters {% templatetag closeblock %}
+                                    {% templatetag openblock %} block filters {% templatetag closeblock %}
+                                        <div id="grp-filters" class="filter g-d-6 g-d-l">
+                                            <div class="grp-pulldown-container">
+                                                <a href="javascript://" class="grp-button grp-pulldown-handler">
+                                                    {% templatetag openblock %} trans 'Filter' {% templatetag closeblock %}
+                                                </a>
+                                                <ul class="grp-pulldown-content" style="display: none">
+                                                    {% templatetag openblock %} for spec in cl.filter_specs {% templatetag closeblock %}
+                                                        {% templatetag openblock %} admin_list_filter cl spec %}
+                                                    {% templatetag openblock %} endfor {% templatetag closeblock %}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    {% templatetag openblock %} endblock {% templatetag closeblock %}
+                                {% templatetag openblock %} endif {% templatetag closeblock %}
+                            </aside>
+                        {% templatetag openblock %} endblock {% templatetag closeblock %}
+                    {% templatetag openblock %} endif {% templatetag closeblock %}
+                    {% templatetag openblock %} block pagination_top {% templatetag closeblock %}
+                        <div class="c-2">
+                            <!-- PAGINATION TOP -->
+                            {% templatetag openblock %} pagination cl {% templatetag closeblock %}
+                        </div>
+                    {% templatetag openblock %} endblock {% templatetag closeblock %}
+                </div>
+            </div>
+            <!-- DATE HIERARCHY -->
+            {% templatetag openblock %} if cl.date_hierarchy {% templatetag closeblock %}
+                {% templatetag openblock %} block date_hierarchy %}<div class="grp-row">{% templatetag openblock %} date_hierarchy cl {% templatetag closeblock %}</div>{% templatetag openblock %} endblock %}
+            {% templatetag openblock %} endif {% templatetag closeblock %}
+        </div>
+    {% templatetag openblock %} endif {% templatetag closeblock %}
+
+    <!-- CHANGE-LIST RESULTS -->
+    <form id="grp-changelist-form" action="" method="post"
+        {% templatetag openblock %} if cl.formset.is_multipart {% templatetag closeblock %} enctype="multipart/form-data"{% templatetag openblock %} endif {% templatetag closeblock %}
+    >{% templatetag openblock %} csrf_token {% templatetag closeblock %}
+        <section id="grp-changelist" class="{% templatetag openblock %} if cl.list_editable {% templatetag closeblock %} grp-editable{% templatetag openblock %} endif {% templatetag closeblock %}">
+            <header style="display:none"><h1>Results</h1></header>
+            <!-- POPUP -->
+            {% templatetag openblock %} if is_popup %}<input type="hidden" name="_popup" value="1" />{% templatetag openblock %} endif {% templatetag closeblock %}
+            <!-- ERRORS -->
+            {% templatetag openblock %} if cl.formset.errors {% templatetag closeblock %}
+                <p class="errornote">
+                    {% templatetag openblock %} blocktrans count cl.formset.errors|length as counter {% templatetag closeblock %}
+                        Please correct the error below.
+                    {% templatetag openblock %} plural {% templatetag closeblock %}
+                        Please correct the errors below.
+                    {% templatetag openblock %} endblocktrans {% templatetag closeblock %}
+                </p>
+                {% endfilter %}&#123;&#123; cl.formset.non_form_errors &#125;&#125;{% filter force_escape %}
+            {% templatetag openblock %} endif {% templatetag closeblock %}
+            <!-- MANAGEMENT FORM -->
+            {% templatetag openblock %} if cl.formset {% templatetag closeblock %}
+                {% endfilter %}&#123;&#123; cl.formset.management_form &#125;&#125;{% filter force_escape %}
+            {% templatetag openblock %} endif {% templatetag closeblock %}
+            <!-- CHANGELIST-RESULTS -->
+            {% templatetag openblock %} block result_list {% templatetag closeblock %}
+                {% templatetag openblock %} result_list cl {% templatetag closeblock %}
+            {% templatetag openblock %} endblock {% templatetag closeblock %}
+        </section>
+        <!-- PAGINATION BOTTOM -->
+        {% templatetag openblock %} if not cl.result_count == 0 {% templatetag closeblock %}
+            {% templatetag openblock %} block pagination_bottom {% templatetag closeblock %}
+                <div class="grp-module">
+                    <div class="grp-row">{% templatetag openblock %} pagination cl {% templatetag closeblock %}</div>
+                </div>
+            {% templatetag openblock %} endblock {% templatetag closeblock %}
+        {% templatetag openblock %} endif {% templatetag closeblock %}
+        <!-- SUBMIT ROW -->
+        {% templatetag openblock %} if cl.formset or action_form {% templatetag closeblock %}
+            <footer id="submit" class="grp-module grp-submit-row grp-fixed-footer">
+                <header style="display:none"><h1>Submit Options</h1></header>
+                <ul>
+                    {% templatetag openblock %} if action_form {% templatetag closeblock %}
+                        <li class="grp-float-left grp-changelist-actions">{% templatetag openblock %} admin_actions {% templatetag closeblock %}</li>
+                    {% templatetag openblock %} endif {% templatetag closeblock %}
+                    {% templatetag openblock %} if cl.formset {% templatetag closeblock %}
+                        <li><input type="submit" class="grp-button grp-default" name="_save" value="Save"/></li>
+                    {% templatetag openblock %} endif {% templatetag closeblock %}
+                </ul>
+            </footer>
+        {% templatetag openblock %} endif {% templatetag closeblock %}
+    </form>
+
+{% templatetag openblock %} endblock {% templatetag closeblock %}
+{% endfilter %}</code></pre></div>
+    </div>
+{% endblock %}

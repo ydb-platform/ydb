@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package yandex.cloud.cloudregistry.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/yandex-cloud/go-genproto/yandex/cloud/cloudregistry/v1;cloudregistry";
+option java_package = "yandex.cloud.api.cloudregistry.v1";
+
+// A Registry resource. For more information, see the [Registry](/docs/cloud-registry/concepts/registry) section of the documentation.
+message Registry {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+
+    // Registry is being created.
+    CREATING = 1;
+
+    // Registry is ready to use.
+    ACTIVE = 2;
+
+    // Registry is being deleted.
+    DELETING = 3;
+  }
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+
+    // Registry kind is maven.
+    MAVEN = 1;
+    // Registry kind is npm.
+    NPM = 2;
+    // Registry kind is docker.
+    DOCKER = 3;
+    // Registry kind is nuget.
+    NUGET = 4;
+    // Registry kind is debian.
+    DEBIAN = 5;
+    // Registry kind is pypi.
+    PYPI = 6;
+    // Regisrty kind is binary.
+    BINARY = 7;
+  }
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+
+    // Registry type is local.
+    LOCAL = 1;
+    REMOTE = 2;
+    VIRTUAL = 3;
+  }
+
+  // Output only. ID of the registry.
+  string id = 1;
+
+  // ID of the folder that the registry belongs to.
+  string folder_id = 2;
+
+  // Name of the registry.
+  string name = 3;
+
+  // Kind of the registry.
+  Kind kind = 4;
+
+  // Type of the registry.
+  Type type = 5;
+
+  // Output only. Status of the registry.
+  Status status = 6;
+
+  // Description of the registry.
+  string description = 7;
+
+  // Resource labels as `key:value` pairs. Maximum of 64 per resource.
+  map<string, string> labels = 8;
+
+  // Resource properties as `key:value` pairs. Maximum of 64 per resource.
+  map<string, string> properties = 9;
+
+  // Output only. Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp created_at = 10;
+
+  // Output only. Modification timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp modified_at = 11;
+}

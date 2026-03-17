@@ -1,0 +1,29 @@
+# This file is distributed under the same license as the django-tables2 package
+# Fabio C. Barrionuevo da Luz <bnafta at gmail dot com>, 2014.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: 0.14.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2018-04-12 10:06+0200\n"
+"PO-Revision-Date: 2014-02-02 00:44-0300\n"
+"Last-Translator: Fabio C. Barrionuevo da Luz <bnafta at gmail dot com>\n"
+"Language-Team: Portuguese (Brazil) <LL@li.org>\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: templates/django_tables2/bootstrap.html:64
+#: templates/django_tables2/bootstrap4.html:64
+#: templates/django_tables2/table.html:61
+msgid "previous"
+msgstr "anterior"
+
+#: templates/django_tables2/bootstrap.html:89
+#: templates/django_tables2/bootstrap4.html:82
+#: templates/django_tables2/table.html:82
+msgid "next"
+msgstr "próximo"

@@ -1,0 +1,3 @@
+[console_scripts]
+pybidi = bidi:main
+

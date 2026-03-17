@@ -1,0 +1,14 @@
+<div class="{% if error %}{{ field.error_class }}{% endif %}">
+    <input type="file" class="form-control {% if error %}is-invalid{% endif %}" id="{{ field.id }}"
+           name="{{ field.id }}" {{ field.input_params() | safe }} />
+    {% if field.help_text %}
+        <small class="form-hint">{{ field.help_text }}</small>
+    {% endif %}
+</div>
+{% include "forms/_error.html" %}
+{% if action=='EDIT' and field._isvalid_value(data) %}
+    <div class="mt-2 border p-2">
+        {% include "displays/file.html" %}
+        {% include "forms/_delete.html" %}
+    </div>
+{% endif %}

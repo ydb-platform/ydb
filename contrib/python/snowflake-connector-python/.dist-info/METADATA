@@ -1,0 +1,1129 @@
+Metadata-Version: 2.1
+Name: snowflake-connector-python
+Version: 2.9.0
+Summary: Snowflake Connector for Python
+Home-page: https://www.snowflake.com/
+Author: Snowflake, Inc
+Author-email: snowflake-python-libraries-dl@snowflake.com
+License: Apache-2.0
+Project-URL: Documentation, https://docs.snowflake.com/en/user-guide/python-connector.html
+Project-URL: Source, https://github.com/snowflakedb/snowflake-connector-python
+Project-URL: Issues, https://github.com/snowflakedb/snowflake-connector-python/issues
+Project-URL: Changelog, https://github.com/snowflakedb/snowflake-connector-python/blob/main/DESCRIPTION.md
+Keywords: Snowflake db database cloud analytics warehouse
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Environment :: Other Environment
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Education
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: SQL
+Classifier: Topic :: Database
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Topic :: Software Development
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+License-File: NOTICE
+Requires-Dist: asn1crypto (<2.0.0,>0.24.0)
+Requires-Dist: cffi (<2.0.0,>=1.9)
+Requires-Dist: cryptography (<41.0.0,>=3.1.0)
+Requires-Dist: oscrypto (<2.0.0)
+Requires-Dist: pyOpenSSL (<23.0.0,>=16.2.0)
+Requires-Dist: pycryptodomex (!=3.5.0,<4.0.0,>=3.2)
+Requires-Dist: pyjwt (<3.0.0)
+Requires-Dist: pytz
+Requires-Dist: requests (<3.0.0)
+Requires-Dist: setuptools (>34.0.0)
+Requires-Dist: charset-normalizer (<3,>=2)
+Requires-Dist: idna (<4,>=2.5)
+Requires-Dist: urllib3 (<1.27,>=1.21.1)
+Requires-Dist: certifi (>=2017.4.17)
+Requires-Dist: typing-extensions (<5,>=4.3)
+Requires-Dist: filelock (<4,>=3.5)
+Provides-Extra: development
+Requires-Dist: Cython ; extra == 'development'
+Requires-Dist: coverage ; extra == 'development'
+Requires-Dist: more-itertools ; extra == 'development'
+Requires-Dist: numpy (<1.24.0) ; extra == 'development'
+Requires-Dist: pendulum (!=2.1.1) ; extra == 'development'
+Requires-Dist: pexpect ; extra == 'development'
+Requires-Dist: pytest (<7.3.0) ; extra == 'development'
+Requires-Dist: pytest-cov ; extra == 'development'
+Requires-Dist: pytest-rerunfailures ; extra == 'development'
+Requires-Dist: pytest-timeout ; extra == 'development'
+Requires-Dist: pytest-xdist ; extra == 'development'
+Requires-Dist: pytzdata ; extra == 'development'
+Provides-Extra: pandas
+Requires-Dist: pandas (<1.6.0,>=1.0.0) ; extra == 'pandas'
+Requires-Dist: pyarrow (<8.1.0,>=8.0.0) ; extra == 'pandas'
+Provides-Extra: secure-local-storage
+Requires-Dist: keyring (!=16.1.0,<24.0.0) ; extra == 'secure-local-storage'
+
+This package includes the Snowflake Connector for Python, which conforms to the Python DB API 2.0 specification:
+https://www.python.org/dev/peps/pep-0249/
+
+Snowflake Documentation is available at:
+https://docs.snowflake.com/
+
+Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
+
+# Release Notes
+
+- v2.9.0(December 9, 2022)
+
+  - Fixed a bug where the permission of the file downloaded via GET command is changed
+  - Reworked authentication internals to allow users to plug custom key-pair authenticators
+  - Multi-statement query execution is now supported through `cursor.execute` and `cursor.executemany`
+    - The Snowflake parameter `MULTI_STATEMENT_COUNT` can be altered at the account, session, or statement level. An additional argument, `num_statements`, can be provided to `execute` to use this parameter at the statement level. It *must* be provided to `executemany` to submit a multi-statement query through the method. Note that bulk insert optimizations available through `executemany` are not available when submitting multi-statement queries.
+      - By default the parameter is 1, meaning only a single query can be submitted at a time
+      - Set to 0 to submit any number of statements in a multi-statement query
+      - Set to >1 to submit the specified exact number of statements in a multi-statement query
+    - Bindings are accepted in the same way for multi-statements as they are for single statement queries
+    - Asynchronous multi-statement query execution is supported. Users should still use `get_results_from_sfqid` to retrieve results
+    - To access the results of each query, users can call `SnowflakeCursor.nextset()` as specified in the DB 2.0 API (PEP-249), to iterate through each statements results
+      - The first statement's results are accessible immediately after calling `execute` (or `get_results_from_sfqid` if asynchronous) through the existing `fetch*()` methods
+
+- v2.8.3(November 28,2022)
+
+  - Bumped cryptography dependency from <39.0.0 to <41.0.0
+  - Fixed a bug where expired OCSP response cache caused infinite recursion during cache loading
+
+- v2.8.2(November 18,2022)
+
+  - Improved performance of OCSP response caching
+  - During the execution of GET commands we no longer resolve target location on the local machine
+  - Improved performance of regexes used for PUT/GET SQL statement detection. CVE-2022-42965
+
+- v2.8.1(October 30,2022)
+
+   - Bumped cryptography dependency from <37.0.0 to <39.0.0
+   - Bumped pandas dependency from <1.5.0 to <1.6.0
+   - Fixed a bug where write_pandas wouldn't write an empty DataFrame to Snowflake
+   - When closing connection async query status checking is now parallelized
+   - Fixed a bug where test logging would be enabled on Jenkins workers in non-Snowflake Jenkins machines
+   - Enhanced the atomicity of write_pandas when overwrite is set to True
+
+- v2.8.0(September 27,2022)
+
+  - Fixed a bug where rowcount was deleted when the cursor was closed
+  - Fixed a bug where extTypeName was used even when it was empty
+  - Updated how telemetry entries are constructed
+  - Added telemetry for imported root packages during run-time
+  - Added telemetry for using write_pandas
+  - Fixed missing dtypes when calling fetch_pandas_all() on empty result
+  - The write_pandas function now supports providing additional arguments to be used by DataFrame.to_parquet
+  - All optional parameters of write_pandas can now be provided to pd_writer and make_pd_writer to be used with DataFrame.to_sql
+
+- v2.7.12(August 26,2022)
+
+   - Fixed a bug where timestamps fetched as pandas.DataFrame or pyarrow.Table would overflow for the sake of unnecessary precision. In the case where an overflow cannot be prevented a clear error will be raised now.
+   - Added in-file caching for OCSP response caching
+   - The write_pandas function now supports transient tables through the new table_type argument which supersedes create_temp_table argument
+   - Fixed a bug where calling fetch_pandas_batches incorrectly raised NotSupportedError after an async query was executed
+   - Added support for OKTA Identity Engine
+
+- v2.7.11(July 26,2022)
+
+   - Added minimum version pin to typing_extensions
+
+- v2.7.10(July 22,2022)
+
+   - Release wheels are now built on manylinux2014
+   - Bumped supported pyarrow version to >=8.0.0,<8.1.0
+   - Updated vendored library versions requests to 2.28.1 and urllib3 to 1.26.10
+   - Added in-memory cache to OCSP requests
+   - Added overwrite option to write_pandas
+   - Added attribute `lastrowid` to `SnowflakeCursor` in compliance with PEP249.
+   - Fixed a bug where gzip compressed http requests might be garbled by an unflushed buffer
+   - Added new connection diagnostics capabilities to snowflake-connector-python
+   - Bumped numpy dependency from <1.23.0 to <1.24.0
+
+
+- v2.7.9(June 26,2022)
+
+   - Fixed a bug where errors raised during get_results_from_sfqid() were missing errno
+   - Fixed a bug where empty results containing GEOGRAPHY type raised IndexError
+
+
+- v2.7.8(May 28,2022)
+
+   - Updated PyPi documentation link to python specific main page
+   - Fixed an error message that appears when pandas optional dependency group is required but is not installed
+   - Implemented the DB API 2 callproc() method
+   - Fixed a bug where decryption took place before decompression when downloading files from stages
+   - Fixed a bug where s3 accelerate configuration was handled incorrectly
+   - Extra named arguments given executemany() are now forwarded to execute()
+   - Automatically sets the application name to streamlit when streamlit is imported and application name was not explicitly set
+   - Bumped pyopenssl dependency version to >=16.2.0,<23.0.0
+
+
+- v2.7.7(April 30,2022)
+
+   - Bumped supported pandas version to < 1.5.0
+   - Fixed a bug where partner name (from SF_PARTNER environmental variable) was set after connection was established
+   - Added a new _no_retry option to executing queries
+   - Fixed a bug where extreme timestamps lost precision
+
+
+- v2.7.6(March 17,2022)
+
+   - Fixed missing python_requires tag in setup.cfg
+
+- v2.7.5(March 17,2022)
+
+   - Added an option for partners to inject their name through an environmental variable (SF_PARTNER)
+   - Fixed a bug where we would not wait for input if a browser window couldn't be opened for SSO login
+   - Deprecate support for Python 3.6
+   - Exported a type definition for SnowflakeConnection
+   - Fixed a bug where final Arrow table would contain duplicate index numbers when using fetch_pandas_all
+
+- v2.7.4(February 05,2022)
+
+   - Add Geography Types
+   - Removing automated incident reporting code
+   - Fixed a bug where circular reference would prevent garbage collection on some objects
+   - Fixed a bug where `DatabaseError` was thrown when executing against a closed cursor instead of `InterfaceError`
+   - Fixed a bug where calling `executemany` would crash if an iterator was supplied as args
+   - Fixed a bug where violating `NOT NULL` constraint raised `DatabaseError` instead of `IntegrityError`
+
+- v2.7.3(January 22,2022)
+
+   - Fixed a bug where timezone was missing from retrieved Timestamp_TZ columns
+   - Fixed a bug where a long running PUT/GET command could hit a Storage Credential Error while renewing credentials
+   - Fixed a bug where py.typed was not being included in our release wheels
+   - Fixed a bug where negative numbers were mangled when fetched with the connection parameter arrow_number_to_decimal
+   - Improved the error message that is encountered when running GET for a non-existing file
+   - Fixed rendering of our long description for PyPi
+   - Fixed a bug where DUO authentication ran into errors if sms authentication was disabled for the user
+   - Add the ability to auto-create a table when writing a pandas DataFrame to a Snowflake table
+   - Bumped the maximum dependency version of numpy from <1.22.0 to <1.23.0
+
+- v2.7.2(December 17,2021)
+
+   - Added support for Python version 3.10.
+   - Fixed an issue bug where _get_query_status failed if there was a network error.
+   - Added the interpolate_empty_sequences connection parameter to control interpolating empty sequences into queries.
+   - Fixed an issue where where BLOCKED was considered to be an error by is_an_error.
+   - Added source field to Telemetry.
+   - Increased the cryptography dependency version.
+   - Increased the pyopenssl dependency version.
+   - Fixed an issue where dbapi.Binary returned a string instead of bytes.
+   - Increased the required version of numpy.
+   - Increased the required version of keyring.
+   - Fixed issue so that fetch functions now return a typed DataFrames and pyarrow Tables for empty results.
+   - Added py.typed
+   - Improved error messages for PUT/GET.
+   - Added Cursor.query attribute for accessing last query.
+   - Increased the required version of pyarrow.
+
+
+- v2.7.1(November 19,2021)
+
+   - Fixed a bug where uploading a streaming file with multiple parts did not work.
+   - JWT tokens are now regenerated when a request is retired.
+   - Updated URL escaping when uploading to AWS S3 to match how S3 escapes URLs.
+   - Removed the unused s3_connection_pool_size connection parameter.
+   - Blocked queries are now be considered to be still running.
+   - Snowflake specific exceptions are now set using Exception arguments.
+   - Fixed an issue where use_s3_regional_url was not set correctly by the connector.
+
+
+- v2.7.0(October 25,2021)
+
+   - Removing cloud sdks.snowflake-connector-python will not install them anymore. Recreate your virtualenv to get rid of unnecessary dependencies.
+   - Include Standard C++ headers.
+   - Update minimum dependency version pin of cryptography.
+   - Fixed a bug where error number would not be added to Exception messages.
+   - Fixed a bug where client_prefetch_threads parameter was not respected when pre-fetching results.
+   - Update signature of SnowflakeCursor.execute's params argument.
+
+
+- v2.6.2(September 27,2021)
+
+   - Updated vendored urllib3 and requests versions.
+   - Fixed a bug where GET commands would fail to download files from sub directories from stages.
+   - Added a feature where where the connector will print the url it tried to open when it is unable to open it for external browser authentication.
+
+
+- v2.6.1(September 16,2021)
+
+   - Bump pandas version from <1.3 to <1.4
+   - Fixing Python deprecation warnings.
+   - Added more type-hints.
+   - Marked HeartBeatTimer threads as daemon threads.
+   - Force cast a column into integer in write_pandas to avoid a rare behavior that would lead to crashing.
+   - Implement AWS signature V4 to new SDKless PUT and GET.
+   - Removed a deprecated setuptools option from setup.py.
+   - Fixed a bug where error logs would be printed for query executions that produce no results.
+   - Fixed a bug where the temporary stage for bulk array inserts exists.
+
+
+- v2.6.0(August 29,2021)
+
+   - Internal change to the implementation of result fetching.
+   - Upgraded Pyarrow version from 3.0 to 5.0.
+   - Internal change to the implementation for PUT and GET. A new connection parameter use_new_put_get was added to toggle between implementations.
+   - Fixed a bug where executemany did not detect the type of data it was inserting.
+   - Updated the minimum Mac OSX build target from 10.13 to 10.14.
+
+
+- v2.5.1(July 31,2021)
+
+   - Fixes Python Connector bug that prevents the connector from using AWS S3 Regional URL. The driver currently overrides the regional URL information with the default S3 URL causing failure in PUT.
+
+
+- v2.5.0(July 22,2021)
+
+   - Fixed a bug in write_pandas when quote_identifiers is set to True the function would not actually quote column names.
+   - Bumping idna dependency pin from <3,>=2.5 to >=2.5,<4
+   - Fix describe method when running `insert into ...` commands
+
+
+- v2.4.6(June 25,2021)
+
+   - Fixed a potential memory leak.
+   - Removed upper certifi version pin.
+   - Updated vendored libraries , urllib(1.26.5) and requests(2.25.1).
+   - Replace pointers with UniqueRefs.
+   - Changed default value of client_session_keep_alive to None.
+   - Added the ability to retrieve metadata/schema without executing the query (describe method).
+
+- v2.4.5(June 15,2021)
+
+   - Fix for incorrect JWT token invalidity when an account alias with a dash in it is used for regionless account URL.
+
+- v2.4.4(May 30,2021)
+
+   - Fixed a segfault issue when using DictCursor and arrow result format with out of range dates.
+   - Adds new make_pd_writer helper function
+
+
+- v2.4.3(April 29,2021)
+
+   - Uses s3 regional URL in private links when a param is set.
+   - New Arrow NUMBER to Decimal converter option.
+   - Update pyopenssl requirement from <20.0.0,>=16.2.0 to >=16.2.0,<21.0.0.
+   - Update pandas requirement from <1.2.0,>=1.0.0 to >=1.0.0,<1.3.0.
+   - Update numpy requirement from <1.20.0 to <1.21.0.
+
+
+- v2.4.2(April 03,2021)
+
+   - PUT statements are now thread-safe.
+
+
+- v2.4.1(March 04,2021)
+
+   - Make connection object exit() aware of status of parameter `autocommit`
+
+
+- v2.4.0(March 04,2021)
+
+   - Added support for Python 3.9 and PyArrow 3.0.x.
+   - Added support for the upcoming multipart PUT threshold keyword.
+   - Added support for using the PUT command with a file-like object.
+   - Added some compilation flags to ease building conda community package.
+   - Removed the pytz pin because it doesn't follow semantic versioning release format.
+   - Added support for optimizing batch inserts through bulk array binding.
+
+
+- v2.3.10(February 01,2021)
+
+   - Improved query ID logging and added request GUID logging.
+   - For dependency checking, increased the version condition for the pyjwt package from <2.0.0 to <3.0.0.
+
+
+- v2.3.9(January 27,2021)
+
+   - The fix to add proper proxy CONNECT headers for connections made over proxies.
+
+
+- v2.3.8(January 14,2021)
+
+   - Arrow result conversion speed up.
+   - Send all Python Connector exceptions to in-band or out-of-band telemetry.
+   - Vendoring requests and urllib3 to contain OCSP monkey patching to our library only.
+   - Declare dependency on setuptools.
+
+
+- v2.3.7(December 10,2020)
+
+   - Added support for upcoming downscoped GCS credentials.
+   - Tightened the pyOpenSSL dependency pin.
+   - Relaxed the boto3 dependency pin up to the next major release.
+   - Relaxed the cffi dependency pin up to the next major release.
+   - Added support for executing asynchronous queries.
+   - Dropped support for Python 3.5.
+
+- v2.3.6(November 16,2020)
+
+   - Fixed a bug that was preventing the connector from working on Windows with Python 3.8.
+   - Improved the string formatting in exception messages.
+   - For dependency checking, increased the version condition for the cryptography package from <3.0.0 to <4.0.0.
+   - For dependency checking, increased the version condition for the pandas package from <1.1 to <1.2.
+
+- v2.3.5(November 03,2020)
+
+   - Updated the dependency on the cryptography package from version 2.9.2 to 3.2.1.
+
+- v2.3.4(October 26,2020)
+
+   - Added an optional parameter to the write_pandas function to specify that identifiers should not be quoted before being sent to the server.
+   - The write_pandas function now honors default and auto-increment values for columns when inserting new rows.
+   - Updated the Python Connector OCSP error messages and accompanying telemetry Information.
+   - Enabled the runtime pyarrow version verification to fail gracefully. Fixed a bug with AWS glue environment.
+   - Upgraded the version of boto3 from 1.14.47 to 1.15.9.
+   - Upgraded the version of idna from 2.9 to 2.10.
+
+- v2.3.3(October 05,2020)
+
+   - Simplified the configuration files by consolidating test settings.
+   - In the Connection object, the execute_stream and execute_string methods now filter out empty lines from their inputs.
+
+- v2.3.2(September 14,2020)
+
+   - Fixed a bug where a file handler was not closed properly.
+   - Fixed various documentation typos.
+
+- v2.3.1(August 25,2020)
+
+   - Fixed a bug where 2 constants were removed by mistake.
+
+- v2.3.0(August 24,2020)
+
+   - When the log level is set to DEBUG, log the OOB telemetry entries that are sent to Snowflake.
+   - Fixed a bug in the PUT command where long running PUTs would fail to re-authenticate to GCP for storage.
+   - Updated the minimum build target MacOS version to 10.13.
+
+- v2.2.10(August 03,2020)
+
+    - Improved an error message for when "pandas" optional dependency group is not installed and user tries to fetch data into a pandas DataFrame. It'll now point user to our online documentation.
+
+- v2.2.9(July 13,2020)
+
+    - Connection parameter validate_default_parameters now verifies known connection parameter names and types. It emits warnings for anything unexpected types or names.
+    - Correct logging messages for compiled C++ code.
+    - Fixed an issue in write_pandas with location determination when database, or schema name was included.
+    - Bumped boto3 dependency version.
+    - Fixed an issue where uploading a file with special UTF-8 characters in their names corrupted file.
+
+- v2.2.8(June 22,2020)
+
+    - Switched docstring style to Google from Epydoc and added automated tests to enforce the standard.
+    - Fixed a memory leak in DictCursor's Arrow format code.
+
+- v2.2.7(June 1,2020)
+
+    - Support azure-storage-blob v12 as well as v2 (for Python 3.5.0-3.5.1) by Python Connector
+    - Fixed a bug where temporary directory path was not Windows compatible in write_pandas function
+    - Added out of band telemetry error reporting of unknown errors
+
+- v2.2.6(May 11,2020)
+
+    - Update Pyarrow version from 0.16.0 to 0.17.0 for Python connector
+    - Remove more restrictive application name enforcement.
+    - Missing keyring dependency will not raise an exception, only emit a debug log from now on.
+    - Bumping boto3 to <1.14
+    - Fix flake8 3.8.0 new issues
+    - Implement Python log interceptor
+
+- v2.2.5(April 30,2020)
+
+    - Added more efficient way to ingest a pandas.Dataframe into Snowflake, located in snowflake.connector.pandas_tools
+    - More restrictive application name enforcement and standardizing it with other Snowflake drivers
+    - Added checking and warning for users when they have a wrong version of pyarrow installed
+
+- v2.2.4(April 10,2020)
+
+    - Emit warning only if trying to set different setting of use_openssl_only parameter
+
+- v2.2.3(March 30,2020)
+
+    - Secure SSO ID Token
+    - Add use_openssl_only connection parameter, which disables the usage of pure Python cryptographic libraries for FIPS
+    - Add manylinux1 as well as manylinux2010
+    - Fix a bug where a certificate file was opened and never closed in snowflake-connector-python.
+    - Fix python connector skips validating GCP URLs
+    - Adds additional client driver config information to in band telemetry.
+
+- v2.2.2(March 9,2020)
+
+    - Fix retry with chunck_downloader.py for stability.
+    - Support Python 3.8 for Linux and Mac.
+
+- v2.2.1(February 18,2020)
+
+    - Fix use DictCursor with execute_string #248
+
+- v2.2.0(January 27,2020)
+
+    - Drop Python 2.7 support
+    - AWS: When OVERWRITE is false, which is set by default, the file is uploaded if no same file name exists in the stage. This used to check the content signature but it will no longer check. Azure and GCP already work this way.
+    - Document Python connector dependencies on our GitHub page in addition to Snowflake docs.
+    - Fix sqlalchemy and possibly python-connector warnings.
+    - Fix GCP exception using the Python connector to PUT a file in a stage with auto_compress=false.
+    - Bump up botocore requirements to 1.14.
+    - Fix uppercaseing authenticator breaks Okta URL which may include case-sensitive elements(#257).
+    - Fix wrong result bug while using fetch_pandas_all() to get fixed numbers with large scales.
+    - Increase multi part upload threshold for S3 to 64MB.
+
+- v2.1.3(January 06,2020)
+
+    - Fix GCP Put failed after hours
+
+- v2.1.2(December 16,2019)
+
+    - Fix the arrow bundling issue for python connector on mac.
+    - Fix the arrow dll bundle issue on windows.Add more logging.
+
+- v2.1.1(December 12,2019)
+
+    - Fix GZIP uncompressed content for Azure GET command.
+    - Add support for GCS PUT and GET for private preview.
+    - Support fetch as numpy value in arrow result format.
+    - Fix NameError: name 'EmptyPyArrowIterator' is not defined for Mac.
+    - Return empty dataframe for fetch_pandas_all() api if result set is empty.
+
+- v2.1.0(December 2,2019)
+
+    - Fix default `ssl_context` options
+    - Pin more dependencies for Python Connector
+    - Fix import of SnowflakeOCSPAsn1Crypto crashes Python on MacOS Catalina
+    - Update the release note that 1.9.0 was removed
+    - Support DictCursor for arrow result format
+    - Upgrade Python's arrow lib to 0.15.1
+    - Raise Exception when PUT fails to Upload Data
+    - Handle year out of range correctly in arrow result format
+
+- v2.0.4(November 13,2019)
+
+    - Increase OCSP Cache expiry time from 24 hours to 120 hours.
+    - Fix pyarrow cxx11 abi compatibility issue
+    - Use new query result format parameter in python tests
+
+- v2.0.3(November 1,2019)
+
+    - Fix for ,Pandas fetch API did not handle the case that first chunk is empty correctly.
+    - Updated with botocore, boto3 and requests packages to the latest version.
+    - Pinned stable versions of Azure urllib3 packages.
+
+- v2.0.2(October 21,2019)
+
+    - Fix sessions remaining open even if they are disposed manually. Retry deleting session if the connection is explicitly closed.
+    - Fix memory leak in the new fetch pandas API
+    - Fix Auditwheel failed with python37
+    - Reduce the footprint of Python Connector
+    - Support asn1crypto 1.1.x
+    - Ensure that the cython components are present for Conda package
+
+- v2.0.1(October 04,2019)
+
+    - Add asn1crypto requirement to mitigate incompatibility change
+
+- v2.0.0(September 30,2019)
+
+    - Release Python Connector 2.0.0 for Arrow format change.
+    - Fix SF_OCSP_RESPONSE_CACHE_DIR referring to the OCSP cache response file directory and not the top level of directory.
+    - Fix Malformed certificate ID key causes uncaught KeyError.
+    - No retry for certificate errors.
+    - Fix In-Memory OCSP Response Cache - PythonConnector
+    - Move AWS_ID and AWS_SECRET_KEY to their newer versions in the Python client
+    - Fix result set downloader for ijson 2.5
+    - Make authenticator field case insensitive earlier
+    - Update USER-AGENT to be consistent with new format
+    - Update Python Driver URL Whitelist to support US Gov domain
+    - Fix memory leak in python connector panda df fetch API
+
+- v1.9.1(October 4,2019)
+
+    - Add asn1crypto requirement to mitigate incompatibility change.
+
+- v1.9.0(August 26,2019) **REMOVED from pypi due to dependency compatibility issues**
+
+    - Implement converter for all arrow data types in python connector extension
+    - Fix arrow error when returning empty result using python connecter
+    - Fix OCSP responder hang, AttributeError: 'ReadTimeout' object has no attribute 'message'
+    - Update OCSP Connection timeout.
+    - Fix RevokedCertificateError OOB Telemetry events are not sent
+    - Uncaught RevocationCheckError for FAIL_OPEN in create_pair_issuer_subject
+    - Fix uncaught exception in generate_telemetry_data function
+    - Fix connector looses context after connection drop/restore by retrying IncompleteRead error.
+    - Make tzinfo class at the module level instead of inlining
+
+- v1.8.7(August 12,2019)
+
+    - Rewrote validateDefaultParameters to validate the database, schema and warehouse at connection time. False by default.
+    - Fix OCSP Server URL problem in multithreaded env
+    - Fix Azure Gov PUT and GET issue
+
+- v1.8.6(July 29,2019)
+
+    - Reduce retries for OCSP from Python Driver
+    - Azure PUT issue: ValueError: I/O operation on closed file
+    - Add client information to USER-AGENT HTTP header - PythonConnector
+    - Better handling of OCSP cache download failure
+
+- v1.8.5(July 15,2019)
+
+    - Drop Python 3.4 support for Python Connector
+
+- v1.8.4(July 01,2019)
+
+    - Update Python Connector to discard invalid OCSP Responses while merging caches
+
+- v1.8.3(June 17,2019)
+
+    - Update Client Driver OCSP Endpoint URL for Private Link Customers
+    - Ignore session gone 390111 when closing
+    - Python3.4 using requests 2.21.0 needs older version of urllib3
+    - Use Account Name for Global URL
+
+- v1.8.2 (June 03,2019)
+
+    - Pendulum datatype support
+
+- v1.8.1 (May 20,2019)
+
+    - Revoked OCSP Responses persists in Driver Cache + Logging Fix
+    - Fixed DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated
+
+- v1.8.0 (May 10, 2019)
+
+    - support ``numpy.bool_`` in binding type
+    - Add Option to Skip Request Pooling
+    - Add OCSP_MODE metric
+    - Fixed PUT URI issue for Windows path
+    - OCSP SoftFail
+
+- v1.7.11 (April 22, 2019)
+
+    - numpy timestamp with timezone support
+    - qmark not binding None
+
+- v1.7.10 (April 8, 2019)
+
+    - Fix the incorrect custom Server URL in Python Driver for Privatelink
+
+- v1.7.9 (March 25,2019)
+
+    - Python Interim Solution for Custom Cache Server URL
+    - Internal change for pending feature
+
+- v1.7.8 (March 12,2019)
+
+    - Add OCSP signing certificate validity check
+
+- v1.7.7 (February 22,2019)
+
+    - Skip HEAD operation when OVERWRITE=true for PUT
+    - Update copyright year from 2018 to 2019 for Python
+
+- v1.7.6 (February 08,2019)
+
+    - Adjusted pyasn1 and pyasn1-module requirements for Python Connector
+    - Added idna to setup.py. made pyasn1 optional for Python2
+
+- v1.7.5 (January 25, 2019)
+
+    - Incorporate "kwargs" style group of key-value pairs in connection's "execute_string" function.
+
+- v1.7.4 (January 3, 2019)
+
+    - Invalidate outdated OCSP response when checking cache hit
+    - Made keyring use optional in Python Connector
+    - Added SnowflakeNullConverter for Python Connector to skip all client side conversions
+    - Honor ``CLIENT_PREFETCH_THREADS`` to download the result set.
+    - Fixed the hang when region=us-west-2 is specified.
+    - Added Python 3.7 tests
+
+- v1.7.3 (December 11, 2018)
+
+    - Improved the progress bar control for SnowSQL
+    - Fixed PUT/GET progress bar for Azure
+
+- v1.7.2 (December 4, 2018)
+
+    - Refactored OCSP checks
+    - Adjusted log level to mitigate confusions
+
+- v1.7.1 (November 27, 2018)
+
+    - Fixed regex pattern warning in cursor.py
+    - Fixed 403 error for EU deployment
+    - Fixed the epoch time to datetime object converter for Windoww
+
+- v1.7.0 (November 13, 2018)
+
+    - Internal change for pending feature.
+
+- v1.6.12 (October 30, 2018)
+
+    - Updated ``boto3`` and ``botocore`` version dependeny.
+    - Catch socket.EAI_NONAME for localhost socket and raise a better error message
+    - Added ``client_session_keep_alive_heartbeat_frequency`` to control heartbeat timings for ``client_session_keep_alive``.
+
+- v1.6.11 (October 23, 2018)
+
+    - Fixed exit_on_error=true didn't work if PUT / GET error occurs
+    - Fixed a backslash followed by a quote in a literal was not taken into account.
+    - Added ``request_guid`` to each HTTP request for tracing.
+
+- v1.6.10 (September 25, 2018)
+
+    - Added ``client_session_keep_alive`` support.
+    - Fixed multiline double quote expressions PR #117 (@bensowden)
+    - Fixed binding ``datetime`` for TIMESTAMP type in ``qmark`` binding mode. PR #118 (@rhlahuja)
+    - Retry HTTP 405 to mitigate Nginx bug.
+    - Accept consent response for id token cache. WIP.
+
+- v1.6.9 (September 13, 2018)
+
+    - Changed most INFO logs to DEBUG. Added INFO for key operations.
+    - Fixed the URL query parser to get multiple values.
+
+- v1.6.8 (August 30, 2018)
+
+    - Updated ``boto3`` and ``botocore`` version dependeny.
+
+- v1.6.7 (August 22, 2018)
+
+    - Enforce virtual host URL for PUT and GET.
+    - Added retryCount, clientStarTime for query-request for better service.
+
+- v1.6.6 (August 9, 2018)
+
+    - Replaced ``pycryptodome`` with ``pycryptodomex`` to avoid namespace conflict with ``PyCrypto``.
+    - Fixed hang if the connection is not explicitly closed since 1.6.4.
+    - Reauthenticate for externalbrowser while running a query.
+    - Fixed remove_comments option for SnowSQL.
+
+- v1.6.5 (July 13, 2018)
+
+    - Fixed the current object cache in the connection for id token use.
+    - Added no OCSP cache server use option.
+
+- v1.6.4 (July 5, 2018)
+
+    - Fixed div by zero for Azure PUT command.
+    - Cache id token for SSO. This feature is WIP.
+    - Added telemetry client and job timings by @dsouzam.
+
+- v1.6.3 (June 14, 2018)
+
+    - Fixed binding long value for Python 2.
+
+- v1.6.2 (June 7, 2018)
+
+    - Removes username restriction for OAuth. PR 86(@tjj5036)
+    - Retry OpenSSL.SysError in tests
+    - Updated concurrent insert test as the server improved.
+
+- v1.6.1 (May 17, 2018)
+
+    - Enable OCSP Dynamic Cache server for privatelink.
+    - Ensure the type of ``login_timeout`` attribute is ``int``.
+
+- v1.6.0 (May 3, 2018)
+
+    - Enable OCSP Cache server by default.
+
+- v1.5.8 (April 26, 2018)
+
+    - Fixed PUT command error 'Server failed to authenticate the request. Make sure the value of Authorization header is formed correctly including the signature.' for Azure deployment.
+
+- v1.5.7 (April 19, 2018)
+
+    - Fixed object has no attribute errors in Python3 for Azure deployment.
+    - Removed ContentEncoding=gzip from the header for PUT command. This caused COPY failure if autocompress=false.
+
+- v1.5.6 (April 5, 2018)
+
+    - Updated ``boto3`` and ``botocore`` version dependeny.
+
+- v1.5.5 (March 22, 2018)
+
+    - Fixed TypeError: list indices must be integers or slices, not str. PR/Issue 75 (@daniel-sali).
+    - Updated ``cryptography`` dependency.
+
+- v1.5.4 (March 15, 2018)
+
+    - Tightened ``pyasn`` and ``pyasn1-modules`` version requirements
+    - Added OS and OS_VERSION session info.
+    - Relaxed ``pycryptodome`` version requirements. No 3.5.0 should be used.
+
+- v1.5.3 (March 9, 2018)
+
+    - Pulled back ``pyasn1`` for OCSP check in Python 2. Python 3 continue using ``asn1crypto`` for better performance.
+    - Limit the upper bound of ``pycryptodome`` version to less than 3.5.0 for Issue 65.
+
+- v1.5.2 (March 1, 2018)
+
+    - Fixed failue in case HOME/USERPROFILE is not set.
+    - Updated ``boto3`` and ``botocore`` version dependeny.
+
+- v1.5.1 (February 15, 2018)
+
+    - Prototyped oauth. Won't work without the server change.
+    - Retry OCSP data parse failure
+    - Fixed paramstyle=qmark binding for SQLAlchemy
+
+- v1.5.0 (January 26, 2018)
+
+    - Removed ``pyasn1`` and ``pyasn1-modules`` from the dependency.
+    - Prototyped key pair authentication.
+    - Fixed OCSP response cache expiration check.
+
+- v1.4.17 (January 19, 2018)
+
+    - Adjusted ``pyasn1`` and ``pyasn1-modules`` version dependency. PR 48 (@baxen)
+    - Started replacing ``pyasn1`` with ``asn1crypto`` Not activated yet.
+
+- v1.4.16 (January 16, 2018)
+
+    - Added OCSP cache related tools.
+
+- v1.4.15 (January 11, 2018)
+
+    - Added OCSP cache server option.
+
+- v1.4.14 (December 14, 2017)
+
+    - Improved OCSP response dump util.
+
+- v1.4.13 (November 30, 2017)
+
+    - Updated ``boto3`` and ``botocore`` version dependeny.
+
+- v1.4.12 (November 16, 2017)
+
+    - Added ``qmark`` and ``numeric`` paramstyle support for server side binding.
+    - Added ``timezone`` session parameter support to connections.
+    - Fixed a file handler leak in OCSP checks.
+
+- v1.4.11 (November 9, 2017)
+
+    - Fixed Azure PUT command to use AES CBC key encryption.
+    - Added retry for intermittent PyAsn1Error.
+
+- v1.4.10 (October 26, 2017)
+
+    - Added Azure support for PUT and GET commands.
+    - Updated ``cryptography``, ``boto3`` and ``botocore`` version dependeny.
+
+- v1.4.9 (October 10, 2017)
+
+    - Fixed a regression caused by ``pyasn1`` upgrade.
+
+- v1.4.8 (October 5, 2017)
+
+    - Updated Fed/SSO parameters. The production version of Fed/SSO from Python Connector requires this version.
+    - Refactored for Azure support
+    - Set CLIENT_APP_ID and CLIENT_APP_VERSION in all requests
+    - Support new behaviors of newer version of ``pyasn1``. Relaxed the dependency.
+    - Making socket timeout same as the login time
+    - Fixed the case where no error message is attached.
+
+- v1.4.7 (September 20, 2017)
+
+    - Refresh AWS token in PUT command if S3UploadFailedError includes the ExpiredToken error
+    - Retry all of 5xx in connection
+
+- v1.4.6 (September 14, 2017)
+
+    - Mitigated sigint handler config failure for SQLAlchemy
+    - Improved the message for invalid SSL certificate error
+    - Retry forever for query to mitigate 500 errors
+
+- v1.4.5 (August 31, 2017)
+
+    - Fixed regression in #34 by rewriting SAML 2.0 compliant service application support.
+    - Cleaned up logger by moving instance to module.
+
+- v1.4.4 (August 24, 2017)
+
+    - Fixed Azure blob certificate issue. OCSP response structure bug fix
+    - Added SAML 2.0 compliant service application support. preview feature.
+    - Upgraded SSL wrapper with the latest urllib3 pyopenssl glue module. It uses kqueue, epoll or poll in replacement of select to read data from socket if available.
+
+- v1.4.3 (August 17, 2017)
+
+    - Changed the log levels for some messages from ERROR to DEBUG to address confusion as real incidents. In fact, they are not real issues but signals for connection retry.
+    - Added ``certifi`` to the dependent component list to mitigate CA root certificate out of date issue.
+    - Set the maximum versions of dependent components ``boto3`` and ``botocore``.
+    - Updated ``cryptography`` and ``pyOpenSSL`` version dependeny change.
+    - Added a connection parameter ``validate_default_parameters`` to validate the default database, schema and warehouse. If the specified object doesn't exist, it raises an error.
+
+- v1.4.2 (August 3, 2017)
+
+    - Fixed retry HTTP 400 in upload file when AWS token expires
+    - Relaxed the version of dependent components ``pyasn1`` and ``pyasn1-modules``
+
+- v1.4.1 (July 26, 2017)
+
+    - Pinned ``pyasn1`` and ``pyasn1-modules`` versions to 0.2.3 and 0.0.9, respectively
+
+- v1.4.0 (July 6, 2017)
+
+    - Relaxed the versions of dependent components ``boto3``, ``botocore``, ``cffi`` and ``cryptography`` and ``pyOpenSSL``
+    - Minor improvements in OCSP response file cache
+
+- v1.3.18 (June 15, 2017)
+
+    - Fixed OCSP response cache file not found issue on Windows. Drive letter was taken off
+    - Use less restrictive cryptography>=1.7,<1.8
+    - Added ORC detection in PUT command
+
+- v1.3.17 (June 1, 2017)
+
+    - Timeout OCSP request in 60 seconds and retry
+    - Set autocommit and abort_detached_query session parameters in authentication time if specified
+    - Fixed cross region stage issue. Could not get files in us-west-2 region S3 bucket from us-east-1
+
+- v1.3.16 (April 20, 2017)
+
+    - Fixed issue in fetching ``DATE`` causing [Error 22] Invalid argument on Windows
+    - Retry on ``RuntimeError`` in requests
+
+- v1.3.15 (March 30, 2017)
+
+    - Refactored data converters in fetch to improve performance
+    - Fixed timestamp format FF to honor the scale of data type
+    - Improved the security of OKTA authentication with hostname verifications
+    - Retry PUT on the error ``OpenSSL.SSL.SysCallError`` 10053 with lower concurrency
+    - Added ``raw_msg`` attribute to ``Error`` class
+    - Refactored session managements
+
+- v1.3.14 (February 24, 2017)
+
+    - Improved PUT and GET error handler.
+    - Added proxy support to OCSP checks.
+    - Use proxy parameters for PUT and GET commands.
+    - Added ``sfqid`` and ``sqlstate`` to the results from query results.
+    - Fixed the connection timeout calculation based on ``login_timeout`` and ``network_timeout``.
+    - Improved error messages in case of 403, 502 and 504 HTTP reponse code.
+    - Upgraded ``cryptography`` to 1.7.2, ``boto3`` to 1.4.4 and ``botocore`` to 1.5.14.
+    - Removed explicit DNS lookup for OCSP URL.
+
+- v1.3.13 (February 9, 2017)
+
+    - Fixed AWS SQS connection error with OCSP checks
+    - Added ``login_timeout`` and ``network_timeout`` parameters to the ``Connection`` objects.
+    - Fixed forbidden access error handing
+
+- v1.3.12 (February 2, 2017)
+
+    - Fixed ``region`` parameter. One character was truncated from the tail of account name
+    - Improved performance of fetching data by refactoring fetchone method
+
+- v1.3.11 (January 27, 2017)
+
+    - Fixed the regression in 1.3.8 that caused intermittent 504 errors
+
+- v1.3.10 (January 26, 2017)
+
+    - Compress data in HTTP requests at all times except empty data or OKTA request
+    - Refactored FIXED, REAL and TIMESTAMP data fetch to improve performance. This mainly impacts SnowSQL
+    - Added ``region`` option to support EU deployments better
+    - Increased the retry counter for OCSP servers to mitigate intermittent failure
+    - Refactored HTTP access retry logic
+
+- v1.3.9 (January 16, 2017)
+
+    - Upgraded ``botocore`` to 1.4.93 to fix and ``boto3`` to 1.4.3 to fix the HTTPS request failure in Python 3.6
+    - Fixed python2 incomaptible import http.client
+    - Retry OCSP validation in case of non-200 HTTP code returned
+
+- v1.3.8 (January 12, 2017)
+
+    - Convert non-UTF-8 data in the large result set chunk to Unicode replacement characters to avoid decode error.
+    - Updated copyright year to 2017.
+    - Use `six` package to support both PY2 and PY3 for some functions
+    - Upgraded ``cryptography`` to 1.7.1 to address MacOS Python 3.6 build issue.
+    - Fixed OverflowError caused by invalid range of timetamp data for SnowSQL.
+
+- v1.3.7 (December 8, 2016)
+
+    - Increased the validity date acceptance window to prevent OCSP returning invalid responses due to out-of-scope validity dates for certificates.
+    - Enabled OCSP response cache file by default.
+
+- v1.3.6 (December 1, 2016)
+
+    - Upgraded ``cryptography`` to 1.5.3, ``pyOpenSSL`` to 16.2.0 and ``cffi`` to 1.9.1.
+
+- v1.3.5 (November 17, 2016)
+
+    - Fixed CA list cache race condition
+    - Added retry intermittent 400 HTTP ``Bad Request`` error
+
+- v1.3.4 (November 3, 2016)
+
+    - Added ``quoted_name`` data type support for binding by SQLAlchemy
+    - Not to compress ``parquiet`` file in PUT command
+
+- v1.3.3 (October 20, 2016)
+
+    - Downgraded ``botocore`` to 1.4.37 due to potential regression.
+    - Increased the stability of PUT and GET commands
+
+- v1.3.2 (October 12, 2016)
+
+    - Upgraded ``botocore`` to 1.4.52.
+    - Set the signature version to v4 to AWS client. This impacts ``PUT``, ``GET`` commands and fetching large result set.
+
+- v1.3.1 (September 30, 2016)
+
+    - Added an account name including subdomain.
+
+- v1.3.0 (September 26, 2016)
+
+    - Added support for the ``BINARY`` data type, which enables support for more Python data types:
+
+        - Python 3:
+
+            - ``bytes`` and ``bytearray`` can be used for binding.
+            - ``bytes`` is also used for fetching ``BINARY`` data type.
+
+        - Python 2:
+
+            - ``bytearray`` can be used for binding
+            - ``str`` is used for fetching ``BINARY`` data type.
+
+    - Added ``proxy_user`` and ``proxy_password`` connection parameters for proxy servers that require authentication.
+
+- v1.2.8 (August 16, 2016)
+
+    - Upgraded ``botocore`` to 1.4.37.
+    - Added ``Connection.execute_string`` and ``Connection.execute_stream`` to run multiple statements in a string and stream.
+    - Increased the stability of fetching data for Python 2.
+    - Refactored memory usage in fetching large result set (Work in Progress).
+
+- v1.2.7 (July 31, 2016)
+
+    - Fixed ``snowflake.cursor.rowcount`` for INSERT ALL.
+    - Force OCSP cache invalidation after 24 hours for better security.
+    - Use ``use_accelerate_endpoint`` in PUT and GET if Transfer acceleration is enabled for the S3 bucket.
+    - Fixed the side effect of ``python-future`` that loads ``test.py`` in the current directory.
+
+- v1.2.6 (July 13, 2016)
+
+    - Fixed the AWS token renewal issue with PUT command when uploading uncompressed large files.
+
+- v1.2.5 (July 8, 2016)
+
+    - Added retry for errors ``S3UploadFailedError`` and ``RetriesExceededError`` in PUT and GET, respectively.
+
+- v1.2.4 (July 6, 2016)
+
+    - Added ``max_connection_pool`` parameter to Connection so that you can specify the maximum number of HTTP/HTTPS connections in the pool.
+    - Minor enhancements for SnowSQL.
+
+- v1.2.3 (June 29, 2016)
+
+    - Fixed 404 issue in GET command. An extra slash character changed the S3 path and failed to identify the file to download.
+
+- v1.2.2 (June 21, 2016)
+
+    - Upgraded ``botocore`` to 1.4.26.
+    - Added retry for 403 error when accessing S3.
+
+- v1.2.1 (June 13, 2016)
+
+    - Improved fetch performance for data types (part 2): DATE, TIME, TIMESTAMP, TIMESTAMP_LTZ, TIMESTAMP_NTZ and TIMESTAMP_TZ.
+
+- v1.2.0 (June 10, 2016)
+
+    - Improved fetch performance for data types (part 1): FIXED, REAL, STRING.
+
+- v1.1.5 (June 2, 2016)
+
+    - Upgraded ``boto3`` to 1.3.1 and ``botocore`` and 1.4.22.
+    - Fixed ``snowflake.cursor.rowcount`` for DML by ``snowflake.cursor.executemany``.
+    - Added ``numpy`` data type binding support. ``numpy.intN``, ``numpy.floatN`` and ``numpy.datetime64`` can be bound and fetched.
+
+- v1.1.4 (May 21, 2016)
+
+    - Upgraded ``cffi`` to 1.6.0.
+    - Minor enhancements to SnowSQL.
+
+- v1.1.3 (May 5, 2016)
+
+    - Upgraded ``cryptography`` to 1.3.2.
+
+- v1.1.2 (May 4, 2016)
+
+    - Changed the dependency of ``tzlocal`` optional.
+    - Fixed charmap error in OCSP checks.
+
+- v1.1.1 (Apr 11, 2016)
+
+    - Fixed OCSP revocation check issue with the new certificate and AWS S3.
+    - Upgraded ``cryptography`` to 1.3.1 and ``pyOpenSSL`` to 16.0.0.
+
+- v1.1.0 (Apr 4, 2016)
+
+    - Added ``bzip2`` support in ``PUT`` command. This feature requires a server upgrade.
+    - Replaced the self contained packages in ``snowflake._vendor`` with the dependency of ``boto3`` 1.3.0 and ``botocore`` 1.4.2.
+
+- v1.0.7 (Mar 21, 2016)
+
+    - Keep ``pyOpenSSL`` at 0.15.1.
+
+- v1.0.6 (Mar 15, 2016)
+
+    - Upgraded ``cryptography`` to 1.2.3.
+    - Added support for ``TIME`` data type, which is now a Snowflake supported data type. This feature requires a server upgrade.
+    - Added ``snowflake.connector.DistCursor`` to fetch the results in ``dict`` instead of ``tuple``.
+    - Added compression to the SQL text and commands.
+
+- v1.0.5 (Mar 1, 2016)
+
+    - Upgraded ``cryptography`` to 1.2.2 and ``cffi`` to 1.5.2.
+    - Fixed the conversion from ``TIMESTAMP_LTZ`` to datetime in queries.
+
+- v1.0.4 (Feb 15, 2016)
+
+    - Fixed the truncated parallel large result set.
+    - Added retry OpenSSL low level errors ``ETIMEDOUT`` and ``ECONNRESET``.
+    - Time out all HTTPS requests so that the Python Connector can retry the job or recheck the status.
+    - Fixed the location of encrypted data for ``PUT`` command. They used to be in the same directory as the source data files.
+    - Added support for renewing the AWS token used in ``PUT`` commands if the token expires.
+
+- v1.0.3 (Jan 13, 2016)
+
+    - Added support for the ``BOOLEAN`` data type (i.e. ``TRUE`` or ``FALSE``). This changes the behavior of the binding for the ``bool`` type object:
+
+        - Previously, ``bool`` was bound as a numeric value (i.e. ``1`` for ``True``, ``0`` for ``False``).
+        - Now, ``bool`` is bound as native SQL data (i.e. ``TRUE`` or ``FALSE``).
+
+    - Added the ``autocommit`` method to the ``Connection`` object:
+
+        - By default, ``autocommit`` mode is ON (i.e. each DML statement commits the change).
+        - If ``autocommit`` mode is OFF, the ``commit`` and ``rollback`` methods are enabled.
+
+    - Avoid segfault issue for ``cryptography`` 1.2 in Mac OSX by using 1.1 until resolved.
+
+- v1.0.2 (Dec 15, 2015)
+
+    - Upgraded ``boto3`` 1.2.2, ``botocore`` 1.3.12.
+    - Removed ``SSLv3`` mapping from the initial table.
+
+- v1.0.1 (Dec 8, 2015)
+
+    - Minor bug fixes.
+
+- v1.0.0 (Dec 1, 2015)
+
+    - General Availability release.

@@ -1,0 +1,20 @@
+{% for change in changes %}
+{% if change.changes|length > 0 %}
+    {% if change.name|length > 0 %} <span style="font-weight: bold;font-style: italic">({{ change.name }})</span>{% endif %}
+    By: {{ change.by }} on: {{ change.event_time }} {% if more_info %}<a href="javascript:void(0)" onclick="info({{ change.id }})"><span class="glyphicon glyphicon-info-sign"></span></a>{% endif %}
+        <div id="" style="background-color: #f0f0f0">
+        <ul>
+        {% for row in change.changes %}
+            <li>{{ row|safe }}</li>
+        {% endfor %}
+    </ul>
+</div>
+    {% if more_info %}
+        <div id="info_{{ change.id }}" style="border: #c9cccf solid 1px">
+            <p><b>&nbsp;Reason:&nbsp;</b>{{ change.info }}</p>
+        </div>
+        {% endif %}
+{% endif %}
+    <br/>
+
+{% endfor %}

@@ -1,0 +1,56 @@
+Metadata-Version: 2.4
+Name: arq
+Version: 0.27.0
+Summary: Job queues in python with asyncio and redis
+Project-URL: Homepage, https://github.com/python-arq/arq
+Project-URL: Documentation, https://arq-docs.helpmanual.io
+Project-URL: Funding, https://github.com/sponsors/samuelcolvin
+Project-URL: Source, https://github.com/python-arq/arq
+Project-URL: Changelog, https://github.com/python-arq/arq/releases
+Author-email: Samuel Colvin <s@muelcolvin.com>
+License: MIT
+License-File: LICENSE
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: Framework :: AsyncIO
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Operating System :: Unix
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Internet
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Clustering
+Classifier: Topic :: System :: Distributed Computing
+Classifier: Topic :: System :: Monitoring
+Classifier: Topic :: System :: Systems Administration
+Requires-Python: >=3.9
+Requires-Dist: click>=8.0
+Requires-Dist: redis[hiredis]<6,>=4.2.0
+Provides-Extra: watch
+Requires-Dist: watchfiles>=0.16; extra == 'watch'
+Description-Content-Type: text/markdown
+
+# arq
+
+[![CI](https://img.shields.io/github/actions/workflow/status/samuelcolvin/arq/ci.yml?branch=main&logo=github&label=CI)](https://github.com/samuelcolvin/arq/actions?query=event%3Apush+branch%3Amain+workflow%3ACI)
+[![Coverage](https://codecov.io/gh/samuelcolvin/arq/branch/main/graph/badge.svg)](https://codecov.io/gh/samuelcolvin/arq)
+[![downloads](https://static.pepy.tech/badge/arq/month)](https://pepy.tech/project/arq)
+[![pypi](https://img.shields.io/pypi/v/arq.svg)](https://pypi.python.org/pypi/arq)
+[![versions](https://img.shields.io/pypi/pyversions/arq.svg)](https://github.com/samuelcolvin/arq)
+[![license](https://img.shields.io/github/license/samuelcolvin/arq.svg)](https://github.com/samuelcolvin/arq/blob/main/LICENSE)
+
+**In maintenance only mode**: arq is in maintenance only mode, see [#510](https://github.com/python-arq/arq/issues/510).
+
+Job queues in python with asyncio and redis.
+
+See [documentation](https://arq-docs.helpmanual.io/) for more details.

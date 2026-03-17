@@ -1,0 +1,435 @@
+Metadata-Version: 2.1
+Name: cchardet
+Version: 2.1.7
+Summary: cChardet is high speed universal character encoding detector.
+Home-page: https://github.com/PyYoshi/cChardet
+Author: PyYoshi
+Author-email: myoshi321go@gmail.com
+License: Mozilla Public License
+Keywords: cython,chardet,charsetdetect
+Platform: UNKNOWN
+Classifier: License :: OSI Approved :: Mozilla Public License 1.1 (MPL 1.1)
+Classifier: License :: OSI Approved :: GNU General Public License (GPL)
+Classifier: License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)
+Classifier: Programming Language :: Cython
+Classifier: Programming Language :: Python
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+
+cChardet
+========
+
+cChardet is high speed universal character encoding detector. - binding to `uchardet`_.
+
+.. image:: https://badge.fury.io/py/cchardet.svg
+   :target: https://badge.fury.io/py/cchardet
+   :alt: PyPI version
+
+.. image:: https://github.com/PyYoshi/cChardet/workflows/Build%20for%20Linux/badge.svg?branch=master
+   :target: https://github.com/PyYoshi/cChardet/actions?query=workflow%3A%22Build+for+Linux%22
+   :alt: Build for Linux
+
+.. image:: https://github.com/PyYoshi/cChardet/workflows/Build%20for%20macOS/badge.svg?branch=master
+   :target: https://github.com/PyYoshi/cChardet/actions?query=workflow%3A%22Build+for+macOS%22
+   :alt: Build for macOS
+
+.. image:: https://github.com/PyYoshi/cChardet/workflows/Build%20for%20windows/badge.svg?branch=master
+   :target: https://github.com/PyYoshi/cChardet/actions?query=workflow%3A%22Build+for+windows%22
+   :alt: Build for Windows
+
+Supported Languages/Encodings
+-----------------------------
+
+-  International (Unicode)
+
+   -  UTF-8
+   -  UTF-16BE / UTF-16LE
+   -  UTF-32BE / UTF-32LE / X-ISO-10646-UCS-4-34121 /
+      X-ISO-10646-UCS-4-21431
+
+-  Arabic
+
+   -  ISO-8859-6
+   -  WINDOWS-1256
+
+-  Bulgarian
+
+   -  ISO-8859-5
+   -  WINDOWS-1251
+
+-  Chinese
+
+   -  ISO-2022-CN
+   -  BIG5
+   -  EUC-TW
+   -  GB18030
+   -  HZ-GB-2312
+
+-  Croatian:
+
+   -  ISO-8859-2
+   -  ISO-8859-13
+   -  ISO-8859-16
+   -  Windows-1250
+   -  IBM852
+   -  MAC-CENTRALEUROPE
+
+-  Czech
+
+   -  Windows-1250
+   -  ISO-8859-2
+   -  IBM852
+   -  MAC-CENTRALEUROPE
+
+-  Danish
+
+   -  ISO-8859-1
+   -  ISO-8859-15
+   -  WINDOWS-1252
+
+-  English
+
+   -  ASCII
+
+-  Esperanto
+
+   -  ISO-8859-3
+
+-  Estonian
+
+   -  ISO-8859-4
+   -  ISO-8859-13
+   -  ISO-8859-13
+   -  Windows-1252
+   -  Windows-1257
+
+-  Finnish
+
+   -  ISO-8859-1
+   -  ISO-8859-4
+   -  ISO-8859-9
+   -  ISO-8859-13
+   -  ISO-8859-15
+   -  WINDOWS-1252
+
+-  French
+
+   -  ISO-8859-1
+   -  ISO-8859-15
+   -  WINDOWS-1252
+
+-  German
+
+   -  ISO-8859-1
+   -  WINDOWS-1252
+
+-  Greek
+
+   -  ISO-8859-7
+   -  WINDOWS-1253
+
+-  Hebrew
+
+   -  ISO-8859-8
+   -  WINDOWS-1255
+
+-  Hungarian:
+
+   -  ISO-8859-2
+   -  WINDOWS-1250
+
+-  Irish Gaelic
+
+   -  ISO-8859-1
+   -  ISO-8859-9
+   -  ISO-8859-15
+   -  WINDOWS-1252
+
+-  Italian
+
+   -  ISO-8859-1
+   -  ISO-8859-3
+   -  ISO-8859-9
+   -  ISO-8859-15
+   -  WINDOWS-1252
+
+-  Japanese
+
+   -  ISO-2022-JP
+   -  SHIFT\_JIS
+   -  EUC-JP
+
+-  Korean
+
+   -  ISO-2022-KR
+   -  EUC-KR / UHC
+
+-  Lithuanian
+
+   -  ISO-8859-4
+   -  ISO-8859-10
+   -  ISO-8859-13
+
+-  Latvian
+
+   -  ISO-8859-4
+   -  ISO-8859-10
+   -  ISO-8859-13
+
+-  Maltese
+
+   -  ISO-8859-3
+
+-  Polish:
+
+   -  ISO-8859-2
+   -  ISO-8859-13
+   -  ISO-8859-16
+   -  Windows-1250
+   -  IBM852
+   -  MAC-CENTRALEUROPE
+
+-  Portuguese
+
+   -  ISO-8859-1
+   -  ISO-8859-9
+   -  ISO-8859-15
+   -  WINDOWS-1252
+
+-  Romanian:
+
+   -  ISO-8859-2
+   -  ISO-8859-16
+   -  Windows-1250
+   -  IBM852
+
+-  Russian
+
+   -  ISO-8859-5
+   -  KOI8-R
+   -  WINDOWS-1251
+   -  MAC-CYRILLIC
+   -  IBM866
+   -  IBM855
+
+-  Slovak
+
+   -  Windows-1250
+   -  ISO-8859-2
+   -  IBM852
+   -  MAC-CENTRALEUROPE
+
+-  Slovene
+
+   -  ISO-8859-2
+   -  ISO-8859-16
+   -  Windows-1250
+   -  IBM852
+   -  M
+
+Example
+-------
+
+.. code-block:: python
+
+    # -*- coding: utf-8 -*-
+    import cchardet as chardet
+    with open(r"src/tests/samples/wikipediaJa_One_Thousand_and_One_Nights_SJIS.txt", "rb") as f:
+        msg = f.read()
+        result = chardet.detect(msg)
+        print(result)
+
+Benchmark
+---------
+
+.. code-block:: bash
+
+    $ cd src/
+    $ pip install chardet
+    $ python tests/bench.py
+
+
+Results
+~~~~~~~
+
+CPU: Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz
+
+RAM: DDR4-3200 64GB
+
+Platform: Ubuntu 20.04 amd64
+
+Python 3.9.0
+^^^^^^^^^^^^
+
++-----------------+------------------+
+|                 | Request (call/s) |
++=================+==================+
+| chardet v3.0.4  |       0.46       |
++-----------------+------------------+
+| cchardet v2.1.7 |     1404.05      |
++-----------------+------------------+
+
+
+LICENSE
+-------
+
+See **COPYING** file.
+
+Contact
+-------
+
+- `Issues`_
+
+
+.. _uchardet: https://github.com/PyYoshi/uchardet
+.. _Issues: https://github.com/PyYoshi/cChardet/issues?page=1&state=open
+
+Platform
+--------
+
+Support
+~~~~~~~
+
+- Windows i686, x86_64
+- Linux i686, x86_64
+- macOS x86_64
+
+Do not Support
+~~~~~~~~~~~~~~
+
+- `Anaconda`_
+- `pyenv`_
+
+.. _Anaconda: https://www.anaconda.com/
+.. _pyenv: https://github.com/pyenv/pyenv
+
+CHANGES
+=======
+
+2.x.x
+-----
+
+
+
+2.1.7 (2020-10-27)
+------------------
+
+- support Python 3.9
+- drop support for Python 3.5
+
+2.1.6 (2020-03-17)
+------------------
+
+- drop support for Python 2.7
+- support Github Actions
+- update dev-dependencies
+
+2.1.5 (2019-09-27)
+------------------
+
+- update language models (uchardet)
+- add iso8859-2 test but disabled it
+- support Python 3.8
+- drop support for Python 3.4
+
+2.1.4 (2018-09-27)
+------------------
+
+- disable LTO because become poor performance
+
+2.1.3 (2018-09-26)
+------------------
+
+- support Python 3.7
+
+2.1.2 (2018-09-26)
+------------------
+
+- enable `LTO`_ for wheel builds
+- update Cython
+
+.. _LTO: https://gcc.gnu.org/wiki/LinkTimeOptimization
+
+2.1.1 (2017-07-01)
+------------------
+
+- fix that different results with different chuck sizes
+- fix that assignments to nsSMState in nsCodingStateMachine result in unspecified behavior
+- include COPYING in package
+
+2.1.0 (2017-05-15)
+------------------
+
+- add cchardetect CLI script (`#30`_) `@craigds`_
+
+.. _#30: https://github.com/PyYoshi/cChardet/pull/30
+.. _@craigds: https://github.com/craigds
+
+2.0.1 (2017-04-25)
+------------------
+
+- fix an issue where UTF-8 with a BOM would not be detected as UTF-8-SIG (fix `#28`_)
+- pass NULL Byte to feed() / detect() (fix `#27`_)
+
+.. _#28: https://github.com/PyYoshi/cChardet/issues/28
+.. _#27: https://github.com/PyYoshi/cChardet/issues/27
+
+2.0.0 (2017-04-06)
+------------------
+
+- Improve tests
+
+2.0a4 (2017-04-05)
+------------------
+
+- Update uchardet repo (Fix buffer overflow)
+
+2.0a3 (2017-03-29)
+------------------
+
+- Implement UniversalDetector (like chardet)
+
+2.0a2 (2017-03-28)
+------------------
+
+- Update uchardet repo (Fix memory leak)
+
+2.0a1 (2017-03-28)
+------------------
+
+- Replace `uchardet-enhanced`_ to `uchardet`_
+- Remove Detector class
+
+.. _uchardet-enhanced: https://bitbucket.org/medoc/uchardet-enhanced/overview
+.. _uchardet: https://github.com/PyYoshi/uchardet
+
+1.1.3 (2017-02-26)
+------------------
+
+- Support AArch64
+
+1.1.2 (2017-01-08)
+------------------
+
+- Support Python 3.6
+
+1.1.1 (2016-11-05)
+------------------
+
+- Use len() function (9e61cb9e96b138b0d18e5f9e013e144202ae4067)
+
+- Remove detect function in _cchardet.pyx (25b581294fc0ae8f686ac9972c8549666766f695)
+
+- Support manylinux1 wheel
+
+1.1.0 (2016-10-17)
+------------------
+
+- Add Detector class
+
+- Improve unit tests
+

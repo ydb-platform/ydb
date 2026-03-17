@@ -1,0 +1,171 @@
+<style type="text/css">
+.code {
+    font-family: 'Consolas', 'Deja Vu Sans Mono', 'Bitstream Vera Sans Mono', 'Monaco', 'Courier New', monospace !important;
+}
+.mongo-stack-trace {
+    line-height: 2.3em !important;
+}
+.mongo-stack-trace tr {
+    border-top: 1px dotted #ccc !important;
+}
+.mongo-stack-trace table th {
+    text-align: left !important;
+}
+
+#flDebug .mongo-stack-trace, #flDebug .mongo-data, .mongo-op-table .toolbar-query {
+    display:none;
+}
+
+#flDebug .mongo-stack-trace table tr.mongo-stack-trace-hide {
+    background: #eee!important;
+    display:none;
+}
+
+#flDebug .panelContent .mongo-op-table,
+#flDebug .panelContent .mongo-stack-trace table { display: table;}
+
+.mongo-op-table td.fifty {width: 50%; word-wrap: break-word;}
+.mongo-op-table td.thirty {width: 30%; word-wrap: break-word;}
+
+</style>
+
+{% macro render_stats(title, queries, slow_query_limit=100) %}
+
+<h4>{{ title }}</h4>
+{% if queries %}
+<table class="mongo-op-table">
+    <thead>
+        <tr>
+            <th>Time (ms)</th>
+            <th>Size</th>
+            {% if title == 'Queries' %}
+            <th>Operation</th>
+            <th>Collection</th>
+            <th>Query</th>
+            <th>Ordering</th>
+            <th>Skip</th>
+            <th>Limit</th>
+            <th>Data</th>
+            {% elif title == 'Inserts' %}
+            <th>Document</th>
+            <th>Safe</th>
+            {% elif title == 'Removes' %}
+            <th>Query / Id</th>
+            <th>Safe</th>
+            {% elif title == 'Updates' %}
+            <th>Query</th>
+            <th>Update</th>
+            <th>Safe</th>
+            <th>Multi</th>
+            <th>Upsert</th>
+            {% endif %}
+            <th>Stack Trace</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for query in queries %}
+            <tr class="{{ loop.cycle('flDebugOdd','flDebugEven') }}{% if query.internal %} toolbar-query{% endif %}">
+                <td {% if query.time > slow_query_limit %}style="color:red;" {% endif %}>
+                {{ query.time|round(3) }}</td>
+                <td>{{ query.size|round(2) }}Kb</td>
+                {% if title == "Queries" %}
+                    {% set colspan = 10 %}
+                    <td>{{ query.operation|title }}</td>
+                    <td>{{ query.collection }}</td>
+                    <td class="code">{% if query.query %}{{ query.query|safe }}{% endif %}</td>
+                    <td class="code">{% if query.ordering %}{{ query.ordering }}{% endif %}</td>
+                    <td>{% if query.skip %}{{ query.skip }}{% endif %}</td>
+                    <td>{% if query.limit %}{{ query.limit }}{% endif %}</td>
+                    <td><a href="javascript:void(0);" class="mongo-toggle-data" data-row="mongo-data-{{ loop.index }}">Toggle</a></td>
+                {% elif title == "Inserts" %}
+                {% set colspan = 5 %}
+                <td class="code fifty"></pre>{{ query.document|safe }}</pre>
+                </td>
+                <td>{{ query.safe }}</td>
+                {% elif title == 'Removes' %}
+                {% set colspan = 5 %}
+                <td class="code thirty">
+                    <pre>{{ query.spec_or_id|safe }}</pre>
+                </td>
+                <td class="code thirty"><pre>{{ query.safe }}</pre></td>
+                {% elif title == 'Updates' %}
+                {% set colspan = 8 %}
+                <td class="code thirty">
+                    <pre>{{ query.spec|safe }}</pre>
+                </td>
+                <td class="code thirty">
+                    <pre>{{ query.document|safe }}</pre>
+                </td>
+                <td>{{ query.safe }}</td>
+                <td>{{ query.multi }}</td>
+                <td>{{ query.upsert }}</td>
+                {% endif %}
+                <td><a href="javascript:void(0);" class="mongo-toggle-trace" data-row="mongo-{{ title|lower }}-{{ loop.index }}">Toggle</a></td>
+            </tr>
+            {% if title == "Queries" %}
+            <tr class="{{ loop.cycle('flDebugOdd', 'flDebugEven') }} mongo-data" id="mongo-data-{{ loop.index }}">
+                <td colspan="{{ colspan }}">
+                    <code><pre>{{ query.data|pprint }}</pre></code>
+                </td>
+            </tr>
+            {% endif %}
+            <tr class="{{ loop.cycle('flDebugOdd','flDebugEven') }} mongo-stack-trace" id="mongo-{{  title|lower }}-{{ loop.index }}">
+                <td colspan="{{ colspan}} ">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Line</th>
+                                <th>File</th>
+                                <th>Function</th>
+                                <th>Code</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for line in query.stack_trace %}
+                            <tr {% if line.4 %}class="mongo-stack-trace-hide" {% endif %}>
+                                <td class="lineno">{{ line.1 }}</td>
+                                <td class="file">{{ line.0 }}</td>
+                                <td class="function">{{ line.2 }}</td>
+                                <td class="code">{{ line.3|safe }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="4">
+                                    <a href="javascript:void(0);" class="mongo-toggle-full-trace">Toggle full trace</a>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No {{ title|lower }} recorded</p>
+{% endif %}
+{% endmacro %}
+
+{{ render_stats("Queries", queries, slow_query_limit)}}
+{{ render_stats("Removes", removes, slow_query_limit)}}
+{{ render_stats("Inserts", inserts, slow_query_limit)}}
+{{ render_stats("Updates", updates, slow_query_limit)}}
+
+<script>
+(function($) {
+
+    $('a.mongo-toggle-trace').click(function(){
+        $("#"+$(this).attr('data-row')).toggle();
+    });
+    $('a.mongo-toggle-data').click(function(){
+        $("#"+$(this).attr('data-row')).toggle();
+    });
+
+    $('a.mongo-toggle-full-trace').click(function(){
+        $(this).closest('table').find('tr.mongo-stack-trace-hide').toggle();
+    });
+
+})(fldt.$);
+</script>

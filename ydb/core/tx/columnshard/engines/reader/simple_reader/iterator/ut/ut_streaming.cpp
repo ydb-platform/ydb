@@ -428,6 +428,135 @@ void TestPartialResultEmission() {
     UNIT_ASSERT_GT(reader.GetIterationsCount(), 10);
 }
 
+void TestStrategyAlways() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    // Enable SimpleReader
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    // STRATEGY_ALWAYS: streaming must be used regardless of portion size.
+    // Use a small MinRecordsForPaging so that even a tiny portion gets split
+    // into multiple pages.
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_ALWAYS);
+    streamingConfig->SetMinRecordsForPaging(500);
+    streamingConfig->SetMaxPagesInFlight(8);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write a SMALL portion – well below the default 50 000-record AUTO threshold.
+    // With STRATEGY_ALWAYS the reader must still activate streaming.
+    const ui32 numRecords = 2000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();
+    const ui32 iterationsCount = reader.GetIterationsCount();
+
+    Cerr << "StrategyAlways: total pages created=" << totalCreated
+         << ", iterations=" << iterationsCount << Endl;
+
+    // With STRATEGY_ALWAYS and MinRecordsForPaging=500 over 2000 records we
+    // expect at least 2 pages to have been created, proving streaming was used.
+    UNIT_ASSERT_GT(totalCreated, 1u);
+    // Multiple iterations confirm the Ack/page protocol ran more than once.
+    UNIT_ASSERT_GT(iterationsCount, 1u);
+}
+
+void TestStrategyNever() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    // Enable SimpleReader
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    // STRATEGY_NEVER: streaming must be suppressed regardless of portion size.
+    // We write a large portion that would normally trigger streaming under AUTO,
+    // but with STRATEGY_NEVER no pages should be created via the streaming path.
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_NEVER);
+    streamingConfig->SetMinRecordsForPaging(500);   // irrelevant for NEVER, but set explicitly
+    streamingConfig->SetMaxPagesInFlight(8);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write a LARGE portion – well above the default 50 000-record AUTO threshold.
+    // With STRATEGY_NEVER the reader must NOT activate streaming.
+    const ui32 numRecords = 100000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();
+    const ui32 iterationsCount = reader.GetIterationsCount();
+
+    Cerr << "StrategyNever: total pages created=" << totalCreated
+         << ", iterations=" << iterationsCount << Endl;
+
+    // With STRATEGY_NEVER the streaming path must never fire, so the
+    // OnPageCreated hook (which is only called in streaming mode) must
+    // report zero pages created.
+    UNIT_ASSERT_VALUES_EQUAL(totalCreated, 0u);
+}
+
 } // namespace
 
 void TestStreamingWithFilterSkip() {
@@ -517,6 +646,14 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(StreamingWithFilterSkip) {
         TestStreamingWithFilterSkip();
+    }
+
+    Y_UNIT_TEST(StrategyAlways) {
+        TestStrategyAlways();
+    }
+
+    Y_UNIT_TEST(StrategyNever) {
+        TestStrategyNever();
     }
 }
 

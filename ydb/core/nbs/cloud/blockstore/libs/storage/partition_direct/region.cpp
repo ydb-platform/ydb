@@ -12,7 +12,6 @@ TRegion::TRegion(
     : ActorSystem(actorSystem)
 {
     for (const auto& directBlockGroup: directBlockGroups) {
-        // TODO EstablishConnections once
         directBlockGroup->EstablishConnections();
     }
 

@@ -104,10 +104,8 @@ ui64 TInMemoryDirectBlockGroup::GenerateLsn()
     return ++LsnGenerator;
 }
 
-NThreading::TFuture<void> TInMemoryDirectBlockGroup::EstablishConnections()
-{
-    return NThreading::MakeFuture();
-}
+void TInMemoryDirectBlockGroup::EstablishConnections()
+{}
 
 NThreading::TFuture<TDBGWriteBlocksResponse>
 TInMemoryDirectBlockGroup::WriteBlocksToPBuffer(

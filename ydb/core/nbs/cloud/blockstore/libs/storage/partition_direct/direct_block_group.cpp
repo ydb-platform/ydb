@@ -103,8 +103,12 @@ ui64 TDirectBlockGroup::GenerateLsn()
     return ++LsnGenerator;
 }
 
-NThreading::TFuture<void> TDirectBlockGroup::EstablishConnections()
+void TDirectBlockGroup::EstablishConnections()
 {
+    if (Initialized) {
+        return;
+    }
+
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this()]   //
         ()
@@ -113,7 +117,6 @@ NThreading::TFuture<void> TDirectBlockGroup::EstablishConnections()
                 self->DoEstablishConnections();
             }
         });
-    return ConnectionEstablishedPromise.GetFuture();
 }
 
 NThreading::TFuture<TDBGReadBlocksResponse>
@@ -615,7 +618,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
         [](const TDDiskConnection& c)
         { return c.HostConnection.IsConnected(); });
 
-    if (allDDiskConnected && allPBufferConnected) {
+    if (!Initialized && allDDiskConnected && allPBufferConnected) {
         Initialized = true;
         ConnectionEstablishedPromise.SetValue();
     }

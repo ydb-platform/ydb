@@ -13,6 +13,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 class TRegion
 {
 public:
+    static constexpr ui64 RegionSize = 4_GB;
+
     TRegion(
         NActors::TActorSystem* actorSystem,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
@@ -34,8 +36,8 @@ private:
     TVector<std::shared_ptr<TVChunk>> VChunks;
 
     // Striping
-    size_t GetVChunkIndex(ui64 blockIndex) const;
-    size_t GetVChunkOffset(ui64 blockIndex) const;
+    [[nodiscard]] size_t GetVChunkIndex(ui64 blockIndex) const;
+    [[nodiscard]] size_t GetVChunkOffset(ui64 blockIndex) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

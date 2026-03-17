@@ -2,6 +2,8 @@
 
 #include "direct_block_group_in_mem.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
 #include <ydb/core/base/counters.h>
@@ -12,10 +14,6 @@ using namespace NThreading;
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-constexpr size_t BlockSize = 4096;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -44,11 +42,11 @@ TFastPathService::TFastPathService(
     NActors::TActorSystem* actorSystem,
     ui64 tabletId,
     ui32 generation,
-    std::shared_ptr<NStorage::NPartitionDirect::TRegion> region,
+    TVector<std::shared_ptr<NStorage::NPartitionDirect::TRegion>> regions,
     const NProto::TStorageServiceConfig& storageConfig,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
-    , Region(std::move(region))
+    , Regions(std::move(regions))
     , TraceSamplePeriod(
           TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
     , Counters(MakeCountersChain(
@@ -71,6 +69,16 @@ NWilson::TTraceId TFastPathService::SpanTrace()
     );
 }
 
+size_t TFastPathService::GetRegionIndex(ui64 blockIndex) const
+{
+    return blockIndex / BlocksPerRegion;
+}
+
+size_t TFastPathService::GetRegionOffset(ui64 blockIndex) const
+{
+    return blockIndex % BlocksPerRegion;
+}
+
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request)
@@ -81,7 +89,12 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
         EBlockStoreRequest::ReadBlocks,
         request->Range.Size() * BlockSize);
 
-    auto result = Region->ReadBlocksLocal(
+    const size_t regionIndex = GetRegionIndex(request->Range.Start);
+    const ui64 regionOffset = GetRegionOffset(request->Range.Start);
+    request->Range =
+        TBlockRange64::WithLength(regionOffset, request->Range.Size());
+
+    auto result = Regions[regionIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
         std::move(traceId));
@@ -111,7 +124,12 @@ TFastPathService::WriteBlocksLocal(
         EBlockStoreRequest::WriteBlocks,
         request->Range.Size() * BlockSize);
 
-    auto result = Region->WriteBlocksLocal(
+    const size_t regionIndex = GetRegionIndex(request->Range.Start);
+    const ui64 regionOffset = GetRegionOffset(request->Range.Start);
+    request->Range =
+        TBlockRange64::WithLength(regionOffset, request->Range.Size());
+
+    auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
         std::move(traceId));

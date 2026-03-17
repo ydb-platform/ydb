@@ -182,14 +182,16 @@ namespace NKikimr::NDDisk {
                 NKikimrBlobStorage::NDDisk::TReplyStatus::E Status;
                 TString ErrorMessage;
                 TRope Data;
+                bool IsRestore = false;
 
                 TEvReadPersistentBufferPart(ui64 inflightCookie, ui64 partCookie,
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorMessage, TRope data)
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorMessage, TRope data, bool isRestore)
                     : InflightCookie(inflightCookie)
                     , PartCookie(partCookie)
                     , Status(status)
                     , ErrorMessage(std::move(errorMessage))
                     , Data(std::move(data))
+                    , IsRestore(isRestore)
                 {}
             };
 
@@ -334,14 +336,6 @@ namespace NKikimr::NDDisk {
 
         THashMap<ui64, TPendingIoOp> WriteCallbacks;
         THashMap<ui64, TPendingIoOp> ReadCallbacks;
-
-        // TODO: remove
-        struct TPendingRead {
-            NWilson::TSpan Span;
-            std::function<void(NPDisk::TEvChunkReadRawResult&, NWilson::TSpan&&)> Callback;
-        };
-        using TPersistentBufferPendingRead = std::function<void(NPDisk::TEvChunkReadRawResult&)>;
-        THashMap<ui64, std::variant<TPendingRead, TPersistentBufferPendingRead>> ReadCallbacksRaw;
 
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
         void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);
@@ -524,7 +518,7 @@ namespace NKikimr::NDDisk {
                 ui32 OffsetInBytes;
                 ui32 Size;
                 std::vector<TPersistentBufferSectorInfo> Sectors;
-                std::map<ui32, TRope> DataParts;
+                std::map<ui64, TRope> DataParts;
                 ui32 PartsCount;
 
                 TRope JoinData(ui32 sectorSize);
@@ -599,12 +593,15 @@ namespace NKikimr::NDDisk {
         std::unordered_set<ui32> PersistentBufferAllocatedChunks;
         std::unordered_set<ui32> PersistentBufferRestoringChunks;
 
+        TActorId WritePersistentBuffersActor;
+
         void InitPersistentBuffer();
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);
-        void StartRestorePersistentBuffer(ui32 pos = 0);
-        void GetPersistentBufferRecordData(TDDiskActor::TPersistentBuffer::TRecord& pr, ui64 tabletId, ui64 vchunkIdx, ui64 lsn, std::function<void(TRope data)> callback);
+        void StartRestorePersistentBuffer();
+        void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
+        void ReplyReadPersistentBuffer(ui64 operationCookie, TRope&& data);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
         double GetPersistentBufferFreeSpace();
 

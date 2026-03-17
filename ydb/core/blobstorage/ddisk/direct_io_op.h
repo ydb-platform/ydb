@@ -99,9 +99,14 @@ public:
         IsErase = isErase;
     }
 
+    void SetIsRestore(bool isRestore) {
+        IsRestore = isRestore;
+    }
+
 private:
     ui64 PartCookie = 0;
     bool IsErase = false;
+    bool IsRestore = false;
 };
 
 class TDDiskActor::TInternalSyncWriteOp final : public TDDiskActor::TDirectIoOpBase {

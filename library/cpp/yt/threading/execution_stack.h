@@ -2,11 +2,13 @@
 
 #include "public.h"
 
+#include <util/system/platform.h>
+
 #if defined(_win_)
 #include <windows.h>
 #endif
 
-namespace NYT::NConcurrency {
+namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -22,8 +24,8 @@ public:
     size_t GetSize() const;
 
 protected:
-    void* Stack_;
-    size_t Size_;
+    const size_t Size_;
+    void* Stack_ = nullptr;
 
     explicit TExecutionStackBase(size_t size);
 };
@@ -39,14 +41,14 @@ public:
     ~TExecutionStack();
 
 private:
-    char* Base_;
+    char* Base_ = nullptr;
 
     static const int GuardPageCount = 256;
 };
 
 #elif defined(_win_)
 
-//! Stack plus Window fiber holder.
+//! Stack plus Windows fiber holder.
 class TExecutionStack
     : public TExecutionStackBase
 {
@@ -62,8 +64,8 @@ public:
 private:
     friend class TExecutionContext;
 
-    void* Handle_;
-    void (*Trampoline_)(void*);
+    void* const Handle_;
+    void (*Trampoline_)(void*) = nullptr;
 
     static VOID CALLBACK FiberTrampoline(PVOID opaque);
 
@@ -76,8 +78,6 @@ private:
 #   error Unsupported platform
 #endif
 
-std::shared_ptr<TExecutionStack> CreateExecutionStack(EExecutionStackKind kind);
-
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NConcurrency
+} // namespace NYT::NThreading

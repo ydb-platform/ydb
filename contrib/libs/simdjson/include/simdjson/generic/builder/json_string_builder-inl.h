@@ -27,6 +27,21 @@
 #define SIMDJSON_EXPERIMENTAL_HAS_NEON 1
 #endif
 #endif
+#if defined(__loongarch_sx)
+#ifndef SIMDJSON_EXPERIMENTAL_HAS_LSX
+#define SIMDJSON_EXPERIMENTAL_HAS_LSX 1
+#endif
+#endif
+#if defined(__riscv_v_intrinsic) && __riscv_v_intrinsic >= 11000
+#ifndef SIMDJSON_EXPERIMENTAL_HAS_RVV
+#define SIMDJSON_EXPERIMENTAL_HAS_RVV 1
+#endif
+#endif
+#if defined(__PPC64__) || defined(_M_PPC64)
+#ifndef SIMDJSON_EXPERIMENTAL_HAS_PPC64
+#define SIMDJSON_EXPERIMENTAL_HAS_PPC64 1
+#endif
+#endif
 #if SIMDJSON_EXPERIMENTAL_HAS_NEON
 #include <arm_neon.h>
 #ifdef _MSC_VER
@@ -39,6 +54,22 @@
 #include <intrin.h>
 #endif
 #endif
+#if SIMDJSON_EXPERIMENTAL_HAS_LSX
+#error #include <lsxintrin.h>
+#endif
+#if SIMDJSON_EXPERIMENTAL_HAS_RVV
+#error #include <riscv_vector.h>
+#endif
+#if SIMDJSON_EXPERIMENTAL_HAS_PPC64
+#include <altivec.h>
+#ifdef bool
+#undef bool
+#endif
+#ifdef vector
+#undef vector
+#endif
+#endif
+
 
 namespace simdjson {
 namespace SIMDJSON_IMPLEMENTATION {
@@ -139,6 +170,35 @@ simdjson_inline bool fast_needs_escaping(std::string_view view) {
   }
   return _mm_movemask_epi8(running) != 0;
 }
+#elif SIMDJSON_EXPERIMENTAL_HAS_PPC64
+simdjson_inline bool fast_needs_escaping(std::string_view view) {
+  if (view.size() < 16) {
+    return simple_needs_escaping(view);
+  }
+  size_t i = 0;
+  __vector unsigned char running = vec_splats((unsigned char)0);
+  __vector unsigned char v34 = vec_splats((unsigned char)34);
+  __vector unsigned char v92 = vec_splats((unsigned char)92);
+  __vector unsigned char v32 = vec_splats((unsigned char)32);
+
+  for (; i + 15 < view.size(); i += 16) {
+    __vector unsigned char word =
+        vec_vsx_ld(0, reinterpret_cast<const unsigned char *>(view.data() + i));
+    running = vec_or(running, (__vector unsigned char)vec_cmpeq(word, v34));
+    running = vec_or(running, (__vector unsigned char)vec_cmpeq(word, v92));
+    running = vec_or(running,
+        (__vector unsigned char)vec_cmplt(word, v32));
+  }
+  if (i < view.size()) {
+    __vector unsigned char word = vec_vsx_ld(
+        0, reinterpret_cast<const unsigned char *>(view.data() + view.length() - 16));
+    running = vec_or(running, (__vector unsigned char)vec_cmpeq(word, v34));
+    running = vec_or(running, (__vector unsigned char)vec_cmpeq(word, v92));
+    running = vec_or(running,
+        (__vector unsigned char)vec_cmplt(word, v32));
+  }
+  return !vec_all_eq(running, vec_splats((unsigned char)0));
+}
 #else
 simdjson_inline bool fast_needs_escaping(std::string_view view) {
   return simple_needs_escaping(view);
@@ -182,28 +242,12 @@ find_next_json_quotable_character(const std::string_view view,
     needs_escape = vorrq_u8(needs_escape, vceqq_u8(word, v92));
     needs_escape = vorrq_u8(needs_escape, vcltq_u8(word, v32));
 
-    if (vmaxvq_u32(vreinterpretq_u32_u8(needs_escape)) != 0) {
-      // Found quotable character - extract exact byte position using ctz
-      uint64x2_t as64 = vreinterpretq_u64_u8(needs_escape);
-      uint64_t lo = vgetq_lane_u64(as64, 0);
-      uint64_t hi = vgetq_lane_u64(as64, 1);
+    const uint8x8_t res = vshrn_n_u16(vreinterpretq_u16_u8(needs_escape), 4);
+    const uint64_t mask = vget_lane_u64(vreinterpret_u64_u8(res), 0);
+    if(mask != 0) {
       size_t offset = ptr - reinterpret_cast<const uint8_t *>(view.data());
-#ifdef _MSC_VER
-      unsigned long trailing_zero = 0;
-      if (lo != 0) {
-        _BitScanForward64(&trailing_zero, lo);
-        return offset + trailing_zero / 8;
-      } else {
-        _BitScanForward64(&trailing_zero, hi);
-        return offset + 8 + trailing_zero / 8;
-      }
-#else
-      if (lo != 0) {
-        return offset + __builtin_ctzll(lo) / 8;
-      } else {
-        return offset + 8 + __builtin_ctzll(hi) / 8;
-      }
-#endif
+      auto trailing_zero = trailing_zeroes(mask);
+      return offset + (trailing_zero >> 2);
     }
     ptr += 16;
     remaining -= 16;
@@ -241,13 +285,128 @@ find_next_json_quotable_character(const std::string_view view,
     if (mask != 0) {
       // Found quotable character - use trailing zero count to find position
       size_t offset = ptr - reinterpret_cast<const uint8_t *>(view.data());
-#ifdef _MSC_VER
-      unsigned long trailing_zero = 0;
-      _BitScanForward(&trailing_zero, mask);
-      return offset + trailing_zero;
+      return offset + trailing_zeroes(mask);
+    }
+    ptr += 16;
+    remaining -= 16;
+  }
+
+  // Scalar fallback for remaining bytes
+  size_t current = len - remaining;
+  return find_next_json_quotable_character_scalar(view, current);
+}
+#elif SIMDJSON_EXPERIMENTAL_HAS_LSX
+simdjson_inline size_t
+find_next_json_quotable_character(const std::string_view view,
+                                  size_t location) noexcept {
+  const size_t len = view.size();
+  const uint8_t *ptr =
+      reinterpret_cast<const uint8_t *>(view.data()) + location;
+  size_t remaining = len - location;
+
+  //SIMD constants for characters requiring escape
+  __m128i v34 = __lsx_vreplgr2vr_b(34);  // '"'
+  __m128i v92 = __lsx_vreplgr2vr_b(92);  // '\\'
+  __m128i v32 = __lsx_vreplgr2vr_b(32);  // control char threshold
+
+  while (remaining >= 16){
+    __m128i word = __lsx_vld(ptr, 0);
+
+    //Check for the quotable characters: '"', '\\', or control char (<32)
+    __m128i needs_escape = __lsx_vseq_b(word, v34);
+    needs_escape = __lsx_vor_v(needs_escape, __lsx_vseq_b(word, v92));
+    needs_escape = __lsx_vor_v(needs_escape, __lsx_vslt_bu(word, v32));
+
+    if (!__lsx_bz_v(needs_escape)){
+
+      //Found quotable character - extract exact byte position
+      uint64_t lo = __lsx_vpickve2gr_du(needs_escape,0);
+      uint64_t hi = __lsx_vpickve2gr_du(needs_escape,1);
+      size_t offset = ptr - reinterpret_cast<const uint8_t *>(view.data());
+      if ( lo != 0) {
+        return offset + trailing_zeroes(lo) / 8;
+      } else {
+        return offset + 8 + trailing_zeroes(hi) / 8;
+      }
+    }
+    ptr += 16;
+    remaining -= 16;
+  }
+  size_t current = len - remaining;
+  return find_next_json_quotable_character_scalar(view, current);
+}
+#elif SIMDJSON_EXPERIMENTAL_HAS_RVV
+simdjson_inline size_t
+find_next_json_quotable_character(const std::string_view view,
+                                  size_t location) noexcept {
+  const size_t len = view.size();
+  const uint8_t *ptr =
+      reinterpret_cast<const uint8_t *>(view.data()) + location;
+  size_t remaining = len - location;
+
+  while (remaining > 0) {
+    size_t vl = __riscv_vsetvl_e8m1(remaining);
+    vuint8m1_t word = __riscv_vle8_v_u8m1(ptr, vl);
+
+    // Check for quotable characters: '"', '\\', or control chars (< 32)
+    vbool8_t needs_escape = __riscv_vmseq(word, (uint8_t)34, vl);
+    needs_escape = __riscv_vmor(needs_escape,
+        __riscv_vmseq(word, (uint8_t)92, vl), vl);
+    needs_escape = __riscv_vmor(needs_escape,
+        __riscv_vmsltu(word, (uint8_t)32, vl), vl);
+
+    long first = __riscv_vfirst(needs_escape, vl);
+    if (first >= 0) {
+      size_t offset = ptr - reinterpret_cast<const uint8_t *>(view.data());
+      return offset + first;
+    }
+    ptr += vl;
+    remaining -= vl;
+  }
+
+  return len;
+}
+#elif SIMDJSON_EXPERIMENTAL_HAS_PPC64
+simdjson_inline size_t
+find_next_json_quotable_character(const std::string_view view,
+                                  size_t location) noexcept {
+  const size_t len = view.size();
+  const uint8_t *ptr =
+      reinterpret_cast<const uint8_t *>(view.data()) + location;
+  size_t remaining = len - location;
+
+  // SIMD constants for characters requiring escape
+  __vector unsigned char v34 = vec_splats((unsigned char)34);  // '"'
+  __vector unsigned char v92 = vec_splats((unsigned char)92);  // '\\'
+  __vector unsigned char v32 = vec_splats((unsigned char)32);  // control char threshold
+
+  // Bitmask for vec_vbpermq to extract one bit per byte
+  const __vector unsigned char perm_mask = {0x78, 0x70, 0x68, 0x60, 0x58, 0x50,
+                                            0x48, 0x40, 0x38, 0x30, 0x28, 0x20,
+                                            0x18, 0x10, 0x08, 0x00};
+
+  while (remaining >= 16) {
+    __vector unsigned char word =
+        vec_vsx_ld(0, reinterpret_cast<const unsigned char *>(ptr));
+
+    // Check for quotable characters: '"', '\\', or control chars (< 32)
+    __vector unsigned char needs_escape =
+        (__vector unsigned char)vec_cmpeq(word, v34);
+    needs_escape = vec_or(needs_escape,
+        (__vector unsigned char)vec_cmpeq(word, v92));
+    needs_escape = vec_or(needs_escape,
+        (__vector unsigned char)vec_cmplt(word, v32));
+
+    __vector unsigned long long result =
+        (__vector unsigned long long)vec_vbpermq(needs_escape, perm_mask);
+#ifdef __LITTLE_ENDIAN__
+    unsigned int mask = static_cast<unsigned int>(result[1]);
 #else
-      return offset + __builtin_ctz(mask);
+    unsigned int mask = static_cast<unsigned int>(result[0]);
 #endif
+    if (mask != 0) {
+      size_t offset = ptr - reinterpret_cast<const uint8_t *>(view.data());
+      return offset + __builtin_ctz(mask);
     }
     ptr += 16;
     remaining -= 16;

@@ -246,7 +246,7 @@ public:
                     unlock(f);
                     f.TryRethrow();
                 }
-                return queue->Async([unlock = std::move(unlock), f]() {
+                return TAsyncQueue::Async(queue, [unlock = std::move(unlock), f]() {
                     return unlock(f);
                 });
             });

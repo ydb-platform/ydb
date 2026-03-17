@@ -852,7 +852,6 @@
   auto settings = NYdb::NTopic::TProducerSettings()
       .Path("my-topic")
       .ProducerIdPrefix("my-producer")
-      .PartitionChooserStrategy(NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::KafkaHash)
       .EventHandlers(
           NYdb::NTopic::TWriteSessionSettings::TEventHandlers()
               .HandlersExecutor(executor)

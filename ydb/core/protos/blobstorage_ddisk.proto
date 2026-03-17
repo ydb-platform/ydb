@@ -238,6 +238,7 @@ message TEvListPersistentBufferResult {
     message TPersistentBufferRecord {
         TBlockSelector Selector = 1;
         uint64 Lsn = 2;
+        uint32 Generation = 3;
     }
 
     TReplyStatus.E Status = 1;

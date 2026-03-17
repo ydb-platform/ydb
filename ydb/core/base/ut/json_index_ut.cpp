@@ -18,6 +18,18 @@ std::optional<std::string> ParseAndCollect(const TString& jsonPath) {
     return result.GetQuery();
 }
 
+void ExpectError(const TString& jsonPath, const std::string& errorMessage) {
+    NYql::TIssues issues;
+    const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
+    UNIT_ASSERT_C(issues.Empty(), "Parse errors found: " + issues.ToOneLineString());
+
+    TQueryCollector collector(path);
+    auto result = collector.Collect();
+    UNIT_ASSERT_C(result.IsError(), "Expected error: " + errorMessage);
+
+    UNIT_ASSERT_STRING_CONTAINS_C(result.GetError().GetMessage(), errorMessage, "Expected error message not found: " + errorMessage);
+}
+
 }  // namespace
 
 Y_UNIT_TEST_SUITE(NJsonIndex) {
@@ -90,6 +102,15 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("false"), std::nullopt);
         UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("null"), std::nullopt);
         UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("\"string\""), std::nullopt);
+    }
+
+    // Variables are not supported now
+    Y_UNIT_TEST(Variables) {
+        const std::string errorMessage = "Variables are not supported at the moment";
+
+        ExpectError("$var", errorMessage);
+        ExpectError("$var.key", errorMessage);
+        ExpectError("$var[1, 2, 3]", errorMessage);
     }
 }
 

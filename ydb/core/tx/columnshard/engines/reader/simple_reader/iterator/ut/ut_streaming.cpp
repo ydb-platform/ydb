@@ -18,26 +18,44 @@ namespace {
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
 // Controller that tracks the maximum pages-in-flight count observed via the
-// OnPageCreated hook, which is called server-side each time a new page is
-// enqueued for the consumer.  Used by TestBackpressureSlowConsumer.
+// OnPageCreated / OnPageSent hooks, which are called server-side each time a
+// new page is enqueued / dequeued for the consumer.
+// Used by TestBackpressureSlowConsumerWithLimit.
 class TBackpressureController: public TDefaultTestsController {
 private:
-    TAdaptiveLock Lock;
+    mutable TAdaptiveLock Lock;
     ui64 MaxPagesInFlightObserved = 0;
+    // Number of times the in-flight count reached or exceeded the configured
+    // MaxPagesInFlight limit – proves the server was actually throttled.
+    ui64 TimesLimitReached = 0;
+    ui64 ConfiguredLimit = 0;
     TAtomicCounter TotalPagesCreated;
 
 public:
+    void SetConfiguredLimit(ui64 limit) {
+        TGuard<TAdaptiveLock> g(Lock);
+        ConfiguredLimit = limit;
+    }
+
     virtual void OnPageCreated(const ui64 pagesInFlight) override {
         TotalPagesCreated.Inc();
         TGuard<TAdaptiveLock> g(Lock);
         if (pagesInFlight > MaxPagesInFlightObserved) {
             MaxPagesInFlightObserved = pagesInFlight;
         }
+        if (ConfiguredLimit > 0 && pagesInFlight >= ConfiguredLimit) {
+            ++TimesLimitReached;
+        }
     }
 
     ui64 GetMaxPagesInFlightObserved() const {
-        TGuard<TAdaptiveLock> g(const_cast<TAdaptiveLock&>(Lock));
+        TGuard<TAdaptiveLock> g(Lock);
         return MaxPagesInFlightObserved;
+    }
+
+    ui64 GetTimesLimitReached() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        return TimesLimitReached;
     }
 
     ui64 GetTotalPagesCreated() const {
@@ -293,23 +311,35 @@ void TestBackpressure() {
     }
 }
 
-void TestBackpressureSlowConsumer() {
+// Parametrized helper: verifies that the server never exceeds MaxPagesInFlight
+// and that the backpressure limit is actually reached (consumer is slower than
+// producer).
+//
+// "Consumer is slower than producer" is guaranteed structurally: the client
+// sends Ack only after receiving a batch (ReadAll protocol), so the server can
+// pre-produce up to MaxPagesInFlight pages before the client consumes the first
+// one.  With MinRecordsForPaging=500 and 100 000 records the server produces
+// ~200 pages, so the limit will be hit many times.
+//
+// maxPagesInFlight == 0 is treated as "use default (8)".
+void TestBackpressureSlowConsumerWithLimit(const ui32 maxPagesInFlight) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
     // Enable SimpleReader with streaming
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
 
-    // Configure a small MaxPagesInFlight so the backpressure limit is easy to hit
-    const ui32 maxPagesInFlight = 2;
+    const ui32 effectiveLimit = maxPagesInFlight == 0 ? 8 : maxPagesInFlight;
+
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
-    streamingConfig->SetMaxPagesInFlight(maxPagesInFlight);
-    // Use a small page size so we get many pages from a single portion
-    streamingConfig->SetMinRecordsForPaging(1000);
+    streamingConfig->SetMaxPagesInFlight(effectiveLimit);
+    // Small page size → many pages → limit is easy to hit
+    streamingConfig->SetMinRecordsForPaging(500);
     streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    csControllerGuard->SetConfiguredLimit(effectiveLimit);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -325,7 +355,7 @@ void TestBackpressureSlowConsumer() {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write enough data to produce many streaming pages
+    // Write enough data to produce many streaming pages (~200 pages with 500-record pages)
     const ui32 numRecords = 100000;
     std::pair<ui64, ui64> portion = {0, numRecords};
 
@@ -336,7 +366,9 @@ void TestBackpressureSlowConsumer() {
     planStep = ProposeCommit(runtime, sender, txId, writeIds);
     PlanCommit(runtime, sender, planStep, txId);
 
-    // Read all data using the standard Ack/Receive protocol
+    // ReadAll uses the Ack/Receive protocol: the client sends Ack only after
+    // receiving a batch, so the server can pre-produce pages up to the limit
+    // before the client consumes any – the consumer is genuinely slower.
     TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
     reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
 
@@ -347,17 +379,23 @@ void TestBackpressureSlowConsumer() {
 
     const ui64 maxObserved = csControllerGuard->GetMaxPagesInFlightObserved();
     const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();
+    const ui64 timesLimitReached = csControllerGuard->GetTimesLimitReached();
 
-    Cerr << "BackpressureSlowConsumer: total pages created=" << totalCreated
+    Cerr << "BackpressureSlowConsumer(limit=" << effectiveLimit << ")"
+         << ": total pages created=" << totalCreated
          << ", max pages in flight observed=" << maxObserved
-         << ", limit=" << maxPagesInFlight
+         << ", times limit reached=" << timesLimitReached
          << ", iterations=" << reader.GetIterationsCount() << Endl;
 
     // Streaming must have produced multiple pages
-    UNIT_ASSERT_GT(totalCreated, 1);
+    UNIT_ASSERT_GT(totalCreated, 1u);
 
-    // The server must never have exceeded MaxPagesInFlight
-    UNIT_ASSERT_LE(maxObserved, maxPagesInFlight);
+    // The server must NEVER have exceeded MaxPagesInFlight
+    UNIT_ASSERT_LE(maxObserved, effectiveLimit);
+
+    // The limit must have been reached at least once, proving the consumer
+    // was genuinely slower than the producer (backpressure actually kicked in).
+    UNIT_ASSERT_GT(timesLimitReached, 0u);
 }
 
 void TestPartialResultEmission() {
@@ -636,8 +674,16 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
         TestBackpressure();
     }
 
-    Y_UNIT_TEST(BackpressureSlowConsumer) {
-        TestBackpressureSlowConsumer();
+    Y_UNIT_TEST(BackpressureSlowConsumerLimit1) {
+        TestBackpressureSlowConsumerWithLimit(1);
+    }
+
+    Y_UNIT_TEST(BackpressureSlowConsumerLimit2) {
+        TestBackpressureSlowConsumerWithLimit(2);
+    }
+
+    Y_UNIT_TEST(BackpressureSlowConsumerLimit4) {
+        TestBackpressureSlowConsumerWithLimit(4);
     }
 
     Y_UNIT_TEST(PartialResultEmission) {

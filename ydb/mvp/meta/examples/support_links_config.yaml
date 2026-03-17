@@ -18,7 +18,6 @@ generic:
 meta:
   meta_api_endpoint: grpc://meta.ydb.example.net:2135
   meta_database: /Root/meta
-  # Service account token name from generic.auth.tokens.* reused for YDB and Grafana API calls.
   meta_database_token_name: "service-account-jwt"
 
   grafana:

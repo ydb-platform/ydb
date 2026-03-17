@@ -1,6 +1,5 @@
 RECURSE_FOR_TESTS(
     ut
-    support_links
 )
 
 LIBRARY()
@@ -34,4 +33,5 @@ END()
 
 RECURSE(
     bin
+    support_links
 )

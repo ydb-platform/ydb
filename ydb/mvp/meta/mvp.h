@@ -57,12 +57,12 @@ public:
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;
-    TMetaSettings MetaSettings;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;
     THolder<NActors::TActorSystemSetup> ActorSystemSetup;
     NActors::TActorSystem ActorSystem;
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
+    TMetaSettings MetaSettings;
 
     static NMvp::TTokensConfig TokensConfig;
 };

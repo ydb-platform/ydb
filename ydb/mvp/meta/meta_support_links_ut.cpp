@@ -46,6 +46,10 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
         NMVP::TMetaSettings Settings;
         const TYdbLocation Location = TYdbLocation("meta", "meta", {}, "/Root");
 
+        explicit TSupportLinksTestContext(NMVP::TMetaSettings settings)
+            : Settings(std::move(settings))
+        {}
+
         explicit TSupportLinksTestContext(const NMVP::TSupportLinksConfig& config) {
             static std::once_flag once;
             std::call_once(once, [] {
@@ -60,10 +64,6 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
                 Settings.DatabaseLinkSources.push_back(NMVP::MakeLinkSource(config.GetDatabase(i)));
             }
         }
-
-        explicit TSupportLinksTestContext(NMVP::TMetaSettings settings)
-            : Settings(std::move(settings))
-        {}
 
         NActors::TActorId RegisterGet(
             TTestActorRuntime& runtime,

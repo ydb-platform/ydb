@@ -12,6 +12,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
+#include <ydb/public/api/protos/ydb_scheme.pb.h>
+#include <ydb/public/api/protos/ydb_secret.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/stream/format.h>
@@ -749,9 +751,49 @@ int TDescribeLogic::PrintPathResponse(const TString& path, const NScheme::TDescr
         return DescribeExternalTable(path, format);
     case NScheme::ESchemeEntryType::SysView:
         return DescribeSystemView(path, format);
+    case NScheme::ESchemeEntryType::Secret:
+        return DescribeSecret(path, options, format, result);
     default:
         return DescribeEntryDefault(entry, options);
     }
+}
+
+int TDescribeLogic::DescribeSecret(const TString& path, const TDescribeOptions& options, EDataFormat format, const NScheme::TDescribePathResult& result) {
+    const auto& entry = result.GetEntry();
+
+    NScheme::TSecretClient client(Driver);
+    auto secretResult = client.DescribeSecret(path).GetValueSync();
+    if (!secretResult.IsSuccess()) {
+        Out << secretResult.GetIssues().ToString() << Endl;
+        return EXIT_FAILURE;
+    }
+
+    if (format == EDataFormat::Default || format == EDataFormat::Pretty) {
+        Out << "Version: " << secretResult.GetVersion() << Endl;
+        if (options.ShowPermissions) {
+            Out << Endl;
+            PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions, Out);
+        }
+        return EXIT_SUCCESS;
+    }
+
+    Ydb::Secret::DescribeSecretResult msg;
+    auto* self = msg.mutable_self();
+    self->set_name(entry.Name);
+    self->set_owner(entry.Owner);
+    self->set_type(Ydb::Scheme::Entry::SECRET);
+    self->set_size_bytes(entry.SizeBytes);
+    if (options.ShowPermissions) {
+        for (const auto& perm : entry.Permissions) {
+            perm.SerializeTo(*self->add_permissions());
+        }
+        for (const auto& perm : entry.EffectivePermissions) {
+            perm.SerializeTo(*self->add_effective_permissions());
+        }
+    }
+    msg.set_version(static_cast<i64>(secretResult.GetVersion()));
+
+    return PrintProtoJsonBase64(msg, Out);
 }
 
 int TDescribeLogic::DescribeEntryDefault(NScheme::TSchemeEntry entry, const TDescribeOptions& options) {

@@ -73,6 +73,22 @@ def create_external_table(session, external_table, external_data_source):
     )
 
 
+def create_secret(session, secret_name, value):
+    session.execute_scheme(
+        f"""
+        CREATE SECRET `{secret_name}` WITH ( value = '{value}' );
+        """
+    )
+
+
+def alter_secret(session, secret_name, value):
+    session.execute_scheme(
+        f"""
+        ALTER SECRET `{secret_name}` WITH ( value = '{value}' );
+        """
+    )
+
+
 class TestSchemeDescribe:
     @pytest.fixture(autouse=True, scope="function")
     def init_test(self, tmp_path):
@@ -110,6 +126,112 @@ class TestSchemeDescribe:
             assert isinstance(references, list)
             assert len(references) == 1
             assert references[0] == expected_reference
+
+
+class TestSecretSchemeDescribe:
+    secret_value_created = "secret-random-value-9f3a2c1e"
+    secret_value_altered = "secret-updated-value-7b4d8e2a"
+
+    @staticmethod
+    def _parse_secret_version_from_scheme_describe(stdout):
+        for line in stdout.splitlines():
+            line = line.strip()
+            if line.startswith("Version:"):
+                parts = line.split()
+                return int(parts[1])
+        assert False, f"Version is missing: {stdout}"
+
+    @pytest.fixture(scope="module")
+    def ydb_cluster_configuration(self, request):
+        return dict(
+            extra_grpc_services=["secret"],
+        )
+
+    def test_describe_secret_format_default(self, ydb_cluster, ydb_database, ydb_client_session):
+        secret_name = "cli_scheme_describe_secret"
+        session_pool = ydb_client_session(ydb_database)
+        with session_pool.checkout() as session:
+            create_secret(session, secret_name, self.secret_value_created)
+
+        out = execute_ydb_cli_command(
+            ydb_cluster.nodes[1],
+            ydb_database,
+            ["scheme", "describe", secret_name],
+        )
+        assert "<secret>" in out
+        assert self.secret_value_created not in out
+        version = self._parse_secret_version_from_scheme_describe(out)
+        assert version == 0, f"version: {version}"
+
+        with session_pool.checkout() as session:
+            alter_secret(session, secret_name, self.secret_value_altered)
+
+        out = execute_ydb_cli_command(
+            ydb_cluster.nodes[1],
+            ydb_database,
+            ["scheme", "describe", secret_name],
+        )
+        assert "<secret>" in out
+        assert self.secret_value_created not in out
+        assert self.secret_value_altered not in out
+        version = self._parse_secret_version_from_scheme_describe(out)
+        assert version == 1, f"actual version: {version}"
+
+    def test_describe_secret_format_proto_json(self, ydb_cluster, ydb_database, ydb_client_session):
+        secret_name = "cli_scheme_describe_secret_json"
+        session_pool = ydb_client_session(ydb_database)
+        with session_pool.checkout() as session:
+            create_secret(session, secret_name, self.secret_value_created)
+
+        out = execute_ydb_cli_command(
+            ydb_cluster.nodes[1],
+            ydb_database,
+            ["scheme", "describe", "--format", "proto-json-base64", secret_name],
+        )
+        assert self.secret_value_created not in out
+        description = json.loads(out)
+        # There's no assert on `version` here: proto3 JSON omits default fields
+        assert self.secret_value_created not in json.dumps(description)
+
+        with session_pool.checkout() as session:
+            alter_secret(session, secret_name, self.secret_value_altered)
+
+        out2 = execute_ydb_cli_command(
+            ydb_cluster.nodes[1],
+            ydb_database,
+            ["scheme", "describe", "--format", "proto-json-base64", secret_name],
+        )
+        assert self.secret_value_created not in out2
+        assert self.secret_value_altered not in out2
+        description2 = json.loads(out2)
+        assert self.secret_value_created not in json.dumps(description2)
+        assert self.secret_value_altered not in json.dumps(description2)
+        assert int(description2["version"]) == 1, f"actual version: {description2["version"]}"
+
+    def test_describe_secret_permissions_in_proto_json(self, ydb_cluster, ydb_database, ydb_client_session):
+        secret_name = "cli_scheme_describe_secret_perms"
+        session_pool = ydb_client_session(ydb_database)
+        with session_pool.checkout() as session:
+            create_secret(session, secret_name, self.secret_value_created)
+
+        out_perms = execute_ydb_cli_command(
+            ydb_cluster.nodes[1],
+            ydb_database,
+            [
+                "scheme",
+                "describe",
+                secret_name,
+                "--permissions",
+                "--format",
+                "proto-json-base64",
+            ],
+        )
+        assert self.secret_value_created not in out_perms
+        self_perms = json.loads(out_perms)["self"]
+        assert "permissions" in self_perms
+        assert "effective_permissions" in self_perms
+        assert isinstance(self_perms["permissions"], list)
+        assert isinstance(self_perms["effective_permissions"], list)
 
 
 class TestViewSchemeDescribe:

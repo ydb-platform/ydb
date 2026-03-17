@@ -6,7 +6,9 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_secret_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
+#include <ydb/public/api/protos/ydb_secret.pb.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <util/string/join.h>
@@ -117,6 +119,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::Transfer;
     case ::Ydb::Scheme::Entry::STREAMING_QUERY:
         return ESchemeEntryType::StreamingQuery;
+    case ::Ydb::Scheme::Entry::SECRET:
+        return ESchemeEntryType::Secret;
     default:
         return ESchemeEntryType::Unknown;
     }
@@ -211,7 +215,6 @@ public:
                 if (any) {
                     any->UnpackTo(&result);
                 }
-
                 promise.SetValue(TDescribePathResult(TStatus(std::move(status)), result.self()));
             };
 
@@ -308,6 +311,42 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TSecretClient::TImpl : public TClientImplCommon<TSecretClient::TImpl> {
+public:
+    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
+        : TClientImplCommon(std::move(connections), settings) {}
+
+    TAsyncDescribeSecretResult DescribeSecret(const std::string& path, const TDescribePathSettings& settings) {
+        auto request = MakeOperationRequest<::Ydb::Secret::DescribeSecretRequest>(settings);
+        request.set_path(TStringType{path});
+
+        auto promise = NThreading::NewPromise<TDescribeSecretResult>();
+        auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
+            ::Ydb::Secret::DescribeSecretResult result;
+            if (any) {
+                any->UnpackTo(&result);
+            }
+            std::string name = result.self().name();
+            promise.SetValue(TDescribeSecretResult(
+                TStatus(std::move(status)),
+                std::move(name),
+                result.version()));
+        };
+
+        Connections_->RunDeferred<::Ydb::Secret::V1::SecretService, ::Ydb::Secret::DescribeSecretRequest, ::Ydb::Secret::DescribeSecretResponse>(
+            std::move(request),
+            extractor,
+            &::Ydb::Secret::V1::SecretService::Stub::AsyncDescribeSecret,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+
+        return promise.GetFuture();
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 TDescribePathResult::TDescribePathResult(TStatus&& status, const TSchemeEntry& entry)
     : TStatus(std::move(status))
     , Entry_(entry)
@@ -325,6 +364,14 @@ void TDescribePathResult::Out(IOutputStream& out) const {
         return TStatus::Out(out);
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+TDescribeSecretResult::TDescribeSecretResult(TStatus&& status, std::string name, uint64_t version)
+    : TStatus(std::move(status))
+    , Name_(std::move(name))
+    , Version_(version)
+{}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -374,6 +421,16 @@ TAsyncStatus TSchemeClient::ModifyPermissions(const std::string& path,
     const TModifyPermissionsSettings& data)
 {
     return Impl_->ModifyPermissions(path, data);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TSecretClient::TSecretClient(const TDriver& driver, const TCommonClientSettings& settings)
+    : Impl_(new TImpl(CreateInternalInterface(driver), settings))
+{}
+
+TAsyncDescribeSecretResult TSecretClient::DescribeSecret(const std::string& path, const TDescribePathSettings& settings) {
+    return Impl_->DescribeSecret(path, settings);
 }
 
 } // namespace NScheme

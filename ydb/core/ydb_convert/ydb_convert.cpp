@@ -1000,6 +1000,9 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
     case NKikimrSchemeOp::EPathTypePersQueueGroup:
         to->set_type(Ydb::Scheme::Entry::TOPIC);
         break;
+    case NKikimrSchemeOp::EPathTypeSecret:
+        to->set_type(Ydb::Scheme::Entry::SECRET);
+        break;
 
     default:
         to->set_type(static_cast<Ydb::Scheme::Entry::Type>(from.GetPathType()));

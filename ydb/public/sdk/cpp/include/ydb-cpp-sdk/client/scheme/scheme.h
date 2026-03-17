@@ -54,6 +54,7 @@ enum class ESchemeEntryType : i32 {
     Transfer = 23,
     StreamingQuery = 24,
     BackupCollection = 25,
+    Secret = 26,
 };
 
 struct TVirtualTimestamp {
@@ -96,9 +97,11 @@ struct TSchemeEntry {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDescribePathResult;
+class TDescribeSecretResult;
 class TListDirectoryResult;
 
 using TAsyncDescribePathResult = NThreading::TFuture<TDescribePathResult>;
+using TAsyncDescribeSecretResult = NThreading::TFuture<TDescribeSecretResult>;
 using TAsyncListDirectoryResult = NThreading::TFuture<TListDirectoryResult>;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -189,6 +192,21 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TSecretClient {
+    class TImpl;
+
+public:
+    TSecretClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
+
+    TAsyncDescribeSecretResult DescribeSecret(const std::string& path,
+        const TDescribePathSettings& settings = TDescribePathSettings());
+
+private:
+    std::shared_ptr<TImpl> Impl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDescribePathResult : public TStatus {
 public:
     TDescribePathResult(TStatus&& status, const TSchemeEntry& entry);
@@ -199,6 +217,21 @@ public:
 private:
     TSchemeEntry Entry_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TDescribeSecretResult : public TStatus {
+public:
+    TDescribeSecretResult(TStatus&& status, std::string name, uint64_t version);
+    const std::string& GetName() const { return Name_; }
+    uint64_t GetVersion() const { return Version_; }
+
+private:
+    std::string Name_;
+    uint64_t Version_ = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TListDirectoryResult : public TDescribePathResult {
 public:

@@ -419,7 +419,7 @@ private:
             TFsPath childPath(StorageDir_ / name);
             TFileStat stat(childPath, true);
             if (stat.IsFile()) {
-                files.push_back(TFileObject{name, stat.MTime, stat.Size});
+                files.push_back(TFileObject{.Name = name, .MTime = stat.MTime, .Size = stat.Size});
                 ++actualFiles;
                 actualSize += stat.Size;
             }

@@ -591,7 +591,7 @@ namespace NTypeAnnImpl {
     void TExtContext::RegisterResolvedImport(const IUdfResolver::TImport& import) {
         YQL_ENSURE(import.Modules);
         for (auto& m : *import.Modules) {
-            auto p = Types.UdfModules.emplace(m, TUdfInfo{import.FileAlias, import.Block->CustomUdfPrefix});
+            auto p = Types.UdfModules.emplace(m, TUdfInfo{.FileAlias=import.FileAlias, .Prefix=import.Block->CustomUdfPrefix});
             // rework this place when user tries to override another module
             if (!p.second && p.first->second.FileAlias != import.FileAlias) {
                 ythrow yexception()

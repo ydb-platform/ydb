@@ -550,9 +550,9 @@ TString Id(const TRule_an_id_pure& node, TTranslation& ctx) {
 TViewDescription Id(const TRule_view_name& node, TTranslation& ctx) {
     switch (node.Alt_case()) {
         case TRule_view_name::kAltViewName1:
-            return {Id(node.GetAlt_view_name1().GetRule_an_id1(), ctx)};
+            return {.ViewName = Id(node.GetAlt_view_name1().GetRule_an_id1(), ctx)};
         case TRule_view_name::kAltViewName2:
-            return {"", true};
+            return {.ViewName = "", .PrimaryFlag = true};
         case TRule_view_name::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
@@ -974,7 +974,7 @@ bool TSqlTranslation::AddCompactSetting(const TIdentifier& id, const TRule_compa
 
 std::pair<TString, TViewDescription> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TViewDescription view, TTranslation& ctx) {
     if (nameWithAt.first) {
-        view = {"@"};
+        view = {.ViewName = "@"};
         ctx.Context().IncrementMonCounter("sql_features", "AnonymousTable");
     }
 
@@ -1091,13 +1091,13 @@ bool TSqlTranslation::BindList(const TRule_bind_parameter_list& node, TVector<TS
         return false;
     }
 
-    bindNames.emplace_back(TSymbolNameWithPos{name, Ctx_.Pos()});
+    bindNames.emplace_back(TSymbolNameWithPos{.Name = name, .Pos = Ctx_.Pos()});
     for (auto& b : node.GetBlock2()) {
         if (!NamedNodeImpl(b.GetRule_bind_parameter2(), name, *this)) {
             return false;
         }
 
-        bindNames.emplace_back(TSymbolNameWithPos{name, Ctx_.Pos()});
+        bindNames.emplace_back(TSymbolNameWithPos{.Name = name, .Pos = Ctx_.Pos()});
     }
     return true;
 }
@@ -1115,7 +1115,7 @@ bool TSqlTranslation::ActionOrSubqueryArgs(const TRule_action_or_subquery_args& 
     if (isOptional) {
         optionalArgsCount++;
     }
-    bindNames.emplace_back(TSymbolNameWithPos{name, Ctx_.Pos()});
+    bindNames.emplace_back(TSymbolNameWithPos{.Name = name, .Pos = Ctx_.Pos()});
 
     for (auto& b : node.GetBlock2()) {
         if (!NamedNodeImpl(b.GetRule_opt_bind_parameter2(), name, isOptional, *this)) {
@@ -1128,7 +1128,7 @@ bool TSqlTranslation::ActionOrSubqueryArgs(const TRule_action_or_subquery_args& 
             Context().Error() << "Non-optional argument can not follow optional one";
             return false;
         }
-        bindNames.emplace_back(TSymbolNameWithPos{name, Ctx_.Pos()});
+        bindNames.emplace_back(TSymbolNameWithPos{.Name = name, .Pos = Ctx_.Pos()});
     }
     return true;
 }
@@ -1336,7 +1336,7 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
     tr.Cluster = TDeferredAtom(Ctx_.Pos(), bindingInfo.Cluster);
 
     const TString view = "";
-    tr.Keys = BuildTableKey(Ctx_.Pos(), tr.Service, tr.Cluster, TDeferredAtom(Ctx_.Pos(), bindingInfo.Path), {view});
+    tr.Keys = BuildTableKey(Ctx_.Pos(), tr.Service, tr.Cluster, TDeferredAtom(Ctx_.Pos(), bindingInfo.Path), {.ViewName = view});
 
     return true;
 }
@@ -4070,7 +4070,7 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
             TDeferredAtom table;
             MakeTableFromExpression(Context().Pos(), Context(), named, table);
             result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
-            result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster, table, {at ? "@" : ""});
+            result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster, table, {.ViewName = at ? "@" : ""});
             break;
         }
         case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:

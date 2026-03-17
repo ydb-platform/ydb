@@ -3171,7 +3171,7 @@ THashMap<TString, TPragmaDescr>::value_type TableElemExt(TString name, PragmaSta
     TString normalizedName(name);
     TMaybe<TIssue> err = NormalizeName({}, normalizedName);
     Y_ABORT_UNLESS(err.Empty(), "%s", err->GetMessage().c_str());
-    return {std::move(normalizedName), TPragmaDescr{std::move(name), std::move(cb)}};
+    return {std::move(normalizedName), TPragmaDescr{.CanonicalName = std::move(name), .Cb = std::move(cb)}};
 }
 
 #define TABLE_ELEM(name, param, value) TableElemExt(name, SetCtxField((&TContext::param), (value)))

@@ -593,7 +593,6 @@ protected:
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         } else {
             MtlsAuthStage = AUTH_SUCCESSFUL;
-            // RequestPoller();
             HandleConnected(PollerEventSaved, ctx);
         }
     }

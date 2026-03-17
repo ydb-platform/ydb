@@ -2192,9 +2192,15 @@ namespace NYql::NTypeAnnImpl {
         }
 
         if (input->ChildrenSize() == 1) {
-            auto status = ConvertToLambda(input->ChildRef(0), ctx.Expr, Max<ui32>());
+            bool isUniversal;
+            auto status = ConvertToLambda(input->ChildRef(0), ctx.Expr, isUniversal, Max<ui32>());
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
         } else {
             auto ui32Type = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint32);
@@ -2203,9 +2209,15 @@ namespace NYql::NTypeAnnImpl {
                 return status;
             }
 
-            status = ConvertToLambda(input->ChildRef(1), ctx.Expr, 1);
+            bool isUniversal;
+            status = ConvertToLambda(input->ChildRef(1), ctx.Expr, isUniversal, 1);
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
         }
 

@@ -2040,9 +2040,15 @@ IGraphTransformer::TStatus SqlResultItemWrapper(const TExprNode::TPtr& input, TE
     }
 
     auto& lambda = input->ChildRef(2);
-    const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 1 : 0);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 1 : 0);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!hasType) {
@@ -2144,9 +2150,15 @@ IGraphTransformer::TStatus SqlWhereWrapper(const TExprNode::TPtr& input, TExprNo
     }
 
     auto& lambda = input->ChildRef(1);
-    const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 1 : 0);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 1 : 0);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!hasType) {
@@ -2201,9 +2213,15 @@ IGraphTransformer::TStatus SqlSortWrapper(const TExprNode::TPtr& input, TExprNod
     }
 
     auto& lambda = input->ChildRef(1);
-    const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 1 : 0);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 1 : 0);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!hasType) {
@@ -4386,17 +4404,29 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
 
     if (!input->Child(3)->IsCallable("Void")) {
         auto& lambda = input->ChildRef(3);
-        const auto status = ConvertToLambda(lambda, ctx.Expr, (!input->Child(2)->IsCallable("Void") && hasType) ? 2 : 1);
+        bool isUniversal;
+        const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, (!input->Child(2)->IsCallable("Void") && hasType) ? 2 : 1);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
     }
 
     if (!input->Child(4)->IsCallable(sqlSelect)) {
         auto& lambda = input->ChildRef(4);
-        const auto status = ConvertToLambda(lambda, ctx.Expr, 0);
+        bool isUniversal;
+        const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 0);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (hasType) {
@@ -4475,9 +4505,15 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
 
         if (!input->Child(2)->IsCallable("Void")) {
             auto& lambda = input->ChildRef(3);
-            const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 2 : 1);
+            bool isUniversal;
+            const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 2 : 1);
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
 
             auto rowType = input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -4491,7 +4527,6 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
 
             ui32 testExprType;
             bool convertToPg;
-            bool isUniversal;
             if (!ExtractPgType(lambda->GetTypeAnn(), testExprType, convertToPg, lambda->Pos(), ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
             }

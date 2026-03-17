@@ -1468,9 +1468,15 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
 
     auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
     auto& lambda = input->ChildRef(2);
-    auto convertStatus = ConvertToLambda(lambda, ctx.Expr, 1);
+    bool isUniversal;
+    auto convertStatus = ConvertToLambda(lambda, ctx.Expr, isUniversal, 1);
     if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
         return convertStatus;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, { itemType }, ctx.Expr)) {
@@ -1497,7 +1503,6 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
 
     TVector<ui32> argTypes;
     bool needRetype = false;
-    bool isUniversal;
     if (auto status = ExtractPgTypesFromMultiLambda(lambda, argTypes, needRetype, ctx.Expr, isUniversal);
         status != IGraphTransformer::TStatus::Ok) {
         return status;
@@ -2092,9 +2097,15 @@ IGraphTransformer::TStatus PgIterateWrapper(const TExprNode::TPtr& input, TExprN
     }
 
     auto& lambda = input->ChildRef(1);
-    const auto status = ConvertToLambda(lambda, ctx.Expr, 1);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 1);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, { input->Head().GetTypeAnn() }, ctx.Expr)) {

@@ -2675,8 +2675,25 @@ bool EnsureLambda(const TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
-IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, ui32 minArgumentsCount,
+IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, ui32 argumentsCount,
     ui32 maxArgumentsCount, bool withTypes) {
+    bool isUniversal = false;
+    auto status = ConvertToLambda(node, ctx, isUniversal, argumentsCount, maxArgumentsCount, withTypes);
+    if (status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (isUniversal) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Callable with universal type is not supported for lambdas"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    return status;
+}
+
+IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, bool& isUniversal,
+    ui32 minArgumentsCount, ui32 maxArgumentsCount, bool withTypes) {
+    isUniversal = false;
     if (node->Type() == TExprNode::Lambda || node->IsCallable("WithOptionalArgs")) {
         auto& actualLambda = node->IsCallable("WithOptionalArgs") ? *node->Child(0) : *node;
         const ui32 optionalArgsCount = node->IsCallable("WithOptionalArgs") ? FromString<ui32>(node->Child(1)->Content()) : 0;
@@ -2747,6 +2764,11 @@ IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& 
 
     if (HasError(node->GetTypeAnn(), ctx)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (node->GetTypeAnn() && node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        isUniversal = true;
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!withTypes || node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Callable) {

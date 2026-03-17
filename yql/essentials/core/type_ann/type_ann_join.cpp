@@ -27,10 +27,16 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto status = ConvertToLambda(input->ChildRef(2), ctx.Expr, 1);
-        status = status.Combine(ConvertToLambda(input->ChildRef(3), ctx.Expr, 1));
+        bool isUniversal1, isUniversal2;
+        auto status = ConvertToLambda(input->ChildRef(2), ctx.Expr, isUniversal1, 1);
+        status = status.Combine(ConvertToLambda(input->ChildRef(3), ctx.Expr, isUniversal2, 1));
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+
+        if (isUniversal1 || isUniversal2) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureAtom(*input->Child(4), ctx.Expr)) {
@@ -94,12 +100,10 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        bool isUniversal1;
         if (!EnsureOneOrTupleOfDataOrOptionalOfData(*lambda1, ctx.Expr, isUniversal1)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        bool isUniversal2;
         if (!EnsureOneOrTupleOfDataOrOptionalOfData(*lambda2, ctx.Expr, isUniversal2)) {
             return IGraphTransformer::TStatus::Error;
         }

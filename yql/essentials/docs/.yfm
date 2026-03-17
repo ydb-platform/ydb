@@ -19,4 +19,4 @@ docs-viewer:
   startrek:
     queue: YQLSUPPORT
     components: [docs]
-  favicon-src: https://docs.yandex-team.ru/favicon.png
+  favicon-src: https://yastatic.net/s3/cloud/docs-viewer-internal/static/freeze/favicon.png

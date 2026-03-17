@@ -1038,7 +1038,6 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestOutputBufferBounded) {
         auto td = OutputBufferBoundedTestData();
         auto descr = MakeJoinDescription(td);
-        descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
 
         THolder<IComputationGraph> graph = ConstructJoinGraphStream(
             td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);
@@ -1066,13 +1065,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         }
 
         constexpr i64 expectedTotal = 200 * 200;
+        constexpr i64 maxOutputRows = 10000;
         UNIT_ASSERT_VALUES_EQUAL(totalRows, expectedTotal);
         UNIT_ASSERT_C(blockCount > 1,
             TStringBuilder() << "Expected multiple output blocks but got " << blockCount
                              << " (all " << totalRows << " rows in one block)");
-        UNIT_ASSERT_C(maxBlockRows < expectedTotal,
+        UNIT_ASSERT_C(maxBlockRows <= maxOutputRows,
             TStringBuilder() << "Max block size " << maxBlockRows
-                             << " should be less than total " << expectedTotal);
+                             << " should be at most " << maxOutputRows);
     }
 }
 } // namespace NKikimr::NMiniKQL

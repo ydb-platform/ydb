@@ -286,10 +286,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                 return NYql::NUdf::EFetchStatus::Finish;
             }
             auto outputIsFull = [&]() {
-                const ui64 bytesLimit = TlsAllocState->IsMemoryYellowZoneEnabled()
-                    ? OutputBytesLimitYellowZone_
-                    : OutputBytesLimit_;
-                return Output_.AllocatedBytes() >= bytesLimit;
+                return Output_.SizeTuples() >= MaxOutputRows_;
             };
             while (!outputIsFull()) {
                 auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn(), outputIsFull);
@@ -316,8 +313,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         JoinType Join_;
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Kind> Output_;
-        static constexpr ui64 OutputBytesLimit_ = 50ULL * 1024 * 1024;
-        static constexpr ui64 OutputBytesLimitYellowZone_ = 5ULL * 1024 * 1024;
+        static constexpr i64 MaxOutputRows_ = 10000;
         bool Finished_ = false;
     };
 

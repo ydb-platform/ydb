@@ -271,7 +271,7 @@ template <typename Source> class TInMemoryHashJoin {
     }
 
     EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx,
-                           JoinMatchFun<TSingleTuple> auto consumeOneOrTwoTuples, auto /*isFull*/) {
+                           JoinMatchFun<TSingleTuple> auto consumeOneOrTwoTuples, auto isFull) {
         while (!Sources_.Build.Finished()) {
             FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Build.FetchRow();
             switch (AsStatus(var)) {
@@ -294,6 +294,24 @@ template <typename Source> class TInMemoryHashJoin {
             return EFetchResult::Finish;
         }
 
+        if (FetchedPack_.has_value()) {
+            ui32 idx = 0;
+            for (TSingleTuple probeTuple : *FetchedPack_) {
+                if (idx++ < ResumeIndex_) {
+                    continue;
+                }
+                Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
+                    consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
+                });
+                if (isFull()) {
+                    ResumeIndex_ = idx;
+                    return EFetchResult::One;
+                }
+            }
+            FetchedPack_ = std::nullopt;
+            ResumeIndex_ = 0;
+        }
+
         if (!Sources_.Probe.Finished()) {
             const FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
             const NKikimr::NMiniKQL::EFetchResult resEnum = AsResult(var);
@@ -301,10 +319,17 @@ template <typename Source> class TInMemoryHashJoin {
             if (resEnum == EFetchResult::One) {
                 const IBlockLayoutConverter::TPackResult& thisPackResult =
                     std::get<One<IBlockLayoutConverter::TPackResult>>(var).Data;
-                for (TSingleTuple probeTuple: thisPackResult) {
+                ui32 idx = 0;
+                for (TSingleTuple probeTuple : thisPackResult) {
+                    idx++;
                     Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
                         consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                     });
+                    if (isFull()) {
+                        FetchedPack_ = thisPackResult;
+                        ResumeIndex_ = idx;
+                        return EFetchResult::One;
+                    }
                 }
             }
 
@@ -322,6 +347,8 @@ template <typename Source> class TInMemoryHashJoin {
     TTable Table_;
     TPackResult BuildData_;
     TMKQLVector<IBlockLayoutConverter::TPackResult> BuildChunks_;
+    std::optional<IBlockLayoutConverter::TPackResult> FetchedPack_;
+    ui32 ResumeIndex_ = 0;
 };
 
 template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THybridHashJoin {

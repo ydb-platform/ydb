@@ -280,7 +280,7 @@ public:
             const auto backupGenStep = TGenStep{Generation, Step};
     
             TVector<TFsPath> children;
-            BackupPath.List(children);
+            BackupPath.Parent().List(children);
     
             TVector<std::pair<TGenStep, TFsPath>> backups;
             for (const auto& child : children) {

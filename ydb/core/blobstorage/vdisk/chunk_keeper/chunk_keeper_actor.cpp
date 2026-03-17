@@ -86,6 +86,7 @@ private:
         hFunc(TEvChunkKeeperFree, HandleError)
         hFunc(TEvChunkKeeperDiscover, HandleError)
         hFunc(NPDisk::TEvLogResult, HandleError)
+        hFunc(TEvListChunks, HandleError)
         IgnoreFunc(NPDisk::TEvCutLog)
         cFunc(TEvents::TEvPoison::EventType, PassAway)
     )
@@ -94,6 +95,7 @@ private:
 
     void Handle(const NPDisk::TEvLogResult::TPtr& ev) {
         Y_VERIFY_S(ActiveRequest, VDISKP(Ctx.LogCtx->VCtx, "No ActiveRequest while handling TEvLogResult"));
+        TRequest activeRequest = *ActiveRequest;
         std::visit(TOverloaded{
             [&](const TRequestAllocate&) -> void {
                 HandleLogResultAllocate(ev);
@@ -570,6 +572,13 @@ private:
         Send(Ctx.LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, Max<ui64>()));
         DeletionsInFlight.clear();
         Committed.reset();  // ensure it won't be used
+    }
+
+
+    void HandleError(const TEvListChunks::TPtr& ev) {
+        // If ChunkKeeper is disabled, all chunks are deallocated on start when VDisk is not ReadOnly
+        // If VDisk is ReadOnly, shredding doesn't work at all
+        Send(ev->Sender, new TEvListChunksResult);
     }
 
 private:

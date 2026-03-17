@@ -1107,6 +1107,10 @@ public:
         }
         Impl.Shred.Requester = ev->Sender;
         Impl.Shred.Cookie = ev->Cookie;
+
+        if (Impl.Owners.empty()) {
+            FinishShredding();
+        }
     }
 
     void Handle(const NPDisk::TEvPreShredCompactVDiskResult::TPtr& ev) {
@@ -1120,6 +1124,12 @@ public:
 
         if (Impl.Shred.Pending.empty()) {
             Impl.Shred.Phase = TImpl::TShredState::EPhase::ShredVDisks;
+
+            if (Impl.Owners.empty()) {
+                FinishShredding();
+                return;
+            }
+        
             for (const auto& [ownerId, ownerData] : Impl.Owners) {
                 std::vector<ui32> chunks(ownerData.ReservedChunks.begin(), ownerData.ReservedChunks.end());
                 chunks.insert(chunks.end(), ownerData.CommittedChunks.begin(), ownerData.CommittedChunks.end());
@@ -1138,10 +1148,14 @@ public:
         bool erased = Impl.Shred.Pending.erase(ev->Get()->Owner);
         Y_VERIFY(erased);
         if (Impl.Shred.Pending.empty()) {
-            Impl.Shred.Phase = TImpl::TShredState::EPhase::None;
-            Send(new IEventHandle(Impl.Shred.Requester, SelfId(),
-                    new NPDisk::TEvShredPDiskResult(NKikimrProto::OK, Impl.Shred.Generation, ""), 0, Impl.Shred.Cookie));
+            FinishShredding();
         }
+    }
+
+    void FinishShredding() {
+        Impl.Shred.Phase = TImpl::TShredState::EPhase::None;
+        Send(new IEventHandle(Impl.Shred.Requester, SelfId(),
+                new NPDisk::TEvShredPDiskResult(NKikimrProto::OK, Impl.Shred.Generation, ""), 0, Impl.Shred.Cookie));
     }
 
     NPDisk::TStatusFlags GetStatusFlags() {

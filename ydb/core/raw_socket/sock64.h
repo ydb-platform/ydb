@@ -301,7 +301,7 @@ public:
             char buffer[1024];
             X509_NAME_oneline(X509_get_subject_name(current), buffer, sizeof(buffer));
             if (err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT) {
-                // Разрешаем self-signed сертификаты
+                // Allow self-signed certificates
                 preverify = 1;
             }
         }

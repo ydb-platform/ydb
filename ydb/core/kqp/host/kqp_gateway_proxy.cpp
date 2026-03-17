@@ -3315,8 +3315,7 @@ public:
                     result.SetSuccess();
                     return MakeFuture(result);
                 } else {
-                    // Direct execution path (old table service): resolve ValueParamName here
-                    // since ModifyScheme goes to schemeshard which doesn't understand ValueParamName.
+                    // DropSecret is instantiated with NKikimrSchemeOp::TDrop
                     if constexpr (std::is_same_v<TSecretSchemaOp, NKikimrSchemeOp::TSecretSchemaOp>) {
                         if (op.HasValueParamName()) {
                             const TString& paramName = op.GetValueParamName();

@@ -119,7 +119,6 @@ void FillTopicRequestParameters(TRequestParameters* params, const TString& path,
     }
 
     params->set_path(path);
-
     if (desc.HasPQTabletConfig()) {
         const auto& cfg = desc.GetPQTabletConfig();
 
@@ -139,7 +138,6 @@ void FillTopicRequestParameters(TRequestParameters* params, const TString& path,
         }
 
         const auto& partCfg = cfg.GetPartitionConfig();
-
         if (partCfg.HasLifetimeSeconds()) {
             auto* retention = params->mutable_retention_period();
             *retention = google::protobuf::util::TimeUtil::SecondsToDuration(partCfg.GetLifetimeSeconds());
@@ -149,19 +147,15 @@ void FillTopicRequestParameters(TRequestParameters* params, const TString& path,
             constexpr ui64 BYTES_IN_MB = 1024ull * 1024ull;
             params->set_retention_storage_mb(partCfg.GetStorageLimitBytes() / BYTES_IN_MB);
         }
-
         if (partCfg.HasWriteSpeedInBytesPerSecond()) {
             params->set_partition_write_speed_bytes_per_second(partCfg.GetWriteSpeedInBytesPerSecond());
         }
-
         if (cfg.HasMeteringMode()) {
             params->set_metering_mode(ConvertMeteringMode(cfg.GetMeteringMode()));
         }
-
         if (cfg.HasMetricsLevel()) {
             params->set_metrics_level(cfg.GetMetricsLevel());
         }
-
         for (const auto& c : cfg.GetConsumers()) {
             if (c.HasName()) {
                 auto* consumer = params->add_consumers();
@@ -173,12 +167,11 @@ void FillTopicRequestParameters(TRequestParameters* params, const TString& path,
 
 static void FillRequestedPermission(
     google::protobuf::RepeatedPtrField<yandex::cloud::events::RequestedPermissions>* permissions,
-    const TString& action,
     const TCloudEventInfo& info)
 {
     auto* permission = permissions->Add();
-    permission->set_permission("ydb.topic." + action);
-    permission->set_resource_type("ydb.topic");
+    permission->set_permission("ydb.databases.alter");
+    permission->set_resource_type("ydb.databases");
     TString resourceId = info.DatabaseId.empty() ? info.TopicPath : info.DatabaseId + "/" + info.TopicPath;
     permission->set_resource_id(resourceId);
     permission->set_authorized(true);
@@ -193,7 +186,7 @@ static void Fill(TCreateTopicEvent& ev, const TCloudEventInfo& info) {
 
     // Authorization
     ev.mutable_authorization()->set_authorized(true);
-    FillRequestedPermission(ev.mutable_authorization()->mutable_permissions(), "CreateTopic", info);
+    FillRequestedPermission(ev.mutable_authorization()->mutable_permissions(), info);
 
     // EventMetadata
     ev.mutable_event_metadata()->set_event_id(CreateGuidAsString());
@@ -232,7 +225,7 @@ static void Fill(TAlterTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_authentication()->set_subject_type(
         yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
     ev.mutable_authorization()->set_authorized(true);
-    FillRequestedPermission(ev.mutable_authorization()->mutable_permissions(), "AlterTopic", info);
+    FillRequestedPermission(ev.mutable_authorization()->mutable_permissions(), info);
 
     ev.mutable_event_metadata()->set_event_id(CreateGuidAsString());
     ev.mutable_event_metadata()->set_event_type("yandex.cloud.events.ydb.topics." + GetOperationType(info.ModifyScheme));
@@ -269,7 +262,7 @@ static void Fill(TDeleteTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_authentication()->set_subject_type(
         yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
     ev.mutable_authorization()->set_authorized(true);
-    FillRequestedPermission(ev.mutable_authorization()->mutable_permissions(), "DeleteTopic", info);
+    FillRequestedPermission(ev.mutable_authorization()->mutable_permissions(), info);
 
     ev.mutable_event_metadata()->set_event_id(CreateGuidAsString());
     ev.mutable_event_metadata()->set_event_type("yandex.cloud.events.ydb.topics." + GetOperationType(info.ModifyScheme));

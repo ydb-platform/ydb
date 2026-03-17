@@ -39,6 +39,35 @@ namespace NKikimr::NAudit {
 // TAuditLogActor
 //
 
+struct TEvAuditLog {
+    //
+    // Events declaration
+    //
+
+    enum EEvents {
+        EvBegin = EventSpaceBegin(TKikimrEvents::ES_YDB_AUDIT_LOG),
+
+        // Request actors
+        EvWriteAuditLog = EvBegin + 0,
+
+        EvEnd
+    };
+
+    static_assert(EvEnd <= EventSpaceEnd(TKikimrEvents::ES_YDB_AUDIT_LOG),
+        "expected EvEnd <= EventSpaceEnd(TKikimrEvents::ES_YDB_AUDIT_LOG)"
+    );
+
+    struct TEvWriteAuditLog : public NActors::TEventLocal<TEvWriteAuditLog, EvWriteAuditLog> {
+        TInstant Time;
+        TAuditLogParts Parts;
+
+        TEvWriteAuditLog(TInstant time, TAuditLogParts&& parts)
+            : Time(time)
+            , Parts(std::move(parts))
+        {}
+    };
+};
+
 void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBackends) {
     for (auto& logBackend : logBackends) {
         try {
@@ -180,6 +209,12 @@ void SendAuditLog(const NActors::TActorSystem* sys, TAuditLogParts&& parts)
 {
     auto request = MakeHolder<TEvAuditLog::TEvWriteAuditLog>(Now(), std::move(parts));
     sys->Send(MakeAuditServiceID(), request.Release());
+}
+
+void SendAuditLog(const NActors::TActorSystem* sys, NActors::TActorId actorId, TAuditLogParts&& parts)
+{
+    auto request = MakeHolder<TEvAuditLog::TEvWriteAuditLog>(Now(), std::move(parts));
+    sys->Send(actorId, request.Release());
 }
 
 // Service interface implementation

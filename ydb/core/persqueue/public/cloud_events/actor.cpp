@@ -274,10 +274,9 @@ void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
         json = SerializeEvent(proto);
     }
 
-    NKikimr::NAudit::TAuditLogParts parts;
-    parts.emplace_back("cloud_event_json", json);
-    auto request = MakeHolder<NAudit::TEvAuditLog::TEvWriteAuditLog>(Now(), std::move(parts));
-    NActors::TActivationContext::ActorSystem()->Send(NAudit::MakeTopicCloudEventsAuditServiceID(), request.Release());
+    AUDIT_LOG_A(NAudit::MakeTopicCloudEventsAuditServiceID(),
+        AUDIT_PART("cloud_event_json", json)
+    );
 }
 
 } // namespace NKikimr::NPQ::NCloudEvents

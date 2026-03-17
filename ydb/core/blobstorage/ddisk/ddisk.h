@@ -469,10 +469,11 @@ struct TPersistentBufferFormat {
             }
         }
 
-        void AddSegment(const TBlockSelector& selector, ui64 lsn) {
+        void AddSegment(const TBlockSelector& selector, ui64 lsn, ui32 generation) {
             auto *segment = Record.AddSegments();
             selector.Serialize(segment->MutableSelector());
             segment->SetLsn(lsn);
+            segment->SetGeneration(generation);
         }
     };
 

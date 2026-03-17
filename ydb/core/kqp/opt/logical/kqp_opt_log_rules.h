@@ -52,6 +52,9 @@ NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpPushLimitOverFullText(const
 NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
+NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
 NYql::NNodes::TExprBase KqpRewriteTopSortOverFlatMap(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase KqpRewriteTakeOverIndexRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext&,

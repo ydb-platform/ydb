@@ -325,8 +325,23 @@ struct TReadMatch {
         YQL_ENSURE(tableDesc.Metadata);
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
         if (indexDesc->Type != TIndexDescription::EType::GlobalFulltextPlain
-            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance
-            && indexDesc->Type != TIndexDescription::EType::GlobalJson) {
+            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance) {
+            return {};
+        }
+
+        return read;
+    }
+
+    static TReadMatch MatchJsonRead(const TExprBase& node, const TKqpOptimizeContext& kqpCtx) {
+        auto read = TReadMatch::Match(node, kqpCtx);
+        if (!read || read.Index().Value().empty()) {
+            return {};
+        }
+
+        const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+        YQL_ENSURE(tableDesc.Metadata);
+        auto [_, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
+        if (indexDesc->Type != TIndexDescription::EType::GlobalJson) {
             return {};
         }
 
@@ -1857,6 +1872,66 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         .Lambda(NewLambdaFrom(ctx, flatMap.Lambda().Pos(), result.Replaces, flatMap.Lambda().Args().Ref(), newLambdaBody.Body()))
         .Done();
     return res;
+}
+
+TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TCoFlatMap>()) {
+        return node;
+    }
+
+    auto flatMap = node.Maybe<TCoFlatMap>().Cast();
+
+    auto read = TReadMatch::MatchJsonRead(flatMap.Input(), kqpCtx);
+    if (!read) {
+        return node;
+    }
+
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+    YQL_ENSURE(tableDesc.Metadata);
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
+    if (indexDesc->Type != TIndexDescription::EType::GlobalJson) {
+        return {};
+    }
+
+    auto body = flatMap.Lambda().Body();
+    if (!body.Maybe<TCoOptionalIf>()) {
+        return {};
+    }
+
+    auto optionalIf = body.Maybe<TCoOptionalIf>().Cast();
+    if (!optionalIf.Predicate().Maybe<TCoCoalesce>()) {
+        return {};
+    }
+
+    auto coalesce = optionalIf.Predicate().Maybe<TCoCoalesce>().Cast();
+    if (!coalesce.Predicate().Maybe<TCoJsonExists>()) {
+        return {};
+    }
+
+    auto jsonExists = coalesce.Predicate().Maybe<TCoJsonExists>().Cast();
+    Cerr << NCommon::ExprToPrettyString(ctx, jsonExists.Ref()) << Endl;
+
+    if (!jsonExists.Json().Maybe<TCoMember>()) {
+        return {};
+    }
+
+    if (!jsonExists.JsonPath().Maybe<TCoUtf8>()) {
+        return {};
+    }
+
+    auto jsonPath = jsonExists.JsonPath().Maybe<TCoUtf8>().Cast().Literal().StringValue();
+    Cerr << "jsonPath: " << jsonPath << Endl;
+
+    const auto& variables = jsonExists.Variables().Ref();
+    if (!variables.GetTypeAnn() || variables.GetTypeAnn()->GetKind() != ETypeAnnotationKind::EmptyDict) {
+        return {};
+    }
+
+    TIssue issue{ctx.GetPosition(read.Pos()), "Json index is not supported for now"};
+    SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, issue);
+    ctx.AddError(issue);
+
+    return {};
 }
 
 // The index and main table have same number of rows, so we can push a copy of TCoTopSort or TCoTake

@@ -28,31 +28,16 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
     TSaverContext saverContext(StoragesManager);
     std::vector<std::shared_ptr<TColumnEngineChanges>> results;
     bool hasOneLayer = false;
+    const auto mayUsePortion = [&](const TPortionInfo::TConstPtr& p) {
+        return !locksManager->IsLocked(p, NDataLocks::ELockCategory::Compaction);
+    };
     for (const auto& [weight, level]: LevelsByWeight) {
         if (weight == 0) {
             break;
         }
-        auto tasks = level->GetOptimizationTasks();
+        auto tasks = level->GetOptimizationTasks(mayUsePortion);
         for (auto& data: tasks) {
             if (data.IsEmpty()) {
-                continue;
-            }
-            // filter out locked portions
-            auto notLockedPortions = data.GetRepackPortions(level->GetLevelId());
-            size_t i = 0;
-            while (i < notLockedPortions.size()) {
-                if (!locksManager->IsLocked(notLockedPortions[i], NDataLocks::ELockCategory::Compaction)) {
-                    i++;
-                    continue;
-                }
-                if (i + 1 == notLockedPortions.size()) {
-                    notLockedPortions.pop_back();
-                    break;
-                }
-                notLockedPortions[i] = notLockedPortions.back();
-                notLockedPortions.pop_back();
-            }
-            if (notLockedPortions.size() < 2) {
                 continue;
             }
             hasOneLayer |= dynamic_pointer_cast<TOneLayerPortions>(level) != nullptr;
@@ -60,7 +45,7 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
                 return results;
             }
 
-            auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, notLockedPortions, saverContext);
+            auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
             result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
             result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
             auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);

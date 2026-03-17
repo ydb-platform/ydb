@@ -50,7 +50,7 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
     return problems;
 }
 
-std::vector<TCompactionTaskData> TOneLayerPortions::DoGetOptimizationTasks() const {
+std::vector<TCompactionTaskData> TOneLayerPortions::DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
     AFL_VERIFY(GetNextLevel());
     ui64 compactedData = 0;
     TCompactionTaskData result(GetNextLevel()->GetLevelId());
@@ -65,14 +65,26 @@ std::vector<TCompactionTaskData> TOneLayerPortions::DoGetOptimizationTasks() con
         if (itFwd != Portions.end() &&
             (itBkwd == Portions.begin() || itBkwd->GetPortion()->GetTotalBlobBytes() <= itFwd->GetPortion()->GetTotalBlobBytes())) {
             auto portion = itFwd->GetPortion();
-            compactedData += portion->GetTotalBlobBytes();
-            result.AddCurrentLevelPortion(portion, GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd()), false);
+            if (mayUsePortion(portion)) {
+                compactedData += portion->GetTotalBlobBytes();
+                result.AddCurrentLevelPortion(
+                    portion, 
+                    GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd(), mayUsePortion), 
+                    false
+                );
+            }
             ++itFwd;
         } else if (itBkwd != Portions.begin() &&
                    (itFwd == Portions.end() || itFwd->GetPortion()->GetTotalBlobBytes() < itBkwd->GetPortion()->GetTotalBlobBytes())) {
             auto portion = itBkwd->GetPortion();
-            compactedData += portion->GetTotalBlobBytes();
-            result.AddCurrentLevelPortion(portion, GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd()), false);
+            if (mayUsePortion(portion)) {
+                compactedData += portion->GetTotalBlobBytes();
+                result.AddCurrentLevelPortion(
+                    portion, 
+                    GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd(), mayUsePortion), 
+                    false
+                );
+            }
             --itBkwd;
         }
     }

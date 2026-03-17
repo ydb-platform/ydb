@@ -33,7 +33,8 @@ private:
         return result;
     }
 
-    virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const override {
+    virtual std::optional<TPortionsChain> DoGetAffectedPortions(
+        const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to, const TMayUsePortion& mayUsePortion) const override {
         if (Portions.empty()) {
             return std::nullopt;
         }
@@ -43,20 +44,30 @@ private:
         if (itFrom != Portions.begin()) {
             auto it = itFrom;
             --it;
-            if (from <= it->GetPortion()->IndexKeyEnd()) {
+            if (from <= it->GetPortion()->IndexKeyEnd() && mayUsePortion(it->GetPortion())) {
                 result.insert(result.begin(), it->GetPortion());
             }
         }
         for (auto it = itFrom; it != itTo; ++it) {
-            result.emplace_back(it->GetPortion());
+            if (mayUsePortion(it->GetPortion())) {
+                result.emplace_back(it->GetPortion());
+            }
         }
+        TPortionInfo::TConstPtr next = nullptr;
         if (itTo != Portions.end()) {
-            return TPortionsChain(std::move(result), itTo->GetPortion());
-        } else if (result.size()) {
-            return TPortionsChain(std::move(result), nullptr);
-        } else {
-            return std::nullopt;
+            auto itNext = itTo;
+            while (itNext != Portions.end() && !mayUsePortion(itNext->GetPortion())) {
+                ++itNext;
+            }
+            if (itNext != Portions.end()) {
+                next = itNext->GetPortion();
+            }
         }
+
+        if (result.size() || next) {
+            return TPortionsChain(std::move(result), next);
+        }
+        return std::nullopt;
     }
 
     virtual ui64 DoGetWeight(bool) const override {
@@ -146,7 +157,7 @@ public:
     virtual std::vector<TPortionInfo::TPtr> DoModifyPortions(
         const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override;
 
-    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks() const override;
+    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const override;
 
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         NArrow::NMerger::TIntervalPositions result;

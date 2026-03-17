@@ -342,7 +342,7 @@ TQueryData::TTypedUnboxedValue* TQueryData::GetParameterUnboxedValuePtr(const TS
 bool TQueryData::TryGetParameterAsString(const TString& name, TString& outValue, TString& outError) const {
     auto it = UnboxedData.find(name);
     if (it == UnboxedData.end()) {
-        outError = TStringBuilder() << "Parameter $" << name << " is required";
+        outError = TStringBuilder() << "Parameter " << name << " is required";
         return false;
     }
     TType* type = it->second.first;
@@ -352,12 +352,12 @@ bool TQueryData::TryGetParameterAsString(const TString& name, TString& outValue,
     }
 
     if (!type->IsData()) {
-        outError = TStringBuilder() << "Parameter $" << name << " must be String or Utf8";
+        outError = TStringBuilder() << "Parameter " << name << " must be String or Utf8";
         return false;
     }
     const auto schemeType = static_cast<const TDataType*>(type)->GetSchemeType();
     if (schemeType != NUdf::TDataType<NUdf::TUtf8>::Id && schemeType != NUdf::TDataType<char*>::Id) {
-        outError = TStringBuilder() << "Parameter $" << name << " must be String or Utf8";
+        outError = TStringBuilder() << "Parameter " << name << " must be String or Utf8";
         return false;
     }
     outValue = TString(it->second.second.AsStringRef());

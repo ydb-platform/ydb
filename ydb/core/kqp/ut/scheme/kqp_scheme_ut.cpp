@@ -13609,12 +13609,7 @@ END DO)",
     }
 
     Y_UNIT_TEST(SetSecretValueWithParamOk) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSchemaSecrets(true);
-        const auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetFeatureFlags(featureFlags);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr;
         auto queryClient = kikimr.GetQueryClient();
 
         { // Utf8 parameter type
@@ -13671,47 +13666,75 @@ END DO)",
     }
 
     Y_UNIT_TEST(SetSecretValueWithParamFail) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSchemaSecrets(true);
-        const auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetFeatureFlags(featureFlags);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
 
-        // Create secret in the usual way so we can try to alter it with params
-        {
+        { // Create secret so we can try to alter it later
             static const auto query = R"sql(
-                CREATE SECRET `/Root/secret-to-alter` WITH (value = "initial");
+                CREATE SECRET `old-sec` WITH (value = "val");
             )sql";
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        { // ALTER with DECLARE but no params passed -> error
-            const auto result = queryClient.ExecuteQuery(R"sql(
-                DECLARE $newValue AS Utf8;
-                ALTER SECRET `/Root/secret-to-alter` WITH (value = $newValue);
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::GENERIC_ERROR || result.GetStatus() == EStatus::BAD_REQUEST,
-                result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Parameter");
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "required");
+        { // No parameter passed
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS Utf8;
+                            %s SECRET `%s` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType,
+                        TString(operationType) == "CREATE" ? "new-sec" : "old-sec"),
+                    NYdb::NQuery::TTxControl::NoTx()
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Parameter $secValue is required for " + TString(operationType) + " SECRET", result.GetIssues().ToString());
+            }
         }
 
-        { // CREATE SECRET with DECLARE $sec AS Uint64 and pass Uint64 -> type error
-            auto params = TParamsBuilder()
-                .AddParam("$sec").Uint64(42).Build()
-                .Build();
-            const auto result = queryClient.ExecuteQuery(R"sql(
-                DECLARE $sec AS Uint64;
-                CREATE SECRET `/Root/secret-wrong-type` WITH (value = $sec);
-            )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "String");
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Utf8");
+        { // Wrong parameter type – integer passed instead of string
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                auto params = TParamsBuilder()
+                    .AddParam("$secValue").Uint64(42).Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS String;
+                            %s SECRET `%s` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType,
+                        TString(operationType) == "CREATE" ? "new-sec" : "old-sec"),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Parameter $secValue must be String or Utf8", result.GetIssues().ToString());
+            }
+        }
+
+        { // Too complex expression
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                auto params = TParamsBuilder()
+                    .AddParam("$secValue1").Utf8("").Build()
+                    .AddParam("$secValue2").Utf8("").Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue1 AS String;
+                            DECLARE $secValue2 AS String;
+                            %s SECRET `%s` WITH (VALUE = $secValue1 || $secValue2);
+                        )sql",
+                        operationType,
+                        TString(operationType) == "CREATE" ? "new-sec" : "old-sec"),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Only string or single string parameter is supported as secret value", result.GetIssues().ToString());
+            }
         }
     }
 

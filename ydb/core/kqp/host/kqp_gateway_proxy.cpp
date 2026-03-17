@@ -3327,7 +3327,7 @@ public:
                             auto queryData = SessionCtx_->Query().QueryData;
                             if (!queryData) {
                                 return MakeFuture(ResultFromError<TGenericResult>(TStringBuilder()
-                                    << "Parameter $" << paramName << " is required for " << operationDesc
+                                    << "Parameter " << paramName << " is required for " << operationDesc
                                     << " but query has no parameters"));
                             }
                             TString resolvedValue;

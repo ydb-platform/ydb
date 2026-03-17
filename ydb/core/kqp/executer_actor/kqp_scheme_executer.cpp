@@ -32,7 +32,7 @@ bool ResolveSecretValueFromParam(TQueryData::TPtr queryData, const TString& para
 ) {
     if (!queryData) {
         onErrorCallback(Ydb::StatusIds::INTERNAL_ERROR,
-            NYql::TIssue(TStringBuilder() << "Parameter $" << paramName << " is required for " << operationDesc
+            NYql::TIssue(TStringBuilder() << "Parameter " << paramName << " is required for " << operationDesc
                 << " but query has no parameters"));
         return false;
     }

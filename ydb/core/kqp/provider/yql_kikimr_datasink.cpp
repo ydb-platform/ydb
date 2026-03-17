@@ -4,6 +4,7 @@
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/issue/yql_issue.h>
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -1834,6 +1835,9 @@ public:
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
                 if (mode == "create") {
+                    if (!settings.Value.IsValid() && !settings.ValueParamName.IsValid()) {
+                        return nullptr;
+                    }
                     const bool valueFromParam = settings.ValueParamName.IsValid();
                     return Build<TKiCreateSecret>(ctx, node->Pos())
                         .World(node->Child(0))
@@ -1845,6 +1849,9 @@ public:
                         .Done()
                         .Ptr();
                 } else if (mode == "alter") {
+                    if (!settings.Value.IsValid() && !settings.ValueParamName.IsValid()) {
+                        return nullptr;
+                    }
                     const bool valueFromParam = settings.ValueParamName.IsValid();
                     return Build<TKiAlterSecret>(ctx, node->Pos())
                         .World(node->Child(0))
@@ -1992,7 +1999,8 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
                 } else if (expr.Maybe<TCoDataCtor>()) {
                     value = expr.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>();
                 } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(tuple.Pos()), "Only literal or single parameter is supported here"));
+                    ctx.AddError(YqlIssue(ctx.GetPosition(tuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                        "Only string or single string parameter is supported as secret value"));
                 }
             } else if (name == "inherit_permissions") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());

@@ -149,7 +149,7 @@ public:
     virtual std::vector<TCSMetadataRequest> CollectMetadataRequests() const override {
         return GranulesStorage->CollectMetadataRequests();
     }
-    ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
+    ui64 GetCompactionPriority(const std::set<TInternalPathId>& pathIds,
         const std::optional<ui64> waitingPriority) const noexcept override;
     std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshotHolders& snapshotHolders,

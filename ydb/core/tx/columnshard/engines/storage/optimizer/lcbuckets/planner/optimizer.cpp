@@ -1,9 +1,6 @@
 #include "optimizer.h"
 
 #include "level/one_layer.h"
-#include "level/zero_level.h"
-#include "selector/snapshot.h"
-#include "selector/transparent.h"
 
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/constructor.h>
 
@@ -40,28 +37,36 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
             if (data.IsEmpty()) {
                 continue;
             }
+            // filter out locked portions
+            auto notLockedPortions = data.GetRepackPortions(level->GetLevelId());
+            size_t i = 0;
+            while (i < notLockedPortions.size()) {
+                if (!locksManager->IsLocked(notLockedPortions[i], NDataLocks::ELockCategory::Compaction)) {
+                    i++;
+                    continue;
+                }
+                if (i + 1 == notLockedPortions.size()) {
+                    notLockedPortions.pop_back();
+                    break;
+                }
+                notLockedPortions[i] = notLockedPortions.back();
+                notLockedPortions.pop_back();
+            }
+            if (notLockedPortions.size() < 2) {
+                continue;
+            }
             hasOneLayer |= dynamic_pointer_cast<TOneLayerPortions>(level) != nullptr;
-            if (!results.empty() && hasOneLayer) {
+            if (hasOneLayer && !results.empty()) {
                 return results;
             }
-            std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> result;
-            //    if (level->GetLevelId() == 0) {
-            result =
-                std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
-            //    } else {
-            //        result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
-            //            granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
-            //        result->AddMovePortions(data.GetMovePortions());
-            //    }
+
+            auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, notLockedPortions, saverContext);
             result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
             result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
             auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
                 "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
             result->SetCheckPoints(std::move(positions));
-            for (auto&& i : result->GetSwitchedPortions()) {
-                AFL_VERIFY(!locksManager->IsLocked(i, NDataLocks::ELockCategory::Compaction));
-            }
             results.push_back(result);
             if (!AppDataVerified().ColumnShardConfig.GetEnableParallelCompaction()) {
                 return results;

@@ -212,10 +212,12 @@ public:
         return Counters;
     }
 
-    std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& locksManager) const;
-    std::optional<NStorageOptimizer::TOptimizationPriority> GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& locksManager,
-        const std::set<TInternalPathId>& pathIds = Default<std::set<TInternalPathId>>(), const std::optional<ui64> waitingPriority = std::nullopt,
-        std::shared_ptr<TGranuleMeta>* granuleResult = nullptr) const;
+    std::shared_ptr<TGranuleMeta> GetGranuleForCompaction() const;
+    std::optional<NStorageOptimizer::TOptimizationPriority> GetCompactionPriority(
+        const std::set<TInternalPathId>& pathIds = Default<std::set<TInternalPathId>>(), 
+        const std::optional<ui64> waitingPriority = std::nullopt,
+        std::shared_ptr<TGranuleMeta>* granuleResult = nullptr
+    ) const;
 };
 
 }   // namespace NKikimr::NOlap

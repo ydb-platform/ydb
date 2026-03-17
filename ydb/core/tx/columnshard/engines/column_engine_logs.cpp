@@ -375,9 +375,11 @@ bool TColumnEngineForLogs::FinishLoading() {
     return true;
 }
 
-ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager,
-    const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept {
-    auto priority = GranulesStorage->GetCompactionPriority(dataLocksManager, pathIds, waitingPriority);
+ui64 TColumnEngineForLogs::GetCompactionPriority(
+    const std::set<TInternalPathId>& pathIds,
+    const std::optional<ui64> waitingPriority
+) const noexcept {
+    auto priority = GranulesStorage->GetCompactionPriority(pathIds, waitingPriority);
     if (!priority) {
         return 0;
     } else {
@@ -388,7 +390,7 @@ ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLock
 std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCompaction(
     const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
-    auto granule = GranulesStorage->GetGranuleForCompaction(dataLocksManager);
+    auto granule = GranulesStorage->GetGranuleForCompaction();
     if (!granule) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no granules for start compaction");
         return {};

@@ -291,6 +291,7 @@ SRCS(
     schemeshard_schema.h
     schemeshard_self_pinger.cpp
     schemeshard_self_pinger.h
+    schemeshard_set_column_constraint.h
     schemeshard_shard_deleter.cpp
     schemeshard_shard_deleter.h
     schemeshard_subop_state_types.cpp

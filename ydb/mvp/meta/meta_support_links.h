@@ -88,7 +88,7 @@ public:
     virtual void RequestClusterInfo() {
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         NActors::TActorId actorId = SelfId();
-        Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location))
+        Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location, "metadb"))
             .CreateSession()
             .Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
                 NYdb::NTable::TAsyncCreateSessionResult res(result);

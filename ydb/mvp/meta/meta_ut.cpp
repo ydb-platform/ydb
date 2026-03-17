@@ -1,18 +1,30 @@
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/support_links/source.h>
 #include <ydb/mvp/core/utils.h>
+#include <ydb/mvp/core/mvp_test_runtime.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/yexception.h>
 #include <yaml-cpp/yaml.h>
 
-static NMvp::NMeta::TMetaAppConfig ParseConfig(const TString& yaml) {
+namespace {
+
+NMvp::NMeta::TMetaAppConfig ParseConfig(const TString& yaml) {
     YAML::Node node = YAML::Load(yaml);
     NMvp::NMeta::TMetaAppConfig appConfig;
     NMVP::MergeYamlNodeToProto(node, appConfig);
     return appConfig;
 }
+
+NHttp::THttpIncomingRequestPtr BuildHttpRequest(TStringBuf url, TStringBuf method = "GET") {
+    NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+    EatWholeString(request, TStringBuilder() << method << " " << url << " HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
+    return request;
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(MetaConfigurationValidation) {
     static NMVP::TMVP MakeTestMvp() {
@@ -223,5 +235,25 @@ meta:
             yexception,
             "meta.meta_database_token_name is required for source=grafana/dashboard/search"
         );
+    }
+
+    Y_UNIT_TEST(MetaDatabaseClientSettingsUseExplicitDatabaseParameterOnlyWhenRequested) {
+        const TYdbLocation location("meta", "meta", {}, "/Root/meta");
+        auto request = BuildHttpRequest("/meta/support_links?cluster=ydb-global&metadb=/root/test");
+        const TRequest parsedRequest(NActors::TActorId{}, request);
+        auto requestWithoutMetadb = BuildHttpRequest("/meta/support_links?cluster=ydb-global");
+        const TRequest parsedRequestWithoutMetadb(NActors::TActorId{}, requestWithoutMetadb);
+
+        const auto defaultSettings = NMVP::TMVP::GetMetaDatabaseClientSettings(parsedRequest, location);
+        UNIT_ASSERT(defaultSettings.Database_);
+        UNIT_ASSERT_VALUES_EQUAL(*defaultSettings.Database_, "/Root/meta");
+
+        const auto supportLinksSettings = NMVP::TMVP::GetMetaDatabaseClientSettings(parsedRequest, location, "metadb");
+        UNIT_ASSERT(supportLinksSettings.Database_);
+        UNIT_ASSERT_VALUES_EQUAL(*supportLinksSettings.Database_, "/Root/meta/root/test");
+
+        const auto settingsWithoutMetadb = NMVP::TMVP::GetMetaDatabaseClientSettings(parsedRequestWithoutMetadb, location, "metadb");
+        UNIT_ASSERT(settingsWithoutMetadb.Database_);
+        UNIT_ASSERT_VALUES_EQUAL(*settingsWithoutMetadb.Database_, "/Root/meta");
     }
 }

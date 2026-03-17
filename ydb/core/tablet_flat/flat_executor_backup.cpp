@@ -192,44 +192,6 @@ std::optional<TGenStep> ParseBackupGenStep(const TString& name) {
     }
 }
 
-void DeleteOldBackups(const TFsPath& currentBackupPath) {
-    try {
-        auto currentGenStep = ParseBackupGenStep(currentBackupPath.Basename());
-        if (!currentGenStep) {
-            return;
-        }
-
-        TVector<TFsPath> children;
-        currentBackupPath.Parent().List(children);
-
-        TVector<std::pair<TGenStep, TFsPath>> backups;
-        for (const auto& child : children) {
-            auto genStep = ParseBackupGenStep(child.Basename());
-
-            if (genStep && child.Child("snapshot").Exists()) {
-                backups.emplace_back(*genStep, child);
-                continue;
-            }
-
-            if (genStep >= currentGenStep) {
-                continue;
-            }
-
-            child.ForceDelete();
-        }
-
-        std::sort(backups.begin(), backups.end(), [](const auto& a, const auto& b) {
-            return a.first > b.first; // descending by (generation, step)
-        });
-
-        for (size_t i = MaxBackupsLimit(); i < backups.size(); ++i) {
-            backups[i].second.ForceDelete();
-        }
-    } catch (const std::exception& e) {
-        LOG_E("Failed to delete old backups in " << currentBackupPath.Parent() << ": " << e.what());
-    }
-}
-
 ui64 NewBackupChangelogMinBytes() {
     return AppData()->SystemTabletBackupConfig.GetNewBackupChangelogMinBytes();
 }
@@ -269,7 +231,7 @@ public:
     void Bootstrap() {
         LOG_D("Bootstrap for " << SnapshotPath);
 
-        DeleteOldBackups(BackupPath);
+        DeleteOldBackups();
 
         try {
             SnapshotPath.MkDirs();
@@ -311,6 +273,41 @@ public:
         }
 
         Become(&TThis::StateWork);
+    }
+
+    void DeleteOldBackups() {
+        try {
+            const auto backupGenStep = TGenStep{Generation, Step};
+    
+            TVector<TFsPath> children;
+            BackupPath.List(children);
+    
+            TVector<std::pair<TGenStep, TFsPath>> backups;
+            for (const auto& child : children) {
+                auto genStep = ParseBackupGenStep(child.Basename());
+    
+                if (genStep && child.Child("snapshot").Exists()) {
+                    backups.emplace_back(*genStep, child);
+                    continue;
+                }
+    
+                if (genStep >= backupGenStep) {
+                    continue;
+                }
+    
+                child.ForceDelete();
+            }
+    
+            std::sort(backups.begin(), backups.end(), [](const auto& a, const auto& b) {
+                return a.first > b.first; // descending by (generation, step)
+            });
+    
+            for (size_t i = MaxBackupsLimit(); i < backups.size(); ++i) {
+                backups[i].second.ForceDelete();
+            }
+        } catch (const std::exception& e) {
+            LOG_E("Failed to delete old backups in " << BackupPath << ": " << e.what());
+        }
     }
 
     void ReplyAndDie(bool success = true, const TString& error = "") {
@@ -456,7 +453,7 @@ public:
             return ReplyAndDie(false, TStringBuilder() << "Failed to flush parent dir after rename " << FinalSnapshotPath.Parent() << ": " << e.what());
         }
 
-        DeleteOldBackups(BackupPath);
+        DeleteOldBackups();
 
         return ReplyAndDie();
     }
@@ -765,7 +762,6 @@ public:
     TChangelogWriter(TActorId owner, const TFsPath& path, const TScheme& schema,
                      TIntrusiveConstPtr<TBackupExclusion> exclusion)
         : Owner(owner)
-        , BackupPath(path)
         , ChangelogPath(path.Child("changelog.json"))
         , Schema(schema)
         , Exclusion(exclusion)
@@ -773,8 +769,6 @@ public:
 
     void Bootstrap() {
         LOG_D("Bootstrap for " << ChangelogPath);
-
-        DeleteOldBackups(BackupPath);
 
         try {
             ChangelogPath.Parent().MkDirs();
@@ -964,7 +958,6 @@ public:
 private:
     TActorId Owner;
 
-    TFsPath BackupPath;
     TFsPath ChangelogPath;
     TFile ChangelogFile;
 

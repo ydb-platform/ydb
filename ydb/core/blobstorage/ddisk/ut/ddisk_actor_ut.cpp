@@ -745,10 +745,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
                 ++gen2Count;
             }
             UNIT_ASSERT_VALUES_EQUAL(record.GetSelector().GetSize(), selector.Size);
+        }
         UNIT_ASSERT_VALUES_EQUAL(gen1Count, 1);
         UNIT_ASSERT_VALUES_EQUAL(gen2Count, 1);
-        }
-
         auto readResult = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
             ctx, disk.ServiceId, new NDDisk::TEvReadPersistentBuffer(creds2, selector, lsn, 2, {true}));
         AssertStatus(readResult, TReplyStatus::OK);

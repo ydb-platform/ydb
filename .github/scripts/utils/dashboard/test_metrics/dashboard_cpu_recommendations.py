@@ -319,6 +319,14 @@ def build_cpu_recommendations(
         max_test_duration_sec = float((max_test_duration_sec_by_suite or {}).get(suite, 0.0) or 0.0)
         long_test_boost_applied = max_test_duration_sec >= float(long_test_threshold_sec)
         recommended = _next_cpu_tier(base_recommended) if long_test_boost_applied else base_recommended
+        # When suite has any timeout(s): recommend at least 2x actual consumption (tier), capped by size limit.
+        timeout_tests_count = int(test_status.get("timeouts", 0) or 0)
+        timeout_2x_boost_applied = False
+        if timeout_tests_count > 0 and p95_c > 0:
+            recommended_2x_tier = _round_cpu_tier(2.0 * p95_c)
+            if recommended_2x_tier > recommended:
+                recommended = recommended_2x_tier
+                timeout_2x_boost_applied = True
         small_cap_applied = size_u_cap == "SMALL" and recommended > 1
         medium_cap_applied = size_u_cap == "MEDIUM" and recommended > 4
         if small_cap_applied:
@@ -345,6 +353,10 @@ def build_cpu_recommendations(
         if long_test_boost_applied:
             explain_parts.append(
                 f"max_test_duration_sec={max_test_duration_sec:.3f} >= threshold_sec={long_test_threshold_sec} -> next_tier={_next_cpu_tier(base_recommended)}"
+            )
+        if timeout_2x_boost_applied:
+            explain_parts.append(
+                f"timeouts={timeout_tests_count} -> 2x_p95_tier={_round_cpu_tier(2.0 * p95_c)}"
             )
         if timeout_max_policy_applied:
             explain_parts.append(f"maximize_reqs_for_timeout_tests(size={size_u or 'UNKNOWN'}) -> {timeout_max_value}")
@@ -378,7 +390,6 @@ def build_cpu_recommendations(
         dur_stats = (test_duration_stats_by_suite or {}).get(suite, {})
         p96_test_duration_sec = float(dur_stats.get("p96_duration_sec", 0.0) or 0.0)
         total_test_duration_sec = float(dur_stats.get("total_duration_sec", 0.0) or 0.0)
-        timeout_tests_count = int(test_status.get("timeouts", 0) or 0)
         chunk_loads = list(dur_stats.get("chunk_loads", []) or [])
         overloaded_chunks = 0
         overloaded_total_duration_sec = 0.0
@@ -488,6 +499,7 @@ def build_cpu_recommendations(
             "recommended_cpu": recommended_req,
             "recommended_cpu_base": base_recommended,
             "recommended_cpu_timeout_boost": long_test_boost_applied,
+            "recommended_cpu_timeout_2x_boost": timeout_2x_boost_applied,
             "recommended_cpu_timeout_max_policy_applied": timeout_max_policy_applied,
             "recommended_cpu_timeout_max_policy_value": timeout_max_value,
             "recommended_cpu_small_cap_applied": small_cap_applied,

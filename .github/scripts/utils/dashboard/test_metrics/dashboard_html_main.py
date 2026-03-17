@@ -230,6 +230,7 @@ def build_html_dashboard(
         <li>Per suite, recommendations use the distribution of chunk <b>cores_est</b> values.</li>
         <li><b>recommended_cpu</b> is p95 rounded to runner tiers: <code>1/2/4/8/16</code>.</li>
         <li><b>recommended_cpu</b> is increased by one tier when a suite has a test with duration at/above size threshold: <b>SMALL=60s, MEDIUM=600s, LARGE=1800s</b> (then size cap is applied).</li>
+        <li>When a suite has <b>any timeout(s)</b>, recommended CPU is at least <b>2× actual consumption</b> (p95 cores rounded to tier), still capped by size limit (SMALL=1, MEDIUM=4, LARGE=4).</li>
         <li>When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites crossing the duration threshold (SMALL=60s, MEDIUM=600s, LARGE=1800s) use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
         <li><b>recommended_split</b> uses per-<b>chunk</b> load: sum test durations inside each chunk. For overloaded chunks (<code>sum &gt; size_timeout*0.98</code>) we sum their durations and estimate required chunk count as <code>ceil(overloaded_total / (size_timeout*0.5))</code>, then add missing chunks.</li>
         <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code> from <code>ya.make</code>.</li>

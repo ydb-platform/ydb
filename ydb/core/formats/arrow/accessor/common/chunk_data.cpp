@@ -24,7 +24,7 @@ TChunkConstructionData TChunkConstructionData::GetSubset(const ui32 recordsCount
     return TChunkConstructionData(recordsCount, DefaultValue, ColumnType, DefaultSerializer, notNullRecordsCount, AdditionalAccessorData);
 }
 
-TChunkConstructionData TChunkConstructionData::WithAdditionalData(std::shared_ptr<IAdditionalAccessorData> additionalAccessorData) const {
+TChunkConstructionData TChunkConstructionData::WithAdditionalAccessorData(std::shared_ptr<IAdditionalAccessorData> additionalAccessorData) const {
     return TChunkConstructionData(RecordsCount, DefaultValue, ColumnType, DefaultSerializer, NotNullRecordsCount, std::move(additionalAccessorData));
 }
 

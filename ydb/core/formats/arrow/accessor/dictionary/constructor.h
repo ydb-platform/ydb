@@ -36,7 +36,7 @@ private:
 public:
     static std::shared_ptr<arrow::DataType> GetTypeByVariantsCount(const ui32 count);
 
-    static TBlobWithAccessorMeta SerializeToBlobAndMeta(
+    static TBlobWithAdditionalAccessorData SerializeToBlobAndMeta(
         const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo);
 
     static TConclusion<std::shared_ptr<arrow::Array>> BuildDictionaryOnlyReader(

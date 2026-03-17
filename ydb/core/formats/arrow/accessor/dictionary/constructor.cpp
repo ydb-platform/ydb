@@ -88,7 +88,7 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
     return true;
 }
 
-TBlobWithAccessorMeta TConstructor::SerializeToBlobAndMeta(
+TBlobWithAdditionalAccessorData TConstructor::SerializeToBlobAndMeta(
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) {
     const TDictionaryArray* arr = static_cast<const TDictionaryArray*>(columnData.get());
     auto arrDictionary = arr->GetDictionary();

@@ -20,7 +20,7 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TChunkPreparation::DoInternalSpl
     auto additionalData = Record.GetMeta().GetAdditionalAccessorData();
     auto accessor = ColumnInfo.GetLoader()->ApplyVerified(Data, GetRecordsCountVerified(), std::nullopt, std::move(additionalData));
 
-    std::vector<NArrow::NAccessor::TBlobWithAccessorMeta> dictionaryBlobsAndMeta;
+    std::vector<NArrow::NAccessor::TBlobWithAdditionalAccessorData> dictionaryBlobsAndMeta;
     const auto predSaver = [&](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arr) {
         if (isDictionary) {
             dictionaryBlobsAndMeta.push_back(NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(

@@ -23,7 +23,7 @@ struct IAdditionalAccessorData {
     }
 };
 
-struct TBlobWithAccessorMeta {
+struct TBlobWithAdditionalAccessorData {
     TString Blob;
     std::shared_ptr<IAdditionalAccessorData> Meta;
 };

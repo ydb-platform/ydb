@@ -1011,12 +1011,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Retry();
         } else {
             if constexpr (std::is_same_v<T, Aws::S3::S3Error>) {
-<<<<<<< HEAD
-                Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
-=======
-                Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                    << ": S3 error: " << error);
->>>>>>> a51bae76a1e (Add retries for uncovered HTTP response codes in s3 import/export (#35776))
+                Finish(false, TStringBuilder() << "S3 error: " << error);
             } else {
                 Finish(false, error);
             }

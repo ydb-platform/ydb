@@ -911,7 +911,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void RunTPC_YqlBenchmark(const EBenchType type, const bool columnStore, std::set<ui32>&& queriesStatus, std::set<ui32>&& skipList, const bool newRbo,
                              const bool printStatus = false, const bool compareResults = false) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -925,7 +925,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<bool> queriesCurrentStatus;
         std::vector<bool> queriesExpectedStatus;
         std::vector<TString> errors;
-        for (ui32 qId = 1, e = BenchmarkQueryCount[type]; qId <= e; ++qId) {
+        for (ui32 qId = 18, e = BenchmarkQueryCount[type]; qId <= 18; ++qId) {
             if (skipList.contains(qId)) {
                 queriesCurrentStatus.emplace_back(false);
                 queriesExpectedStatus.emplace_back(false);

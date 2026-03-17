@@ -508,11 +508,19 @@
   ```cpp
   auto settings = NYdb::NTopic::TProducerSettings()
       .Path("my-topic")
-      .ProducerIdPrefix("my-producer")
-      .PartitionChooserStrategy(NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+      .ProducerIdPrefix("my-producer");
 
   auto producer = topicClient.CreateProducer(settings);
   ```
+
+  {% cut "Выбор партиции" %}
+
+  Партиция для сообщения выбирается одним из двух способов:
+
+  * **Bound** (по умолчанию) — по диапазонам ключей, которые сервер задаёт для каждой партиции. Ключ сообщения сопоставляется с диапазоном `[from, to)`.
+  * **KafkaHash** (`PartitionChooserStrategy::KafkaHash`) — по хешу ключа, аналогично Kafka SDK при передаче ключа. Этот способ нельзя использовать при включённом [автопартиционировании](../../concepts/datamodel/topic#autopartitioning).
+
+  {% endcut %}
 
   {% cut "(старая версия документации)" %}
 

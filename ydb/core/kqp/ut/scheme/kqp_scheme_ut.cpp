@@ -13608,6 +13608,43 @@ END DO)",
         }
     }
 
+    Y_UNIT_TEST(CreateSecretWithParam) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        const auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto queryClient = kikimr.GetQueryClient();
+
+        { // create secret with declared parameter
+            auto params = TParamsBuilder()
+                .AddParam("$secValue").Utf8("my-secret-value").Build()
+                .Build();
+
+            const auto result = queryClient.ExecuteQuery(R"sql(
+                DECLARE $secValue AS Utf8;
+                CREATE SECRET `/Root/secret-param` WITH (value = $secValue);
+            )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        { // alter secret with declared parameter
+            auto params = TParamsBuilder()
+                .AddParam("$newValue").Utf8("updated-secret-value").Build()
+                .Build();
+
+            const auto result = queryClient.ExecuteQuery(R"sql(
+                DECLARE $newValue AS Utf8;
+                ALTER SECRET `/Root/secret-param` WITH (value = $newValue);
+            )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        { // verify the secret exists
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-param");
+            UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret should exist");
+        }
+    }
+
     Y_UNIT_TEST_TWIN(AlterSecret, UseQueryService) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableSchemaSecrets(true);

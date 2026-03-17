@@ -3305,31 +3305,6 @@ public:
                 op.SetName(pathPair.second);
                 FillSchemaOperation(settings, op);
 
-                // DropSecret is instantiated with NKikimrSchemeOp::TDrop
-                if constexpr (std::is_same_v<TSecretSchemaOp, NKikimrSchemeOp::TSecretSchemaOp>) {
-                    if (op.HasValueParamName()) {
-                        const TString& paramName = op.GetValueParamName();
-                        Y_ENSURE(GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSecret ||
-                            GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSecret);
-                        const TString operationDesc = (GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSecret)
-                            ? "CREATE SECRET" : "ALTER SECRET";
-                        auto queryData = SessionCtx_->Query().QueryData;
-                        if (!queryData) {
-                            return MakeFuture(ResultFromError<TGenericResult>(TStringBuilder()
-                                << "Parameter $" << paramName << " is required for " << operationDesc
-                                << " but query has no parameters"));
-                        }
-                        TString resolvedValue;
-                        TString resolveError;
-                        if (!queryData->TryGetParameterAsString(paramName, resolvedValue, resolveError)) {
-                            return MakeFuture(ResultFromError<TGenericResult>(
-                                TStringBuilder() << resolveError << " for " << operationDesc));
-                        }
-                        op.SetValue(resolvedValue);
-                        op.ClearValueParamName();
-                    }
-                }
-
                 if (SessionCtx_->Query().PrepareOnly) {
                     auto& phyQuery = *SessionCtx_->Query().PreparingQuery->MutablePhysicalQuery();
                     auto& phyTx = *phyQuery.AddTransactions();
@@ -3340,6 +3315,31 @@ public:
                     result.SetSuccess();
                     return MakeFuture(result);
                 } else {
+                    // Direct execution path (old table service): resolve ValueParamName here
+                    // since ModifyScheme goes to schemeshard which doesn't understand ValueParamName.
+                    if constexpr (std::is_same_v<TSecretSchemaOp, NKikimrSchemeOp::TSecretSchemaOp>) {
+                        if (op.HasValueParamName()) {
+                            const TString& paramName = op.GetValueParamName();
+                            Y_ENSURE(GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSecret ||
+                                GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSecret);
+                            const TString operationDesc = (GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSecret)
+                                ? "CREATE SECRET" : "ALTER SECRET";
+                            auto queryData = SessionCtx_->Query().QueryData;
+                            if (!queryData) {
+                                return MakeFuture(ResultFromError<TGenericResult>(TStringBuilder()
+                                    << "Parameter $" << paramName << " is required for " << operationDesc
+                                    << " but query has no parameters"));
+                            }
+                            TString resolvedValue;
+                            TString resolveError;
+                            if (!queryData->TryGetParameterAsString(paramName, resolvedValue, resolveError)) {
+                                return MakeFuture(ResultFromError<TGenericResult>(
+                                    TStringBuilder() << resolveError << " for " << operationDesc));
+                            }
+                            op.SetValue(resolvedValue);
+                            op.ClearValueParamName();
+                        }
+                    }
                     return Gateway_->ModifyScheme(std::move(tx));
                 }
             } catch (yexception& e) {

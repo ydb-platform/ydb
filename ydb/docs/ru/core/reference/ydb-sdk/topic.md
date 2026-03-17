@@ -1093,7 +1093,15 @@
 
 - C++
 
-  Продьюсер всегда использует дедупликацию — `ProducerIdPrefix` обязателен при [создании](#start-writer).
+  По умолчанию продьюсер **не** использует дедупликацию, если в настройках не задан `ProducerIdPrefix`.
+
+  Чтобы включить дедупликацию и получить гарантию exactly-once на уровне продьюсера, задайте префикс:
+
+  ```cpp
+  auto settings = NYdb::NTopic::TProducerSettings()
+      .Path("my-topic")
+      .ProducerIdPrefix("my-producer");
+  ```
 
   {% cut "(старая версия документации)" %}
 

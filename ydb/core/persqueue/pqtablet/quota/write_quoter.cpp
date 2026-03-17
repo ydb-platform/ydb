@@ -120,10 +120,16 @@ ui64 TWriteQuoter::GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig&
 
 IEventBase* TWriteQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
     auto now = ActorContext().Now();
+    TDuration partitionQuotaWaitTime;
+    if (context.PartitionDeduplicationIdQuotaWaitStart) {
+        partitionQuotaWaitTime = context.PartitionDeduplicationIdQuotaWaitStart - context.PartitionQuotaWaitStart;
+    } else {
+        partitionQuotaWaitTime = now - context.PartitionQuotaWaitStart;
+    }
     return new TEvPQ::TEvApproveWriteQuota(
         context.Request->Cookie,
         context.AccountQuotaWaitTime,
-        now - context.PartitionQuotaWaitStart,
+        partitionQuotaWaitTime,
         context.PartitionDeduplicationIdQuotaWaitStart ? now - context.PartitionDeduplicationIdQuotaWaitStart : TDuration::Zero()
     );
 };

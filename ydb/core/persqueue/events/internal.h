@@ -1057,6 +1057,13 @@ struct TEvPQ {
     };
 
     struct TEvApproveWriteQuota : public TEventLocal<TEvApproveWriteQuota, EvApproveWriteQuota> {
+        TEvApproveWriteQuota(ui64 requestCookie, const TDuration& accountWaitTime, const TDuration& partitionWaitTime)
+            : Cookie(requestCookie)
+            , AccountQuotaWaitTime(accountWaitTime)
+            , PartitionQuotaWaitTime(partitionWaitTime)
+            , DeduplicationIdQuotaWaitTime(TDuration::Zero())
+        {}
+
         TEvApproveWriteQuota(ui64 requestCookie, const TDuration& accountWaitTime, const TDuration& partitionWaitTime, const TDuration deduplicationIdQuotaWaitTime)
             : Cookie(requestCookie)
             , AccountQuotaWaitTime(accountWaitTime)

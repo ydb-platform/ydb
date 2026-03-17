@@ -108,7 +108,7 @@ private:
             },
             [&](const std::monostate&) -> void { Y_ABORT_S(VDISKP(Ctx.LogCtx->VCtx,
                     "Empty ActiveRequest while processing request")); },
-        }, *ActiveRequest);
+        }, activeRequest);
     }
 
     void Handle(const TEvChunkKeeperAllocate::TPtr& ev) {

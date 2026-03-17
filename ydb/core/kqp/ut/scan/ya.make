@@ -4,12 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
 REQUIREMENTS(cpu:2)
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 SRCS(
     kqp_flowcontrol_ut.cpp

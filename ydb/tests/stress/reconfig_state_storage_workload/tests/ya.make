@@ -11,7 +11,7 @@ TEST_SRCS(
 
 REQUIREMENTS(ram:32 cpu:4)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -33,6 +33,5 @@ PEERDIR(
     ydb/tests/stress/common
     ydb/tests/stress/reconfig_state_storage_workload/workload
 )
-
 
 END()

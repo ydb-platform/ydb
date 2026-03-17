@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(1)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()

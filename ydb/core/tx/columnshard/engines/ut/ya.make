@@ -20,7 +20,7 @@ PEERDIR(
     yql/essentials/udfs/common/json2
 )
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(ram:16)

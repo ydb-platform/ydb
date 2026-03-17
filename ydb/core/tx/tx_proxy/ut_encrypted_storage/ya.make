@@ -2,15 +2,7 @@ UNITTEST_FOR(ydb/core/tx/tx_proxy)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(
-        ram:32
-    )
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt

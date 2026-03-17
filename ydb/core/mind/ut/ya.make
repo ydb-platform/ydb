@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/mind)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE  == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE  == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
     SPLIT_FACTOR(80)

@@ -116,7 +116,7 @@ private:
         { // validation
             if (ReadOnly) {
                 TString errorReason = TStringBuilder() << "ChunkKeeper is in read-only mode, Subsystem# " << subsystem;
-                STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK04, VDISKP(LogCtx->VCtx, "Bad allocation request"),
+                STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK04, VDISKP(Ctx.LogCtx->VCtx, "Bad allocation request"),
                         (ErrorReason, errorReason));
                 Send(ev->Sender, new TEvChunkKeeperAllocateResult(std::nullopt, NKikimrProto::ERROR, errorReason));
                 return;
@@ -138,7 +138,7 @@ private:
         { // validation
             if (ReadOnly) {
                 TString errorReason = TStringBuilder() << "ChunkKeeper is in read-only mode, ChunkIdx# " << chunkIdx << " Subsystem# " << subsystem;
-                STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK04, VDISKP(LogCtx->VCtx, "Bad deallocation request"),
+                STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK04, VDISKP(Ctx.LogCtx->VCtx, "Bad deallocation request"),
                         (ErrorReason, errorReason));
                 Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, errorReason));
                 return;
@@ -542,7 +542,7 @@ private:
 
     void HandleError(const TEvChunkKeeperAllocate::TPtr& ev) {
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(LogCtx->VCtx, "Handle TEvChunkKeeperAllocate in ErrorState"),
+        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperAllocate in ErrorState"),
                 (Subsystem, subsystem));
         Send(ev->Sender, new TEvChunkKeeperAllocateResult(std::nullopt, NKikimrProto::ERROR, "ChunkKeeper is disabled"));
     }
@@ -550,7 +550,7 @@ private:
     void HandleError(const TEvChunkKeeperFree::TPtr& ev) {
         ui32 chunkIdx = ev->Get()->ChunkIdx;
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(LogCtx->VCtx, "Handle TEvChunkKeeperFree in ErrorState"),
+        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperFree in ErrorState"),
                 (ChunkIdx, chunkIdx),
                 (Subsystem, subsystem));
         Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, "ChunkKeeper is disabled"));
@@ -558,16 +558,16 @@ private:
 
     void HandleError(const TEvChunkKeeperDiscover::TPtr& ev) {
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(LogCtx->VCtx, "Handle TEvChunkKeeperDiscover in ErrorState"),
+        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperDiscover in ErrorState"),
                 (Subsystem, subsystem));
         Send(ev->Sender, new TEvChunkKeeperDiscoverResult({}, NKikimrProto::ERROR, "ChunkKeeper is disabled"));
     }
 
     void HandleError(const NPDisk::TEvLogResult::TPtr& ev) {
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(LogCtx->VCtx, "Handle TEvLogResult in ErrorState"),
+        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult in ErrorState"),
                 (Event, ev->Get()->ToString()));
-        CHECK_PDISK_RESPONSE(LogCtx->VCtx, ev, TActivationContext::AsActorContext());
-        Send(LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, Max<ui64>()));
+        CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
+        Send(Ctx.LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, Max<ui64>()));
         DeletionsInFlight.clear();
         Committed.reset();  // ensure it won't be used
     }
@@ -585,6 +585,7 @@ private:
     std::optional<TRequest> ActiveRequest;
 
     ui64 CurEntryPointLsn = 0;
+    ui64 LastAllocatedLsn = 0;
     bool IsActive;
     bool ReadOnly;
 };

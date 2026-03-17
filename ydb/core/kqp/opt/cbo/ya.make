@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     cbo_hints.cpp
     cbo_optimizer_new.cpp
+    kqp_statistics.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(cbo_optimizer_new.h)

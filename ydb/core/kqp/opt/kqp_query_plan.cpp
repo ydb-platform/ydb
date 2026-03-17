@@ -588,7 +588,7 @@ private:
 
             if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(SerializerCtx.Config->GetDefaultCostBasedOptimizationLevel())!=0) {
 
-                if (auto stats = SerializerCtx.TypeCtx.GetStats(tableLookup.Raw())) {
+                if (auto stats = (SerializerCtx.OptimizeCtx ? SerializerCtx.OptimizeCtx->KqpStats.GetStats(tableLookup.Raw()) : SerializerCtx.TypeCtx.GetStats(tableLookup.Raw()))) {
                     planNode.OptEstimates["E-Rows"] = TStringBuilder() << stats->Nrows;
                     planNode.OptEstimates["E-Cost"] = TStringBuilder() << stats->Cost;
                     planNode.OptEstimates["E-Size"] = TStringBuilder() << stats->ByteSize;
@@ -908,7 +908,7 @@ private:
     std::shared_ptr<TOptimizerStatistics> FindWrapStats(TExprNode::TPtr node, const TExprNode* dataSourceNode) {
         if (auto maybeWrapBase = TMaybeNode<TDqSourceWrapBase>(node)) {
             if (maybeWrapBase.Cast().DataSource().Raw() == dataSourceNode) {
-                return SerializerCtx.TypeCtx.GetStats(node.Get());
+                return SerializerCtx.OptimizeCtx ? SerializerCtx.OptimizeCtx->KqpStats.GetStats(node.Get()) : SerializerCtx.TypeCtx.GetStats(node.Get());
             }
         }
         for (const auto& child : node->Children()) {
@@ -968,7 +968,7 @@ private:
 
         if (!stats) {
             // Fallback to TCoDataSource
-            stats = SerializerCtx.TypeCtx.GetStats(dataSource.Raw());
+            stats = SerializerCtx.OptimizeCtx ? SerializerCtx.OptimizeCtx->KqpStats.GetStats(dataSource.Raw()) : SerializerCtx.TypeCtx.GetStats(dataSource.Raw());
         }
 
         if (stats) {
@@ -1919,7 +1919,7 @@ private:
             return;
         }
 
-        if (auto stats = SerializerCtx.TypeCtx.GetStats(expr.Raw())) {
+        if (auto stats = (SerializerCtx.OptimizeCtx ? SerializerCtx.OptimizeCtx->KqpStats.GetStats(expr.Raw()) : SerializerCtx.TypeCtx.GetStats(expr.Raw()))) {
             op.Properties["E-Rows"] = TStringBuilder() << stats->Nrows;
             op.Properties["E-Cost"] = TStringBuilder() << stats->Cost;
             op.Properties["E-Size"] = TStringBuilder() << stats->ByteSize;

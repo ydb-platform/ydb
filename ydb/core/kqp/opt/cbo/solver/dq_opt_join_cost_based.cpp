@@ -23,7 +23,7 @@ using NYql::NDq::BuildAtom;
  */
 bool DqCollectJoinRelationsWithStats(
     TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
-    TTypeAnnotationContext& typesCtx,
+    TKqpStatsStore& kqpStats,
     const TCoEquiJoin& equiJoin,
     const TProviderCollectFunction& collector
 ) {
@@ -35,7 +35,7 @@ bool DqCollectJoinRelationsWithStats(
         auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
         auto joinArg = input.List();
 
-        auto stats = typesCtx.GetStats(joinArg.Raw());
+        auto stats = kqpStats.GetStats(joinArg.Raw());
 
         auto scope = input.Scope();
         if (!scope.Maybe<TCoAtom>()){
@@ -534,12 +534,13 @@ IOptimizerNew* MakeNativeOptimizerNew(
 void CollectInterestingOrderingsFromJoinTree(
     const NYql::NNodes::TExprBase& equiJoinNode,
     TFDStorage& fdStorage,
-    TTypeAnnotationContext& typeCtx
+    TTypeAnnotationContext& /*typeCtx*/,
+    TKqpStatsStore& kqpStats
 ) {
     Y_ENSURE(equiJoinNode.Maybe<TCoEquiJoin>());
 
     auto equiJoin = equiJoinNode.Cast<TCoEquiJoin>();
-    auto stats = typeCtx.GetStats(equiJoinNode.Raw());
+    auto stats = kqpStats.GetStats(equiJoinNode.Raw());
     TTableAliasMap* tableAliases = nullptr;
     if (stats) {
         tableAliases = stats->TableAliases.Get();
@@ -594,6 +595,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     const TExprBase& node,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx,
+    TKqpStatsStore& kqpStats,
     ui32 optLevel,
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
@@ -606,6 +608,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
         node,
         ctx,
         typesCtx,
+        kqpStats,
         optLevel,
         opt,
         providerCollect,
@@ -620,6 +623,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     const TExprBase& node,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx,
+    TKqpStatsStore& kqpStats,
     ui32 optLevel,
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
@@ -638,7 +642,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     auto equiJoin = node.Cast<TCoEquiJoin>();
     YQL_ENSURE(equiJoin.ArgCount() >= 4);
 
-    auto stats = typesCtx.GetStats(equiJoin.Raw());
+    auto stats = kqpStats.GetStats(equiJoin.Raw());
     if (stats && stats->CBOFired) {
         return node;
     }
@@ -655,7 +659,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     // The arguments of the EquiJoin are 1..n-2, n-2 is the  join tree
     // of the EquiJoin and n-1 argument are the parameters to EquiJoin
 
-    if (!DqCollectJoinRelationsWithStats(rels, typesCtx, equiJoin, providerCollect)){
+    if (!DqCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, providerCollect)){
         ctx.AddWarning(
             YqlIssue(ctx.GetPosition(equiJoin.Pos()), TIssuesIds::CBO_MISSING_TABLE_STATS,
             "Cost Based Optimizer could not be applied to this query: couldn't load statistics"
@@ -709,7 +713,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(typesCtx, ctx, equiJoin, joinTree, shufflingOrderingsByJoinLabels);
     joinTree->Stats.CBOFired = true;
-    typesCtx.SetStats(res.Raw(), std::make_shared<TOptimizerStatistics>(joinTree->Stats));
+    kqpStats.SetStats(res.Raw(), std::make_shared<TOptimizerStatistics>(joinTree->Stats));
     if (shufflingOrderingsByJoinLabels) {
         YQL_CLOG(TRACE, CoreDq) << shufflingOrderingsByJoinLabels->ToString();
     }

@@ -757,7 +757,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
 }
 
 NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    TTypeAnnotationContext& typeCtx, bool ruleEnabled)
+    TTypeAnnotationContext& /*typeCtx*/, bool ruleEnabled, const NKikimr::NKqp::TKqpStatsStore* kqpStats)
 {
     if (!ruleEnabled) {
         return node;
@@ -774,7 +774,7 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
     }
 
     auto unionAll = idxLookupJoin.Input().Cast<TDqCnUnionAll>();
-    auto inputStats = typeCtx.GetStats(unionAll.Output().Raw());
+    auto inputStats = kqpStats ? kqpStats->GetStats(unionAll.Output().Raw()) : nullptr;
     if (!inputStats || !inputStats->SortColumns) {
         return node;
     }
@@ -902,7 +902,8 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
     NYql::NNodes::TExprBase node,
     NYql::TExprContext& ctx,
     TTypeAnnotationContext& typeCtx,
-    bool ruleEnabled
+    bool ruleEnabled,
+    const NKikimr::NKqp::TKqpStatsStore* kqpStats
 )
 {
     if (!ruleEnabled) {
@@ -920,8 +921,8 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
     }
 
     auto unionAll = idxLookupJoin.Input().Cast<TDqCnUnionAll>();
-    auto inputStats = typeCtx.GetStats(unionAll.Output().Raw());
-    auto sortedByOrderingIdx = inputStats->SortingOrderings.GetInitOrderingIdx();
+    auto inputStats = kqpStats ? kqpStats->GetStats(unionAll.Output().Raw()) : nullptr;
+    auto sortedByOrderingIdx = inputStats ? inputStats->SortingOrderings.GetInitOrderingIdx() : -1;
 
     if (!inputStats || !typeCtx.SortingsFSM || sortedByOrderingIdx == -1) {
         return node;

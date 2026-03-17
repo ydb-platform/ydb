@@ -1,1 +1,15 @@
-**/*.tar.gz
+# Clang format
+/.clang-format
+
+# Editor config
+/.editorconfig
+
+# Cursor ignore
+.cursor/
+.cursorignore
+
+# Claude Code
+.claude/
+
+# Harness local cluster working directory
+.ydbd_working_dir/

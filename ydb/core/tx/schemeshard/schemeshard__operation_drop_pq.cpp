@@ -446,14 +446,11 @@ public:
         }
 
         // Emit topic CloudEvent after successful drop
-        SendTopicCloudEvent(
+        ScheduleSendTopicCloudEvent(
             Transaction,
+            context,
             NKikimrScheme::StatusSuccess,
-            TString(),
-            context.SS,
-            context.PeerName,
-            context.UserToken ? context.UserToken->GetUserSID() : TString(),
-            context.UserAgent);
+            TString());
 
         // Activate main tx state machine
         SetState(NextState());

@@ -562,14 +562,11 @@ public:
         IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         // Emit topic CloudEvent after successful create
-        SendTopicCloudEvent(
+        ScheduleSendTopicCloudEvent(
             Transaction,
+            context,
             NKikimrScheme::StatusSuccess,
-            TString(),
-            context.SS,
-            context.PeerName,
-            context.UserToken ? context.UserToken->GetUserSID() : TString(),
-            context.UserAgent);
+            TString());
 
         SetState(NextState());
         return result;

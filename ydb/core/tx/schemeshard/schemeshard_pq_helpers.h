@@ -28,14 +28,11 @@ public:
     ui64 Throughput;
 };
 
-void SendTopicCloudEvent(
+void ScheduleSendTopicCloudEvent(
     const NKikimrSchemeOp::TModifyScheme& operation,
+    TOperationContext& context,
     NKikimrScheme::EStatus status,
-    const TString& reason,
-    TSchemeShard* ss,
-    const TString& peerName,
-    const TString& userSID,
-    const TString& userAgent);
+    const TString& reason);
 
 void FinishWithError(
     TProposeResponse* result,

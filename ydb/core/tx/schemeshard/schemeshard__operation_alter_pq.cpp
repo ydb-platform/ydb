@@ -1058,14 +1058,11 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionsToCreate);
 
         // Emit topic CloudEvent after successful alter
-        SendTopicCloudEvent(
+        ScheduleSendTopicCloudEvent(
             Transaction,
+            context,
             NKikimrScheme::StatusSuccess,
-            TString(),
-            context.SS,
-            context.PeerName,
-            context.UserToken ? context.UserToken->GetUserSID() : TString(),
-            context.UserAgent);
+            TString());
 
         SetState(NextState());
         return result;

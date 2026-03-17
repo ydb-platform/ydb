@@ -4,34 +4,15 @@
 
 namespace NKikimr::NSchemeShard {
 
-void FinishWithError(
-    TProposeResponse* result,
-    const NKikimrSchemeOp::TModifyScheme& operation,
-    NKikimrScheme::EStatus status,
-    const TString& errStr,
-    TOperationContext& context)
-{
-    result->SetError(status, errStr);
-    SendTopicCloudEvent(
-        operation,
-        status,
-        errStr,
-        context.SS,
-        context.PeerName,
-        context.UserToken ? context.UserToken->GetUserSID() : TString(),
-        context.UserAgent);
-}
+namespace {
 
-void SendTopicCloudEvent(
+bool BuildTopicCloudEventInfo(
     const NKikimrSchemeOp::TModifyScheme& operation,
+    TOperationContext& context,
     NKikimrScheme::EStatus status,
     const TString& reason,
-    TSchemeShard* ss,
-    const TString& peerName,
-    const TString& userSID,
-    const TString& userAgent)
+    NPQ::NCloudEvents::TCloudEventInfo& info)
 {
-    NPQ::NCloudEvents::TCloudEventInfo info;
     const TString workingDir = operation.GetWorkingDir();
     TString name;
     if (operation.HasCreatePersQueueGroup()) {
@@ -41,13 +22,13 @@ void SendTopicCloudEvent(
     } else if (operation.HasDrop()) {
         name = operation.GetDrop().GetName();
     } else {
-        return;
+        return false;
     }
 
     info.TopicPath = workingDir.empty() ? name : workingDir + "/" + name;
 
     // Cloud / folder / database
-    TPath dbPath = DatabasePathFromModifySchemeOperation(ss, operation);
+    TPath dbPath = DatabasePathFromModifySchemeOperation(context.SS, operation);
     if (!dbPath.IsEmpty()) {
         auto [cloudId, folderId, databaseId] = GetDatabaseCloudIds(dbPath);
         info.CloudId = cloudId;
@@ -55,18 +36,55 @@ void SendTopicCloudEvent(
         info.DatabaseId = databaseId;
     }
 
-    info.RemoteAddress = peerName;
-    info.UserSID = userSID;
+    info.RemoteAddress = context.PeerName;
+    info.UserSID = context.UserToken ? context.UserToken->GetUserSID() : TString();
     info.Issue = reason;
-    info.UserAgent = userAgent;
+    info.UserAgent = context.UserAgent;
     info.CreatedAt = TInstant::Now();
-    info.ModifyScheme = std::move(operation);
+    info.ModifyScheme = operation;
     info.OperationStatus = status;
+
+    return true;
+}
+
+} // anonymous namespace
+
+void FinishWithError(
+    TProposeResponse* result,
+    const NKikimrSchemeOp::TModifyScheme& operation,
+    NKikimrScheme::EStatus status,
+    const TString& errStr,
+    TOperationContext& context)
+{
+    result->SetError(status, errStr);
+
+    NPQ::NCloudEvents::TCloudEventInfo info;
+    if (!BuildTopicCloudEventInfo(operation, context, status, errStr, info)) {
+        return;
+    }
+
+    auto* sys = NActors::TActivationContext::ActorSystem();
+    auto actorId = sys->Register(new NPQ::NCloudEvents::TCloudEventsActor());
+    sys->Send(actorId, new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
+}
+
+void ScheduleSendTopicCloudEvent(
+    const NKikimrSchemeOp::TModifyScheme& operation,
+    TOperationContext& context,
+    NKikimrScheme::EStatus status,
+    const TString& reason)
+{
+    NPQ::NCloudEvents::TCloudEventInfo info;
+    if (!BuildTopicCloudEventInfo(operation, context, status, reason, info)) {
+        return;
+    }
 
     auto* sys = NActors::TActivationContext::ActorSystem();
     auto actorId = sys->Register(new NPQ::NCloudEvents::TCloudEventsActor());
 
-    sys->Send(actorId, new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
+    context.OnComplete.Send(
+        actorId,
+        new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
 }
 
 } // NKikimr::NSchemeShard

@@ -36,13 +36,13 @@ void TWriteQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
     CheckTotalPartitionQuota(std::move(context));
 }
 
-bool TWriteQuoter::CanExaust(TInstant now) {
-    if (!TPartitionQuoterBase::CanExaust(now)) {
+bool TWriteQuoter::CanExaust(TRequestContext& context, TInstant now) {
+    if (!TPartitionQuoterBase::CanExaust(context, now)) {
         return false;
     }
     if (!PartitionDeduplicationIdQuotaTracker.CanExaust(now)) {
-        if (!PartitionDeduplicationIdQuotaStartWaitTime) {
-            PartitionDeduplicationIdQuotaStartWaitTime = now;
+        if (!context.PartitionDeduplicationIdQuotaWaitStart) {
+            context.PartitionDeduplicationIdQuotaWaitStart = now;
         }
         return false;
     }
@@ -124,7 +124,7 @@ IEventBase* TWriteQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
         context.Request->Cookie,
         context.AccountQuotaWaitTime,
         now - context.PartitionQuotaWaitStart,
-        PartitionDeduplicationIdQuotaStartWaitTime ? now - PartitionDeduplicationIdQuotaStartWaitTime : TDuration::Zero()
+        context.PartitionDeduplicationIdQuotaWaitStart ? now - context.PartitionDeduplicationIdQuotaWaitStart : TDuration::Zero()
     );
 };
 

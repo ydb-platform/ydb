@@ -44,7 +44,7 @@ protected:
     void HandleWakeUpImpl() override;
     TString Description() const override { return "Write quoter"; }
 
-    bool CanExaust(TInstant now) override;
+    bool CanExaust(TRequestContext& context, TInstant now) override;
 
     STFUNC(ProcessEventImpl) override
     {
@@ -56,7 +56,6 @@ private:
     bool QuotingEnabled;
     THolder<TAccountQuoterHolder> AccountQuotaTracker;
 
-    TInstant PartitionDeduplicationIdQuotaStartWaitTime;
     TQuotaTracker PartitionDeduplicationIdQuotaTracker;
 };
 

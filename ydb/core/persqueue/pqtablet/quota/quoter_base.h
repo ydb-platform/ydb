@@ -17,6 +17,7 @@ struct TRequestContext {
     THolder<TEvPQ::TEvRequestQuota> Request;
     TDuration AccountQuotaWaitTime;
     TInstant PartitionQuotaWaitStart;
+    TInstant PartitionDeduplicationIdQuotaWaitStart;
     TDuration TotalQuotaWaitTime;
     TActorId PartitionActor;
 
@@ -91,7 +92,7 @@ protected:
     virtual ui64 GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const = 0;
     virtual TString Description() const = 0;
 
-    virtual bool CanExaust(TInstant now);
+    virtual bool CanExaust(TRequestContext& context, TInstant now);
 
 protected:
     void CheckTotalPartitionQuota(TRequestContext&& context);

@@ -100,7 +100,7 @@ void TPartitionQuoterBase::CheckTotalPartitionQuota(TRequestContext&& context) {
     if (!PartitionTotalQuotaTracker) {
         return ApproveQuota(context);
     }
-    if (!CanExaust(ActorContext().Now()) || !WaitingTotalPartitionQuotaRequests.empty()) {
+    if (!CanExaust(context, ActorContext().Now()) || !WaitingTotalPartitionQuotaRequests.empty()) {
         WaitingTotalPartitionQuotaRequests.push_back(std::move(context));
         return;
     }
@@ -127,15 +127,19 @@ void TPartitionQuoterBase::ApproveQuota(TRequestContext& context) {
     Send(context.PartitionActor, MakeQuotaApprovedEvent(context));
 }
 
-bool TPartitionQuoterBase::CanExaust(TInstant now) {
+bool TPartitionQuoterBase::CanExaust(TRequestContext&, TInstant now) {
     return PartitionTotalQuotaTracker->CanExaust(now);
 }
 
 void TPartitionQuoterBase::ProcessPartitionTotalQuotaQueue() {
-    if (!PartitionTotalQuotaTracker)
+    if (!PartitionTotalQuotaTracker) {
         return;
-    while (!WaitingTotalPartitionQuotaRequests.empty() && CanExaust(ActorContext().Now())) {
+    }
+    while (!WaitingTotalPartitionQuotaRequests.empty()) {
         auto& request = WaitingTotalPartitionQuotaRequests.front();
+        if (!CanExaust(request, ActorContext().Now())) {
+            return;
+        }
         ApproveQuota(request);
         WaitingTotalPartitionQuotaRequests.pop_front();
     }

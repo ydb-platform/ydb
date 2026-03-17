@@ -21,6 +21,7 @@ SRCS(
     dq_opt_join_cbo_factory.cpp
     dq_opt_join_cost_based.cpp
     dq_opt_join_tree_node.cpp
+    dq_opt_stat.cpp
     dq_opt_stat_kqp.cpp
     dq_opt_stat_transformer_base.cpp
 )

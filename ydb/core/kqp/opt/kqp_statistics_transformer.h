@@ -41,7 +41,7 @@ class TKqpStatisticsTransformer : public TDqStatisticsTransformerBase {
             const TKikimrConfiguration::TPtr& config,
             const TKqpProviderContext& pctx
         ) :
-            TDqStatisticsTransformerBase(&typeCtx, pctx, kqpCtx->GetOptimizerHints(), &kqpCtx->ShufflingOrderingsByJoinLabels, true),
+            TDqStatisticsTransformerBase(&typeCtx, pctx, kqpCtx->GetOptimizerHints(), &kqpCtx->ShufflingOrderingsByJoinLabels, true, &kqpCtx->KqpStats),
             Config(config),
             KqpCtx(*kqpCtx) {}
 

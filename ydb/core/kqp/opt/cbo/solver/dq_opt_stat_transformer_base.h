@@ -3,6 +3,7 @@
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
 
 namespace NKikimr::NKqp {
 
@@ -13,7 +14,8 @@ public:
         const IProviderContext& ctx,
         const TOptimizerHints& hints = {},
         TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr,
-        const bool useFSMForSortElimination = false
+        const bool useFSMForSortElimination = false,
+        TKqpStatsStore* kqpStats = nullptr
     );
 
     NYql::IGraphTransformer::TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) override;
@@ -27,7 +29,8 @@ protected:
     bool BeforeLambdas(const NYql::TExprNode::TPtr& input, NYql::TExprContext& ctx);
     bool AfterLambdas(const NYql::TExprNode::TPtr& input, NYql::TExprContext& ctx);
 
-    NYql::TTypeAnnotationContext* TypeCtx;
+    NYql::TTypeAnnotationContext* TypeCtx;  // kept: FSM fields, type annotation ops
+    TKqpStatsStore* KqpStats;               // all GetStats/SetStats (may be null if using TypeCtx)
     const IProviderContext& Pctx;
     TOptimizerHints Hints;
     TShufflingOrderingsByJoinLabels* ShufflingOrderingsByJoinLabels;

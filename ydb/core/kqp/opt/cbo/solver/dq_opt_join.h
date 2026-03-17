@@ -4,12 +4,13 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
 
 namespace NKikimr::NKqp {
 
-NYql::NNodes::TExprBase DqRewriteEquiJoin(const NYql::NNodes::TExprBase& node, NYql::NDq::EHashJoinMode mode, bool useCBO, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, const TOptimizerHints& hints = {});
+NYql::NNodes::TExprBase DqRewriteEquiJoin(const NYql::NNodes::TExprBase& node, NYql::NDq::EHashJoinMode mode, bool useCBO, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, TKqpStatsStore& kqpStats, const TOptimizerHints& hints = {});
 
-NYql::NNodes::TExprBase DqRewriteEquiJoin(const NYql::NNodes::TExprBase& node, NYql::NDq::EHashJoinMode mode, bool useCBO, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, int& joinCounter, const TOptimizerHints& hints = {});
+NYql::NNodes::TExprBase DqRewriteEquiJoin(const NYql::NNodes::TExprBase& node, NYql::NDq::EHashJoinMode mode, bool useCBO, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typeCtx, TKqpStatsStore& kqpStats, int& joinCounter, const TOptimizerHints& hints = {});
 
 NYql::NNodes::TExprBase DqBuildPhyJoin(const NYql::NNodes::TDqJoin& join, bool pushLeftStage, NYql::TExprContext& ctx, NYql::IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage = true);
 

@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -34,6 +35,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};
     std::shared_ptr<NKikimr::NKqp::TOptimizerHints> Hints{};
     NYql::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
+    NKikimr::NKqp::TKqpStatsStore KqpStats;
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics() {
         if (Config->OptOverrideStatistics.Get()) {

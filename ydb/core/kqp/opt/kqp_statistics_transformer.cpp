@@ -24,8 +24,8 @@ using namespace NYql::NDq;
  * Compute statistics and cost for read table
  * Currently we look up the number of rows and attributes in the statistics service
  */
-void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
-    const TKqpOptimizeContext& kqpCtx) {
+void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationContext* /*typeCtx*/,
+    const TKqpOptimizeContext& kqpCtx, TKqpStatsStore* kqpStats) {
 
     auto inputNode = TExprBase(input);
     std::shared_ptr<TOptimizerStatistics> inputStats;
@@ -35,7 +35,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
 
     TMaybe<TCoAtomList> columns;
     if (auto readTable = inputNode.Maybe<TKqlReadTableBase>()) {
-        inputStats = typeCtx->GetStats(readTable.Cast().Table().Raw());
+        inputStats = kqpStats->GetStats(readTable.Cast().Table().Raw());
         nAttrs = readTable.Cast().Columns().Size();
         columns = readTable.Cast().Columns();
 
@@ -46,7 +46,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
             readRange = true;
         }
     } else if (auto readRanges = inputNode.Maybe<TKqlReadTableRangesBase>()) {
-        inputStats = typeCtx->GetStats(readRanges.Cast().Table().Raw());
+        inputStats = kqpStats->GetStats(readRanges.Cast().Table().Raw());
         nAttrs = readRanges.Cast().Columns().Size();
 
         columns = readRanges.Cast().Columns();
@@ -114,7 +114,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table" << stats->ToString();
 
-    typeCtx->SetStats(input.Get(), stats);
+    kqpStats->SetStats(input.Get(), stats);
 }
 
 std::vector<TOrdering::TItem::EDirection> GetAscDirections(std::size_t n) {
@@ -131,7 +131,8 @@ std::vector<TOrdering::TItem::EDirection> GetDescDirections(std::size_t n) {
 void InferStatisticsForKqpTable(
     const TExprNode::TPtr& input,
     TTypeAnnotationContext* typeCtx,
-    TKqpOptimizeContext& kqpCtx
+    TKqpOptimizeContext& kqpCtx,
+    TKqpStatsStore* kqpStats
 ) {
     auto inputNode = TExprBase(input);
 
@@ -145,7 +146,7 @@ void InferStatisticsForKqpTable(
 
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path.Value());
     TSimpleSharedPtr<THashSet<TString>> aliases;
-    if (auto tablePrevStats = typeCtx->GetStats(inputNode.Raw())) {
+    if (auto tablePrevStats = kqpStats->GetStats(inputNode.Raw())) {
         aliases = tablePrevStats->Aliases;
     } else {
         aliases = MakeSimpleShared<THashSet<TString>>();
@@ -236,7 +237,7 @@ void InferStatisticsForKqpTable(
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ": " << stats->ToString();
 
-    typeCtx->SetStats(input.Get(), stats);
+    kqpStats->SetStats(input.Get(), stats);
 }
 
 /**
@@ -250,16 +251,17 @@ void InferStatisticsForKqpTable(
 */
 void InferStatisticsForSteamLookup(
     const TExprNode::TPtr& input,
-    TTypeAnnotationContext* typeCtx,
-    const TKqpOptimizeContext kqpCtx
+    TTypeAnnotationContext* /*typeCtx*/,
+    const TKqpOptimizeContext kqpCtx,
+    TKqpStatsStore* kqpStats
 ) {
     auto inputNode = TExprBase(input);
     auto streamLookup = inputNode.Cast<TKqpCnStreamLookup>();
 
     auto columns = streamLookup.Columns();
     int nAttrs = columns.Size();
-    auto tableStats = typeCtx->GetStats(streamLookup.Table().Raw());
-    auto inputStats = typeCtx->GetStats(streamLookup.Output().Raw());
+    auto tableStats = kqpStats->GetStats(streamLookup.Table().Raw());
+    auto inputStats = kqpStats->GetStats(streamLookup.Output().Raw());
 
     if (!inputStats || !tableStats) {
         return;
@@ -283,7 +285,7 @@ void InferStatisticsForSteamLookup(
     }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for KqpCnStreamLookup: " << res->ToString();
-    typeCtx->SetStats(input.Get(), std::move(res));
+    kqpStats->SetStats(input.Get(), std::move(res));
 }
 
 /**
@@ -292,18 +294,18 @@ void InferStatisticsForSteamLookup(
  * Table lookup can be done with an Iterator, in which case we treat it as a full scan
  * We don't differentiate between a small range and full scan at this time
  */
-void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotationContext* /*typeCtx*/, TKqpStatsStore* kqpStats) {
     auto inputNode = TExprBase(input);
     auto lookupTable = inputNode.Cast<TKqlLookupTableBase>();
     auto lookupKeys = lookupTable.LookupKeys();
 
-    auto inputTableStats = typeCtx->GetStats(lookupTable.Table().Raw());
-    auto inputLookupStats = typeCtx->GetStats(lookupKeys.Raw());
+    auto inputTableStats = kqpStats->GetStats(lookupTable.Table().Raw());
+    auto inputLookupStats = kqpStats->GetStats(lookupKeys.Raw());
     if (!inputTableStats || !inputLookupStats) {
         return;
     }
 
-    typeCtx->SetStats(input.Get(), inputLookupStats);
+    kqpStats->SetStats(input.Get(), inputLookupStats);
 }
 
 /**
@@ -313,14 +315,15 @@ void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotation
  */
 void InferStatisticsForRowsSourceSettings(
     const TExprNode::TPtr& input,
-    TTypeAnnotationContext* typeCtx,
-    const TKqpOptimizeContext& kqpCtx
+    TTypeAnnotationContext* /*typeCtx*/,
+    const TKqpOptimizeContext& kqpCtx,
+    TKqpStatsStore* kqpStats
 ) {
 
     auto inputNode = TExprBase(input);
     auto sourceSettings = inputNode.Cast<TKqpReadRangesSourceSettings>();
 
-    auto inputStats = typeCtx->GetStats(sourceSettings.Table().Raw());
+    auto inputStats = kqpStats->GetStats(sourceSettings.Table().Raw());
     if (!inputStats) {
         return;
     }
@@ -382,39 +385,40 @@ void InferStatisticsForRowsSourceSettings(
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for source settings: " << outputStats->ToString();
 
-    typeCtx->SetStats(input.Get(), outputStats);
+    kqpStats->SetStats(input.Get(), outputStats);
 }
 
 /**
  * Compute statistics for index lookup
  * Currently we just make up a number for cardinality (5) and set cost to 0
  */
-void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotationContext* /*typeCtx*/, TKqpStatsStore* kqpStats) {
     auto inputNode = TExprBase(input);
     auto lookupIndex = inputNode.Cast<TKqlStreamLookupIndex>();
 
-    auto inputStats = typeCtx->GetStats(lookupIndex.LookupKeys().Raw());
+    auto inputStats = kqpStats->GetStats(lookupIndex.LookupKeys().Raw());
     if (!inputStats) {
         return;
     }
 
-    typeCtx->SetStats(input.Get(), inputStats);
+    kqpStats->SetStats(input.Get(), inputStats);
 }
 
 void InferStatisticsForReadTableIndexRanges(
     const TExprNode::TPtr& input,
     TTypeAnnotationContext* typeCtx,
-    const TKqpOptimizeContext& kqpCtx
+    const TKqpOptimizeContext& kqpCtx,
+    TKqpStatsStore* kqpStats
 ) {
     auto indexRanges = TKqlReadTableIndexRanges(input);
 
-    auto inputStats = typeCtx->GetStats(indexRanges.Table().Raw());
+    auto inputStats = kqpStats->GetStats(indexRanges.Table().Raw());
     if (!inputStats) {
         return;
     }
 
     TString alias;
-    if (auto prevStats = typeCtx->GetStats(TExprBase(input).Raw()); prevStats && prevStats->Aliases && !prevStats->Aliases->empty()) {
+    if (auto prevStats = kqpStats->GetStats(TExprBase(input).Raw()); prevStats && prevStats->Aliases && !prevStats->Aliases->empty()) {
         alias = *prevStats->Aliases->begin();
     }
 
@@ -447,34 +451,35 @@ void InferStatisticsForReadTableIndexRanges(
     stats->Aliases = inputStats->Aliases;
     stats->SourceTableName = inputStats->SourceTableName;
 
-    typeCtx->SetStats(input.Get(), stats);
+    kqpStats->SetStats(input.Get(), stats);
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for index: " << stats->ToString();
 }
 
 void InferStatisticsForLookupJoin(
     const TExprNode::TPtr& input,
-    TTypeAnnotationContext* typeCtx
+    TTypeAnnotationContext* /*typeCtx*/,
+    TKqpStatsStore* kqpStats
 ) {
     auto lookupJoin = TKqlIndexLookupJoinBase(input);
 
-    auto inputStats = typeCtx->GetStats(lookupJoin.Input().Raw());
+    auto inputStats = kqpStats->GetStats(lookupJoin.Input().Raw());
     if (!inputStats) {
         return;
     }
 
-    auto propagateAliases = [typeCtx, lookupJoin](auto&& thisLambda, const TExprNode::TPtr& input) -> void {
+    auto propagateAliases = [kqpStats, lookupJoin](auto&& thisLambda, const TExprNode::TPtr& input) -> void {
         auto exprNode = TExprBase(input).Raw();
         if (auto maybeKqlLookupTableBase = TMaybeNode<TKqlLookupTableBase>(exprNode)) {
             auto lookupBase = maybeKqlLookupTableBase.Cast();
 
-            if (auto leftStats = typeCtx->GetStats(lookupBase.LookupKeys().Raw()); leftStats && leftStats->Aliases) {
+            if (auto leftStats = kqpStats->GetStats(lookupBase.LookupKeys().Raw()); leftStats && leftStats->Aliases) {
                 if (auto leftLabel = lookupJoin.LeftLabel().StringValue()) {
                     leftStats->Aliases->insert(std::move(leftLabel));
                 }
             }
 
-            if (auto rightStats = typeCtx->GetStats(lookupBase.Table().Raw()); rightStats && rightStats->Aliases) {
+            if (auto rightStats = kqpStats->GetStats(lookupBase.Table().Raw()); rightStats && rightStats->Aliases) {
                 if (auto rightLabel = lookupJoin.RightLabel().StringValue()) {
                     rightStats->Aliases->insert(std::move(rightLabel));
                 }
@@ -488,14 +493,14 @@ void InferStatisticsForLookupJoin(
     auto outputStats = *inputStats;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for lookup join: " << outputStats.ToString();
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)));
+    kqpStats->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)));
 }
 
 /***
  * Infer statistics for result binding of a stage
  */
-void InferStatisticsForResultBinding(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
-    TVector<TVector<std::shared_ptr<TOptimizerStatistics>>>& txStats) {
+void InferStatisticsForResultBinding(const TExprNode::TPtr& input, TTypeAnnotationContext* /*typeCtx*/,
+    TVector<TVector<std::shared_ptr<TOptimizerStatistics>>>& txStats, TKqpStatsStore* kqpStats) {
 
     auto inputNode = TExprBase(input);
     auto param = inputNode.Cast<TCoParameter>();
@@ -514,8 +519,8 @@ void InferStatisticsForResultBinding(const TExprNode::TPtr& input, TTypeAnnotati
             std::from_chars(resultNoStr.data(), resultNoStr.data() + resultNoStr.size(), resultNo);
 
             auto resStats = txStats[bindingNo][resultNo];
-            typeCtx->SetStats(param.Name().Raw(), resStats);
-            typeCtx->SetStats(inputNode.Raw(), resStats);
+            kqpStats->SetStats(param.Name().Raw(), resStats);
+            kqpStats->SetStats(inputNode.Raw(), resStats);
         }
     }
 }
@@ -627,11 +632,11 @@ private:
                                                         {"gte", "lte"}, {"eq", "neq"},  {"neq", "eq"}};
 };
 
-void InferStatisticsForOlapFilter(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForOlapFilter(const TExprNode::TPtr& input, TTypeAnnotationContext* /*typeCtx*/, TKqpStatsStore* kqpStats) {
     auto inputNode = TExprBase(input);
     auto filter = inputNode.Cast<TKqpOlapFilter>();
     auto filterInput = filter.Input();
-    auto inputStats = typeCtx->GetStats(filterInput.Raw());
+    auto inputStats = kqpStats->GetStats(filterInput.Raw());
 
     if (!inputStats) {
         return;
@@ -646,18 +651,18 @@ void InferStatisticsForOlapFilter(const TExprNode::TPtr& input, TTypeAnnotationC
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for OLAP Filter: " << outputStats.ToString();
 
 
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)) );
+    kqpStats->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)) );
 }
 
-void InferStatisticsForOlapRead(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForOlapRead(const TExprNode::TPtr& input, TTypeAnnotationContext* /*typeCtx*/, TKqpStatsStore* kqpStats) {
     auto inputNode = TExprBase(input);
     auto olapRead = inputNode.Cast<TKqpReadOlapTableRangesBase>();
 
     auto process = olapRead.Process();
-    auto lambdaStats = typeCtx->GetStats(process.Body().Raw());
+    auto lambdaStats = kqpStats->GetStats(process.Body().Raw());
     if (lambdaStats) {
         YQL_CLOG(TRACE, CoreDq) << "Infer statistics for OLAP table: " << lambdaStats->ToString();
-        typeCtx->SetStats(input.Get(), lambdaStats);
+        kqpStats->SetStats(input.Get(), lambdaStats);
     }
 }
 
@@ -785,15 +790,16 @@ double EstimateRowSize(const TStructExprType& rowType, const TString& format, co
 
 void InferStatisticsForDqSourceWrap(
     const TExprNode::TPtr& input,
-    TTypeAnnotationContext* typeCtx,
-    TKqpOptimizeContext& kqpCtx
+    TTypeAnnotationContext* /*typeCtx*/,
+    TKqpOptimizeContext& kqpCtx,
+    TKqpStatsStore* kqpStats
 ) {
     auto inputNode = TExprBase(input);
     if (auto wrapBase = inputNode.Maybe<TDqSourceWrapBase>()) {
         if (auto maybeS3DataSource = wrapBase.Cast().DataSource().Maybe<TS3DataSource>()) {
             auto s3DataSource = maybeS3DataSource.Cast();
             if (s3DataSource.Name()) {
-                auto stats = typeCtx->GetStats(s3DataSource.Raw());
+                auto stats = kqpStats->GetStats(s3DataSource.Raw());
                 if (!stats) {
                     stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>());
                 }
@@ -819,7 +825,7 @@ void InferStatisticsForDqSourceWrap(
                         newSpecific->OverrideApplied = true;
                         stats->Specific = newSpecific;
                         specific = newSpecific.get();
-                        typeCtx->SetStats(s3DataSource.Raw(), stats);
+                        kqpStats->SetStats(s3DataSource.Raw(), stats);
                     }
                 }
 
@@ -832,12 +838,12 @@ void InferStatisticsForDqSourceWrap(
                     newSpecific->FullRawRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, false);
                     newSpecific->FullDecodedRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, true);
                     specific = newSpecific.get();
-                    typeCtx->SetStats(s3DataSource.Raw(), stats);
+                    kqpStats->SetStats(s3DataSource.Raw(), stats);
                 }
 
-                auto wrapStats = typeCtx->GetStats(input.Get());
+                auto wrapStats = kqpStats->GetStats(input.Get());
                 if (!wrapStats) {
-                    typeCtx->SetStats(input.Get(), stats);
+                    kqpStats->SetStats(input.Get(), stats);
                 } else {
                     stats = wrapStats;
                 }
@@ -875,7 +881,7 @@ void InferStatisticsForDqSourceWrap(
                             specific->Costs[TStructExprType::MakeHash(rowType->GetItems())] = stats->Cost;
                         }
                     }
-                    typeCtx->SetStats(input.Get(), stats);
+                    kqpStats->SetStats(input.Get(), stats);
                 }
             }
         }
@@ -886,15 +892,15 @@ void InferStatisticsForDqSourceWrap(
  * When encountering a KqpPhysicalTx, we save the results of the stage in a vector
  * where it can later be accessed via binding parameters
  */
-void AppendTxStats(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
-    TVector<TVector<std::shared_ptr<TOptimizerStatistics>>>& txStats) {
+void AppendTxStats(const TExprNode::TPtr& input, TTypeAnnotationContext* /*typeCtx*/,
+    TVector<TVector<std::shared_ptr<TOptimizerStatistics>>>& txStats, TKqpStatsStore* kqpStats) {
 
     auto inputNode = TExprBase(input);
     auto tx = inputNode.Cast<TKqpPhysicalTx>();
     TVector<std::shared_ptr<TOptimizerStatistics>> vec;
 
     for (size_t i = 0; i < tx.Results().Size(); i++) {
-        vec.push_back(typeCtx->GetStats(tx.Results().Item(i).Raw()));
+        vec.push_back(kqpStats->GetStats(tx.Results().Item(i).Raw()));
     }
 
     txStats.push_back(vec);
@@ -915,9 +921,10 @@ TString TableAliasToString(TTableAliasMap* tableAlias) {
 class TInterestingOrderingsFSMBuilder {
 public:
     TInterestingOrderingsFSMBuilder(
-        TTypeAnnotationContext& typeCtx
+        TTypeAnnotationContext& typeCtx,
+        TKqpStatsStore* kqpStats
     )
-        : InterestingOrderingsCollector(typeCtx)
+        : InterestingOrderingsCollector(typeCtx, kqpStats)
     {}
 
 public:
@@ -962,9 +969,11 @@ private:
     class TInterestingOrderingsCollector {
     public:
         TInterestingOrderingsCollector(
-            TTypeAnnotationContext& typeCtx
+            TTypeAnnotationContext& typeCtx,
+            TKqpStatsStore* kqpStats
         )
             : TypeCtx(typeCtx)
+            , KqpStats(kqpStats)
         {}
 
         bool Collect(const TExprNode::TPtr& node) {
@@ -990,10 +999,11 @@ private:
     public:
         TFDStorage FDStorage;
         TTypeAnnotationContext& TypeCtx;
+        TKqpStatsStore* KqpStats;
 
     private:
         void CollectEquiJoin(const TCoEquiJoin& equiJoin) {
-            CollectInterestingOrderingsFromJoinTree(equiJoin, FDStorage, TypeCtx);
+            CollectInterestingOrderingsFromJoinTree(equiJoin, FDStorage, TypeCtx, *KqpStats);
         }
 
     private:
@@ -1001,7 +1011,7 @@ private:
         void CollectKqpReadTable(const TExprBase& readTable) {
             Y_ENSURE(readTable.Maybe<TKqlReadTableRangesBase>() || readTable.Maybe<TKqlReadTableBase>());
 
-            auto stats = TypeCtx.GetStats(readTable.Raw());
+            auto stats = KqpStats->GetStats(readTable.Raw());
             if (!stats) {
                 return;
             }
@@ -1064,7 +1074,7 @@ private:
             }
 
             TTableAliasMap* tableAliases = nullptr;
-            if (auto stats = TypeCtx.GetStats(aggregationBase.Raw())) {
+            if (auto stats = KqpStats->GetStats(aggregationBase.Raw())) {
                 tableAliases = stats->TableAliases.Get();
             }
 
@@ -1083,7 +1093,7 @@ private:
         template <typename TSortCallable>
         void CollectSort(const TSortCallable& sortCallable) {
             TTableAliasMap* tableAliases = nullptr;
-            if (auto stats = TypeCtx.GetStats(sortCallable.Raw())) {
+            if (auto stats = KqpStats->GetStats(sortCallable.Raw())) {
                 tableAliases = stats->TableAliases.Get();
             }
 
@@ -1138,7 +1148,7 @@ private:
     private:
         template <auto GetDirs>
         void CollectKqlReadTableIndexRanges(const TKqlReadTableIndexRanges& readTableIndexRanges) {
-            auto stats = TypeCtx.GetStats(readTableIndexRanges.Raw());
+            auto stats = KqpStats->GetStats(readTableIndexRanges.Raw());
             if (!stats) {
                 return;
             }
@@ -1168,7 +1178,7 @@ private:
                 true
             );
 
-            auto lambdaStats = TypeCtx.GetStats(lambdaBody.Raw());
+            auto lambdaStats = KqpStats->GetStats(lambdaBody.Raw());
             computer.Compute(lambdaBody);
 
             TTableAliasMap* tableAliases = lambdaStats? lambdaStats->TableAliases.Get(): nullptr;
@@ -1199,7 +1209,7 @@ private:
 
         TJoinColumn GetColumnFromMember(const TCoMember& member) {
             TJoinColumn column = TJoinColumn::FromString(member.Name().StringValue());
-            if (auto stats = TypeCtx.GetStats(member.Raw()); stats && column.RelName.empty()) {
+            if (auto stats = KqpStats->GetStats(member.Raw()); stats && column.RelName.empty()) {
                 if (stats->Aliases && stats->Aliases->size() == 1) {
                     column.RelName = *stats->Aliases->begin();
                 }
@@ -1231,7 +1241,7 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(
         TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
         /* ^ we have to propogate statistics to work with aliases */
 
-        auto fsmBuilder = TInterestingOrderingsFSMBuilder(*TypeCtx);
+        auto fsmBuilder = TInterestingOrderingsFSMBuilder(*TypeCtx, KqpStats);
         std::tie(TypeCtx->OrderingsFSM, TypeCtx->SortingsFSM) = fsmBuilder.Build(input);
     }
 
@@ -1245,39 +1255,39 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     bool matched = true;
     // KQP Matchers
     if(TKqlReadTableIndexRanges::Match(input.Get())) {
-        InferStatisticsForReadTableIndexRanges(input, TypeCtx, KqpCtx);
+        InferStatisticsForReadTableIndexRanges(input, TypeCtx, KqpCtx, KqpStats);
     }
     else if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
-        InferStatisticsForReadTable(input, TypeCtx, KqpCtx);
+        InferStatisticsForReadTable(input, TypeCtx, KqpCtx, KqpStats);
     }
     else if(TKqlStreamLookupIndex::Match(input.Get())){
-        InferStatisticsForIndexLookup(input, TypeCtx);
+        InferStatisticsForIndexLookup(input, TypeCtx, KqpStats);
     }
     else if(TKqlLookupTableBase::Match(input.Get())) {
-        InferStatisticsForLookupTable(input, TypeCtx);
+        InferStatisticsForLookupTable(input, TypeCtx, KqpStats);
     }
     else if(TKqpTable::Match(input.Get())) {
-        InferStatisticsForKqpTable(input, TypeCtx, KqpCtx);
+        InferStatisticsForKqpTable(input, TypeCtx, KqpCtx, KqpStats);
     }
     else if (TKqpReadRangesSourceSettings::Match(input.Get())) {
-        InferStatisticsForRowsSourceSettings(input, TypeCtx, KqpCtx);
+        InferStatisticsForRowsSourceSettings(input, TypeCtx, KqpCtx, KqpStats);
     }
     else if (TKqpCnStreamLookup::Match(input.Get())) {
-        InferStatisticsForSteamLookup(input, TypeCtx, KqpCtx);
+        InferStatisticsForSteamLookup(input, TypeCtx, KqpCtx, KqpStats);
     }
     else if (TKqlIndexLookupJoinBase::Match(input.Get())) {
-        InferStatisticsForLookupJoin(input, TypeCtx);
+        InferStatisticsForLookupJoin(input, TypeCtx, KqpStats);
     }
 
     // Match a result binding atom and connect it to a stage
     else if(TCoParameter::Match(input.Get())) {
-        InferStatisticsForResultBinding(input, TypeCtx, TxStats);
+        InferStatisticsForResultBinding(input, TypeCtx, TxStats, KqpStats);
     }
     else if(TDqSourceWrapBase::Match(input.Get())) {
-        InferStatisticsForDqSourceWrap(input, TypeCtx, KqpCtx);
+        InferStatisticsForDqSourceWrap(input, TypeCtx, KqpCtx, KqpStats);
     }
     else if (TKqpOlapFilter::Match(input.Get())) {
-        InferStatisticsForOlapFilter(input, TypeCtx);
+        InferStatisticsForOlapFilter(input, TypeCtx, KqpStats);
     }
     else {
         matched = false;
@@ -1290,9 +1300,9 @@ bool TKqpStatisticsTransformer::AfterLambdasSpecific(const TExprNode::TPtr& inpu
     Y_UNUSED(ctx);
     bool matched = true;
     if (TKqpPhysicalTx::Match(input.Get())) {
-        AppendTxStats(input, TypeCtx, TxStats);
+        AppendTxStats(input, TypeCtx, TxStats, KqpStats);
     } else if (TKqpReadOlapTableRangesBase::Match(input.Get())) {
-        InferStatisticsForOlapRead(input, TypeCtx);
+        InferStatisticsForOlapRead(input, TypeCtx, KqpStats);
     } else {
         matched = false;
     }

@@ -524,10 +524,11 @@ TExprBase DqRewriteEquiJoin(
     bool useCBO,
     TExprContext& ctx,
     TTypeAnnotationContext& typeCtx,
+    NKikimr::NKqp::TKqpStatsStore& kqpStats,
     const NKikimr::NKqp::TOptimizerHints& hints
 ) {
     int dummyJoinCounter = 0;
-    return DqRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, dummyJoinCounter, hints);
+    return DqRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, kqpStats, dummyJoinCounter, hints);
 }
 
 /**
@@ -541,6 +542,7 @@ TExprBase DqRewriteEquiJoin(
     bool useCBO,
     TExprContext& ctx,
     TTypeAnnotationContext& typeCtx,
+    NKikimr::NKqp::TKqpStatsStore& kqpStats,
     int& joinCounter,
     const NKikimr::NKqp::TOptimizerHints& hints
 ) {
@@ -568,8 +570,8 @@ TExprBase DqRewriteEquiJoin(
         return node;
     }
 
-    auto equiJoinStats = typeCtx.GetStats(equiJoin.Raw());
-    typeCtx.SetStats(result->Input.Raw(), equiJoinStats);
+    auto equiJoinStats = kqpStats.GetStats(equiJoin.Raw());
+    kqpStats.SetStats(result->Input.Raw(), equiJoinStats);
 
     THashMap<TStringBuf, TVector<TStringBuf>> columnsToRename;
     THashSet<TStringBuf> columnsToDrop;

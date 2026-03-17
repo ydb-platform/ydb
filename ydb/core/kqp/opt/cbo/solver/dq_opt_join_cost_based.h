@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 
@@ -8,6 +10,13 @@ namespace NKikimr::NKqp {
 
 using TProviderCollectFunction =
     std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const NYql::TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>;
+
+bool DqCollectJoinRelationsWithStats(
+    TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
+    TKqpStatsStore& kqpStats,
+    const NYql::NNodes::TCoEquiJoin& equiJoin,
+    const TProviderCollectFunction& collector
+);
 
 /*
  * Main routine that checks:
@@ -21,6 +30,7 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     const NYql::NNodes::TExprBase& node,
     NYql::TExprContext& ctx,
     NYql::TTypeAnnotationContext& typesCtx,
+    TKqpStatsStore& kqpStats,
     ui32 optLevel,
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
@@ -33,6 +43,7 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     const NYql::NNodes::TExprBase& node,
     NYql::TExprContext& ctx,
     NYql::TTypeAnnotationContext& typesCtx,
+    TKqpStatsStore& kqpStats,
     ui32 optLevel,
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
@@ -45,7 +56,8 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
 void CollectInterestingOrderingsFromJoinTree(
     const NYql::NNodes::TExprBase& equiJoinNode,
     TFDStorage& fdStorage,
-    NYql::TTypeAnnotationContext& typeCtx
+    NYql::TTypeAnnotationContext& typeCtx,
+    TKqpStatsStore& kqpStats
 );
 
 IOptimizerNew* MakeNativeOptimizerNew(

@@ -150,7 +150,7 @@ std::shared_ptr<TOptimizerStatistics> ApplyBytesHints(
     return inputStats;
 }
 
-void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const NKikimr::NKqp::IProviderContext& ctx, NKikimr::NKqp::TOptimizerHints hints) {
+void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, const NKikimr::NKqp::IProviderContext& ctx, NKikimr::NKqp::TOptimizerHints hints) {
 
     auto inputNode = TExprBase(input);
     auto join = inputNode.Cast<TCoMapJoinCore>();
@@ -158,8 +158,8 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
     auto leftArg = join.LeftInput();
     auto rightArg = join.RightDict();
 
-    auto leftStats = typeCtx->GetStats(leftArg.Raw());
-    auto rightStats = typeCtx->GetStats(rightArg.Raw());
+    auto leftStats = kqpStats->GetStats(leftArg.Raw());
+    auto rightStats = kqpStats->GetStats(rightArg.Raw());
 
     if (!leftStats || !rightStats) {
         return;
@@ -205,13 +205,13 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
     );
     resStats->Labels = std::make_shared<TVector<TString>>();
     resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
-    typeCtx->SetStats(join.Raw(), resStats);
+    kqpStats->SetStats(join.Raw(), resStats);
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for MapJoin: " << resStats->ToString();
 }
 
 void InferStatisticsForGraceJoin(
     const TExprNode::TPtr& input,
-    TTypeAnnotationContext* typeCtx,
+    TKqpStatsStore* kqpStats,
     const NKikimr::NKqp::IProviderContext& ctx,
     NKikimr::NKqp::TOptimizerHints hints,
     NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
@@ -222,8 +222,8 @@ void InferStatisticsForGraceJoin(
     auto leftArg = join.LeftInput();
     auto rightArg = join.RightInput();
 
-    auto leftStats = typeCtx->GetStats(leftArg.Raw());
-    auto rightStats = typeCtx->GetStats(rightArg.Raw());
+    auto leftStats = kqpStats->GetStats(leftArg.Raw());
+    auto rightStats = kqpStats->GetStats(rightArg.Raw());
 
     if (!leftStats || !rightStats) {
         return;
@@ -288,11 +288,11 @@ void InferStatisticsForGraceJoin(
     }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for GraceJoin with labels: " << "[" << JoinSeq(", ", unionOfLabels) << "]" << ", stats: " << resStats->ToString();
-    typeCtx->SetStats(join.Raw(), std::move(resStats));
+    kqpStats->SetStats(join.Raw(), std::move(resStats));
 }
 
-void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const NKikimr::NKqp::IProviderContext& ctx, NKikimr::NKqp::TOptimizerHints hints) {
-    if (auto stats = typeCtx->GetStats(TExprBase(input).Raw())) {
+void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, const NKikimr::NKqp::IProviderContext& ctx, NKikimr::NKqp::TOptimizerHints hints) {
+    if (auto stats = kqpStats->GetStats(TExprBase(input).Raw())) {
         return;
     }
 
@@ -302,8 +302,8 @@ void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TTypeAnnotationC
     auto leftArg = join.LeftInput();
     auto rightArg = join.RightInput();
 
-    auto leftStats = typeCtx->GetStats(leftArg.Raw());
-    auto rightStats = typeCtx->GetStats(rightArg.Raw());
+    auto leftStats = kqpStats->GetStats(leftArg.Raw());
+    auto rightStats = kqpStats->GetStats(rightArg.Raw());
 
     if (!leftStats || !rightStats) {
         return;
@@ -366,7 +366,7 @@ void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TTypeAnnotationC
         resStats->SortingOrderings = leftStats->SortingOrderings;
     }
 
-    typeCtx->SetStats(join.Raw(), resStats);
+    kqpStats->SetStats(join.Raw(), resStats);
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for DqJoin: " << resStats->ToString();
 }
 

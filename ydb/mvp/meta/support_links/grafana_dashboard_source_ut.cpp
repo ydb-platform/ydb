@@ -1,46 +1,41 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <memory>
 
-#include <ydb/mvp/meta/mvp.h>
-#include <ydb/mvp/meta/support_links/source.h>
+#include <ydb/library/actors/http/http.h>
 #include <ydb/mvp/meta/support_links/grafana_dashboard_source.h>
 
+namespace {
+
+NMVP::TMetaSettings MakeMetaSettings() {
+    NMVP::TMetaSettings settings;
+    settings.GrafanaEndpoint = "https://grafana.example.net";
+    return settings;
+}
+
+NHttp::TUrlParameters MakeUrlParameters(TStringBuf url) {
+    return NHttp::TUrlParameters(url);
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
-    class TMvpGuard {
-    public:
-        TMvpGuard() {
-            const char* argv[] = {"source_grafana_dashboard_source_ut"};
-            Mvp = std::make_unique<NMVP::TMVP>(1, argv);
-        }
-
-    private:
-        std::unique_ptr<NMVP::TMVP> Mvp;
-    };
-
     Y_UNIT_TEST(BuildsResolvedGrafanaDashboardUrl) {
-        TMvpGuard mvpGuard;
-        NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
-            .Endpoint = "https://grafana.example.net",
-        };
-
-        NMVP::TSupportLinkEntry config;
+        NMVP::TSupportLinkEntryConfig config;
         config.SetSource("grafana/dashboard");
         config.SetTitle("CPU");
         config.SetUrl("/d/cpu");
-        NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
+        const auto settings = MakeMetaSettings();
+        NMVP::TGrafanaDashboardSource source(std::move(config), settings);
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["k8s_namespace"] = "ydb-workspace";
         clusterColumns["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
-        TVector<std::pair<TString, TString>> queryParams;
-        queryParams.emplace_back("cluster", "ydb-global");
-        queryParams.emplace_back("database", "root_test");
+        auto urlParameters = MakeUrlParameters("/?cluster=ydb-global&database=root_test");
         const NActors::TActorId parent;
         const NActors::TActorId httpProxyId;
 
         auto result = source.Resolve(NMVP::ILinkSource::TResolveInput{
             .ClusterColumns = clusterColumns,
-            .QueryParams = queryParams,
+            .UrlParameters = urlParameters,
             .Parent = parent,
             .HttpProxyId = httpProxyId,
         });
@@ -55,28 +50,22 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
     }
 
     Y_UNIT_TEST(ReturnsPartialUrlAndErrorWhenDatasourceMissing) {
-        TMvpGuard mvpGuard;
-        NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
-            .Endpoint = "https://grafana.example.net",
-        };
-
-        NMVP::TSupportLinkEntry config;
+        NMVP::TSupportLinkEntryConfig config;
         config.SetSource("grafana/dashboard");
         config.SetTitle("CPU");
         config.SetUrl("/d/cpu");
-        NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
+        const auto settings = MakeMetaSettings();
+        NMVP::TGrafanaDashboardSource source(std::move(config), settings);
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["k8s_namespace"] = "ydb-workspace";
-        TVector<std::pair<TString, TString>> queryParams;
-        queryParams.emplace_back("cluster", "ydb-global");
-        queryParams.emplace_back("database", "/root/test");
+        auto urlParameters = MakeUrlParameters("/?cluster=ydb-global&database=%2Froot%2Ftest");
         const NActors::TActorId parent;
         const NActors::TActorId httpProxyId;
 
         auto result = source.Resolve(NMVP::ILinkSource::TResolveInput{
             .ClusterColumns = clusterColumns,
-            .QueryParams = queryParams,
+            .UrlParameters = urlParameters,
             .Parent = parent,
             .HttpProxyId = httpProxyId,
         });
@@ -84,7 +73,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(
             result.Links[0].Url,
-            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-cluster=ydb-global&var-database=%2Froot%2Ftest"
+            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-cluster=ydb-global&var-database=/root/test"
         );
         UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result.Errors[0].Source, "meta");
@@ -92,28 +81,23 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
     }
 
     Y_UNIT_TEST(EncodesQueryParamReservedCharacters) {
-        TMvpGuard mvpGuard;
-        NMVP::InstanceMVP->MetaSettings.GrafanaConfig = NMVP::TGrafanaSupportConfig{
-            .Endpoint = "https://grafana.example.net",
-        };
-
-        NMVP::TSupportLinkEntry config;
+        NMVP::TSupportLinkEntryConfig config;
         config.SetSource("grafana/dashboard");
         config.SetTitle("CPU");
         config.SetUrl("/d/cpu");
-        NMVP::TGrafanaDashboardSource source(std::move(config), NMVP::InstanceMVP->MetaSettings);
+        const auto settings = MakeMetaSettings();
+        NMVP::TGrafanaDashboardSource source(std::move(config), settings);
 
         THashMap<TString, TString> clusterColumns;
         clusterColumns["k8s_namespace"] = "ydb-workspace";
         clusterColumns["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
-        TVector<std::pair<TString, TString>> queryParams;
-        queryParams.emplace_back("database", "root&x=y");
+        auto urlParameters = MakeUrlParameters("/?database=root%26x%3Dy");
         const NActors::TActorId parent;
         const NActors::TActorId httpProxyId;
 
         auto result = source.Resolve(NMVP::ILinkSource::TResolveInput{
             .ClusterColumns = clusterColumns,
-            .QueryParams = queryParams,
+            .UrlParameters = urlParameters,
             .Parent = parent,
             .HttpProxyId = httpProxyId,
         });

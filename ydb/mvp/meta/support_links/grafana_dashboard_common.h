@@ -1,25 +1,26 @@
 #pragma once
 
 #include "source_common.h"
+#include "types.h"
 
 namespace NMVP::NSupportLinks {
 
-inline TString ResolveGrafanaUrl(const TGrafanaSupportConfig& grafanaConfig, const TString& configuredUrl) {
+inline TString ResolveGrafanaUrl(TStringBuf grafanaEndpoint, const TString& configuredUrl) {
     if (IsAbsoluteUrl(configuredUrl)) {
         return configuredUrl;
     }
-    return JoinUrl(grafanaConfig.Endpoint, configuredUrl);
+    return JoinUrl(grafanaEndpoint, configuredUrl);
 }
 
 inline TString ResolveGrafanaDashboardUrl(
-    const TGrafanaSupportConfig& grafanaConfig,
+    TStringBuf grafanaEndpoint,
     const TLinkResolveContext& context,
     TVector<TSupportError>& errors)
 {
     static constexpr TStringBuf WorkspaceColumn = "k8s_namespace";
     static constexpr TStringBuf DatasourceColumn = "datasource";
 
-    TString url = ResolveGrafanaUrl(grafanaConfig, context.LinkConfig.GetUrl());
+    TString url = ResolveGrafanaUrl(grafanaEndpoint, context.LinkConfig.GetUrl());
     const auto workspaceIt = context.ClusterColumns.find(WorkspaceColumn);
     if (workspaceIt == context.ClusterColumns.end() || workspaceIt->second.empty()) {
         errors.emplace_back(TSupportError{
@@ -40,8 +41,8 @@ inline TString ResolveGrafanaDashboardUrl(
         url = AppendQueryParam(url, "var-ds", datasourceIt->second);
     }
 
-    for (const auto& [name, value] : context.QueryParams) {
-        url = AppendQueryParam(url, TStringBuilder() << "var-" << name, value);
+    for (const auto& [name, _] : context.UrlParameters.Parameters) {
+        url = AppendQueryParam(url, TStringBuilder() << "var-" << name, context.UrlParameters[name]);
     }
     return url;
 }

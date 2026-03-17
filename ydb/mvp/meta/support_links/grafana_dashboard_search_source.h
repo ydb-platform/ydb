@@ -82,7 +82,7 @@ public:
         TString configuredUrl = Context.LinkConfig.GetUrl().empty()
             ? TString("/api/search")
             : Context.LinkConfig.GetUrl();
-        TString searchUrl = NSupportLinks::ResolveGrafanaUrl(GetGrafanaConfig(), configuredUrl);
+        TString searchUrl = NSupportLinks::ResolveGrafanaUrl(GetGrafanaEndpoint(), configuredUrl);
         if (!Context.LinkConfig.GetTag().empty()) {
             searchUrl = AppendQueryParam(searchUrl, "tag", Context.LinkConfig.GetTag());
         }
@@ -194,8 +194,8 @@ private:
         DieResolver();
     }
 
-    const TGrafanaSupportConfig& GetGrafanaConfig() const {
-        return MetaSettings.GrafanaConfig;
+    TStringBuf GetGrafanaEndpoint() const {
+        return MetaSettings.GrafanaEndpoint;
     }
 
     bool ValidateRequiredClusterColumns(TVector<TSupportError>& errors) const {
@@ -227,7 +227,7 @@ private:
     TString ResolveGrafanaDashboardUrl(const TString& configuredUrl) {
         TLinkResolveContext context = Context;
         context.LinkConfig.SetUrl(configuredUrl);
-        return NSupportLinks::ResolveGrafanaDashboardUrl(GetGrafanaConfig(), context, Errors);
+        return NSupportLinks::ResolveGrafanaDashboardUrl(GetGrafanaEndpoint(), context, Errors);
     }
 };
 
@@ -240,7 +240,7 @@ inline void ValidateGrafanaDashboardSearchResolverConfig(const TResolverValidati
     const TString effectiveUrl = context.LinkConfig.GetUrl().empty()
         ? TString("/api/search")
         : context.LinkConfig.GetUrl();
-    if (!IsAbsoluteUrl(effectiveUrl) && context.GrafanaConfig.Endpoint.empty())
+    if (!IsAbsoluteUrl(effectiveUrl) && context.GrafanaEndpoint.empty())
     {
         ythrow yexception() << "grafana.endpoint is required for relative url";
     }
@@ -257,16 +257,12 @@ namespace NMVP {
 
 class TGrafanaDashboardSearchSource : public ILinkSource {
 public:
-    TGrafanaDashboardSearchSource(TSupportLinkEntry config, const TMetaSettings& metaSettings)
+    TGrafanaDashboardSearchSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings)
         : Config_(std::move(config))
         , MetaSettings_(metaSettings)
     {}
 
-    size_t Place() const override {
-        return 0;
-    }
-
-    const TSupportLinkEntry& Config() const override {
+    const TSupportLinkEntryConfig& Config() const override {
         return Config_;
     }
 
@@ -279,7 +275,7 @@ public:
             .SourceName = Config_.GetSource(),
             .LinkConfig = Config_,
             .ClusterColumns = input.ClusterColumns,
-            .QueryParams = input.QueryParams,
+            .UrlParameters = input.UrlParameters,
             .Parent = input.Parent,
             .HttpProxyId = input.HttpProxyId,
         };
@@ -288,12 +284,12 @@ public:
         return TResolveOutput{
             .Name = Config_.GetSource(),
             .Ready = false,
-            .Actors = {actorId},
+            .Actor = actorId,
         };
     }
 
 private:
-    TSupportLinkEntry Config_;
+    TSupportLinkEntryConfig Config_;
     const TMetaSettings& MetaSettings_;
 };
 

@@ -14,7 +14,7 @@ inline void ValidateGrafanaDashboardResolverConfig(const TResolverValidationCont
     if (context.LinkConfig.GetUrl().empty()) {
         ythrow yexception() << "url is required for source=" << context.LinkConfig.GetSource();
     }
-    if (!IsAbsoluteUrl(context.LinkConfig.GetUrl()) && context.GrafanaConfig.Endpoint.empty()) {
+    if (!IsAbsoluteUrl(context.LinkConfig.GetUrl()) && context.GrafanaEndpoint.empty()) {
         ythrow yexception() << "grafana.endpoint is required for relative url";
     }
 }
@@ -25,16 +25,12 @@ namespace NMVP {
 
 class TGrafanaDashboardSource : public ILinkSource {
 public:
-    TGrafanaDashboardSource(TSupportLinkEntry config, const TMetaSettings& metaSettings)
+    TGrafanaDashboardSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings)
         : Config_(std::move(config))
         , MetaSettings_(metaSettings)
     {}
 
-    size_t Place() const override {
-        return 0;
-    }
-
-    const TSupportLinkEntry& Config() const override {
+    const TSupportLinkEntryConfig& Config() const override {
         return Config_;
     }
 
@@ -45,7 +41,7 @@ public:
             .SourceName = Config_.GetSource(),
             .LinkConfig = Config_,
             .ClusterColumns = input.ClusterColumns,
-            .QueryParams = input.QueryParams,
+            .UrlParameters = input.UrlParameters,
             .Parent = input.Parent,
             .HttpProxyId = input.HttpProxyId,
         };
@@ -54,7 +50,7 @@ public:
             .Name = Config_.GetSource(),
             .Ready = true,
         };
-        TString url = NSupportLinks::ResolveGrafanaDashboardUrl(MetaSettings_.GrafanaConfig, resolveContext, result.Errors);
+        TString url = NSupportLinks::ResolveGrafanaDashboardUrl(MetaSettings_.GrafanaEndpoint, resolveContext, result.Errors);
         if (!url.empty()) {
             result.Links.emplace_back(NSupportLinks::TResolvedLink{
                 .Title = Config_.GetTitle(),
@@ -65,17 +61,17 @@ public:
     }
 
 private:
-    TSupportLinkEntry Config_;
+    TSupportLinkEntryConfig Config_;
     const TMetaSettings& MetaSettings_;
 };
 
 inline std::shared_ptr<ILinkSource> BuildGrafanaDashboardSource(
-    TSupportLinkEntry config,
+    TSupportLinkEntryConfig config,
     const TMetaSettings& metaSettings)
 {
     NSupportLinks::ValidateGrafanaDashboardResolverConfig(NSupportLinks::TResolverValidationContext{
         .LinkConfig = config,
-        .GrafanaConfig = metaSettings.GrafanaConfig,
+        .GrafanaEndpoint = metaSettings.GrafanaEndpoint,
     });
     return std::make_shared<TGrafanaDashboardSource>(std::move(config), metaSettings);
 }

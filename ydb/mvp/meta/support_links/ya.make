@@ -1,5 +1,5 @@
 RECURSE_FOR_TESTS(
-	ut
+    ut
 )
 
 LIBRARY()
@@ -17,8 +17,3 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-
-RECURSE(
-	bin
-)
-

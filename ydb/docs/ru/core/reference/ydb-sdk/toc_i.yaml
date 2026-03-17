@@ -10,7 +10,7 @@ items:
   - name: Форматы данных
     href: data-formats/index.md
     items:
-    - name: Protobuf
+    - name: Protobuf (Value)
       href: data-formats/format-protobuf.md
     - name: Apache Arrow
       href: data-formats/format-arrow.md

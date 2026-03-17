@@ -13608,7 +13608,7 @@ END DO)",
         }
     }
 
-    Y_UNIT_TEST(CreateSecretWithParam) {
+    Y_UNIT_TEST(SetSecretValueWithParamOk) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableSchemaSecrets(true);
         const auto settings = TKikimrSettings()
@@ -13617,31 +13617,101 @@ END DO)",
         TKikimrRunner kikimr(settings);
         auto queryClient = kikimr.GetQueryClient();
 
-        { // create secret with declared parameter
-            auto params = TParamsBuilder()
-                .AddParam("$secValue").Utf8("my-secret-value").Build()
-                .Build();
+        { // Utf8 parameter type
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                const auto params = TParamsBuilder()
+                    .AddParam("$secValue").Utf8(TString("value") + operationType).Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS Utf8;
+                            %s SECRET `sec-utf8` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+        { // String parameter type
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                const auto params = TParamsBuilder()
+                    .AddParam("$secValue").String(TString("value") + operationType).Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS String;
+                            %s SECRET `sec-string` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+        { // empty value in parameter
+            for (const auto* operationType : { "CREATE", "ALTER" }) {
+                const auto params = TParamsBuilder()
+                    .AddParam("$secValue").Utf8("").Build()
+                    .Build();
+                const auto result = queryClient.ExecuteQuery(
+                    Sprintf(R"sql(
+                            DECLARE $secValue AS Utf8;
+                            %s SECRET `sec-empty` WITH (VALUE = $secValue);
+                        )sql",
+                        operationType),
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params
+                ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+    }
 
-            const auto result = queryClient.ExecuteQuery(R"sql(
-                DECLARE $secValue AS Utf8;
-                CREATE SECRET `/Root/secret-param` WITH (value = $secValue);
-            )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+    Y_UNIT_TEST(SetSecretValueWithParamFail) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        const auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        // Create secret in the usual way so we can try to alter it with params
+        {
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-to-alter` WITH (value = "initial");
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        { // alter secret with declared parameter
-            auto params = TParamsBuilder()
-                .AddParam("$newValue").Utf8("updated-secret-value").Build()
-                .Build();
 
+        { // ALTER with DECLARE but no params passed -> error
             const auto result = queryClient.ExecuteQuery(R"sql(
                 DECLARE $newValue AS Utf8;
-                ALTER SECRET `/Root/secret-param` WITH (value = $newValue);
-            )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                ALTER SECRET `/Root/secret-to-alter` WITH (value = $newValue);
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::GENERIC_ERROR || result.GetStatus() == EStatus::BAD_REQUEST,
+                result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Parameter");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "required");
         }
-        { // verify the secret exists
-            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-param");
-            UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret should exist");
+
+        { // CREATE SECRET with DECLARE $sec AS Uint64 and pass Uint64 -> type error
+            auto params = TParamsBuilder()
+                .AddParam("$sec").Uint64(42).Build()
+                .Build();
+            const auto result = queryClient.ExecuteQuery(R"sql(
+                DECLARE $sec AS Uint64;
+                CREATE SECRET `/Root/secret-wrong-type` WITH (value = $sec);
+            )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "String");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Utf8");
         }
     }
 

@@ -397,12 +397,22 @@ void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString
         TokenizeBinaryJson(root.GetElement(0), prefix, tokens);
         break;
     case NBinaryJson::EContainerType::Array:
+        if (root.GetSize() == 0) {
+            tokens.push_back(prefix + (char)NBinaryJson::EEntryType::Container);
+            return;
+        }
+
         for (ui32 pos = 0; pos < root.GetSize(); pos++) {
             TokenizeBinaryJson(root.GetElement(pos), prefix, tokens);
         }
         break;
     case NBinaryJson::EContainerType::Object:
         auto it = root.GetObjectIterator();
+        if (!it.HasNext()) {
+            tokens.push_back(prefix + (char)NBinaryJson::EEntryType::Container);
+            return;
+        }
+
         while (it.HasNext()) {
             auto kv = it.Next();
             Y_ENSURE(kv.first.GetType() == NBinaryJson::EEntryType::String);

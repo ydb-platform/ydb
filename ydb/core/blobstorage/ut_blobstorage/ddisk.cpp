@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                     << " lsn# " << lsn << "\n";
 
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvErasePersistentBuffer(
-                    PBCreds, {VChunkIndex, offsetInBytes, size}, lsn, PBCreds.Generation,)),
+                    PBCreds, {VChunkIndex, offsetInBytes, size}, lsn, PBCreds.Generation)),
                     Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == status);
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             auto res = testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             UNIT_ASSERT(testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD) == -1);
-            for (auto [_, lsn] : erases) {
+            for (auto [_, lsn, __] : erases) {
                 PersistentBuffers.erase(lsn);
             }
             return res;

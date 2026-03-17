@@ -177,11 +177,6 @@ static void Fill(TCreateTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_authentication()->set_subject_id(info.UserSID);
     ev.mutable_authentication()->set_subject_type(
         yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
-    if (!info.MaskedToken.empty()) {
-        ev.mutable_authentication()
-            ->mutable_token_info()
-            ->set_masked_iam_token(info.MaskedToken);
-    }
 
     // Authorization
     ev.mutable_authorization()->set_authorized(true);
@@ -196,6 +191,7 @@ static void Fill(TCreateTopicEvent& ev, const TCloudEventInfo& info) {
 
     // RequestMetadata
     ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
+    ev.mutable_request_metadata()->set_user_agent(info.UserAgent);
 
     if (info.OperationStatus == NKikimrScheme::StatusSuccess) {
         ev.set_event_status(EStatus::DONE);
@@ -221,11 +217,6 @@ static void Fill(TAlterTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_authentication()->set_subject_id(info.UserSID);
     ev.mutable_authentication()->set_subject_type(
         yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
-    if (!info.MaskedToken.empty()) {
-        ev.mutable_authentication()
-            ->mutable_token_info()
-            ->set_masked_iam_token(info.MaskedToken);
-    }
     ev.mutable_authorization()->set_authorized(true);
 
     ev.mutable_event_metadata()->set_event_id(CreateGuidAsString());
@@ -236,6 +227,7 @@ static void Fill(TAlterTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_event_metadata()->set_folder_id(info.FolderId);
 
     ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
+    ev.mutable_request_metadata()->set_user_agent(info.UserAgent);
 
     if (info.OperationStatus == NKikimrScheme::StatusSuccess) {
         ev.set_event_status(EStatus::DONE);
@@ -261,11 +253,6 @@ static void Fill(TDeleteTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_authentication()->set_subject_id(info.UserSID);
     ev.mutable_authentication()->set_subject_type(
         yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
-    if (!info.MaskedToken.empty()) {
-        ev.mutable_authentication()
-            ->mutable_token_info()
-            ->set_masked_iam_token(info.MaskedToken);
-    }
     ev.mutable_authorization()->set_authorized(true);
 
     ev.mutable_event_metadata()->set_event_id(CreateGuidAsString());
@@ -276,6 +263,7 @@ static void Fill(TDeleteTopicEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_event_metadata()->set_folder_id(info.FolderId);
 
     ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
+    ev.mutable_request_metadata()->set_user_agent(info.UserAgent);
 
     if (info.Issue.empty()) {
         ev.set_event_status(EStatus::DONE);

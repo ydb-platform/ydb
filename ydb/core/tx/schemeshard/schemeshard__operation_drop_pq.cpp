@@ -362,7 +362,7 @@ public:
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
                 }
-                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), OperationId, context);
+                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), context);
                 return result;
             }
         }
@@ -391,19 +391,19 @@ public:
             }
 
             if (!checks) {
-                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), OperationId, context);
+                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), context);
                 return result;
             }
         }
 
         if (dropPolicy != NKikimrSchemeOp::EDropFailOnChanges) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, "drop policy isn't supported", OperationId, context);
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, "drop policy isn't supported", context);
             return result;
         }
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusPreconditionFailed, errStr, OperationId, context);
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusPreconditionFailed, errStr, context);
             return result;
         }
 
@@ -411,7 +411,7 @@ public:
         Y_ABORT_UNLESS(pqGroup);
 
         if (pqGroup->AlterData) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusMultipleModifications, "Drop over Create/Alter", OperationId, context);
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusMultipleModifications, "Drop over Create/Alter", context);
             return result;
         }
 
@@ -453,8 +453,7 @@ public:
             context.SS,
             context.PeerName,
             context.UserToken ? context.UserToken->GetUserSID() : TString(),
-            TString() /* maskedToken */,
-            ui64(OperationId.GetTxId()));
+            context.UserAgent);
 
         // Activate main tx state machine
         SetState(NextState());

@@ -9,7 +9,6 @@ void FinishWithError(
     const NKikimrSchemeOp::TModifyScheme& operation,
     NKikimrScheme::EStatus status,
     const TString& errStr,
-    const TOperationId& operationId,
     TOperationContext& context)
 {
     result->SetError(status, errStr);
@@ -20,8 +19,7 @@ void FinishWithError(
         context.SS,
         context.PeerName,
         context.UserToken ? context.UserToken->GetUserSID() : TString(),
-        TString() /* maskedToken */,
-        ui64(operationId.GetTxId()));
+        context.UserAgent);
 }
 
 void SendTopicCloudEvent(
@@ -31,8 +29,7 @@ void SendTopicCloudEvent(
     TSchemeShard* ss,
     const TString& peerName,
     const TString& userSID,
-    const TString& maskedToken,
-    [[maybe_unused]] ui64 txId)
+    const TString& userAgent)
 {
     NPQ::NCloudEvents::TCloudEventInfo info;
     const TString workingDir = operation.GetWorkingDir();
@@ -60,8 +57,8 @@ void SendTopicCloudEvent(
 
     info.RemoteAddress = peerName;
     info.UserSID = userSID;
-    info.MaskedToken = maskedToken;
     info.Issue = reason;
+    info.UserAgent = userAgent;
     info.CreatedAt = TInstant::Now();
     info.ModifyScheme = std::move(operation);
     info.OperationStatus = status;

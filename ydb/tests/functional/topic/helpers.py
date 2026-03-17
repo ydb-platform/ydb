@@ -107,6 +107,8 @@ class CanonicalCaptureCloudEventOutput:
         req_meta = event.get('request_metadata') or {}
         if req_meta.get('remote_address'):
             req_meta['remote_address'] = '<canonized_remote_address>'
+        if req_meta.get('user_agent'):
+            req_meta['user_agent'] = '<canonized_user_agent>'
 
         return event
 

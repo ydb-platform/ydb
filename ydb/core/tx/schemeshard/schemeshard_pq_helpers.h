@@ -35,15 +35,13 @@ void SendTopicCloudEvent(
     TSchemeShard* ss,
     const TString& peerName,
     const TString& userSID,
-    const TString& maskedToken,
-    ui64 txId);
+    const TString& userAgent);
 
 void FinishWithError(
     TProposeResponse* result,
     const NKikimrSchemeOp::TModifyScheme& operation,
     NKikimrScheme::EStatus status,
     const TString& errStr,
-    const TOperationId& operationId,
     TOperationContext& context);
 
 } // NKikimr::NSchemeShard

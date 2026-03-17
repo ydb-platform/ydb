@@ -61,6 +61,7 @@ message TEvModifySchemeTransaction {
 	// UserSID and SanitizedToken are used as alternatives to UserToken for operations initiated by schemeshard itself, such as schema operations during import/export and similar tasks.
     optional string UserSID = 9;
     optional string SanitizedToken = 10;
+    optional string ApplicationName = 11;  // YDB application name for audit (from YDB_APPLICATION_NAME header)
 }
 
 message TFetcherCheckUserTieringPermissionsResult {

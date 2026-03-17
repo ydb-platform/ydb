@@ -138,32 +138,23 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(!GetStageData().IsEmptyWithData());
 
-    // Decide whether to use streaming mode based on config from AppData
-    const bool useStreaming = TStreamingConfigHelper::ShouldUseStreamingMode(GetRecordsCount());
+    StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
 
-    if (useStreaming && memoryLimit && !IsSourceInMemory()) {
-        // Enable page-based streaming
+    if (memoryLimit && !IsSourceInMemory()) {
         const auto accessor = ExtractPortionAccessor();
-        StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
+        StreamingMode = TStreamingConfigHelper::ShouldUseStreamingMode(GetRecordsCount());
+    } else {
+        // No memory limit or source already in memory: single page covering the whole portion
+        StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
+    }
 
-        // Initialize streaming mode
-        StreamingMode = true;
-
+    if (StreamingMode) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_enabled")(
             "source_idx", GetSourceIdx())("records", GetRecordsCount())(
             "pages", StageResult->GetPagesToResultVerified().size());
-    } else if (memoryLimit && !IsSourceInMemory()) {
-        // Use memory limit but without streaming (legacy behavior)
-        const auto accessor = ExtractPortionAccessor();
-        StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
-        StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
-    } else {
-        // Read entire portion at once
-        StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
-        StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
     }
-    
+
     if (StageResult->IsEmpty()) {
         StageResult = TFetchedResult::BuildEmpty();
         StageResult->SetPages({});

@@ -144,7 +144,7 @@ public:
         SendPDiskResponse(disk, *init, initReply.release());
 
         auto checkSpace = WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
-        auto res = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, "", 0);
+        auto res = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
         SendPDiskResponse(disk, *checkSpace, res);
 
         auto readLog = WaitPDiskRequest<NPDisk::TEvReadLog>(disk);
@@ -674,7 +674,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TString payload = MakeData('P', BlockSize);
         const NDDisk::TBlockSelector selector{3, 0, BlockSize};
         auto checkSpace = ctx.WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
-        auto res = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, "", 0);
+        auto res = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
         double expected = 0.123;
         res->NormalizedOccupancy = expected;
         ctx.SendPDiskResponse(disk, *checkSpace, res);

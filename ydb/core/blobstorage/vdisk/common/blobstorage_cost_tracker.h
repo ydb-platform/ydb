@@ -350,10 +350,14 @@ public:
         BurstDetector.Set(Bucket.IsEmpty(), SeqnoBurstDetector.fetch_add(1));
     }
 
-    void SetTimeAvailable(ui64 diskTimeAvailableNSec) {
+    void UpdatePDiskParameters(ui64 diskTimeAvailableNSec, ui32 expectedSlotCount) {
         ui64 diskTimeAvailable = diskTimeAvailableNSec * GetDiskTimeAvailableScale();
         DiskTimeAvailable.store(diskTimeAvailable);
         MonGroup->DiskTimeAvailableCtr() = diskTimeAvailable;
+
+        if (expectedSlotCount > 0) {
+            MonGroup->DiskTimeFairShareNs() = diskTimeAvailableNSec / expectedSlotCount;
+        }
     }
 
 public:

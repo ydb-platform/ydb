@@ -1443,6 +1443,12 @@ public:
 
         // validate the last line using the last hash from meta
         if (prevLine && prevStep == metaStep) {
+            if (metaLastHash.empty()) {
+                SendResultAndDie(false, TStringBuilder()
+                    << "Changelog meta is missing 'last_sha256' field: " << ChangelogMetaPath);
+                return false;
+            }
+
             if (prevHash != metaLastHash) {
                 SendResultAndDie(false, TStringBuilder()
                     << "Changelog checksum mismatch for " << prevLine

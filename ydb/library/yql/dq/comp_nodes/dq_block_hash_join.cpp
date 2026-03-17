@@ -11,8 +11,6 @@
 
 #include <arrow/scalar.h>
 
-#include <util/system/backtrace.h>
-
 #include "dq_join_common.h"
 
 namespace NKikimr::NMiniKQL {
@@ -237,12 +235,10 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             }
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
         }
-        TSides<NUdf::TUnboxedValue> streamValues{
-            .Build = Streams_.Build->GetValue(ctx),
-            .Probe = Streams_.Probe->GetValue(ctx)
-        };
         const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->Settings.LeftIsBuild()) ? userTypes.Probe : userTypes.Build;
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, std::move(streamValues), std::move(layouts), Meta_.get(), userNullTypes);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx,
+            TSides<NUdf::TUnboxedValue>{.Build = Streams_.Build->GetValue(ctx), .Probe = Streams_.Probe->GetValue(ctx)},
+            std::move(layouts), Meta_.get(), userNullTypes);
     }
 
   private:
@@ -282,7 +278,6 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
 
       private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
-          try {
             size_t expectedSize = Meta_->Renames.size() + 1;
             MKQL_ENSURE(width == expectedSize,
                         Sprintf("runtime(%i) vs compile-time(%i) tuple width mismatch", width, expectedSize));
@@ -312,11 +307,6 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                 }
             }
             return FlushTo(output);
-          } catch (const std::exception& e) {
-            Cerr << "WideFetch exception: " << e.what() << Endl;
-            PrintBackTrace();
-            throw;
-          }
         }
 
       private:

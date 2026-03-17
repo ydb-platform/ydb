@@ -1627,7 +1627,9 @@ void TTupleLayout::TupleDeepCopy(
             auto overflowOffset = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 0 * sizeof(ui32));
             auto overflowSize   = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
             std::memcpy(outOverflow, inOverflow + overflowOffset, overflowSize);
-            WriteUnaligned<ui32>(outTuple + col.Offset + 1 + 0 * sizeof(ui32), outOverflowSize);
+            MKQL_ENSURE(outOverflowSize <= std::numeric_limits<ui32>::max(),
+                        "overflow offset exceeds ui32 range");
+            WriteUnaligned<ui32>(outTuple + col.Offset + 1 + 0 * sizeof(ui32), static_cast<ui32>(outOverflowSize));
             outOverflowSize += overflowSize;
         }
     }
@@ -1638,6 +1640,7 @@ void TTupleLayout::TupleDeepCopy(
     TTupleData& outTuple, TTupleData& outOverflow) const
 {
     auto appendRange = [](TTupleData& to, std::span<const ui8> range) {
+        MKQL_ENSURE(to.size() <= std::numeric_limits<ui32>::max(), "tuple buffer exceeds ui32 range");
         ui32 offset = to.size();
         ui32 writeSize = range.size();
         to.resize(offset + writeSize);
@@ -1650,6 +1653,8 @@ void TTupleLayout::TupleDeepCopy(
         if (size == 255) { // overflow buffer used
             auto overflowOffset = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 0 * sizeof(ui32));
             auto overflowSize   = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
+            MKQL_ENSURE(outOverflow.size() <= std::numeric_limits<ui32>::max(),
+                        "overflow offset exceeds ui32 range");
             ui32 outOverflowOffset = outOverflow.size();
             appendRange(outOverflow, {inOverflow + overflowOffset, overflowSize});
             WriteUnaligned<ui32>(outTuple.data() + initSize + col.Offset + 1 + 0 * sizeof(ui32), outOverflowOffset);
@@ -1669,6 +1674,8 @@ void TTupleLayout::Concat(
     }
     MKQL_ENSURE(dstOverflow.size() <= std::numeric_limits<ui32>::max(),
                 "overflow buffer exceeds ui32 offset range");
+    MKQL_ENSURE(dstOverflow.size() + srcOverflowSize <= std::numeric_limits<ui32>::max(),
+                "combined overflow would exceed ui32 offset range");
     ui32 dstOverflowOffset = dstOverflow.size();
     if (srcOverflowSize > 0) {
         dstOverflow.resize(dstOverflow.size() + srcOverflowSize);
@@ -1720,6 +1727,12 @@ TPackResult TTupleLayout::Flatten(TArrayRef<TPackResult> tuples) const {
 
     ui32 tupleSize = TotalRowSize;
     for (const TPackResult& tupleBatch : tuples) {
+        MKQL_ENSURE(flattened.PackedTuples.size() / tupleSize <= std::numeric_limits<ui32>::max(),
+                    "dstCount exceeds ui32 range");
+        MKQL_ENSURE(tupleBatch.PackedTuples.size() / tupleSize <= std::numeric_limits<ui32>::max(),
+                    "srcCount exceeds ui32 range");
+        MKQL_ENSURE(tupleBatch.Overflow.size() <= std::numeric_limits<ui32>::max(),
+                    "srcOverflowSize exceeds ui32 range");
         ui32 dstCount = flattened.PackedTuples.size() / tupleSize;
         ui32 srcCount = tupleBatch.PackedTuples.size() / tupleSize;
         ui32 srcOverflowSize = tupleBatch.Overflow.size();

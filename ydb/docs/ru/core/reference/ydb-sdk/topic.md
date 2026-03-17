@@ -1106,7 +1106,7 @@
   auto session = topicClient.CreateWriteSession(settings);
   ```
 
-  Для включения дедупликации укажите `ProducerId` или вызовите `DeduplicationEnabled()`.
+  Для включения дедупликации нужно в настройках сессии записи указать опцию `ProducerId` или явно включить дедупликацию, вызвав метод `DeduplicationEnabled()`, например, как в секции ["Подключение к топику"](#start-writer).
 
   {% endcut %}
 

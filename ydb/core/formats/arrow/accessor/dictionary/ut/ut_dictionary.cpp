@@ -77,6 +77,33 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         }
     }
 
+    // Slice that uses a non-consecutive subset of the dictionary (e.g. indices 1 and 2 but not 0).
+    // Without position remapping, positions would point into the original dictionary while the
+    // slice holds only the filtered dictionary -> wrong values or OOB. Verifies DoISlice remaps
+    // positions to indices into the filtered dictionary.
+    Y_UNIT_TEST(SliceSubsetOfDictionaryRemapsPositions) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "A");
+        builder.AddRecord(1, "B");
+        builder.AddRecord(2, "C");
+        builder.AddRecord(3, "A");
+        auto arr = builder.Finish(4);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        // Full dict order (map iteration): A, B, C -> indices 0, 1, 2. Positions: [0, 1, 2, 0].
+        // Slice(1, 2) -> positions [1, 2] -> we use dict indices 1 and 2 (B and C), not 0.
+        // Filtered dict = [B, C]. Old 1->0, 2->1. Positions must be remapped to [0, 1].
+        auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(1, 2));
+        AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
+        Cerr << PrepareToCompare(slice->GetChunkedArray()->ToString()) << Endl;
+        Cerr << PrepareToCompare(slice->GetDictionary()->ToString()) << Endl;
+        Cerr << PrepareToCompare(slice->GetPositions()->ToString()) << Endl;
+        AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([["B","C"]])");
+        AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["B","C"])");
+        AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([0,1])");
+    }
+
     Y_UNIT_TEST(Serialization) {
         TTrivialArray::TPlainBuilder builder;
         builder.AddRecord(0, "abc");

@@ -69,22 +69,50 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
     }));
     if (markCount == mask.size()) {
         return std::make_shared<TDictionaryArray>(ArrayDictionary, positionsNew);
-    } else {
-        auto filtered = TColumnFilter(std::move(mask)).Apply(std::make_shared<TTrivialArray>(ArrayDictionary))->GetChunkedArray();
-        std::shared_ptr<arrow::Array> dictArray;
-        if (!filtered || filtered->num_chunks() == 0) {
-            dictArray = TThreadSimpleArraysCache::GetNull(ArrayDictionary->type(), 0);
-        } else if (filtered->num_chunks() == 1) {
-            dictArray = filtered->chunk(0);
-        } else {
-            arrow::ArrayVector parts;
-            for (int i = 0; i < filtered->num_chunks(); ++i) {
-                parts.push_back(filtered->chunk(i));
-            }
-            dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
-        }
-        return std::make_shared<TDictionaryArray>(dictArray, positionsNew);
     }
+    // Build old dictionary index -> new (filtered) dictionary index.
+    std::vector<ui32> oldToNew(ArrayDictionary->length(), 0);
+    for (ui32 newIdx = 0, i = 0; i < mask.size(); ++i) {
+        if (mask[i]) {
+            oldToNew[i] = newIdx++;
+        }
+    }
+    auto filtered = TColumnFilter(std::move(mask)).Apply(std::make_shared<TTrivialArray>(ArrayDictionary))->GetChunkedArray();
+    std::shared_ptr<arrow::Array> dictArray;
+    if (!filtered || filtered->num_chunks() == 0) {
+        dictArray = TThreadSimpleArraysCache::GetNull(ArrayDictionary->type(), 0);
+    } else if (filtered->num_chunks() == 1) {
+        dictArray = filtered->chunk(0);
+    } else {
+        arrow::ArrayVector parts;
+        for (int i = 0; i < filtered->num_chunks(); ++i) {
+            parts.push_back(filtered->chunk(i));
+        }
+        dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
+    }
+    // Remap positions to indices into the filtered dictionary.
+    std::unique_ptr<arrow::ArrayBuilder> positionsBuilder = NArrow::MakeBuilder(positionsNew->type());
+    AFL_VERIFY(SwitchType(positionsNew->type()->id(), [&](const auto& type) {
+        using TRecordsWrap = std::decay_t<decltype(type)>;
+        using TRecordsArray = typename arrow::TypeTraits<typename TRecordsWrap::T>::ArrayType;
+        if constexpr (TRecordsWrap::IsIndexType()) {
+            const auto* arrPositionsImpl = static_cast<const TRecordsArray*>(positionsNew.get());
+            auto* builder = type.CastBuilder(positionsBuilder.get());
+            using CType = typename TRecordsWrap::ValueType;
+            for (int64_t i = 0; i < arrPositionsImpl->length(); ++i) {
+                if (arrPositionsImpl->IsNull(i)) {
+                    TStatusValidator::Validate(builder->AppendNull());
+                } else {
+                    const ui32 oldIdx = arrPositionsImpl->Value(i);
+                    TStatusValidator::Validate(builder->Append(static_cast<CType>(oldToNew[oldIdx])));
+                }
+            }
+            return true;
+        }
+        return false;
+    }));
+    auto positionsRemapped = NArrow::FinishBuilder(std::move(positionsBuilder));
+    return std::make_shared<TDictionaryArray>(dictArray, positionsRemapped);
 }
 
 NJson::TJsonValue TDictionaryArray::DoDebugJson() const {

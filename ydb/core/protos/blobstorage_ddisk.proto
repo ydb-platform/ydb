@@ -156,6 +156,7 @@ message TEvReadPersistentBuffer {
     TBlockSelector Selector = 2;
     uint64 Lsn = 3;
     TReadInstruction Instruction = 4;
+    uint32 Generation = 5;
 }
 
 message TEvReadPersistentBufferResult {
@@ -210,6 +211,7 @@ message TEvErasePersistentBuffer {
     TQueryCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     uint64 Lsn = 3;
+    uint32 Generation = 4;
 }
 
 
@@ -217,6 +219,7 @@ message TEvBatchErasePersistentBuffer {
     message TEraseInfo {
         TBlockSelector Selector = 1;
         uint64 Lsn = 2;
+        uint32 Generation = 3;
     }
 
     TQueryCredentials Credentials = 1;

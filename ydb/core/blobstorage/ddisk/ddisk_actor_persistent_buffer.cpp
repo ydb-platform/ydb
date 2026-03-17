@@ -439,6 +439,7 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
+        const ui32 generation = record.GetGeneration();
 
         Counters.Interface.ReadPersistentBuffer.Request();
 
@@ -450,7 +451,7 @@ namespace NKikimr::NDDisk {
             .Attribute("size", selector.Size)
             .Attribute("lsn", static_cast<long>(lsn)));
 
-        auto it = PersistentBuffers.find({creds.TabletId, creds.Generation, selector.VChunkIndex});
+        auto it = PersistentBuffers.find({creds.TabletId, generation, selector.VChunkIndex});
         if (it == PersistentBuffers.end()) {
             Counters.Interface.ReadPersistentBuffer.Reply(false);
             span.End();
@@ -480,7 +481,7 @@ namespace NKikimr::NDDisk {
             .Span = std::move(span),
 
             .TabletId = creds.TabletId,
-            .Generation = creds.Generation,
+            .Generation = generation,
             .VChunkIdx = selector.VChunkIndex,
             .Lsn = lsn,
         });
@@ -595,7 +596,8 @@ namespace NKikimr::NDDisk {
         for (auto& e : record.GetErases()) {
             const TBlockSelector selector(e.GetSelector());
             auto lsn = e.GetLsn();
-            const auto it = PersistentBuffers.find({creds.TabletId, creds.Generation, selector.VChunkIndex});
+            auto generation = e.GetGeneration();
+            const auto it = PersistentBuffers.find({creds.TabletId, generation, selector.VChunkIndex});
             if (it == PersistentBuffers.end()
                 || it->second.Records.find(lsn) == it->second.Records.end()) {
                 Counters.Interface.ErasePersistentBuffer.Reply(false);
@@ -620,7 +622,8 @@ namespace NKikimr::NDDisk {
         for (auto& e : record.GetErases()) {
             const TBlockSelector selector(e.GetSelector());
             auto lsn = e.GetLsn();
-            const auto it = PersistentBuffers.find({creds.TabletId, creds.Generation, selector.VChunkIndex});
+            auto generation = e.GetGeneration();
+            const auto it = PersistentBuffers.find({creds.TabletId, generation, selector.VChunkIndex});
             TPersistentBuffer& buffer = it->second;
             const auto jt = buffer.Records.find(lsn);
             TPersistentBuffer::TRecord& pr = jt->second;
@@ -668,6 +671,7 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
+        const ui32 generation = record.GetGeneration();
 
         Counters.Interface.ErasePersistentBuffer.Request();
 
@@ -682,7 +686,7 @@ namespace NKikimr::NDDisk {
 
         const ui64 eraseCookie = NextCookie++;
 
-        const auto it = PersistentBuffers.find({creds.TabletId, creds.Generation, selector.VChunkIndex});
+        const auto it = PersistentBuffers.find({creds.TabletId, generation, selector.VChunkIndex});
         if (it == PersistentBuffers.end()) {
             Counters.Interface.ErasePersistentBuffer.Reply(false);
             span.End();

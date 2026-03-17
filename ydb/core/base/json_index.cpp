@@ -1,8 +1,34 @@
 #include "json_index.h"
 
+#include <yql/essentials/types/binary_json/format.h>
+
 namespace NKikimr {
 
 namespace NJsonIndex {
+
+namespace {
+
+NBinaryJson::EEntryType GetEntryType(const TJsonPathItem& item) {
+    switch (item.Type) {
+        case EJsonPathItemType::StringLiteral:
+            return NBinaryJson::EEntryType::String;
+        case EJsonPathItemType::NumberLiteral:
+            return NBinaryJson::EEntryType::Number;
+        case EJsonPathItemType::BooleanLiteral:
+            if (item.GetBoolean()) {
+                return NBinaryJson::EEntryType::BoolTrue;
+            } else {
+                return NBinaryJson::EEntryType::BoolFalse;
+            }
+        case EJsonPathItemType::NullLiteral:
+            return NBinaryJson::EEntryType::Null;
+        default:
+            Y_ENSURE(false, "Unexpected item type");
+    }
+    return NBinaryJson::EEntryType::Null;
+}
+
+}  // namespace
 
 TResult::TResult(const TQuery& query)
     : Result(query)
@@ -45,6 +71,14 @@ bool TResult::IsError() const {
     return std::holds_alternative<TResult::TError>(Result);
 }
 
+bool TResult::IsDone() const {
+    return Done;
+}
+
+void TResult::MarkDone() {
+    Done = true;
+}
+
 TQueryCollector::TQueryCollector(const TJsonPathPtr path)
     : Reader(path)
 {
@@ -59,7 +93,7 @@ TResult TQueryCollector::Collect(const TJsonPathItem& item) {
         case EJsonPathItemType::MemberAccess:
             return MemberAccess(item);
         case EJsonPathItemType::WildcardMemberAccess:
-            return WildcardMemberAccess(item);
+            return Finalize(item);
         case EJsonPathItemType::ContextObject:
             return ContextObject();
         case EJsonPathItemType::Variable:
@@ -115,19 +149,13 @@ TResult TQueryCollector::Collect(const TJsonPathItem& item) {
         case EJsonPathItemType::BinaryNotEqual:
             return BinaryNotEqual(item);
         case EJsonPathItemType::AbsMethod:
-            return AbsMethod(item);
         case EJsonPathItemType::FloorMethod:
-            return FloorMethod(item);
         case EJsonPathItemType::CeilingMethod:
-            return CeilingMethod(item);
         case EJsonPathItemType::DoubleMethod:
-            return DoubleMethod(item);
         case EJsonPathItemType::TypeMethod:
-            return TypeMethod(item);
         case EJsonPathItemType::SizeMethod:
-            return SizeMethod(item);
         case EJsonPathItemType::KeyValueMethod:
-            return KeyValueMethod(item);
+            return Finalize(item);
         case EJsonPathItemType::StartsWithPredicate:
             return StartsWithPredicate(item);
         case EJsonPathItemType::IsUnknownPredicate:
@@ -139,21 +167,50 @@ TResult TQueryCollector::Collect(const TJsonPathItem& item) {
     }
 }
 
+TResult TQueryCollector::EvaluateLiteral(const TJsonPathItem& item) {
+    std::string value;
+    value.push_back(0);
+    value.push_back((char)GetEntryType(item));
+
+    switch (item.Type) {
+        case EJsonPathItemType::StringLiteral: {
+            value += item.GetString();
+            break;
+        }
+
+        case EJsonPathItemType::NumberLiteral: {
+            double number = item.GetNumber();
+            value += TStringBuf((char*)&number, sizeof(double));
+            break;
+        }
+
+        case EJsonPathItemType::BooleanLiteral:
+        case EJsonPathItemType::NullLiteral:
+            break;
+        default:
+            return TResult(TIssue("Expected a literal expression"));
+    }
+
+    return TResult(value);
+}
+
+TResult TQueryCollector::Finalize(const TJsonPathItem& item) {
+    auto input = Collect(Reader.ReadInput(item));
+    input.MarkDone();
+    return input;
+}
+
 TResult TQueryCollector::ContextObject() {
     return TResult(std::string{});
 }
 
 TResult TQueryCollector::MemberAccess(const TJsonPathItem& item) {
     auto input = Collect(Reader.ReadInput(item));
-    if (input.IsError()) {
+    if (input.IsError() || input.IsDone() || !input.GetQuery().has_value()) {
         return input;
     }
 
     auto& query = input.GetQuery();
-    if (!query.has_value()) {
-        return input;
-    }
-
     auto member = std::string(item.GetString());
     auto size = member.size();
 
@@ -168,12 +225,6 @@ TResult TQueryCollector::MemberAccess(const TJsonPathItem& item) {
 
     *query += std::move(member);
     return input;
-}
-
-TResult TQueryCollector::WildcardMemberAccess(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
 }
 
 TResult TQueryCollector::ArrayAccess(const TJsonPathItem& item) {
@@ -285,26 +336,19 @@ TResult TQueryCollector::BinaryNotEqual(const TJsonPathItem& item) {
 }
 
 TResult TQueryCollector::NullLiteral() {
-    // TODO: Implement
-    return TResult(TIssue("Not implemented"));
+    return TResult(std::nullopt);
 }
 
-TResult TQueryCollector::BooleanLiteral(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
+TResult TQueryCollector::BooleanLiteral(const TJsonPathItem&) {
+    return TResult(std::nullopt);
 }
 
-TResult TQueryCollector::NumberLiteral(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
+TResult TQueryCollector::NumberLiteral(const TJsonPathItem&) {
+    return TResult(std::nullopt);
 }
 
-TResult TQueryCollector::StringLiteral(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
+TResult TQueryCollector::StringLiteral(const TJsonPathItem&) {
+    return TResult(std::nullopt);
 }
 
 TResult TQueryCollector::FilterObject(const TJsonPathItem& item) {
@@ -319,52 +363,27 @@ TResult TQueryCollector::FilterPredicate(const TJsonPathItem& item) {
     return TResult(TIssue("Not implemented"));
 }
 
-TResult TQueryCollector::AbsMethod(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::FloorMethod(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::CeilingMethod(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::DoubleMethod(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::TypeMethod(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::SizeMethod(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::KeyValueMethod(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
 TResult TQueryCollector::StartsWithPredicate(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
+    auto input = Collect(Reader.ReadInput(item));
+    if (input.IsError() || input.IsDone() || !input.GetQuery().has_value()) {
+        return input;
+    }
+
+    const auto& prefixItem = Reader.ReadPrefix(item);
+    if (prefixItem.Type != EJsonPathItemType::StringLiteral) {
+        return TResult(TIssue("Expected a string literal"));
+    }
+
+    auto prefix = EvaluateLiteral(prefixItem);
+    if (prefix.IsError()) {
+        return prefix;
+    }
+
+    auto& query = input.GetQuery();
+    *query += std::move(prefix.GetQuery().value());
+
+    input.MarkDone();
+    return input;
 }
 
 TResult TQueryCollector::IsUnknownPredicate(const TJsonPathItem& item) {
@@ -380,15 +399,13 @@ TResult TQueryCollector::ExistsPredicate(const TJsonPathItem& item) {
 }
 
 TResult TQueryCollector::LikeRegexPredicate(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
+    auto input = Collect(Reader.ReadInput(item));
+    input.MarkDone();
+    return input;
 }
 
-TResult TQueryCollector::Variable(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
+TResult TQueryCollector::Variable(const TJsonPathItem&) {
+    return TResult(TIssue("Variables are not supported at the moment"));
 }
 
 }  // namespace NJsonIndex

@@ -35,8 +35,13 @@ public:
 
     bool IsError() const;
 
+    bool IsDone() const;
+
+    void MarkDone();
+
 private:
     std::variant<TQuery, TError> Result;
+    bool Done = false;
 };
 
 class TQueryCollector {
@@ -48,10 +53,17 @@ public:
 private:
     TResult Collect(const TJsonPathItem& item);
 
+    // Evaluates a literal node directly, without requiring a preceding ContextObject.
+    // Use this for sub-expressions that are unconditionally literal by design
+    // (e.g. the prefix argument of starts_with). Returns an error for non-literal nodes.
+    TResult EvaluateLiteral(const TJsonPathItem& item);
+
+    TResult Finalize(const TJsonPathItem& item);
+
+    // The next methods are used to build the query step by step.
     TResult ContextObject();
 
     TResult MemberAccess(const TJsonPathItem& item);
-    TResult WildcardMemberAccess(const TJsonPathItem& item);
 
     TResult ArrayAccess(const TJsonPathItem& item);
     TResult WildcardArrayAccess(const TJsonPathItem& item);
@@ -79,14 +91,6 @@ private:
     TResult BinaryGreaterEqual(const TJsonPathItem& item);
     TResult BinaryEqual(const TJsonPathItem& item);
     TResult BinaryNotEqual(const TJsonPathItem& item);
-
-    TResult AbsMethod(const TJsonPathItem& item);
-    TResult FloorMethod(const TJsonPathItem& item);
-    TResult CeilingMethod(const TJsonPathItem& item);
-    TResult DoubleMethod(const TJsonPathItem& item);
-    TResult TypeMethod(const TJsonPathItem& item);
-    TResult SizeMethod(const TJsonPathItem& item);
-    TResult KeyValueMethod(const TJsonPathItem& item);
 
     TResult StartsWithPredicate(const TJsonPathItem& item);
     TResult IsUnknownPredicate(const TJsonPathItem& item);

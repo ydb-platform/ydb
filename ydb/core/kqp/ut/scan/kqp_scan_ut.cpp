@@ -2703,6 +2703,54 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             ON a.Key = b.Key;
         )");
     }
+
+    Y_UNIT_TEST(DecimalColumnCsvBulkUpsertScan) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        settings.SetEnableArrowFormatAtDatashard(true);
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+
+        TKikimrRunner kikimr(settings);
+
+        TTableClient client{kikimr.GetDriver()};
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        auto partitions = TExplicitPartitions()
+            .AppendSplitPoints(TValueBuilder()
+                .BeginTuple().AddElement().BeginOptional().Uint64(2).EndOptional().EndTuple()
+                .Build());
+
+        auto ret = session.CreateTable("/Root/DecimalCsvScanTest",
+                TTableBuilder()
+                    .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                    .AddNullableColumn("GroupId", EPrimitiveType::Uint32)
+                    .AddNullableColumn("Value", TDecimalType(22, 9))
+                    .SetPrimaryKeyColumns({"Key"})
+                    .SetPartitionAtKeys(partitions)
+                    .Build()).GetValueSync();
+        UNIT_ASSERT_C(ret.IsSuccess(), ret.GetIssues().ToString());
+
+        TStringBuilder csv;
+        csv << "1,1,10.123456789\n";
+        csv << "2,1,20.987654321\n";
+        csv << "3,2,30.123456789\n";
+
+        auto upsert = client.BulkUpsert("/Root/DecimalCsvScanTest", EDataFormat::CSV, csv).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT GroupId, MAX(Value) AS Value
+            FROM `/Root/DecimalCsvScanTest`
+            GROUP BY GroupId
+            ORDER BY GroupId
+        )").GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1u];["20.987654321"]];
+            [[2u];["30.123456789"]]
+        ])", StreamResultToYson(it));
+    }
 }
 
 

@@ -200,6 +200,7 @@ namespace NKikimr::NStorage {
         vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
         vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
         vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
+        vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
 
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {

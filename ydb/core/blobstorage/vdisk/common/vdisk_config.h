@@ -133,6 +133,7 @@ namespace NKikimr {
         TControlWrapper HullCompFullCompPeriodSec;
         TControlWrapper HullCompThrottlerBytesRate;
         TControlWrapper DefragThrottlerBytesRate;
+        TControlWrapper MaxActiveCompactionsPerPDisk;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
         bool AddHeader;

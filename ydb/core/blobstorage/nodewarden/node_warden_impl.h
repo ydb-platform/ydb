@@ -230,6 +230,7 @@ namespace NKikimr::NStorage {
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
+        TControlWrapper MaxActiveCompactionsPerPDisk;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;

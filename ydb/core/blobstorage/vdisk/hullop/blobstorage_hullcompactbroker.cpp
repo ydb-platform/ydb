@@ -236,7 +236,7 @@ namespace NKikimr {
                         return rhs.second.Priority > lhs.second.Priority;
                     });
             Y_VERIFY(it != PendingCompactions.end());
-            const TCompactionKey& key = it->first;
+            TCompactionKey key = it->first;
             const TCompactionRequest& request = it->second;
             ActiveCompactionsInfo.emplace(key, TCompactionInfo(pdiskId, request.Key.GroupId, request.Key.VDiskId, request.Key.ActorId, token));
             CompactionsToken.emplace(token, request.Key);

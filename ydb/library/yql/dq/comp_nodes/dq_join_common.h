@@ -249,7 +249,7 @@ struct TTableAndSomeData {
     NJoinTable::TNeumannJoinTable Table;
     TMKQLDeque<TFuturePage> Futures;
     std::optional<TPackResult> CurrentProbePack;
-    i64 ProbeResumeIndex = 0;
+    ui32 ProbeResumeIndex = 0;
 };
 
 namespace NJoinPackedTuples {
@@ -392,7 +392,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         Source Probe;
         TProbeSpiller<Settings> Spiller;
         std::optional<TPackResult> FetchedPack;
-        i64 ResumeIndex = 0;
+        ui32 ResumeIndex = 0;
     };
 
     using DumpedBuckets = std::unordered_map<int, TSpilledBucket>;
@@ -665,7 +665,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
-                i64 idx = 0;
+                ui32 idx = 0;
                 for (TSingleTuple tuple : *state.FetchedPack) {
                     if (idx++ < state.ResumeIndex) {
                         continue;
@@ -739,7 +739,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         table->Futures.push_back(Spiller_->Extract(*GetBackOrNull(currentProbe)));
                     }
                     if (table->CurrentProbePack.has_value()) {
-                        i64 idx = 0;
+                        ui32 idx = 0;
                         for (TSingleTuple probeTuple : *table->CurrentProbePack) {
                             if (idx++ < table->ProbeResumeIndex) {
                                 continue;

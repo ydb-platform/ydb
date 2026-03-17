@@ -1629,7 +1629,7 @@ void TTupleLayout::TupleDeepCopy(
             std::memcpy(outOverflow, inOverflow + overflowOffset, overflowSize);
             MKQL_ENSURE(outOverflowSize <= std::numeric_limits<ui32>::max(),
                         "overflow offset exceeds ui32 range");
-            WriteUnaligned<ui32>(outTuple + col.Offset + 1 + 0 * sizeof(ui32), static_cast<ui32>(outOverflowSize));
+            WriteUnaligned<ui32>(outTuple + col.Offset + 1 + 0 * sizeof(ui32), outOverflowSize);
             outOverflowSize += overflowSize;
         }
     }

@@ -176,7 +176,7 @@ class TNeumannHashTable {
     TNeumannHashTable(TNeumannHashTable &&) = default;
     TNeumannHashTable &operator=(TNeumannHashTable &&) = default;
 
-    static int EstimateLogSize(int nItems) {
+    static ui32 EstimateLogSize(int nItems) {
         int estimated = 32 - std::countl_zero<ui32>(nItems);
         return std::max(1, std::min(24, estimated > 2 ? estimated - 2 : estimated));
     }
@@ -184,7 +184,7 @@ class TNeumannHashTable {
 
 
 
-    i64 RequiredMemoryForBuild(int nItems) const {
+    ui64 RequiredMemoryForBuild(int nItems) const {
         return sizeof(TDirectory)*EstimateLogSize(nItems)+ static_cast<size_t>(BufferSlotSize_) * nItems;
     }
 

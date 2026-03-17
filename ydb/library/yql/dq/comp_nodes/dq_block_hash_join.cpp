@@ -285,7 +285,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             if (Finished_) {
                 return NYql::NUdf::EFetchStatus::Finish;
             }
-            auto outputIsFull = [this]() {
+            auto outputIsFull = [&]() {
                 const ui64 bytesLimit = TlsAllocState->IsMemoryYellowZoneEnabled()
                     ? OutputBytesLimitYellowZone_
                     : OutputBytesLimit_;

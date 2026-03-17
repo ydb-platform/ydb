@@ -153,7 +153,12 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
 
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(handle);
-            tenantHiveTablet = reply->Request->ResultSet.front().DomainInfo->Params.GetHive();
+            auto& resultEntry = reply->Request->ResultSet.front();
+            UNIT_ASSERT_C(resultEntry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok,
+                    "SchemeCache navigate for /Root/db1 failed with status " << static_cast<int>(resultEntry.Status));
+            UNIT_ASSERT(resultEntry.DomainInfo);
+            tenantHiveTablet = resultEntry.DomainInfo->Params.GetHive();
+            UNIT_ASSERT(tenantHiveTablet != 0);
 
         }
 

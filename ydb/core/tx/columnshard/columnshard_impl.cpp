@@ -199,7 +199,7 @@ NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
     Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
-    return NOlap::TSnapshot::MaxForPlanStep(minReadStep);
+    return NOlap::TSnapshot(minReadStep, 0);
 }
 
 bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot) const {

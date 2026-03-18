@@ -10,6 +10,9 @@ namespace NYdb::NBS::NBlockStore {
 // Host count in DirectBlockGroup.
 constexpr size_t DirectBlockGroupHostCount = 5;
 
+// Quorum host count in DirectBlockGroup.
+constexpr size_t QuorumDirectBlockGroupHostCount = 3;
+
 // Default BlockSize.
 constexpr ui32 DefaultBlockSize = 4_KB;
 

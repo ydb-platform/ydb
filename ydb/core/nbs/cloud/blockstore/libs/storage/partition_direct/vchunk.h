@@ -46,6 +46,8 @@ private:
 
     void UpdateDirtyMap(TDBGRestoreResponse response);
 
+    void DoStart();
+
     void DoReadBlocksLocal(
         NThreading::TPromise<TReadBlocksLocalResponse> promise,
         TCallContextPtr callContext,
@@ -69,15 +71,16 @@ private:
     void OnEraseResponse(const TEraseRequestExecutor::TResponse& response);
 
     NActors::TActorSystem* const ActorSystem = nullptr;
+    const TExecutorPtr Executor;
+    const TThreadChecker ExecutorThreadChecker{Executor};
+    const IDirectBlockGroupPtr DirectBlockGroup;
     const TVChunkConfig VChunkConfig;
     const size_t BlocksCount;
     const ui32 SyncRequestsBatchSize;
     const TDuration TraceSamplePeriod;
 
-    TExecutorPtr Executor;
     TBlocksDirtyMap BlocksDirtyMap;
-    IDirectBlockGroupPtr DirectBlockGroup;
-    std::atomic<NActors::TMonotonic> LastTraceTs;
+    std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     bool DirtyMapRestored = false;
 };
 

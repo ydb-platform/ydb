@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
@@ -208,6 +209,7 @@ private:
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     TExecutorPtr Executor;
+    const TThreadChecker ExecutorThreadChecker{Executor};
     const ui64 TabletId;
 
     TVector<TDDiskConnection> DDiskConnections;

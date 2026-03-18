@@ -28,12 +28,12 @@ TVChunk::TVChunk(
     ui32 syncRequestsBatchSize,
     TDuration traceSamplePeriod)
     : ActorSystem(actorSystem)
+    , Executor(directBlockGroup->GetExecutor())
+    , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkConfig(vChunkConfig)
     , BlocksCount(VChunkSize / DefaultBlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , TraceSamplePeriod(traceSamplePeriod)
-    , Executor(directBlockGroup->GetExecutor())
-    , DirectBlockGroup(std::move(directBlockGroup))
 {}
 
 TVChunk::~TVChunk() = default;
@@ -47,17 +47,7 @@ void TVChunk::Start()
         {
             // Executor thread
             if (auto self = weakSelf.lock()) {
-                auto future =
-                    self->DirectBlockGroup->RestoreFromPersistentBuffers(
-                        self->VChunkConfig.VChunkIndex);
-                future.Subscribe(
-                    [weakSelf = std::move(weakSelf)]   //
-                    (const TFuture<TDBGRestoreResponse>& f) mutable
-                    {
-                        if (auto self = weakSelf.lock()) {
-                            self->UpdateDirtyMap(UnsafeExtractValue(f));
-                        }
-                    });
+                self->DoStart();
             }
         });
 }
@@ -123,8 +113,6 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
          request = std::move(request),
          traceId = std::move(traceId)]() mutable
         {
-            // Executor thread
-
             if (auto self = weakSelf.lock()) {
                 self->DoWriteBlocksLocal(
                     std::move(promise),
@@ -155,10 +143,27 @@ NWilson::TTraceId TVChunk::SpanTrace()
 
 void TVChunk::UpdateDirtyMap(TDBGRestoreResponse response)
 {
-    // Executor thread
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
     Y_UNUSED(response);
 
     DirtyMapRestored = true;
+}
+
+void TVChunk::DoStart()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    auto future = DirectBlockGroup->RestoreFromPersistentBuffers(
+        VChunkConfig.VChunkIndex);
+    future.Subscribe(
+        [weakSelf = weak_from_this()]   //
+        (const TFuture<TDBGRestoreResponse>& f) mutable
+        {
+            if (auto self = weakSelf.lock()) {
+                self->UpdateDirtyMap(UnsafeExtractValue(f));
+            }
+        });
 }
 
 void TVChunk::DoReadBlocksLocal(
@@ -167,7 +172,7 @@ void TVChunk::DoReadBlocksLocal(
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
 {
-    // Executor thread
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     if (!DirtyMapRestored) {
         promise.SetValue(TReadBlocksLocalResponse{
@@ -205,7 +210,7 @@ void TVChunk::DoWriteBlocksLocal(
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
 {
-    // Executor thread
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     auto range = request->Range;
     auto writeExecutor = std::make_shared<TWriteRequestExecutor>(
@@ -243,7 +248,7 @@ void TVChunk::OnWriteBlocksResponse(
     TBlockRange64 range,
     const TWriteRequestExecutor::TResponse& response)
 {
-    // Executor thread
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     promise.SetValue(TWriteBlocksLocalResponse{.Error = response.Error});
 
@@ -258,7 +263,7 @@ void TVChunk::OnWriteBlocksResponse(
 
 void TVChunk::DoFlush()
 {
-    // Executor thread
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     auto hints = BlocksDirtyMap.MakeFlushHint(SyncRequestsBatchSize);
 
@@ -291,7 +296,7 @@ void TVChunk::DoFlush()
 
 void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
 {
-    // Executor thread
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     BlocksDirtyMap.FlushFinished(
         response.Location,
@@ -303,7 +308,8 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
 
 void TVChunk::DoErase()
 {
-    // Executor thread
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
     auto hints = BlocksDirtyMap.MakeEraseHint(SyncRequestsBatchSize);
 
     for (auto& [location, hint]: hints) {
@@ -335,7 +341,7 @@ void TVChunk::DoErase()
 
 void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
 {
-    // Executor thread
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     BlocksDirtyMap.EraseFinished(
         response.Location,

@@ -1,5 +1,7 @@
 #include "dirty_map.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -10,7 +12,7 @@ TInflightInfo::TInflightInfo(
     : WriteRequested(writeRequested)
     , WriteConfirmed(writeConfirmed)
 {
-    Y_ABORT_UNLESS(WriteConfirmed.Count() >= 3);
+    Y_ABORT_UNLESS(WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
 }
 
 TInflightInfo::EState TInflightInfo::GetState() const

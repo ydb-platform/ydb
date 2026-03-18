@@ -35,6 +35,8 @@ public:
 
     ~TInMemoryDirectBlockGroup() override = default;
 
+    TExecutorPtr GetExecutor() override;
+
     ui64 GenerateLsn() override;
 
     NThreading::TFuture<void> EstablishConnections() override;
@@ -67,6 +69,15 @@ public:
         ui8 hostIndex,
         const TVector<TPBufferSegment>& segments,
         NWilson::TTraceId traceId) override;
+
+    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+        ui32 vChunkIndex,
+        ui8 hostIndex,
+        const TVector<TPBufferSegment>& segments,
+        NWilson::TTraceId traceId) override;
+
+    NThreading::TFuture<TDBGRestoreResponse> RestoreFromPersistentBuffers(
+        ui32 vChunkIndex) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

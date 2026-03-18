@@ -1,5 +1,6 @@
 #include "write_request.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -74,7 +75,7 @@ void TWriteRequestExecutor::OnWriteResponse(
 {
     if (!HasError(response.Error)) {
         CompletedWrites.Set(location);
-        if (CompletedWrites.Count() >= 3) {
+        if (CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount) {
             Reply(MakeError(S_OK));
         }
         return;

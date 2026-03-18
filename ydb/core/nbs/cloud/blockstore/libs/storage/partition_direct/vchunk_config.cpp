@@ -11,9 +11,8 @@ TVChunkConfig TVChunkConfig::Make(ui32 vChunkIndex)
 {
     auto rotate = [vChunkIndex](size_t index) -> ui8
     {
-        Y_UNUSED(vChunkIndex);
         return static_cast<ui8>(
-            (index /*+ vChunkIndex*/) % DirectBlockGroupHostCount);
+            (index + vChunkIndex) % DirectBlockGroupHostCount);
     };
     TVChunkConfig result{
         .VChunkIndex = vChunkIndex,

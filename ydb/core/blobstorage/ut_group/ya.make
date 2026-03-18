@@ -1,10 +1,8 @@
 UNITTEST()
 
-IF (NOT WITH_VALGRIND)
-    SRCS(
-        main.cpp
-    )
-ENDIF()
+SRCS(
+    main.cpp
+)
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)

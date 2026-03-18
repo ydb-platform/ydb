@@ -334,7 +334,7 @@ private:
         for (size_t count = 0; !PendingTx.empty() && count < MaxTxPerBatch; ++count) {
             auto next = std::move(PendingTx.front());
             PendingTx.pop_front();
-            ExecuteImpl(next);
+            Process(next);
         }
         ScheduleProcessPending();
     }
@@ -345,7 +345,8 @@ private:
         DB.Begin(stamp, Pages);
         NWilson::TSpan span;
         TTransactionContext txc(TabletId, Generation0, Step0, DB, *this, Max<ui64>(), 0, span);
-        bool ready = transaction->Execute(txc, TActivationContext::AsActorContext());
+        const auto& ctx = TActivationContext::AsActorContext();
+        bool ready = transaction->Execute(txc, ctx);
         DB.Commit(stamp, ready);
         if (ready) {
             transaction->Complete(ctx);

@@ -5,12 +5,28 @@
 
 namespace NKikimr::NPQ::NCloudEvents {
 
+namespace {
+
+void WriteVarint64(IOutputStream& out, ui64 value) {
+    char buf[10];
+    int n = 0;
+    while (value >= 128) {
+        buf[n++] = static_cast<char>((value & 0x7F) | 0x80);
+        value >>= 7;
+    }
+    buf[n++] = static_cast<char>(value & 0x7F);
+    out.Write(buf, n);
+}
+
+}  // namespace
+
 TFileEventsWriter::TFileEventsWriter(const TString& filePath)
     : OutputFile(TFile(filePath, OpenAlways | WrOnly | ForAppend))
     , OutStream(OutputFile)
 {}
 
 void TFileEventsWriter::Write(const TString& data) {
+    WriteVarint64(OutStream, data.size());
     OutStream.Write(data);
     OutStream.Flush();
     OutputFile.Flush();

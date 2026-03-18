@@ -1,8 +1,8 @@
 #include "actor.h"
 
-#include <google/protobuf/json/json.h>
 #include <util/generic/guid.h>
 #include <ydb/core/audit/audit_log.h>
+#include <google/protobuf/util/json_util.h>
 #include <google/protobuf/util/time_util.h>
 #include <ydb/core/audit/audit_log_impl.h>
 #include <ydb/core/audit/audit_log_service.h>
@@ -27,6 +27,14 @@ std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
     }
     return "";
 }
+
+} // anonymous namespace
+
+TString GetCloudEventType(const TCloudEventInfo& info) {
+    return TString("yandex.cloud.events.ydb.topics.") + GetOperationType(info.ModifyScheme);
+}
+
+namespace {
 
 using namespace yandex::cloud::events::ydb::topics;
 
@@ -238,12 +246,13 @@ template void Fill<TCreateTopicEvent>(TCreateTopicEvent& ev, const TCloudEventIn
 template void Fill<TDeleteTopicEvent>(TDeleteTopicEvent& ev, const TCloudEventInfo& info);
 
 template<typename TEvent>
-TString SerializeEvent(const TEvent& ev) {
+TString SerializeEventToJson(const TEvent& ev) {
     TString json;
-    google::protobuf::json::PrintOptions printOpts;
-    printOpts.preserve_proto_field_names = true;
-    printOpts.always_print_primitive_fields = true;
-    google::protobuf::json::MessageToJsonString(ev, &json, printOpts);
+    google::protobuf::util::JsonPrintOptions opts;
+    opts.preserve_proto_field_names = true;
+    opts.always_print_primitive_fields = true;
+    auto status = google::protobuf::util::MessageToJsonString(ev, &json, opts);
+    Y_ABORT_UNLESS(status.ok(), "MessageToJsonString failed");
     return json;
 }
 
@@ -256,15 +265,15 @@ TString BuildTopicCloudEventJson(const TCloudEventInfo& info) {
     if (type == NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup) {
         TCreateTopicEvent proto;
         Fill(proto, info);
-        json = SerializeEvent(proto);
+        json = SerializeEventToJson(proto);
     } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup) {
         TAlterTopicEvent proto;
         Fill(proto, info);
-        json = SerializeEvent(proto);
+        json = SerializeEventToJson(proto);
     } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup) {
         TDeleteTopicEvent proto;
         Fill(proto, info);
-        json = SerializeEvent(proto);
+        json = SerializeEventToJson(proto);
     }
 
     return json;
@@ -300,9 +309,9 @@ void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
         return;
     }
 
-    TString json = BuildTopicCloudEventJson(ev.Get()->Get()->Info);
+    TString data = BuildTopicCloudEventJson(ev.Get()->Get()->Info);
     if (EventsWriter) {
-        EventsWriter->Write(json + "\n");
+        EventsWriter->Write(data);
     }
 }
 

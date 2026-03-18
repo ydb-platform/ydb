@@ -5,11 +5,72 @@ import subprocess
 import time
 
 import yatest
+from google.protobuf import json_format
 
+from ydb.core.persqueue.public.cloud_events.proto import topics_pb2
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 
 
 NO_RECORDS_TIMEOUT = plain_or_under_sanitizer(2, 30)
+
+
+def _decode_varint(data, pos):
+    """Decode varint from data at pos. Returns (value, new_pos)."""
+    result = 0
+    shift = 0
+    while pos < len(data):
+        b = data[pos]
+        pos += 1
+        result |= (b & 0x7F) << shift
+        if (b & 0x80) == 0:
+            break
+        shift += 7
+        if shift >= 64:
+            raise ValueError("Varint too long")
+    return result, pos
+
+
+def _parse_length_delimited_messages(data):
+    """Parse length-delimited protobuf messages. Returns list of raw message bytes."""
+    messages = []
+    pos = 0
+    while pos < len(data):
+        try:
+            length, pos = _decode_varint(data, pos)
+        except (ValueError, IndexError):
+            break
+        if pos + length > len(data):
+            break
+        messages.append(bytes(data[pos:pos + length]))
+        pos += length
+    return messages
+
+
+def _protobuf_to_dict(msg):
+    """Convert protobuf message to dict for canonization (preserving field names)."""
+    return json_format.MessageToDict(msg, preserving_proto_field_name=True)
+
+
+def _parse_protobuf_event(blob):
+    """Parse a single blob as CreateTopic, AlterTopic, or DeleteTopic. Supports protobuf and JSON. Returns dict or None."""
+    for msg_cls in (topics_pb2.CreateTopic, topics_pb2.AlterTopic, topics_pb2.DeleteTopic):
+        try:
+            msg = msg_cls()
+            msg.ParseFromString(blob)
+            if msg.event_metadata.event_type in TOPIC_CLOUD_EVENT_TYPES:
+                return _protobuf_to_dict(msg)
+        except Exception:
+            continue
+    # Fallback: C++ TFileEventsWriter now outputs JSON (length-delimited)
+    try:
+        event = json.loads(blob.decode('utf-8'))
+        if isinstance(event, dict):
+            meta = event.get('event_metadata') or {}
+            if meta.get('event_type') in TOPIC_CLOUD_EVENT_TYPES:
+                return event
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        pass
+    return None
 
 
 def make_test_file_with_content(human_readable_file_name, content):
@@ -61,7 +122,7 @@ class CanonicalCaptureCloudEventOutput:
     Captures topic cloud events from file (audit log or topic_cloud_events.json),
     normalizes variable fields, outputs one JSON line per event.
     Use with yatest.common.canonical_file via canonize().
-    Supports two formats: audit log (cloud_event_json wrapper) and raw JSON from TFileEventsWriter.
+    Supports: length-delimited protobuf from TFileEventsWriter, and audit log (cloud_event_json).
     """
 
     def __init__(self, filename, database_path):
@@ -167,13 +228,28 @@ class CanonicalCaptureCloudEventOutput:
             f.seek(self.saved_pos)
             while time.time() - last_read_time <= NO_RECORDS_TIMEOUT:
                 time.sleep(0.1)
-                line = f.readline()
-                if len(line) > 0:
-                    canonized = self._process_line(line.decode('utf-8'))
-                    if canonized:
-                        self.captured += canonized
-                        self.read_lines += 1
-                    last_read_time = time.time()
+                chunk = f.readline()
+                if len(chunk) == 0:
+                    continue
+                last_read_time = time.time()
+                # Format: length-delimited protobuf (TFileEventsWriter)
+                messages = _parse_length_delimited_messages(chunk)
+                if messages:
+                    for blob in messages:
+                        event = _parse_protobuf_event(blob)
+                        if event:
+                            event = self._canonize_event(event)
+                            self.captured += json.dumps(event, sort_keys=True) + '\n'
+                            self.read_lines += 1
+                else:
+                    # Fallback: audit log (JSON with cloud_event_json) or legacy JSON
+                    try:
+                        canonized = self._process_line(chunk.decode('utf-8'))
+                        if canonized:
+                            self.captured += canonized
+                            self.read_lines += 1
+                    except UnicodeDecodeError:
+                        pass
 
     def canonize(self):
         # Use only the last captured event: tests that run setup (e.g. create_topic) before

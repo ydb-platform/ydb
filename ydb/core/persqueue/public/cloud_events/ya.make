@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/protobuf
     library/cpp/json
     library/cpp/unified_agent_client
     library/cpp/monlib/dynamic_counters

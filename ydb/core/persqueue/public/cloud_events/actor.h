@@ -47,6 +47,7 @@ struct TCloudEvent : public NActors::TEventLocal<TCloudEvent, static_cast<ui32>(
 };
 
 TString BuildTopicCloudEventJson(const TCloudEventInfo& info);
+TString GetCloudEventType(const TCloudEventInfo& info);
 
 class TCloudEventsActor : public NActors::TActorBootstrapped<TCloudEventsActor> {
 public:

@@ -19,6 +19,8 @@ DATA(
 )
 
 PEERDIR(
+    contrib/python/protobuf
+    ydb/core/persqueue/public/cloud_events/proto
     ydb/tests/library
     ydb/tests/library/fixtures
     ydb/tests/oss/canonical

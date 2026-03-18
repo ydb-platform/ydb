@@ -107,7 +107,13 @@ std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, T
 
 TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslation& ctx);
 
+<<<<<<< HEAD
 TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx);
+=======
+TMaybe<TVector<TEncoding>> ColumnEncoding(const TRule_encoding& node, TTranslation& ctx);
+
+TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTranslation& ctx);
+>>>>>>> a46b6dca66e (Add per column encoding settings YQL grammar)
 
 /// \return optional prefix
 TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id);

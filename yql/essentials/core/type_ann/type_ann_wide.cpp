@@ -792,8 +792,14 @@ IGraphTransformer::TStatus WideTopWrapper(const TExprNode::TPtr& input, TExprNod
     }
 
     const auto& types = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    if (!ValidateWideTopKeys(input->Tail(), types, ctx.Expr)) {
+    bool isUniversal;
+    if (!ValidateWideTopKeys(input->Tail(), types, ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     output = input;
@@ -812,15 +818,27 @@ IGraphTransformer::TStatus WideSortWrapper(const TExprNode::TPtr& input, TExprNo
     }
 
     const auto& types = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    if (!ValidateWideTopKeys(input->Tail(), types, ctx.Expr)) {
+    bool isUniversal;
+    if (!ValidateWideTopKeys(input->Tail(), types, ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     input->SetTypeAnn(input->Head().GetTypeAnn());
     return IGraphTransformer::TStatus::Ok;
 }
 
-bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& types, TExprContext& ctx) {
+bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& types, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
+    if (keys.GetTypeAnn() && keys.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        isUniversal = true;
+        return true;
+    }
+
     if (!(EnsureTupleMinSize(keys, 1U, ctx) && EnsureTupleMaxSize(keys, types.size(), ctx))) {
         return false;
     }
@@ -831,8 +849,12 @@ bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& 
             return false;
         }
 
-        if (!EnsureAtom(item->Head(), ctx)) {
+        if (!EnsureAtomOrUniversal(item->Head(), ctx, isUniversal)) {
             return false;
+        }
+
+        if (isUniversal) {
+            return true;
         }
 
         if (ui32 index; TryFromString(item->Head().Content(), index)) {

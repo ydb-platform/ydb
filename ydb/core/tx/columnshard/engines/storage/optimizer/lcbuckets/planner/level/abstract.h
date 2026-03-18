@@ -193,13 +193,6 @@ public:
         } else {
             return Portions;
         }
-        auto moveIds = GetMovePortionIds();
-        for (auto&& i : Portions) {
-            if (!moveIds.contains(i->GetPortionId())) {
-                result.emplace_back(i);
-            }
-        }
-        return result;
     }
 
     std::vector<TPortionInfo::TConstPtr> GetMovePortions() const {

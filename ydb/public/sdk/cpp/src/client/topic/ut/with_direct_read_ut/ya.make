@@ -4,10 +4,12 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
+    REQUIREMENTS(cpu:4)
     SIZE(MEDIUM)
 ENDIF()
 
 FORK_SUBTESTS()
+FORK_TEST_FILES()
 
 PEERDIR(
     ydb/core/testlib/default

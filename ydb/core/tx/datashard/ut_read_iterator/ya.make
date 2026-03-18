@@ -2,12 +2,13 @@ UNITTEST_FOR(ydb/core/tx/datashard)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(10)
+SPLIT_FACTOR(25)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
+    REQUIREMENTS(cpu:2)
     SIZE(MEDIUM)
 ENDIF()
 

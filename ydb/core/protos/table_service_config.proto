@@ -492,4 +492,6 @@ message TTableServiceConfig {
     optional TCompileCacheWarmupConfig CompileCacheWarmupConfig = 122 [(InvalidateCompileCache) = false];
 
     optional bool EnableKqpSysViewSourceRead = 123 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool UseBlockHashJoin = 124 [default = false, (InvalidateCompileCache) = true];
 };

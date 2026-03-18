@@ -320,18 +320,22 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
 
     const ui32 columnId = *requiredDataColumnIds.begin();
 
-    // True if columnId is used only as argument to SOME(columnId)
+    // True only if *all* aggregations are exactly SOME(columnId)
     auto isKeyColumnOnlyUsedInSome = [aggrProc](const ui32 columnId) -> bool {
         bool usedInAggr = false;
         for (const auto& aggr : aggrProc->GetAggregations()) {
-            for (const auto& inp : aggr.GetInputs()) {
-                if (inp.GetColumnId() == columnId) {
-                    usedInAggr = true;
-                    if (aggr.GetAggregationId() != NAggregation::EAggregate::Some || aggr.GetInputs().size() != 1) {
-                        return false;
-                    }
-                }
+            // Every aggregation must be SOME with exactly one input
+            if (aggr.GetAggregationId() != NAggregation::EAggregate::Some) {
+                return false;
             }
+            const auto& inputs = aggr.GetInputs();
+            if (inputs.size() != 1) {
+                return false;
+            }
+            if (inputs[0].GetColumnId() != columnId) {
+                return false;
+            }
+            usedInAggr = true;
         }
         return usedInAggr;
     };

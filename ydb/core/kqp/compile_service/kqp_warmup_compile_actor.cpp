@@ -14,11 +14,12 @@
 
 #include <ydb/library/actors/core/scheduler_cookie.h>
 
+#include <util/random/shuffle.h>
+
 #include <util/generic/hash.h>
 #include <library/cpp/json/json_reader.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
-#include <random>
 
 namespace NKikimr::NKqp {
 
@@ -429,11 +430,7 @@ private:
         }
 
         if (maxNodesToQuery < NodeIds.size()) {
-            auto rng = std::mt19937(TInstant::Now().MicroSeconds());
-            for (ui32 i = 0; i < maxNodesToQuery; ++i) {
-                std::uniform_int_distribution<ui32> dist(i, NodeIds.size() - 1);
-                std::swap(NodeIds[i], NodeIds[dist(rng)]);
-            }
+            PartialShuffle(NodeIds.begin(), NodeIds.end(), maxNodesToQuery, *AppData()->RandomProvider);
         }
 
         LOG_I("Spawning fetch cache actor, filtering by " << std::min<size_t>(maxNodesToQuery, NodeIds.size()) << " nodes");

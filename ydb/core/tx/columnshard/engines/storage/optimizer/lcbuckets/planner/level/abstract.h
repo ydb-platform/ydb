@@ -98,8 +98,8 @@ public:
 class TPortionsChain {
 private:
     std::vector<TPortionInfo::TConstPtr> Portions;
-
     TPortionInfo::TConstPtr NotIncludedNextPortion;
+    bool ConsistBlockedPortions;
 
 public:
     const std::vector<TPortionInfo::TConstPtr>& GetPortions() const {
@@ -108,6 +108,10 @@ public:
 
     const TPortionInfo::TConstPtr& GetNotIncludedNextPortion() const {
         return NotIncludedNextPortion;
+    }
+
+    bool GetConsistBlockedPortions() const {
+        return ConsistBlockedPortions;
     }
 
     TChainAddress GetAddress() const {
@@ -120,10 +124,16 @@ public:
         }
     }
 
-    TPortionsChain(const std::vector<TPortionInfo::TConstPtr>& portions, const TPortionInfo::TConstPtr& notIncludedNextPortion)
-        : Portions(portions)
-        , NotIncludedNextPortion(notIncludedNextPortion) {
-        AFL_VERIFY(Portions.size() || !!NotIncludedNextPortion);
+    TPortionsChain(
+        const std::vector<TPortionInfo::TConstPtr>& portions, 
+        const TPortionInfo::TConstPtr& notIncludedNextPortion,
+        const bool consistBlockedPortions
+    ): 
+        Portions(portions), 
+        NotIncludedNextPortion(notIncludedNextPortion),
+        ConsistBlockedPortions(consistBlockedPortions)
+    {
+        AFL_VERIFY(Portions.size() || !!NotIncludedNextPortion || ConsistBlockedPortions);
     }
 };
 

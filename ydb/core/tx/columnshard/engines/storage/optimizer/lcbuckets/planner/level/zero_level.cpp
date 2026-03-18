@@ -11,8 +11,11 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks(cons
         if (!mayUsePortion(i.GetPortion())) {
             continue;
         }
-        result.back().AddCurrentLevelPortion(
-            i.GetPortion(), NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd(), mayUsePortion), true);
+        auto affectedPortions = NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd(), mayUsePortion);
+        if (affectedPortions.has_value() && affectedPortions->GetConsistBlockedPortions()) {
+            continue;
+        }
+        result.back().AddCurrentLevelPortion(i.GetPortion(), std::move(affectedPortions), true);
         if (!result.back().CanTakeMore()) {
             //            result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
             if (--tasksLeft <= 0) {

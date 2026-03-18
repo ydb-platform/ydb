@@ -50,6 +50,23 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
     return problems;
 }
 
+void TOneLayerPortions::TryAddPortionToTask(
+    const TPortionInfo::TConstPtr& portion,
+    TCompactionTaskData& task,
+    ui64& compactedData,
+    const TMayUsePortion& mayUsePortion
+) const {
+    if (!mayUsePortion(portion)) {
+        return;
+    }
+    auto affectedPortions = GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd(), mayUsePortion);
+    if (affectedPortions.has_value() && affectedPortions->GetConsistBlockedPortions()) {
+        return;
+    }
+    compactedData += portion->GetTotalBlobBytes();
+    task.AddCurrentLevelPortion(portion, std::move(affectedPortions), false);
+}
+
 std::vector<TCompactionTaskData> TOneLayerPortions::DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
     AFL_VERIFY(GetNextLevel());
     ui64 compactedData = 0;
@@ -64,27 +81,11 @@ std::vector<TCompactionTaskData> TOneLayerPortions::DoGetOptimizationTasks(const
            (itBkwd != Portions.begin() || itFwd != Portions.end()) && result.CanTakeMore()) {
         if (itFwd != Portions.end() &&
             (itBkwd == Portions.begin() || itBkwd->GetPortion()->GetTotalBlobBytes() <= itFwd->GetPortion()->GetTotalBlobBytes())) {
-            auto portion = itFwd->GetPortion();
-            if (mayUsePortion(portion)) {
-                compactedData += portion->GetTotalBlobBytes();
-                result.AddCurrentLevelPortion(
-                    portion, 
-                    GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd(), mayUsePortion), 
-                    false
-                );
-            }
+            TryAddPortionToTask(itFwd->GetPortion(), result, compactedData, mayUsePortion);
             ++itFwd;
         } else if (itBkwd != Portions.begin() &&
                    (itFwd == Portions.end() || itFwd->GetPortion()->GetTotalBlobBytes() < itBkwd->GetPortion()->GetTotalBlobBytes())) {
-            auto portion = itBkwd->GetPortion();
-            if (mayUsePortion(portion)) {
-                compactedData += portion->GetTotalBlobBytes();
-                result.AddCurrentLevelPortion(
-                    portion, 
-                    GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd(), mayUsePortion), 
-                    false
-                );
-            }
+            TryAddPortionToTask(itBkwd->GetPortion(), result, compactedData, mayUsePortion);
             --itBkwd;
         }
     }

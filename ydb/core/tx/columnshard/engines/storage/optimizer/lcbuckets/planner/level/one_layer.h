@@ -34,7 +34,10 @@ private:
     }
 
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(
-        const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to, const TMayUsePortion& mayUsePortion) const override {
+        const NArrow::TSimpleRow& from, 
+        const NArrow::TSimpleRow& to,
+        const TMayUsePortion& mayUsePortion
+    ) const override {
         if (Portions.empty()) {
             return std::nullopt;
         }
@@ -44,28 +47,38 @@ private:
         if (itFrom != Portions.begin()) {
             auto it = itFrom;
             --it;
-            if (from <= it->GetPortion()->IndexKeyEnd() && mayUsePortion(it->GetPortion())) {
-                result.insert(result.begin(), it->GetPortion());
+            if (from <= it->GetPortion()->IndexKeyEnd()) {
+                itFrom = it;
             }
         }
         for (auto it = itFrom; it != itTo; ++it) {
-            if (mayUsePortion(it->GetPortion())) {
-                result.emplace_back(it->GetPortion());
-            }
+            result.emplace_back(it->GetPortion());
         }
         TPortionInfo::TConstPtr next = nullptr;
         if (itTo != Portions.end()) {
-            auto itNext = itTo;
-            while (itNext != Portions.end() && !mayUsePortion(itNext->GetPortion())) {
-                ++itNext;
-            }
-            if (itNext != Portions.end()) {
-                next = itNext->GetPortion();
+            next = itTo->GetPortion();
+        }
+
+        // We should not compact the portions that intersect with blocked portions
+        // on a "one layer" level. Because one layer requires all portions not to intersect
+        // with each other. So, if we just skip blocked portions, there will be a chance that
+        // new compacted portions will intersect with those blocked portions, that is we will
+        // break this requirement.
+        // So, that is why here we check all the portions if they are blocked, so that the client's
+        // code can skip this [from, to] part completely.
+        bool consistBlockedPortions = false;
+        for (auto& it: result) {
+            if (!mayUsePortion(it)) {
+                consistBlockedPortions = true;
+                break;
             }
         }
 
+        if (consistBlockedPortions) {
+            return TPortionsChain(std::vector<TPortionInfo::TConstPtr>(), nullptr, true);
+        }
         if (result.size() || next) {
-            return TPortionsChain(std::move(result), next);
+            return TPortionsChain(std::move(result), next, false);
         }
         return std::nullopt;
     }
@@ -100,6 +113,13 @@ private:
     virtual TInstant DoGetWeightExpirationInstant() const override {
         return TInstant::Max();
     }
+
+    void TryAddPortionToTask(
+        const TPortionInfo::TConstPtr& portion, 
+        TCompactionTaskData& task, 
+        ui64& compactedData,
+        const TMayUsePortion& mayUsePortion
+    ) const;
 
 public:
     TOneLayerPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,

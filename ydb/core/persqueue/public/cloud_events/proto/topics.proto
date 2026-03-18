@@ -82,7 +82,11 @@ message TopicDetails {
 }
 
 message CreateTopic {
-  option (include) = true;
+  option (event_descriptor) = {
+    service: "ydb"
+    category: DATA
+    visibility: PUBLIC
+  };
 
   Authentication authentication = 1 [(required) = true];
   Authorization authorization = 2 [(required) = true];
@@ -128,7 +132,11 @@ message CreateTopic {
 }
 
 message AlterTopic {
-  option (include) = true;
+  option (event_descriptor) = {
+    service: "ydb"
+    category: DATA
+    visibility: PUBLIC
+  };
 
   Authentication authentication = 1 [(required) = true];
   Authorization authorization = 2 [(required) = true];
@@ -174,7 +182,11 @@ message AlterTopic {
 }
 
 message DeleteTopic {
-  option (include) = true;
+  option (event_descriptor) = {
+    service: "ydb"
+    category: MANAGEMENT
+    visibility: PUBLIC
+  };
 
   Authentication authentication = 1 [(required) = true];
   Authorization authorization = 2 [(required) = true];

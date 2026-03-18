@@ -38,6 +38,11 @@ IGraphTransformer::TStatus ExpandMapWrapper(const TExprNode::TPtr& input, TExprN
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureFlowType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -72,6 +77,11 @@ IGraphTransformer::TStatus ExpandMapWrapper(const TExprNode::TPtr& input, TExprN
 IGraphTransformer::TStatus WideMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureWideFlowOrStreamType(input->Head(), ctx.Expr)) {
@@ -626,6 +636,11 @@ IGraphTransformer::TStatus NarrowMapWrapper(const TExprNode::TPtr& input, TExprN
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -664,6 +679,11 @@ IGraphTransformer::TStatus NarrowMapWrapper(const TExprNode::TPtr& input, TExprN
 IGraphTransformer::TStatus NarrowMultiMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {

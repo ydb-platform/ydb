@@ -208,7 +208,7 @@ bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type,
 bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx, bool inner = false);
 IGraphTransformer::TStatus EnsureDependsOnTailAndRewrite(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types,
-    unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0
+    ui32 requiredArgumentCount, ui32 requiredDependsOnCount, bool& isUniversal
 );
 
 const TTypeAnnotationNode* MakeTypeHandleResourceType(TExprContext& ctx);

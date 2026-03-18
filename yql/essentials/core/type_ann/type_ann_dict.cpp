@@ -71,9 +71,15 @@ IGraphTransformer::TStatus MutDictCreateWrapper(const TExprNode::TPtr& input, TE
     }
 
     auto dictType = type->Cast<TDictExprType>();
-    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+    bool isUniversal;
+    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1, 0, isUniversal);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     input->SetTypeAnn(ConvertDictTypeToMutDictType(dictType, ctx.Expr));
@@ -95,9 +101,15 @@ IGraphTransformer::TStatus ToMutDictWrapper(const TExprNode::TPtr& input, TExprN
     }
 
     auto dictType = input->Head().GetTypeAnn()->Cast<TDictExprType>();
-    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+    bool isUniversal;
+    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1, 0, isUniversal);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     input->SetTypeAnn(ConvertDictTypeToMutDictType(dictType, ctx.Expr));

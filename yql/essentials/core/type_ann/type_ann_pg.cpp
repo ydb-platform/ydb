@@ -527,9 +527,15 @@ IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::
 }
 
 IGraphTransformer::TStatus PgCloneWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+    bool isUniversal;
+    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1, 0, isUniversal);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (IsNull(input->Head())) {
@@ -540,7 +546,6 @@ IGraphTransformer::TStatus PgCloneWrapper(const TExprNode::TPtr& input, TExprNod
     auto type = input->Head().GetTypeAnn();
     ui32 argType;
     bool convertToPg;
-    bool isUniversal;
     if (!ExtractPgType(type, argType, convertToPg, input->Head().Pos(), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
     }

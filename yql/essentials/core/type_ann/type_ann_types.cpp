@@ -211,8 +211,14 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         auto name = input->Child(0)->Content();
@@ -502,18 +508,24 @@ namespace NYql::NTypeAnnImpl {
         TVector<const TItemExprType*> items;
         for (size_t i = 0; i < input->ChildrenSize(); ++i) {
             auto& child = input->ChildRef(i);
+            if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(child->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
             auto nameNode = child->Child(0);
-            if (nameNode->GetTypeAnn() && nameNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-                input->SetTypeAnn(nameNode->GetTypeAnn());
-                return IGraphTransformer::TStatus::Ok;
+            bool isUniversal;
+            if (!EnsureAtomOrUniversal(*nameNode, ctx.Expr, isUniversal)) {
+                return IGraphTransformer::TStatus::Error;
             }
 
-            if (!EnsureAtom(*nameNode, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
 
             auto& typeNode = child->ChildRef(1);
@@ -846,8 +858,14 @@ namespace NYql::NTypeAnnImpl {
             return status;
         }
 
-        if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(*input->Child(1), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -951,6 +969,11 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureTupleMinSize(*input->Child(0), 0, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -985,6 +1008,11 @@ namespace NYql::NTypeAnnImpl {
         TVector<TCallableExprType::TArgumentInfo> arguments;
         for (ui32 index = 1; index < input->ChildrenSize(); ++index) {
             auto child = input->Child(index);
+            if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(child->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!EnsureTupleMinSize(*child, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -1120,8 +1148,14 @@ namespace NYql::NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         TMemoryPool pool(4096);

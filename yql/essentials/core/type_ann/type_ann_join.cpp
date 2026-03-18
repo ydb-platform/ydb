@@ -257,6 +257,11 @@ namespace NYql::NTypeAnnImpl {
         const size_t numLists = input->ChildrenSize() - 2;
 
         auto optionsNode = input->Child(input->ChildrenSize() - 1);
+        if (optionsNode->GetTypeAnn() && optionsNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(optionsNode->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         TJoinOptions options;
         auto status = ValidateEquiJoinOptions(input->Pos(), *optionsNode, options, ctx.Expr);
         if (status != IGraphTransformer::TStatus::Ok) {
@@ -267,6 +272,11 @@ namespace NYql::NTypeAnnImpl {
         TExprNode::TListType updatedChildren;
         for (ui32 idx = 0; idx < numLists; ++idx) {
             auto& listPair = *input->Child(idx);
+            if (listPair.GetTypeAnn() && listPair.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(listPair.GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!EnsureTupleSize(listPair, 2, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -312,6 +322,11 @@ namespace NYql::NTypeAnnImpl {
         }
 
         auto joins = input->Child(input->ChildrenSize() - 2);
+        if (joins->GetTypeAnn() && joins->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(joins->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         const TStructExprType* resultType = nullptr;
         status = EquiJoinAnnotation(input->Pos(), resultType, labels, *joins, options, ctx.Expr);
         if (status != IGraphTransformer::TStatus::Ok) {

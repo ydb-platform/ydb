@@ -742,23 +742,24 @@ void TestMemoryLimitChunkBoundaries() {
     UNIT_ASSERT_GT(iterationsCount, 1u);
 }
 
-// Test for zero memory limit scenario (should fall back to non-streaming)
+// Test for zero MaxPagesInFlight – the scan must be rejected with an error
+// because MaxPagesInFlight=0 is an invalid configuration when streaming is
+// enabled (strategy != Never).
 void TestMemoryLimitZero() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
-    // Enable SimpleReader with streaming
+    // Enable SimpleReader
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
 
-    // Configure zero memory limit (should fall back to non-streaming)
+    // MaxPagesInFlight=0 with STRATEGY_AUTO is invalid and must cause an error.
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
-    streamingConfig->SetMinRecordsForPaging(1000000);  // Very high threshold
-    streamingConfig->SetMaxPagesInFlight(0);  // Zero limit
+    streamingConfig->SetMinRecordsForPaging(1000000);
+    streamingConfig->SetMaxPagesInFlight(0);  // Invalid: must be > 0 when streaming is active
     streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-    csControllerGuard->SetConfiguredLimit(0);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -774,7 +775,6 @@ void TestMemoryLimitZero() {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write data that would normally trigger streaming
     const ui32 numRecords = 2000;
     std::pair<ui64, ui64> portion = {0, numRecords};
 
@@ -785,26 +785,18 @@ void TestMemoryLimitZero() {
     planStep = ProposeCommit(runtime, sender, txId, writeIds);
     PlanCommit(runtime, sender, planStep, txId);
 
-    // Read (should fall back to non-streaming due to zero memory limit)
+    // The scan must fail at start because MaxPagesInFlight=0 is invalid.
     TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
     reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
 
     auto rb = reader.ReadAll();
-    UNIT_ASSERT(reader.IsCorrectlyFinished());
-    UNIT_ASSERT(rb);
-    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
 
-    const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();
-    const ui32 iterationsCount = reader.GetIterationsCount();
+    Cerr << "MemoryLimitZero: IsError=" << reader.IsError()
+         << ", IsCorrectlyFinished=" << reader.IsCorrectlyFinished() << Endl;
 
-    Cerr << "MemoryLimitZero: total pages created=" << totalCreated
-         << ", iterations=" << iterationsCount << Endl;
-
-    // With zero memory limit, should fall back to non-streaming
-    // The OnPageCreated hook should not be called
-    UNIT_ASSERT_VALUES_EQUAL(totalCreated, 0u);
-    // Should have minimal iterations (non-streaming behavior)
-    UNIT_ASSERT_LE(iterationsCount, 10u);
+    // The scan must have been rejected with an error.
+    UNIT_ASSERT(reader.IsError());
+    UNIT_ASSERT(!rb);
 }
 
 void TestStreamingWithFilterSkip() {

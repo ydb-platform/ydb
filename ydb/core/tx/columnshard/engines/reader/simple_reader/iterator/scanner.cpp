@@ -19,7 +19,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 TConclusionStatus TScanHead::Start() {
-    return TConclusionStatus::Success();
+    return TStreamingConfigHelper::Validate();
 }
 
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)

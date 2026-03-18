@@ -279,6 +279,15 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
         logHypergraph("Hypergraph after hints");
     }
 
+    if (!hints.JoinOrderHints->Hints.empty()) {
+        TJoinOrderHintsApplier joinHints(graph);
+        joinHints.Apply(*hints.JoinOrderHints);
+        if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+            YQL_CLOG(TRACE, CoreDq) << "Hypergraph after hints: ";
+            YQL_CLOG(TRACE, CoreDq) << graph.String();
+        }
+    }
+
     return graph;
 }
 

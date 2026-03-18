@@ -149,6 +149,9 @@ void THarmonizer::ProcessStarvedState() {
     HARMONIZER_DEBUG_PRINT("shared info", SharedInfo.ToString());
     for (ui16 poolIdx : PriorityOrder) {
         TPoolInfo &pool = *Pools[poolIdx];
+        if (pool.IsSharedOnly) {
+            continue;
+        }
         i64 threadCount = pool.GetFullThreadCount();
         HARMONIZER_DEBUG_PRINT("poolIdx", poolIdx, "threadCount", threadCount, "pool.DefaultFullThreadCount", pool.DefaultFullThreadCount);
         if (CpuConsumption.PoolConsumption[poolIdx].Elapsed > pool.GetThreadCount()) {
@@ -185,6 +188,9 @@ void THarmonizer::ProcessNeedyState() {
     for (size_t needyPoolIdx : CpuConsumption.NeedyPools) {
         TPoolInfo &pool = *Pools[needyPoolIdx];
         if (!CpuConsumption.IsNeedyByPool[needyPoolIdx]) {
+            continue;
+        }
+        if (pool.IsSharedOnly) {
             continue;
         }
         float fullThreadCount = pool.GetFullThreadCount();
@@ -228,6 +234,9 @@ void THarmonizer::ProcessExchange() {
     size_t sumOfAdditionalThreads = CpuConsumption.AdditionalThreads;
     for (size_t needyPoolIdx : CpuConsumption.NeedyPools) {
         TPoolInfo &pool = *Pools[needyPoolIdx];
+        if (pool.IsSharedOnly) {
+            continue;
+        }
         i64 fullThreadCount = pool.GetFullThreadCount();
         float threadCount = fullThreadCount + SharedInfo.CpuConsumption[needyPoolIdx].CpuQuota;
 
@@ -258,6 +267,9 @@ void THarmonizer::ProcessExchange() {
         }
 
         TPoolInfo &pool = *Pools[poolIdx];
+        if (pool.IsSharedOnly) {
+            continue;
+        }
         size_t fullThreadCount = pool.GetFullThreadCount();
         size_t additionalThreadsCount = Max<size_t>(0L, fullThreadCount - pool.DefaultFullThreadCount);
         size_t currentTakingAwayThreads = Min(additionalThreadsCount, takingAwayThreads);
@@ -278,6 +290,9 @@ void THarmonizer::ProcessHoggishState() {
     HARMONIZER_DEBUG_PRINT("ProcessHoggishState");
     for (auto &[hoggishPoolIdx, freeCpu] : CpuConsumption.HoggishPools) {
         TPoolInfo &pool = *Pools[hoggishPoolIdx];
+        if (pool.IsSharedOnly) {
+            continue;
+        }
         i64 fullThreadCount = pool.GetFullThreadCount();
         if (fullThreadCount > pool.MinFullThreadCount && freeCpu >= 1) {
             pool.DecreasingThreadsByHoggishState.fetch_add(1, std::memory_order_relaxed);
@@ -477,6 +492,7 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ign
         poolInfo.MinLocalQueueSize = poolInfo.BasicPool->GetMinLocalQueueSize();
         poolInfo.MaxLocalQueueSize = poolInfo.BasicPool->GetMaxLocalQueueSize();
         poolInfo.LocalQueueSize = poolInfo.MinLocalQueueSize;
+        poolInfo.IsSharedOnly = poolInfo.BasicPool->IsSharedOnly();
     }
     PriorityOrder.clear();
 }

@@ -17,7 +17,6 @@ namespace {
 using namespace NActors;
 
 constexpr TDuration LEASE_DURATION = TDuration::Seconds(30);
-constexpr size_t SQL_TEXT_MAX_SIZE = 4000;
 
 template <typename TDerived>
 class TPoolHandlerActorBase : public TActor<TDerived> {
@@ -110,67 +109,13 @@ protected:
         TRequest(const TActorId& workerActorId, const TString& sessionId, const TString& requestText = "", std::shared_ptr<IWmSessionUpdater> wmSessionUpdater = nullptr)
             : WorkerActorId(workerActorId)
             , SessionId(sessionId)
-            , SplittedRequestText(GetChunks(requestText))
+            , RequestText(requestText)
             , WmSessionUpdater(wmSessionUpdater)
         {}
 
-        std::vector<TString> GetChunks(const TString& requestText, size_t chunkSize = SQL_TEXT_MAX_SIZE) const {
-            std::vector<TString> chunks;
-            if (requestText.empty()) {
-                return chunks;
-            }
-
-            size_t total = (requestText.size() + chunkSize - 1) / chunkSize;
-            chunks.reserve(total);
-
-            for (size_t i = 0; i < total; ++i) {
-                chunks.push_back(requestText.substr(i * chunkSize, chunkSize));
-            }
-            return chunks;
-        }
-
-        template <typename TExtraFunc>
-        void SerializeChunk(size_t index, IOutputStream& out, const TString& poolId,
-                            const TStringBuf eventName, TExtraFunc&& extraFunc) const
-        {
-            const size_t total = SplittedRequestText.empty() ? 1 : SplittedRequestText.size();
-            const void* reqId = static_cast<const void*>(&SplittedRequestText);
-            TStringBuf partData = "";
-
-            if (index < SplittedRequestText.size()) {
-                partData = SplittedRequestText[index];
-            }
-
-            NJsonWriter::TBuf json(NJsonWriter::HEM_RELAXED, &out);
-
-            json.BeginObject();
-            json.WriteKey("pool").WriteString(poolId);
-            json.WriteKey("sid").WriteString(SessionId);
-            json.WriteKey("req_id").WriteString(TStringBuilder() << reqId);
-            json.WriteKey("part").WriteInt(index + 1);
-            json.WriteKey("total").WriteInt(total);
-                
-            json.WriteKey("request");
-            
-            json.BeginObject();
-            json.WriteKey("event").WriteString(eventName);
-            json.WriteKey("data").WriteString(partData);
-            extraFunc(json);
-            json.EndObject();
-            
-            json.EndObject();
-        }
-
-        const TStringBuf GetRequestText() const {
-            if (SplittedRequestText.empty()) {
-                return {};
-            }
-            return SplittedRequestText[0];
-        }
-
         const TActorId WorkerActorId;
         const TString SessionId;
-        const std::vector<TString> SplittedRequestText;
+        const TString RequestText;
         const TInstant StartTime = TInstant::Now();
         TInstant ContinueTime;
         std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
@@ -269,8 +214,6 @@ private:
         TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId, requestText, wmSessionUpdater)}).first->second;
         Counters.LocalDelayedRequests->Inc();
 
-        LOG_REQ_PENDING(PoolId, request);
-
         if (wmSessionUpdater) {
             wmSessionUpdater->SetPoolId(PoolId);
         }
@@ -296,8 +239,6 @@ private:
         request->State = TRequest::EState::Finishing;
         request->Duration = ev->Get()->Duration;
         request->CpuConsumed = ev->Get()->CpuConsumed;
-
-        LOG_REQ_FINISHED(PoolId, request);
 
         OnCleanupRequest(request);
     }
@@ -382,21 +323,17 @@ public:
             Counters.LocalInFly->Inc();
             Counters.ContinueOk->Inc();
             Counters.DelayedTimeMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
-
-            LOG_REQ_STARTED(PoolId, request, LocalInFlight);
         } else {
             if (status == Ydb::StatusIds::OVERLOADED) {
                 Counters.ContinueOverloaded->Inc();
-                LOG_REQ_OVERLOADED(PoolId, request, issues);
             } else if (status == Ydb::StatusIds::CANCELLED) {
                 Counters.Cancelled->Inc();
-                LOG_REQ_CANCELED(PoolId, request, issues);
             } else {
                 Counters.ContinueError->Inc();
                 LOG_W("Reply continue error " << status
                     << " to " << request->WorkerActorId
                     << ", session id: " << request->SessionId
-                    << ", request text: " << request->GetRequestText()
+                    << ", request text: " << request->RequestText
                     << ", issues: " << issues.ToOneLineString());
             }
             RemoveRequest(request);
@@ -717,7 +654,7 @@ protected:
         PendingRequests.emplace_back(request->SessionId);
         FifoCounters.PendingRequestsCount->Inc();
         LOG_D("Request placed into pending queue, session id: " << request->SessionId
-            << ", request text: " << request->GetRequestText()
+            << ", request text: " << request->RequestText
             << ", queue size: " << PendingRequests.size()
         );
 
@@ -875,7 +812,6 @@ private:
         const TString& sessionId = ev->Get()->SessionId;
         TRequest* request = GetRequestSafe(sessionId);
         if (request) {
-            LOG_REQ_QUEUED(PoolId, request, GlobalState.DelayedRequests);
             // Notify proxy that request moved to Delayed state via shared interface
             if (request->WmSessionUpdater) {
                 request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::DELAYED, TActivationContext::Now());

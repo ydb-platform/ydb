@@ -1254,14 +1254,16 @@
 
 - C++
 
-  Для записи в топик в транзакции используется `IWriteSession` (метод `Write` с параметром транзакции). Продьюсер транзакционную запись пока не поддерживает.
+  Для записи в топик в транзакции используйте продьюсер (`IProducer`) и передайте транзакцию через параметр `Tx` в сообщении (`TWriteMessage`).
 
   [Пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_writer/transaction/main.cpp)
 
   ```c++
   NYdb::NQuery::TQueryClient queryClient(driver);
 
-  NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+  auto producer = /* созданный IProducer (TTopicClient::CreateProducer) */;
+
+  NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([&producer](NYdb::NQuery::TSession session) -> NYdb::TStatus {
       auto beginTxResult = session.BeginTransaction().GetValueSync();
       if (!beginTxResult.IsSuccess()) {
           return beginTxResult;
@@ -1271,7 +1273,9 @@
       std::string payload = "message";
       NYdb::NTopic::TWriteMessage writeMessage(payload);
 
-      topicSession->Write(std::move(writeMessage), tx);
+      writeMessage.Tx(tx);
+      producer->Write(std::move(writeMessage));
+      producer->Flush().GetValueSync();
       return tx.Commit().GetValueSync();
   }));
   ```

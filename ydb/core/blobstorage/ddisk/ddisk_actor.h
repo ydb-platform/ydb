@@ -544,7 +544,7 @@ namespace NKikimr::NDDisk {
                 std::map<ui64, TRope> DataParts;
                 ui32 PartsCount;
                 ui64 VChunkIndex;
-                
+
                 TRope JoinData(ui32 sectorSize);
             };
 
@@ -633,6 +633,7 @@ namespace NKikimr::NDDisk {
         void ReplyReadPersistentBuffer(ui64 operationCookie, TRope&& data);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
         double GetPersistentBufferFreeSpace();
+        void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases);
 
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);
@@ -646,8 +647,6 @@ namespace NKikimr::NDDisk {
 
         void Handle(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
         void Handle(TEvPrivate::TEvWritePersistentBufferPart::TPtr ev);
-
-        void HandleWriteInFlight(ui64 cookie, const std::function<std::unique_ptr<IEventBase>()>& factory);
 
         void ProcessIoSubmitQueue();
         void ScheduleIoSubmitWakeup();

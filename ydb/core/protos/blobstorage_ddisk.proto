@@ -211,7 +211,7 @@ message TEvSyncWithDDiskResult {
 message TEvErasePersistentBuffer {
     TQueryCredentials Credentials = 1;
     reserved 2;
-    uint64 Lsn = 3; // Erase all lsns less than or equal to
+    uint64 Lsn = 3; // Erase all lsns for tablet less than or equal to
     uint32 Generation = 4;
 }
 

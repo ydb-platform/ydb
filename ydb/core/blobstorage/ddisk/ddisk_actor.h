@@ -527,7 +527,7 @@ namespace NKikimr::NDDisk {
             std::map<ui64, TRecord> Records;
         };
 
-        std::map<std::tuple<ui64, ui64>, TPersistentBuffer> PersistentBuffers;
+        std::map<std::tuple<ui64, ui32, ui64>, TPersistentBuffer> PersistentBuffers;
         ui64 PersistentBufferInMemoryCacheSize = 0;
 
         ui64 CalcPersistentBufferInMemoryCacheSize();
@@ -552,6 +552,7 @@ namespace NKikimr::NDDisk {
             ui8 Signature[16];
             ui64 HeaderChecksum;
             ui64 TabletId;
+            ui32 Generation;
             ui64 VChunkIndex;
             ui32 OffsetInBytes;
             ui32 Size;
@@ -569,6 +570,7 @@ namespace NKikimr::NDDisk {
             std::set<ui64> OperationCookies;
 
             ui64 TabletId;
+            ui32 Generation;
             ui64 VChunkIdx;
             ui64 Lsn;
             ui32 OffsetInBytes;
@@ -598,7 +600,7 @@ namespace NKikimr::NDDisk {
         void InitPersistentBuffer();
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();
-        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);
+        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);
         void StartRestorePersistentBuffer();
         void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
         void ReplyReadPersistentBuffer(ui64 operationCookie, TRope&& data);

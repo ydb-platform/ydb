@@ -311,8 +311,8 @@ public:
                 const TInstant now = TAppData::TimeProvider->Now();
                 const ui64 requestIdx = NewTRequestInfo(it->second, now, true);
 
-                std::vector<std::tuple<NDDisk::TBlockSelector, ui64>> erases;
-                erases.push_back({{1, 0, (ui32)it->second}, it->first});
+                std::vector<std::tuple<NDDisk::TBlockSelector, ui64, ui32>> erases;
+                erases.push_back({{1, 0, (ui32)it->second}, it->first, Credentials.Generation});
                 auto ev = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(Credentials,
                     erases);
                 SendRequest(ctx, std::move(ev), requestIdx);

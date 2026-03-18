@@ -347,11 +347,12 @@ struct TPersistentBufferFormat {
 
         TEvReadPersistentBuffer() = default;
 
-        TEvReadPersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
-                const TReadInstruction& instruction) {
+        TEvReadPersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector,
+                ui64 lsn, ui32 generation, const TReadInstruction& instruction) {
             creds.Serialize(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
+            Record.SetGeneration(generation);
             instruction.Serialize(Record.MutableInstruction());
         }
     };
@@ -377,10 +378,11 @@ struct TPersistentBufferFormat {
 
         TEvErasePersistentBuffer() = default;
 
-        TEvErasePersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn) {
+        TEvErasePersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn, ui32 generation) {
             creds.Serialize(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
+            Record.SetGeneration(generation);
         }
     };
 
@@ -393,19 +395,21 @@ struct TPersistentBufferFormat {
             creds.Serialize(Record.MutableCredentials());
         }
 
-        TEvBatchErasePersistentBuffer(const TQueryCredentials& creds, const std::vector<std::tuple<TBlockSelector, ui64>>& erases) {
+        TEvBatchErasePersistentBuffer(const TQueryCredentials& creds, const std::vector<std::tuple<TBlockSelector, ui64, ui32>>& erases) {
             creds.Serialize(Record.MutableCredentials());
-            for (auto& [selector, lsn] : erases) {
+            for (auto& [selector, lsn, generation] : erases) {
                 auto* erase = Record.AddErases();
                 selector.Serialize(erase->MutableSelector());
                 erase->SetLsn(lsn);
+                erase->SetGeneration(generation);
             }
         }
 
-        void AddErase(const TBlockSelector& selector, ui64 lsn) {
+        void AddErase(const TBlockSelector& selector, ui64 lsn, ui32 generation) {
             auto *erase = Record.AddErases();
             selector.Serialize(erase->MutableSelector());
             erase->SetLsn(lsn);
+            erase->SetGeneration(generation);
         }
     };
 
@@ -466,10 +470,11 @@ struct TPersistentBufferFormat {
             }
         }
 
-        void AddSegment(const TBlockSelector& selector, ui64 lsn) {
+        void AddSegment(const TBlockSelector& selector, ui64 lsn, ui32 generation) {
             auto *segment = Record.AddSegments();
             selector.Serialize(segment->MutableSelector());
             segment->SetLsn(lsn);
+            segment->SetGeneration(generation);
         }
     };
 

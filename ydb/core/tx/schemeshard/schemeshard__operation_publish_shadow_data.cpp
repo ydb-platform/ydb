@@ -152,6 +152,14 @@ public:
         context.SS->ClearDescribePathCaches(tablePath);
         context.OnComplete.PublishToSchemeBoard(OperationId, txState->TargetPathId);
 
+        if (context.SS->Indexes.contains(tablePath->ParentPathId)) {
+            auto parentDir = context.SS->PathsById.at(tablePath->ParentPathId);
+            ++parentDir->DirAlterVersion;
+            context.SS->PersistPathDirAlterVersion(db, parentDir);
+            context.SS->ClearDescribePathCaches(parentDir);
+            context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
+        }
+
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
     }

@@ -6,6 +6,7 @@ import yatest
 from ydb.tests.library.stress.fixtures import StressFixture
 from ydb.tests.stress.topic.workload import YdbTopicWorkload
 
+
 def create_test_methods(chunk_size):
     def decorator(cls):
         workload = YdbTopicWorkload(
@@ -37,7 +38,7 @@ def create_test_methods(chunk_size):
     return decorator
 
 
-@create_test_methods(chunk_size=3)
+@create_test_methods(chunk_size=2)
 class TestYdbTopicWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):

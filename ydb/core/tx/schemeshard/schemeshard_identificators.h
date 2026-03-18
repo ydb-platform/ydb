@@ -114,6 +114,7 @@ constexpr TOperationId InvalidOperationId = TOperationId(InvalidTxId, InvalidSub
 NKikimrSchemeOp::TShardIdx AsProto(const TShardIdx& shardIdx);
 TShardIdx FromProto(const NKikimrSchemeOp::TShardIdx& shardIdx);
 
+// todo flown4qqqq: rename TIndexBuildId into TLongOperationId or something like this
 STRONG_UI64_TYPE_DEF_DV(TIndexBuildId, Max<ui64>(), Max<ui64>());
 constexpr TIndexBuildId InvalidIndexBuildId = TIndexBuildId();
 

@@ -36,12 +36,11 @@ struct TDqBlockJoinContext {
 
 class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
   public:
-    TBlockPackedTupleSource(TComputationContext& ctx, TSides<IComputationNode*> stream,
+    TBlockPackedTupleSource(NUdf::TUnboxedValue&& stream, TComputationContext& ctx,
                             const TDqBlockJoinContext* meta,
                             TSides<std::unique_ptr<IBlockLayoutConverter>>& converters, ESide side)
         : Side_(side)
-        , Stream_(stream.SelectSide(side))
-        , StreamValues_(Stream_->GetValue(ctx))
+        , StreamValues_(std::move(stream))
         , Buff_(ctx.MutableValues.get() + meta->TempStateIndes.SelectSide(side), meta->InputTypes.SelectSide(side).size())
         , ArrowBlockToInternalConverter_(converters.SelectSide(side).get())
     {}
@@ -84,7 +83,6 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
 
     bool Finished_ = false;
     [[maybe_unused]]ESide Side_;
-    IComputationNode* Stream_;
     NYql::NUdf::TUnboxedValue StreamValues_;
     std::span<NYql::NUdf::TUnboxedValue> Buff_;
     IBlockLayoutConverter* ArrowBlockToInternalConverter_;
@@ -230,8 +228,12 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             }
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
         }
+        TSides<NUdf::TUnboxedValue> streamValues{
+            .Build = Streams_.Build->GetValue(ctx),
+            .Probe = Streams_.Probe->GetValue(ctx)
+        };
         const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->Settings.LeftIsBuild()) ? userTypes.Probe : userTypes.Build;
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_, std::move(layouts), Meta_.get(), userNullTypes);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, std::move(streamValues), std::move(layouts), Meta_.get(), userNullTypes);
     }
 
   private:
@@ -240,14 +242,14 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         using JoinType = NJoinPackedTuples::THybridHashJoin<TBlockPackedTupleSource, TestStorageSettings, Kind>;
 
       public:
-        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationNode*> streams,
+        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<NUdf::TUnboxedValue> streamValues,
                      TSides<std::unique_ptr<IBlockLayoutConverter>> converters, const TDqBlockJoinContext* meta,
                      const TVector<TType*>& userBuildTypes)
             : TBase(memInfo)
             , Meta_(meta)
             , Converters_(std::move(converters))
-            , Join_(TSides<TBlockPackedTupleSource>{.Build = {ctx, streams, meta, Converters_, ESide::Build},
-                                                    .Probe = {ctx, streams, meta, Converters_, ESide::Probe}},
+            , Join_(TSides<TBlockPackedTupleSource>{.Build = {std::move(streamValues.Build), ctx, meta, Converters_, ESide::Build},
+                                                    .Probe = {std::move(streamValues.Probe), ctx, meta, Converters_, ESide::Probe}},
                     ctx, "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()},

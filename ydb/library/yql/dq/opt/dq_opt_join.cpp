@@ -1332,6 +1332,9 @@ TExprBase DqBuildHashJoin(
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
 
+    static const std::set<std::string_view> blockHashJoinSupportedTypes = {"Inner"sv, "Left"sv, "LeftSemi"sv, "LeftOnly"sv};
+    useBlockHashJoin = useBlockHashJoin && blockHashJoinSupportedTypes.contains(joinType);
+
     auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
     auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();
 
@@ -1363,7 +1366,8 @@ TExprBase DqBuildHashJoin(
     bool shuffleRightSide = !join.ShuffleRightSideBy() || !join.ShuffleRightSideBy().Cast().Empty() || !shuffleElimination;
     THashMap<TString, TString> leftColumnRemap;
     THashMap<TString, TString> rightColumnRemap;
-    if (shuffleLeftSide && shuffleRightSide /* for columnshardhashv1 (shuffle elimination) it is important to save original types for join predicate */) {
+    if ((shuffleLeftSide && shuffleRightSide) /* for columnshardhashv1 (shuffle elimination) it is important to save original types for join predicate */
+        || useBlockHashJoin /* block hash join peephole needs aligned types; remap must happen regardless of shuffle */) {
         for (ui32 i = 0U; i < rightJoinKeys.size() && !badKey; ++i) {
             const auto keyType1 = leftStructType->FindItemType(leftJoinKeys[i]);
             const auto keyType2 = rightStructType->FindItemType(rightJoinKeys[i]);
@@ -1379,14 +1383,24 @@ TExprBase DqBuildHashJoin(
 
             if (commonType) {
                 if (!IsSameAnnotation(*keyType1, *commonType)) {
-                    TString rename = (TString("_yql_dq_key_left_") + ToString(i));
-                    leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
-                    remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), std::move(rename), TNodeFlags::Default), i, commonType);
+                    const bool skipCastForBlockJoin = useBlockHashJoin
+                        && keyType1->GetKind() == ETypeAnnotationKind::Optional
+                        && IsSameAnnotation(*keyType1->Cast<TOptionalExprType>()->GetItemType(), *commonType);
+                    if (!skipCastForBlockJoin) {
+                        TString rename = (TString("_yql_dq_key_left_") + ToString(i));
+                        leftColumnRemap[leftJoinKeys[i].StringValue()] = rename;
+                        remapLeft.emplace_back(leftJoinKeys[i], ctx.NewAtom(leftJoinKeys[i].Pos(), std::move(rename), TNodeFlags::Default), i, commonType);
+                    }
                 }
                 if (!IsSameAnnotation(*keyType2, *commonType)) {
-                    TString rename = TString("_yql_dq_key_right_") + ToString(i);
-                    rightColumnRemap[rightJoinKeys[i].StringValue()] = rename;
-                    remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), rename, TNodeFlags::Default), i, commonType);
+                    const bool skipCastForBlockJoin = useBlockHashJoin
+                        && keyType2->GetKind() == ETypeAnnotationKind::Optional
+                        && IsSameAnnotation(*keyType2->Cast<TOptionalExprType>()->GetItemType(), *commonType);
+                    if (!skipCastForBlockJoin) {
+                        TString rename = TString("_yql_dq_key_right_") + ToString(i);
+                        rightColumnRemap[rightJoinKeys[i].StringValue()] = rename;
+                        remapRight.emplace_back(rightJoinKeys[i], ctx.NewAtom(rightJoinKeys[i].Pos(), rename, TNodeFlags::Default), i, commonType);
+                    }
                 }
             } else
                 badKey = true;
@@ -1684,9 +1698,6 @@ TExprBase DqBuildHashJoin(
             flags = maybeFlags.Cast().Ref().ChildrenList();
         }
     }
-
-    static const std::set<std::string_view> blockHashJoinSupportedTypes = {"Inner"sv, "Left"sv, "LeftSemi"sv, "LeftOnly"sv};
-    useBlockHashJoin = useBlockHashJoin && blockHashJoinSupportedTypes.contains(joinType);
 
     TExprNode::TPtr hashJoin;
     switch (mode) {

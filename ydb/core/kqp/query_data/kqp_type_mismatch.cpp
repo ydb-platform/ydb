@@ -12,7 +12,7 @@ using namespace NYql::NUdf;
 namespace {
 
 TString BuildPath(TStringBuf parentPath, TStringBuf childSuffix) {
-    return TStringBuilder() << parentPath << childSuffix;
+    return TStringBuilder() << parentPath << "." << childSuffix;
 }
 
 TString BuildIndexPath(TStringBuf parentPath, ui32 index) {
@@ -36,20 +36,12 @@ TString DescribeType(const TType* type) {
         }
         case TType::EKind::Pg:
             return TStringBuilder() << "Pg(" << static_cast<const TPgType*>(type)->GetName() << ")";
-        case TType::EKind::Resource:
-            return TStringBuilder() << "Resource(" << static_cast<const TResourceType*>(type)->GetTag() << ")";
         case TType::EKind::Tagged:
             return TStringBuilder() << "Tagged(" << static_cast<const TTaggedType*>(type)->GetTag() << ")";
         case TType::EKind::Optional: {
             const auto* optionalType = static_cast<const TOptionalType*>(type);
             return TStringBuilder() << "Optional<" << DescribeType(optionalType->GetItemType()) << ">";
         }
-        case TType::EKind::Block: {
-            const auto shape = static_cast<const TBlockType*>(type)->GetShape();
-            return shape == TBlockType::EShape::Scalar ? "Scalar" : "Block";
-        }
-        case TType::EKind::Linear:
-            return static_cast<const TLinearType*>(type)->IsDynamic() ? "Linear(dynamic)" : "Linear(static)";
         default:
             return TString(type->GetKindAsStr());
     }
@@ -148,47 +140,15 @@ bool GetFirstTypeIncompatibility(const TType* expected, const TType* actual, TSt
             return GetFirstTypeIncompatibility(
                 static_cast<const TListType*>(expected)->GetItemType(),
                 static_cast<const TListType*>(actual)->GetItemType(),
-                BuildPath(path, "[]"),
-                incompatibility);
-
-        case TType::EKind::Stream:
-            return GetFirstTypeIncompatibility(
-                static_cast<const TStreamType*>(expected)->GetItemType(),
-                static_cast<const TStreamType*>(actual)->GetItemType(),
-                BuildPath(path, "[]"),
-                incompatibility);
-
-        case TType::EKind::Flow:
-            return GetFirstTypeIncompatibility(
-                static_cast<const TFlowType*>(expected)->GetItemType(),
-                static_cast<const TFlowType*>(actual)->GetItemType(),
-                BuildPath(path, "[]"),
+                BuildPath(path, "<list>"),
                 incompatibility);
 
         case TType::EKind::Optional:
             return GetFirstTypeIncompatibility(
                 static_cast<const TOptionalType*>(expected)->GetItemType(),
                 static_cast<const TOptionalType*>(actual)->GetItemType(),
-                BuildPath(path, "?"),
+                BuildPath(path, "<optional>"),
                 incompatibility);
-
-        case TType::EKind::Linear: {
-            const auto* expectedLinear = static_cast<const TLinearType*>(expected);
-            const auto* actualLinear = static_cast<const TLinearType*>(actual);
-            if (expectedLinear->IsDynamic() != actualLinear->IsDynamic()) {
-                incompatibility = TStringBuilder()
-                    << "first incompatibility at " << path
-                    << ": expected " << DescribeType(expected)
-                    << ", actual " << DescribeType(actual);
-                return true;
-            }
-
-            return GetFirstTypeIncompatibility(
-                expectedLinear->GetItemType(),
-                actualLinear->GetItemType(),
-                BuildPath(path, "[]"),
-                incompatibility);
-        }
 
         case TType::EKind::Dict: {
             const auto* expectedDict = static_cast<const TDictType*>(expected);
@@ -234,48 +194,6 @@ bool GetFirstTypeIncompatibility(const TType* expected, const TType* actual, TSt
             return false;
         }
 
-        case TType::EKind::Multi: {
-            const auto* expectedMulti = static_cast<const TMultiType*>(expected);
-            const auto* actualMulti = static_cast<const TMultiType*>(actual);
-
-            const auto expectedSize = expectedMulti->GetElementsCount();
-            const auto actualSize = actualMulti->GetElementsCount();
-            const auto commonSize = std::min(expectedSize, actualSize);
-            for (ui32 i = 0; i < commonSize; ++i) {
-                if (GetFirstTypeIncompatibility(
-                    expectedMulti->GetElementType(i),
-                    actualMulti->GetElementType(i),
-                    BuildIndexPath(path, i),
-                    incompatibility))
-                {
-                    return true;
-                }
-            }
-
-            if (expectedSize != actualSize) {
-                incompatibility = TStringBuilder()
-                    << "first incompatibility at " << path
-                    << ": expected Multi size " << expectedSize
-                    << ", actual size " << actualSize;
-                return true;
-            }
-
-            return false;
-        }
-
-        case TType::EKind::Resource: {
-            const auto* expectedResource = static_cast<const TResourceType*>(expected);
-            const auto* actualResource = static_cast<const TResourceType*>(actual);
-            if (expectedResource->GetTagStr() != actualResource->GetTagStr()) {
-                incompatibility = TStringBuilder()
-                    << "first incompatibility at " << path
-                    << ": expected " << DescribeType(expected)
-                    << ", actual " << DescribeType(actual);
-                return true;
-            }
-            return false;
-        }
-
         case TType::EKind::Tagged: {
             const auto* expectedTagged = static_cast<const TTaggedType*>(expected);
             const auto* actualTagged = static_cast<const TTaggedType*>(actual);
@@ -301,85 +219,8 @@ bool GetFirstTypeIncompatibility(const TType* expected, const TType* actual, TSt
                 BuildPath(path, "<variant>"),
                 incompatibility);
 
-        case TType::EKind::Block: {
-            const auto* expectedBlock = static_cast<const TBlockType*>(expected);
-            const auto* actualBlock = static_cast<const TBlockType*>(actual);
-            if (expectedBlock->GetShape() != actualBlock->GetShape()) {
-                incompatibility = TStringBuilder()
-                    << "first incompatibility at " << path
-                    << ": expected " << DescribeType(expected)
-                    << ", actual " << DescribeType(actual);
-                return true;
-            }
-
-            return GetFirstTypeIncompatibility(
-                expectedBlock->GetItemType(),
-                actualBlock->GetItemType(),
-                BuildPath(path, "[]"),
-                incompatibility);
-        }
-
-        case TType::EKind::Callable: {
-            const auto* expectedCallable = static_cast<const TCallableType*>(expected);
-            const auto* actualCallable = static_cast<const TCallableType*>(actual);
-
-            if (expectedCallable->GetNameStr() != actualCallable->GetNameStr()) {
-                incompatibility = TStringBuilder()
-                    << "first incompatibility at " << path
-                    << ": expected callable '" << expectedCallable->GetName()
-                    << "', actual callable '" << actualCallable->GetName() << "'";
-                return true;
-            }
-
-            if (expectedCallable->GetArgumentsCount() != actualCallable->GetArgumentsCount()) {
-                incompatibility = TStringBuilder()
-                    << "first incompatibility at " << path
-                    << ": expected callable arguments count " << expectedCallable->GetArgumentsCount()
-                    << ", actual " << actualCallable->GetArgumentsCount();
-                return true;
-            }
-
-            if (expectedCallable->GetOptionalArgumentsCount() != actualCallable->GetOptionalArgumentsCount()) {
-                incompatibility = TStringBuilder()
-                    << "first incompatibility at " << path
-                    << ": expected optional arguments count " << expectedCallable->GetOptionalArgumentsCount()
-                    << ", actual " << actualCallable->GetOptionalArgumentsCount();
-                return true;
-            }
-
-            if (GetFirstTypeIncompatibility(
-                expectedCallable->GetReturnType(),
-                actualCallable->GetReturnType(),
-                BuildPath(path, "->"),
-                incompatibility))
-            {
-                return true;
-            }
-
-            for (ui32 i = 0; i < expectedCallable->GetArgumentsCount(); ++i) {
-                if (GetFirstTypeIncompatibility(
-                    expectedCallable->GetArgumentType(i),
-                    actualCallable->GetArgumentType(i),
-                    BuildIndexPath(path, i),
-                    incompatibility))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         default:
             break;
-    }
-
-    if (!expected->IsSameType(*actual)) {
-        incompatibility = TStringBuilder()
-            << "first incompatibility at " << path
-            << ": expected " << DescribeType(expected)
-            << ", actual " << DescribeType(actual);
-        return true;
     }
 
     return false;

@@ -470,6 +470,7 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"DlqName\"            Type: \"Utf8\"}"
         "Columns { Name: \"TablesFormat\"       Type: \"Uint32\"}"
         "Columns { Name: \"Tags\"               Type: \"Utf8\"}"
+        "Columns { Name: \"TopicCreated\"       Type: \"Bool\"}"
         "KeyColumnNames: [\"Account\", \"QueueName\"]",
         TDuration::Seconds(5000),
         "root@builtin"
@@ -616,6 +617,7 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"DlqArn\"                        Type: \"Utf8\"}"
         "Columns { Name: \"MaxReceiveCount\"               Type: \"Uint64\"}"
         "Columns { Name: \"ShowDetailedCountersDeadline\"  Type: \"Uint64\"}"
+        "Columns { Name: \"TopicCreated\"                  Type: \"Bool\"}"
         "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]";
     client.CreateTable("/Root/SQS/.STD",
         attributesTable,

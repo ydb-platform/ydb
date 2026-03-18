@@ -143,6 +143,7 @@ private:
     const TString MaskedToken_;
     const TString AuthType_;
     const TString SourceAddress_;
+    const bool EnableSQSMigrationTopicCreation_;
 
     ui64 RequiredShardsCount_ = 0;
     ui64 CreatedShardsCount_ = 0;

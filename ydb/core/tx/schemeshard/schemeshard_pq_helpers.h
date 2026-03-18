@@ -8,15 +8,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-class TSchemeShard;
-class TPath;
-
-TPath DatabasePathFromModifySchemeOperation(
-    TSchemeShard* ss,
-    const NKikimrSchemeOp::TModifyScheme& operation);
-
-std::tuple<TString, TString, TString> GetDatabaseCloudIds(const TPath& databasePath);
-
 class PQGroupReserve {
 public:
     PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions, ui64 currentStorageUsage = 0) {

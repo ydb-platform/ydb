@@ -133,7 +133,6 @@ bool TPartitionQuoterBase::CanExaust(TInstant now) {
 
 void TPartitionQuoterBase::ProcessPartitionTotalQuotaQueue() {
     if (!PartitionTotalQuotaTracker) {
-        LOG_T("PartitionTotalQuotaTracker is not defined");
         return;
     }
     LOG_D("Waiting for the quota of partition " << WaitingTotalPartitionQuotaRequests.size() << " of the request");

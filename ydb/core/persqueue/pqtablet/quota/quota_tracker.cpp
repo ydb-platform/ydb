@@ -33,7 +33,7 @@ namespace NKikimr::NPQ {
             QuotedTime += diff;
         }
 
-        AvailableSize = Min<i64>(AvailableSize + QuotaSpeed * diff.MicroSeconds(), MaxBurst);
+        AvailableSize = Min<i64>(AvailableSize + static_cast<i64>(QuotaSpeed) * static_cast<i64>(diff.MicroSeconds()), MaxBurst);
     }
 
     bool TQuotaTracker::CanExaust(const TInstant timestamp) {

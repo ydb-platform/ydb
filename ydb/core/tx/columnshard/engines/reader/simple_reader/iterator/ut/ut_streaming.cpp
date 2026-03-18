@@ -207,20 +207,18 @@ void TestStreamingReadMultiplePortions() {
     }
 
     // Read all portions with streaming
-    {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId - 1));
-        reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId - 1));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
 
-        auto rb = reader.ReadAll();
-        UNIT_ASSERT(reader.IsCorrectlyFinished());
-        UNIT_ASSERT(rb);
-        UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numPortions * recordsPerPortion);
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numPortions * recordsPerPortion);
 
-        // With multiple large portions and streaming, we should have many iterations
-        const ui32 iterationsCount = reader.GetIterationsCount();
-        Cerr << "Iterations count (multiple portions): " << iterationsCount << Endl;
-        UNIT_ASSERT_GT(iterationsCount, numPortions);
-    }
+    // With multiple large portions and streaming, we should have many iterations
+    const ui32 iterationsCount = reader.GetIterationsCount();
+    Cerr << "Iterations count (multiple portions): " << iterationsCount << Endl;
+    UNIT_ASSERT_GT(iterationsCount, numPortions);
 }
 
 void TestBackpressure() {
@@ -259,56 +257,54 @@ void TestBackpressure() {
     PlanCommit(runtime, sender, planStep, txId);
 
     // Test backpressure by controlling acknowledgments
-    {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
-        reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
 
-        // Initialize scanner
-        UNIT_ASSERT(reader.InitializeScanner());
+    // Initialize scanner
+    UNIT_ASSERT(reader.InitializeScanner());
 
-        // Send first Ack to start receiving data
-        reader.Ack();
+    // Send first Ack to start receiving data
+    reader.Ack();
 
-        ui32 receivedBatches = 0;
+    ui32 receivedBatches = 0;
 
-        // Simulate slow consumer: receive data but delay acknowledgments
-        while (true) {
-            bool hasMore = reader.Receive();
-            receivedBatches++;
+    // Simulate slow consumer: receive data but delay acknowledgments
+    while (true) {
+        bool hasMore = reader.Receive();
+        receivedBatches++;
 
-            if (!hasMore) {
-                // Finished
-                break;
-            }
-
-            Cerr << "Received batch " << receivedBatches << Endl;
-
-            // Simulate processing delay before sending next Ack
-            // This creates backpressure - the reader should not send more data
-            // until we acknowledge
-            if (receivedBatches % 3 == 0) {
-                // Every 3rd batch, add a small delay to simulate slow processing
-                Sleep(TDuration::MilliSeconds(10));
-            }
-
-            // Send Ack to request next batch
-            reader.Ack();
+        if (!hasMore) {
+            // Finished
+            break;
         }
 
-        UNIT_ASSERT(reader.IsCorrectlyFinished());
-        auto finalResult = reader.GetResult();
-        UNIT_ASSERT(finalResult);
-        UNIT_ASSERT_VALUES_EQUAL(finalResult->num_rows(), numRecords);
+        Cerr << "Received batch " << receivedBatches << Endl;
 
-        // Verify that we received data in multiple iterations (streaming worked)
-        const ui32 iterationsCount = reader.GetIterationsCount();
-        Cerr << "Total iterations with backpressure: " << iterationsCount << Endl;
-        Cerr << "Total batches received: " << receivedBatches << Endl;
+        // Simulate processing delay before sending next Ack
+        // This creates backpressure - the reader should not send more data
+        // until we acknowledge
+        if (receivedBatches % 3 == 0) {
+            // Every 3rd batch, add a small delay to simulate slow processing
+            Sleep(TDuration::MilliSeconds(10));
+        }
 
-        // With backpressure and large data, we should have multiple iterations
-        UNIT_ASSERT_GT(iterationsCount, 1);
-        UNIT_ASSERT_GT(receivedBatches, 1);
+        // Send Ack to request next batch
+        reader.Ack();
     }
+
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    auto finalResult = reader.GetResult();
+    UNIT_ASSERT(finalResult);
+    UNIT_ASSERT_VALUES_EQUAL(finalResult->num_rows(), numRecords);
+
+    // Verify that we received data in multiple iterations (streaming worked)
+    const ui32 iterationsCount = reader.GetIterationsCount();
+    Cerr << "Total iterations with backpressure: " << iterationsCount << Endl;
+    Cerr << "Total batches received: " << receivedBatches << Endl;
+
+    // With backpressure and large data, we should have multiple iterations
+    UNIT_ASSERT_GT(iterationsCount, 1);
+    UNIT_ASSERT_GT(receivedBatches, 1);
 }
 
 // Parametrized helper: verifies that the server never exceeds MaxPagesInFlight
@@ -619,6 +615,198 @@ void TestStrategyNever() {
 
 } // namespace
 
+// Test for extremely low memory limits that force single-record pages
+void TestMemoryLimitSingleRecordPages() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    // Enable SimpleReader with streaming
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    // Configure extremely low memory limit to force single-record pages
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetMinRecordsForPaging(1);  // Trigger streaming for any data
+    streamingConfig->SetMaxPagesInFlight(4);
+    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    csControllerGuard->SetConfiguredLimit(4);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write a small dataset that will be split into single-record pages
+    const ui32 numRecords = 100;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    // Read with streaming enabled
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();
+    const ui32 iterationsCount = reader.GetIterationsCount();
+
+    Cerr << "MemoryLimitSingleRecordPages: total pages created=" << totalCreated
+         << ", iterations=" << iterationsCount << Endl;
+
+    // With single-record pages, we should have many pages created
+    UNIT_ASSERT_GT(totalCreated, 50u);
+    // Multiple iterations confirm the Ack/page protocol ran
+    UNIT_ASSERT_GT(iterationsCount, 50u);
+}
+
+// Test for memory limits that exactly match chunk boundaries
+void TestMemoryLimitChunkBoundaries() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    // Enable SimpleReader with streaming
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    // Configure memory limit to match typical chunk size
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetMinRecordsForPaging(1000);  // Trigger streaming
+    streamingConfig->SetMaxPagesInFlight(4);
+    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    csControllerGuard->SetConfiguredLimit(4);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write data that should create chunks near our memory limit
+    const ui32 numRecords = 5000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    // Read with streaming enabled
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();
+    const ui32 iterationsCount = reader.GetIterationsCount();
+
+    Cerr << "MemoryLimitChunkBoundaries: total pages created=" << totalCreated
+         << ", iterations=" << iterationsCount << Endl;
+
+    // Should have multiple pages created
+    UNIT_ASSERT_GT(totalCreated, 1u);
+    UNIT_ASSERT_GT(iterationsCount, 1u);
+}
+
+// Test for zero memory limit scenario (should fall back to non-streaming)
+void TestMemoryLimitZero() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    // Enable SimpleReader with streaming
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    // Configure zero memory limit (should fall back to non-streaming)
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetMinRecordsForPaging(1000000);  // Very high threshold
+    streamingConfig->SetMaxPagesInFlight(0);  // Zero limit
+    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    csControllerGuard->SetConfiguredLimit(0);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write data that would normally trigger streaming
+    const ui32 numRecords = 2000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    // Read (should fall back to non-streaming due to zero memory limit)
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();
+    const ui32 iterationsCount = reader.GetIterationsCount();
+
+    Cerr << "MemoryLimitZero: total pages created=" << totalCreated
+         << ", iterations=" << iterationsCount << Endl;
+
+    // With zero memory limit, should fall back to non-streaming
+    // The OnPageCreated hook should not be called
+    UNIT_ASSERT_VALUES_EQUAL(totalCreated, 0u);
+    // Should have minimal iterations (non-streaming behavior)
+    UNIT_ASSERT_LE(iterationsCount, 10u);
+}
+
 void TestStreamingWithFilterSkip() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -722,6 +910,18 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(StrategyNever) {
         TestStrategyNever();
+    }
+
+    Y_UNIT_TEST(MemoryLimitSingleRecordPages) {
+        TestMemoryLimitSingleRecordPages();
+    }
+
+    Y_UNIT_TEST(MemoryLimitChunkBoundaries) {
+        TestMemoryLimitChunkBoundaries();
+    }
+
+    Y_UNIT_TEST(MemoryLimitZero) {
+        TestMemoryLimitZero();
     }
 }
 

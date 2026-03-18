@@ -435,8 +435,8 @@ public:
 
         if (DryRun) {
             auto* dryRunExec = new TDryRunExecutor(TabletID());
-            Executor0 = dryRunExec;
             ITablet::ExecutorActorID = ctx.RegisterWithSameMailbox(dryRunExec);
+            SetExternalExecutor(dryRunExec);
             OnActivateExecutor(ctx);
         } else {
             using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;

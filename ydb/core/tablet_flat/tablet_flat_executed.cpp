@@ -229,6 +229,10 @@ void TTabletExecutedFlat::Detach(const TActorContext &ctx) {
     OnDetach(ctx);
 }
 
+void TTabletExecutedFlat::SetExternalExecutor(IExecutor* executor) {
+    Executor0 = executor;
+}
+
 bool TTabletExecutedFlat::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
     if (ev) {
         TStringStream str;

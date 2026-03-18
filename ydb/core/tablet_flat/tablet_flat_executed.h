@@ -8,10 +8,6 @@ namespace NTabletFlatExecutor {
 
 class TExecutor;
 
-namespace NRecovery {
-class TRecoveryShard;
-} // namespace NRecovery
-
 struct IMiniKQLFactory {
     virtual ~IMiniKQLFactory() = default;
 
@@ -24,8 +20,6 @@ class TTabletExecutedFlat
     : public NFlatExecutorSetup::ITablet
     , public IActorExceptionHandler
 {
-    friend class NRecovery::TRecoveryShard;
-
 protected:
     using IExecutor = NFlatExecutorSetup::IExecutor;
 
@@ -119,6 +113,8 @@ protected:
         if (size)
             TxCacheQuota->ReleaseQuota(size);
     }
+
+    void SetExternalExecutor(IExecutor* executor);
 
 private:
     IExecutor* CreateExecutor(const TActorContext &ctx);

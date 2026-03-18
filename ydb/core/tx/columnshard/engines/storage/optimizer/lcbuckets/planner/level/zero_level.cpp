@@ -12,7 +12,7 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks(cons
             continue;
         }
         auto affectedPortions = NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd(), mayUsePortion);
-        if (affectedPortions.has_value() && affectedPortions->GetConsistBlockedPortions()) {
+        if (affectedPortions.has_value() && affectedPortions->HasBlockedPortions()) {
             continue;
         }
         result.back().AddCurrentLevelPortion(i.GetPortion(), std::move(affectedPortions), true);

@@ -637,12 +637,12 @@ public:
 };
 
 void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
-    Counters.GetCSCounters().OnSetupCompaction();
-    BackgroundController.ResetWaitingPriority();
     if (BackgroundController.GetCompactionsCount()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_start_compaction")("reason", "compaction_in_progress");
         return;
     }
+    Counters.GetCSCounters().OnSetupCompaction();
+    BackgroundController.ResetWaitingPriority();
 
     auto indexChangesList = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
 

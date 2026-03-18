@@ -60,7 +60,7 @@ void TOneLayerPortions::TryAddPortionToTask(
         return;
     }
     auto affectedPortions = GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd(), mayUsePortion);
-    if (affectedPortions.has_value() && affectedPortions->GetConsistBlockedPortions()) {
+    if (affectedPortions.has_value() && affectedPortions->HasBlockedPortions()) {
         return;
     }
     compactedData += portion->GetTotalBlobBytes();

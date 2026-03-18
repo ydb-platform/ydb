@@ -110,7 +110,7 @@ public:
         return NotIncludedNextPortion;
     }
 
-    bool GetConsistBlockedPortions() const {
+    bool HasBlockedPortions() const {
         return ConsistBlockedPortions;
     }
 

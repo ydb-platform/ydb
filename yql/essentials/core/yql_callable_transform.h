@@ -47,8 +47,11 @@ public:
             status = *maybeStatus;
         } else {
             if (name == CommitName) {
-                auto datasink = ParseCommit(*input, ctx);
-                if (!datasink) {
+                bool isUniversal;
+                auto datasink = ParseCommit(*input, ctx, isUniversal);
+                if (isUniversal) {
+                    input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+                } else if (!datasink) {
                     status = TStatus::Error;
                 } else {
                     status = ProcessDataProviderAnnotation(*datasink, input, output, ctx);
@@ -140,7 +143,8 @@ public:
     }
 
 protected:
-    IDataProvider* ParseCommit(const TExprNode& input, TExprContext& ctx) {
+    IDataProvider* ParseCommit(const TExprNode& input, TExprContext& ctx, bool& isUniversal) {
+        isUniversal = false;
         if (!EnsureMinArgsCount(input, 2, ctx)) {
             return nullptr;
         }
@@ -149,7 +153,17 @@ protected:
             return nullptr;
         }
 
+        if (input.Child(0)->GetTypeAnn() && input.Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            isUniversal = true;
+            return nullptr;
+        }
+
         if (!EnsureWorldType(*input.Child(0), ctx)) {
+            return nullptr;
+        }
+
+        if (input.Child(1)->GetTypeAnn() && input.Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            isUniversal = true;
             return nullptr;
         }
 
@@ -158,6 +172,15 @@ protected:
         }
 
         if (input.ChildrenSize() == 3) {
+            if (input.Child(2)->GetTypeAnn() && input.Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                isUniversal = true;
+                return nullptr;
+            }
+
+            if (!EnsureTuple(*input.Child(2), ctx)) {
+                return nullptr;
+            }
+
             for (auto& setting : input.Child(2)->Children()) {
                 if (!EnsureTupleSize(*setting, 2, ctx)) {
                     return nullptr;

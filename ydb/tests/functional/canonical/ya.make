@@ -6,7 +6,7 @@ TEST_SRCS(
     test_sql.py
 )
 REQUIREMENTS(cpu:2)
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -17,12 +17,10 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 DEPENDS(
 )
 
-
 DATA (
     arcadia/ydb/tests/functional/canonical/canondata
     arcadia/ydb/tests/functional/canonical/sql
 )
-
 
 PEERDIR(
     ydb/tests/library

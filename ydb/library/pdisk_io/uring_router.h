@@ -40,7 +40,7 @@ struct TUringRouterConfig {
     ui32 SqThreadIdleMs = 1000;
 
     // Kernel thread polls submissions (IORING_SETUP_SQPOLL)
-    bool UseSQPoll = true;
+    bool UseSQPoll = false;
 
     // NVMe/polled devices: no interrupts, user polls completion (IORING_SETUP_IOPOLL).
     // It requires support from both device and driver,

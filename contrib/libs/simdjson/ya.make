@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(4.3.1)
+VERSION(4.4.0)
 
-ORIGINAL_SOURCE(https://github.com/simdjson/simdjson/archive/v4.3.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/simdjson/simdjson/archive/v4.4.0.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/simdjson/include

@@ -114,8 +114,8 @@ namespace NKikimr::NDDisk {
 #if defined(__linux__)
         NPDisk::TUringRouterConfig config;
         config.QueueDepth = MaxInFlight;
-        config.UseSQPoll = true;
-        config.UseIOPoll = true;
+        config.UseSQPoll = false;
+        config.UseIOPoll = false;
         if (!UringRouter) {
             if (DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
                 UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);

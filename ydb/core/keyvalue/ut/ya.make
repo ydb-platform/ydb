@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/keyvalue)
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(30)
-IF (WITH_VALGRIND OR SANITIZER_TYPE  == "thread")
+IF (SANITIZER_TYPE  == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()

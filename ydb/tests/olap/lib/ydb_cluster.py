@@ -83,7 +83,12 @@ class YdbCluster:
                     raise RuntimeError(
                         "client-host is set to 'static', but no STORAGE nodes are available from get_cluster_nodes()"
                     )
-                cls._client_host = nodes[0].host
+                for n in nodes:
+                    if cls.ydb_endpoint.find(n.host) >= 0:
+                        cls._client_host = n.host
+                        break
+                if not cls._client_host:
+                    cls._client_host = nodes[0].host
         return cls._client_host
 
     @classmethod

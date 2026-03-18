@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     FORK_SUBTESTS()
 
-    IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    IF (SANITIZER_TYPE)
         SIZE(LARGE)
         TAG(ya:fat)
     ELSE()

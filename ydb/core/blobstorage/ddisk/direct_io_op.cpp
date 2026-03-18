@@ -238,7 +238,7 @@ void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorS
         case TUringOperationBase::EREAD: {
             TRope data = ExtractData();
             reply = std::make_unique<TEvPrivate::TEvReadPersistentBufferPart>(
-                GetCookie(), PartCookie, status, std::move(reason), std::move(data));
+                GetCookie(), PartCookie, status, std::move(reason), std::move(data), IsRestore);
             break;
         }
         case TUringOperationBase::EWRITE:

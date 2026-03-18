@@ -257,7 +257,8 @@ namespace NKikimr::TEvPersQueue {
     struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinished> {
         TEvReadingPartitionFinishedRequest() = default;
 
-        TEvReadingPartitionFinishedRequest(const TString& consumer, ui32 partitionId, bool scaleAwareSDK, bool startedReadingFromEndOffset) {
+        TEvReadingPartitionFinishedRequest(const TActorId& pipeClient, const TString& consumer, ui32 partitionId, bool scaleAwareSDK, bool startedReadingFromEndOffset) {
+            ActorIdToProto(pipeClient, Record.MutablePipeClient());
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
             Record.SetScaleAwareSDK(scaleAwareSDK);
@@ -268,7 +269,8 @@ namespace NKikimr::TEvPersQueue {
     struct TEvReadingPartitionStartedRequest : public TEventPB<TEvReadingPartitionStartedRequest, NKikimrPQ::TEvReadingPartitionStartedRequest, EvReadingPartitionStarted> {
         TEvReadingPartitionStartedRequest() = default;
 
-        TEvReadingPartitionStartedRequest(const TString& consumer, ui32 partitionId) {
+        TEvReadingPartitionStartedRequest(const TActorId& pipeClient, const TString& consumer, ui32 partitionId) {
+            ActorIdToProto(pipeClient, Record.MutablePipeClient());
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
         }

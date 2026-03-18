@@ -14,16 +14,17 @@ namespace {
 void DoReadFromSectorMap(
     const TIntrusivePtr<NPDisk::TSectorMap>& sectorMap,
     ui32 blockSize,
-    const std::shared_ptr<TReadBlocksLocalRequest>& request,
+    TGuardedSgList& sgList,
+    TBlockRange64 range,
     NThreading::TPromise<TDBGReadBlocksResponse> promise)
 {
-    if (auto guard = request->Sglist.Acquire()) {
+    if (auto guard = sgList.Acquire()) {
         // Acquire the sglist guard to access the data
         const auto& sglist = guard.Get();
 
         // Calculate offset and size
-        ui64 startOffset = request->Range.Start * blockSize;
-        ui64 totalSize = request->Range.Size() * blockSize;
+        ui64 startOffset = range.Start * blockSize;
+        ui64 totalSize = range.Size() * blockSize;
 
         if (totalSize != SgListGetSize(sglist)) {
             auto error = MakeError(
@@ -97,31 +98,32 @@ TInMemoryDirectBlockGroup::TInMemoryDirectBlockGroup(
         NPDisk::NSectorMap::DM_NONE);
 }
 
-NThreading::TFuture<void> TInMemoryDirectBlockGroup::EstablishConnections(
-    TExecutorPtr executor,
-    NWilson::TTraceId traceId,
-    ui32 vChunkIndex)
+ui64 TInMemoryDirectBlockGroup::GenerateLsn()
 {
-    Y_UNUSED(executor);
-    Y_UNUSED(traceId);
-    Y_UNUSED(vChunkIndex);
+    return ++LsnGenerator;
+}
 
+NThreading::TFuture<void> TInMemoryDirectBlockGroup::EstablishConnections()
+{
     return NThreading::MakeFuture();
 }
 
 NThreading::TFuture<TDBGWriteBlocksResponse>
-TInMemoryDirectBlockGroup::WriteBlocksLocal(
+TInMemoryDirectBlockGroup::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
-    TCallContextPtr callContext,
-    std::shared_ptr<TWriteBlocksLocalRequest> request,
+    ui8 hostIndex,
+    ui64 lsn,
+    TBlockRange64 range,
+    TGuardedSgList guardedSglist,
     NWilson::TTraceId traceId)
 {
     Y_UNUSED(vChunkIndex);
-    Y_UNUSED(callContext);
+    Y_UNUSED(hostIndex);
+    Y_UNUSED(lsn);
     Y_UNUSED(traceId);
 
     // Acquire the sglist guard to access the data
-    auto guard = request->Sglist.Acquire();
+    auto guard = guardedSglist.Acquire();
     if (!guard) {
         // Failed to acquire guard, return error
         auto error = MakeError(E_CANCELLED, "Failed to acquire sglist guard");
@@ -132,8 +134,8 @@ TInMemoryDirectBlockGroup::WriteBlocksLocal(
     const auto& sglist = guard.Get();
 
     // Calculate offset and size
-    ui64 startOffset = request->Range.Start * BlockSize;
-    ui64 totalSize = request->Range.Size() * BlockSize;
+    ui64 startOffset = range.Start * BlockSize;
+    ui64 totalSize = range.Size() * BlockSize;
 
     if (totalSize != SgListGetSize(sglist)) {
         auto error = MakeError(
@@ -170,69 +172,77 @@ TInMemoryDirectBlockGroup::WriteBlocksLocal(
         return NThreading::MakeFuture<TDBGWriteBlocksResponse>(
             {.Error = std::move(error)});
     }
-    // Return meta compatible with TDirectBlockGroup (3 replicas)
-    TVector<TPersistentBufferWriteMeta> meta;
-    meta.reserve(3);
-    for (ui8 i = 0; i < 3; i++) {
-        meta.emplace_back(i, 0);
-    }
+
     return NThreading::MakeFuture<TDBGWriteBlocksResponse>(
-        {.Meta = std::move(meta), .Error = MakeError(S_OK)});
-}
-
-NThreading::TFuture<TDBGSyncBlocksResponse>
-TInMemoryDirectBlockGroup::SyncWithPersistentBuffer(
-    ui32 vChunkIndex,
-    ui8 persistBufferIndex,
-    const TVector<TSyncRequest>& syncRequests,
-    NWilson::TTraceId traceId)
-{
-    Y_UNUSED(vChunkIndex);
-    Y_UNUSED(persistBufferIndex);
-    Y_UNUSED(syncRequests);
-    Y_UNUSED(traceId);
-
-    return NThreading::MakeFuture<TDBGSyncBlocksResponse>(
         {.Error = MakeError(S_OK)});
 }
 
-NThreading::TFuture<TDBGReadBlocksResponse>
-TInMemoryDirectBlockGroup::ReadBlocksLocalFromPersistentBuffer(
+NThreading::TFuture<TDBGFlushResponse>
+TInMemoryDirectBlockGroup::FlushFromPBuffer(
     ui32 vChunkIndex,
-    ui8 persistentBufferIndex,
-    TCallContextPtr callContext,
-    std::shared_ptr<TReadBlocksLocalRequest> request,
-    NWilson::TTraceId traceId,
-    ui64 lsn)
+    ui8 hostIndex,
+    const TVector<TPBufferSegment>& segments,
+    NWilson::TTraceId traceId)
 {
     Y_UNUSED(vChunkIndex);
-    Y_UNUSED(persistentBufferIndex);
-    Y_UNUSED(callContext);
+    Y_UNUSED(hostIndex);
+    Y_UNUSED(segments);
+    Y_UNUSED(traceId);
+
+    TDBGFlushResponse response;
+    for (const auto& _: segments) {
+        response.Errors.push_back(MakeError(S_OK));
+    }
+
+    return NThreading::MakeFuture<TDBGFlushResponse>(std::move(response));
+}
+
+NThreading::TFuture<TDBGReadBlocksResponse>
+TInMemoryDirectBlockGroup::ReadBlocksFromPBuffer(
+    ui32 vChunkIndex,
+    ui8 hostIndex,
+    ui64 lsn,
+    TBlockRange64 range,
+    TGuardedSgList sglist,
+    NWilson::TTraceId traceId)
+{
+    Y_UNUSED(vChunkIndex);
+    Y_UNUSED(hostIndex);
     Y_UNUSED(traceId);
     Y_UNUSED(lsn);
 
     auto promise = NThreading::NewPromise<TDBGReadBlocksResponse>();
     auto future = promise.GetFuture();
 
-    DoReadFromSectorMap(SectorMap, BlockSize, request, std::move(promise));
+    DoReadFromSectorMap(
+        SectorMap,
+        BlockSize,
+        sglist,
+        range,
+        std::move(promise));
     return future;
 }
 
 NThreading::TFuture<TDBGReadBlocksResponse>
-TInMemoryDirectBlockGroup::ReadBlocksLocalFromDDisk(
+TInMemoryDirectBlockGroup::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
-    TCallContextPtr callContext,
-    std::shared_ptr<TReadBlocksLocalRequest> request,
+    ui8 hostIndex,
+    TBlockRange64 range,
+    TGuardedSgList sglist,
     NWilson::TTraceId traceId)
 {
     Y_UNUSED(vChunkIndex);
-    Y_UNUSED(callContext);
-    Y_UNUSED(traceId);
+    Y_UNUSED(hostIndex), Y_UNUSED(traceId);
 
     auto promise = NThreading::NewPromise<TDBGReadBlocksResponse>();
     auto future = promise.GetFuture();
 
-    DoReadFromSectorMap(SectorMap, BlockSize, request, std::move(promise));
+    DoReadFromSectorMap(
+        SectorMap,
+        BlockSize,
+        sglist,
+        range,
+        std::move(promise));
     return future;
 }
 

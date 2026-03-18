@@ -30,6 +30,7 @@
 #include <ydb/core/blobstorage/vdisk/query/query_statalgo.h>
 #include <ydb/core/blobstorage/vdisk/query/assimilation.h>
 #include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_actor.h>
+#include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_ctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
@@ -1994,8 +1995,8 @@ namespace NKikimr {
             ActiveActors.Insert(MetadataActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run chunk keeper actor
-            IActor* chunkKeeperActor = CreateChunkKeeperActor(logCtx, std::move(ev->Get()->ChunkKeeperData),
-                    Config->EnableChunkKeeper, Config->BaseInfo.ReadOnly);
+            IActor* chunkKeeperActor = CreateChunkKeeperActor(TChunkKeeperCtx{logCtx, Db->SkeletonID},
+                    std::move(ev->Get()->ChunkKeeperData), Config->EnableChunkKeeper, Config->BaseInfo.ReadOnly);
             Db->ChunkKeeperActorID.Set(ctx.Register(chunkKeeperActor));
             ActiveActors.Insert(Db->ChunkKeeperActorID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
@@ -2811,6 +2812,7 @@ namespace NKikimr {
                 .HugeKeeperId = Db->HugeKeeperID,
                 .DefragId = DefragId,
                 .SyncLogId = Db->SyncLogID,
+                .ChunkKeeperId = Db->ChunkKeeperActorID,
             });
 
             const TActorContext& ctx = TActivationContext::AsActorContext();

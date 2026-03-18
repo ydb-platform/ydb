@@ -2,11 +2,7 @@ UNITTEST_FOR(ydb/core/tx/tx_proxy)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(cpu:4)
-ELSEIF(SANITIZER_TYPE)
+IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:4)
 ELSE()
@@ -29,6 +25,5 @@ SRCS(
     proxy_ext_tenant_ut.cpp
     proxy_ut_helpers.cpp
 )
-
 
 END()

@@ -2458,7 +2458,106 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(expireTimeCalledFlag,
             "Token expire time was not taken from the parser subclass override");
     }
-}
+
+    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    void AuthorizationWithPeerName() {
+        using namespace Tests;
+
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 servicePort = tp.GetPort(4284);
+        TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        SetUseAccessService<TAccessServiceMock>(authConfig);
+        authConfig.SetUseAccessServiceApiKey(IsApiKeySupported<TAccessServiceMock>());
+        authConfig.SetUseAccessServiceTLS(false);
+        authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
+        authConfig.SetUseStaff(false);
+        auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = NKikimr::CreateTicketParser;
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+
+        TString userToken = "user1";
+        TString testPeerName = "192.168.1.100";
+
+        // Access Server Mock
+        TAccessServiceMock accessServiceMock;
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
+        std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
+            accessServiceMock.ContainerId = "aaaa1234";
+        }
+
+        // Authorization successful.
+        TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+            {{"something.read"}, {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}
+        };
+        runtime->Send(new IEventHandle(
+            MakeTicketParserID(), 
+            sender, 
+            new TEvTicketParser::TEvAuthorizeTicket(userToken, testPeerName, entries)
+        ), 0);
+        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT(!result->HasError());
+        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1@as");
+
+        // Verify that x-user-ip header was set with the correct value
+        UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedXUserIP, testPeerName,
+                                   "Expected x-user-ip header to be '" << testPeerName 
+                                   << "' but got '" << accessServiceMock.CapturedXUserIP << "'");
+
+        accessServiceMock.CapturedXUserIP.clear();
+
+        // Authorization failure with not enough permissions.
+        entries = {
+            {{"something.write"}, {{"folder_id", "test_folder"}, {"database_id", "test_db"}}}
+        };
+        runtime->Send(new IEventHandle(
+            MakeTicketParserID(), 
+            sender, 
+            new TEvTicketParser::TEvAuthorizeTicket(userToken, testPeerName, entries)
+        ), 0);
+        result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT(result->HasError());
+        UNIT_ASSERT(!result->Error.Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access Denied");
+
+        // Verify that x-user-ip header was set with the correct value
+        UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedXUserIP, testPeerName,
+                                   "Expected x-user-ip header to be '" << testPeerName 
+                                   << "' but got '" << accessServiceMock.CapturedXUserIP << "'");
+    }
+
+    Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserAuthorization) {
+        AuthorizationWithPeerName<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserBulkAuthorization) {
+        AuthorizationWithPeerName<TTicketParserAccessServiceMockV2, true>();
+    }
+
+    Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserNebiusAuthorization) {
+        AuthorizationWithPeerName<NKikimr::TNebiusAccessServiceMock>();
+    }
+} // Test suite TTicketParserTest
 
 Y_UNIT_TEST_SUITE(AuthorizeRequestToAccessService) {
 

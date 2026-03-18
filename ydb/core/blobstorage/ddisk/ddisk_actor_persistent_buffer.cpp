@@ -479,8 +479,11 @@ namespace NKikimr::NDDisk {
         TPersistentBuffer::TRecord& pr = jt->second;
         if (pr.OffsetInBytes > selector.OffsetInBytes ||
             pr.OffsetInBytes + pr.Size < selector.Size + selector.OffsetInBytes) {
+            Counters.Interface.ReadPersistentBuffer.Reply(false);
+            span.End();
             SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST, "Selector range is out of record bounds"));
+            return;
         }
 
         ui64 operationCookie = NextCookie++;

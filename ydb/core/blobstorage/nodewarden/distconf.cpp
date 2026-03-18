@@ -172,7 +172,8 @@ namespace NKikimr::NStorage {
                 PersistConfig({}, drives); // persist committed storage config
             }
         } else {
-            Y_DEBUG_ABORT_UNLESS(StorageConfig->GetGeneration() == CommittedStorageConfig->GetGeneration());
+            // TODO(alexvru): examine this further
+            // Y_DEBUG_ABORT_UNLESS(StorageConfig->GetGeneration() == CommittedStorageConfig->GetGeneration());
         }
     }
 

@@ -26,6 +26,7 @@ struct TPoolInfo {
     ISharedPool* Shared = nullptr;
     IExecutorPool* Pool = nullptr;
     TBasicExecutorPool* BasicPool = nullptr;
+    bool IsSharedOnly = false;
 
     i16 DefaultFullThreadCount = 0;
     i16 MinFullThreadCount = 0;

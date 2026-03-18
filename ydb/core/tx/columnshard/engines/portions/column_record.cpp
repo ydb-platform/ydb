@@ -43,7 +43,7 @@ NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     meta.SetNumRows(RecordsCount);
     meta.SetRawBytes(RawBytes);
     if (AdditionalAccessorData && AdditionalAccessorData->HasDataToSerialize()) {
-        AdditionalAccessorData->AddToProto(&meta);
+        AdditionalAccessorData->AddToProto(meta);
     }
     return meta;
 }

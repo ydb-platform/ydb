@@ -11,11 +11,8 @@ NJson::TJsonValue TDictionaryAccessorData::DebugJson() const {
     return result;
 }
 
-void TDictionaryAccessorData::AddToProto(NKikimrTxColumnShard::TIndexColumnMeta* meta) const {
-    if (!meta) {
-        return;
-    }
-    auto* add = meta->MutableAdditionalAccessorData();
+void TDictionaryAccessorData::AddToProto(NKikimrTxColumnShard::TIndexColumnMeta& meta) const {
+    auto* add = meta.MutableAdditionalAccessorData();
     auto* acc = add->MutableDictionaryAccessorData();
     acc->SetDictionaryBlobSize(DictionaryBlobSize);
     acc->SetPositionsBlobSize(PositionsBlobSize);

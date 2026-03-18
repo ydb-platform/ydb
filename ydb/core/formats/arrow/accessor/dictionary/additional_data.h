@@ -21,7 +21,7 @@ struct TDictionaryAccessorData : IAdditionalAccessorData {
         return true;
     };
 
-    void AddToProto(NKikimrTxColumnShard::TIndexColumnMeta* meta) const override;
+    void AddToProto(NKikimrTxColumnShard::TIndexColumnMeta& meta) const override;
 
     NJson::TJsonValue DebugJson() const override;
 };

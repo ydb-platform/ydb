@@ -236,8 +236,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
     auto& request = ev->Get()->Record;
 
     const ui64 id = request.GetId();
-    auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
-        ? TRowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId())
+    auto rowVersion = request.HasSnapshot()
+        ? TRowVersion::FromProto(request.GetSnapshot())
         : GetMvccTxVersion(EMvccTxMode::ReadOnly);
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
@@ -285,7 +285,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
             badRequest("Empty index columns list");
         }
 
-        if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
+        if (request.HasSnapshot()) {
             const auto& pathId = tableId.PathId;
             const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
             if (!SnapshotManager.FindAvailable(snapshotKey)) {

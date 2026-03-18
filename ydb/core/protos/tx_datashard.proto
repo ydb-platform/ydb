@@ -2720,8 +2720,7 @@ message TEvValidateUniqueIndexRequest {
     optional uint64 SeqNoGeneration = 6; // monotonically increasing sequence, first part
     optional uint64 SeqNoRound = 7; // monotonically increasing sequence, second part
 
-    optional uint64 SnapshotTxId = 8;
-    optional uint64 SnapshotStep = 9;
+    optional NKikimrProto.TRowVersion Snapshot = 8;
 }
 
 message TEvValidateUniqueIndexResponse {

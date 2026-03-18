@@ -1066,8 +1066,8 @@ private:
         // Check snapshot and pass it to Validate if it's present
         if (Self->TablesWithSnapshots.contains(path->PathId)) {
             auto snapId = Self->TablesWithSnapshots.at(path->PathId);
-            record.SetSnapshotTxId(ui64(snapId));
-            record.SetSnapshotStep(ui64(Self->SnapshotsStepIds.at(snapId)));
+            record.MutableSnapshot()->SetTxId(ui64(snapId));
+            record.MutableSnapshot()->SetStep(ui64(Self->SnapshotsStepIds.at(snapId)));
         }
 
         TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;

@@ -7,6 +7,8 @@
 #include "schemeshard__operation.h"
 #include "schemeshard__stats.h"
 #include "schemeshard_backup.h"
+#include "schemeshard_build_index.h"
+#include "schemeshard_set_column_constraint.h"
 #include "schemeshard_domain_links.h"
 #include "schemeshard_export.h"
 #include "schemeshard_forced_compaction.h"
@@ -1905,6 +1907,8 @@ public:
 
         struct TTxPipeReset;
         struct TTxBilling;
+
+        class TTxCreateSetColumnConstraint;
     };
 
     NTabletFlatExecutor::ITransaction* CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TPtr& ev);
@@ -1935,6 +1939,9 @@ public:
     void Handle(TEvIndexBuilder::TEvCancelRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvForgetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvListRequest::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
+    NTabletFlatExecutor::ITransaction* CreateTxCreateSetColumnConstraint(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev);
 
     void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);

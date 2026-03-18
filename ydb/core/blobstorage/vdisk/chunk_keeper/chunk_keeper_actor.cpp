@@ -43,7 +43,7 @@ public:
         if (IsActive) {
             Become(&TThis::StateAccepting);
         } else {
-            if (!ReadOnly) {
+            if (!ReadOnly && !Committed->Chunks.empty()) {
                 DropAllChunks();
             }
             Become(&TThis::StateError);

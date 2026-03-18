@@ -473,6 +473,8 @@ private:
     template <typename Func>
     auto DispatchByExportKind(Func&& func, TExportInfo& exportInfo) {
         switch (exportInfo.Kind) {
+        case TExportInfo::EKind::YT:
+            return func.template operator()<Ydb::Export::ExportToYtSettings>();
         case TExportInfo::EKind::S3:
             return func.template operator()<Ydb::Export::ExportToS3Settings>();
         case TExportInfo::EKind::FS:

@@ -46,7 +46,7 @@ For [fulltext indexes](../../../dev/fulltext-indexes.md) with n-grams (`use_filt
 SELECT id, title
 FROM articles VIEW ft_idx
 WHERE body ILIKE "%learn%ing%"
-ORDER BY id;
+LIMIT 20;
 ```
 
 ### Examples

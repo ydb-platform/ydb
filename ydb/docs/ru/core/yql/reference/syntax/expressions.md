@@ -45,7 +45,7 @@ SELECT "fo" || "o";
 SELECT id, title
 FROM articles VIEW ft_idx
 WHERE body ILIKE "%обуч%ние%"
-ORDER BY id;
+LIMIT 20;
 ```
 
 ### Примеры

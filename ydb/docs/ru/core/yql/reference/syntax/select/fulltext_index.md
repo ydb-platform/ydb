@@ -32,7 +32,7 @@ ORDER BY ...
 SELECT id, title
 FROM articles VIEW ft_idx
 WHERE FulltextMatch(body, "машинное обучение")
-ORDER BY id;
+LIMIT 20;
 ```
 
 ### Режим `Wildcard` и шаблоны `%` / `_` (требуются N-граммы)
@@ -44,7 +44,7 @@ ORDER BY id;
 SELECT id, title
 FROM articles VIEW ft_idx
 WHERE FulltextMatch(body, "маш% обу%ние", "Wildcard" AS Mode)
-ORDER BY id;
+LIMIT 20;
 ```
 
 ### LIKE / ILIKE (используют полнотекстовый индекс)
@@ -55,7 +55,7 @@ ORDER BY id;
 SELECT id, title
 FROM articles VIEW ft_idx
 WHERE body ILIKE "%обуч%ние%"
-ORDER BY id;
+LIMIT 20;
 ```
 
 ## FulltextScore

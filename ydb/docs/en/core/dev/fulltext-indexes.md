@@ -40,7 +40,7 @@ Example query:
 SELECT id, title
 FROM articles VIEW ft_index
 WHERE FulltextMatch(body, "search terms")
-ORDER BY id;
+LIMIT 20;
 ```
 
 ### Fulltext index for ranking (`fulltext_relevance`) {#relevance}
@@ -94,7 +94,7 @@ Example query with `FulltextMatch`:
 SELECT id, title
 FROM articles VIEW ngram_index
 WHERE FulltextMatch(body, "%learn%", "Wildcard" AS Mode)
-ORDER BY id;
+LIMIT 20;
 ```
 
 Example query with `LIKE`:
@@ -103,7 +103,7 @@ Example query with `LIKE`:
 SELECT id, title
 FROM articles VIEW ngram_index
 WHERE body LIKE "%learn%ing%"
-ORDER BY id;
+LIMIT 20;
 ```
 
 ## Full syntax for fulltext indexes {#syntax}
@@ -121,22 +121,6 @@ Functions and expressions for fulltext search:
 
 * [Fulltext built-in functions](../yql/reference/builtins/fulltext.md)
 * [LIKE / ILIKE with a fulltext index](../yql/reference/syntax/expressions.md#like-ilike-with-fulltext-index)
-
-## Index parameters {#parameters}
-
-Fulltext index parameters are specified in the `WITH (...)` clause.
-For the full list, see:
-
-* [FULLTEXT INDEX (CREATE TABLE)](../yql/reference/syntax/create_table/fulltext_index.md)
-
-## Using Fulltext Indexes {#select}
-
-Queries to fulltext indexes are executed using the `VIEW` syntax in YQL.
-
-For full details and additional parameters, see:
-
-* [VIEW (Fulltext index)](../yql/reference/syntax/select/fulltext_index.md)
-* [Fulltext built-in functions](../yql/reference/builtins/fulltext.md)
 
 {% note info %}
 

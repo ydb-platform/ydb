@@ -65,7 +65,7 @@ A fulltext index:
 ```yql
 ALTER TABLE `series`
   ADD INDEX ft_idx GLOBAL USING fulltext_plain
-  ON (title) COVER (series_id)
+  ON (title)
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 

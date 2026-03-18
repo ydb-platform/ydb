@@ -36,7 +36,7 @@ WHERE FulltextMatch(body, "машинное обучение");
 SELECT id, title
 FROM articles VIEW ft_idx
 WHERE FulltextMatch(body, "маш% обу%ние", "Wildcard" AS Mode)
-ORDER BY id;
+LIMIT 20;
 ```
 
 ### Пример для Keywords {#keywords}

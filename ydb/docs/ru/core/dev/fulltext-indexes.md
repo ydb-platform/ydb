@@ -40,7 +40,7 @@ ALTER TABLE articles
 SELECT id, title
 FROM articles VIEW ft_index
 WHERE FulltextMatch(body, "поисковые термы")
-ORDER BY id;
+LIMIT 20;
 ```
 
 ### Полнотекстовый индекс для ранжирования (`fulltext_relevance`) {#relevance}
@@ -94,7 +94,7 @@ ALTER TABLE articles
 SELECT id, title
 FROM articles VIEW ngram_index
 WHERE FulltextMatch(body, "%обуч%", "Wildcard" AS Mode)
-ORDER BY id;
+LIMIT 20;
 ```
 
 Пример запроса с `LIKE`:
@@ -103,7 +103,7 @@ ORDER BY id;
 SELECT id, title
 FROM articles VIEW ngram_index
 WHERE body LIKE "%обуч%ние%"
-ORDER BY id;
+LIMIT 20;
 ```
 
 ## Полный синтаксис полнотекстовых индексов {#syntax}
@@ -121,22 +121,6 @@ ORDER BY id;
 
 * [Базовые функции полнотекстового поиска](../yql/reference/builtins/fulltext.md);
 * [LIKE / ILIKE с полнотекстовым индексом](../yql/reference/syntax/expressions.md#like-ilike-with-fulltext-index).
-
-## Параметры индекса {#parameters}
-
-Параметры полнотекстового индекса задаются в секции `WITH (...)`.
-Полный список параметров см. здесь:
-
-* [FULLTEXT INDEX (CREATE TABLE)](../yql/reference/syntax/create_table/fulltext_index.md)
-
-## Использование полнотекстовых индексов {#select}
-
-Запросы к полнотекстовым индексам выполняются с использованием синтаксиса `VIEW` в YQL.
-
-Подробности и дополнительные параметры:
-
-* [VIEW (Полнотекстовый индекс)](../yql/reference/syntax/select/fulltext_index.md)
-* [Базовые функции полнотекстового поиска](../yql/reference/builtins/fulltext.md)
 
 {% note info %}
 

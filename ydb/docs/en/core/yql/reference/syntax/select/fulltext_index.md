@@ -32,7 +32,7 @@ For function details, see [{#T}](../../builtins/fulltext.md), including
 SELECT id, title
 FROM articles VIEW ft_idx
 WHERE FulltextMatch(body, "machine learning")
-ORDER BY id;
+LIMIT 20;
 ```
 
 ### `Wildcard` mode and `%` / `_` patterns (requires n-grams)
@@ -44,7 +44,7 @@ To explicitly enable this behavior, pass `"Wildcard" AS Mode` as a named argumen
 SELECT id, title
 FROM articles VIEW ft_idx
 WHERE FulltextMatch(body, "mach% learn%", "Wildcard" AS Mode)
-ORDER BY id;
+LIMIT 20;
 ```
 
 ### LIKE / ILIKE (use the fulltext index)
@@ -55,7 +55,7 @@ For fulltext indexes with n-grams, `LIKE`/`ILIKE` predicates over the indexed te
 SELECT id, title
 FROM articles VIEW ft_idx
 WHERE body ILIKE "%learn%ing%"
-ORDER BY id;
+LIMIT 20;
 ```
 
 ## FulltextScore ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25) relevance)

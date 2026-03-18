@@ -20,7 +20,7 @@ WHERE FulltextMatch(body, "machine learning");
 
 Only the first two arguments can be positional. Additional parameters must be passed as **named arguments**.
 
-Supported named arguments:
+Supports named arguments:
 
 * `Mode` (String): query mode — `"Keywords"` (default), `"Query"`, `"Wildcard"`
 * `DefaultOperator` (String): operator for `"Keywords"` mode — `"And"` or `"Or"` (default `"And"`)
@@ -36,7 +36,7 @@ If the index is created with n-gram filtering, you can use `%` and `_` patterns 
 SELECT id, title
 FROM articles VIEW ft_idx
 WHERE FulltextMatch(body, "mach% learn%", "Wildcard" AS Mode)
-ORDER BY id;
+LIMIT 20;
 ```
 
 ### MinimumShouldMatch example {#minimum-should-match-example}
@@ -73,7 +73,7 @@ LIMIT 10;
 
 Only the first two arguments can be positional. Additional parameters must be passed as **named arguments**.
 
-Supported named arguments:
+Supports named arguments:
 
 * `DefaultOperator` (String): `"And"` or `"Or"` (default `"And"`)
 * `MinimumShouldMatch` (String): when `DefaultOperator` is set to `"Or"`, minimum number of matched terms (absolute or percentage)

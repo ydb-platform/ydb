@@ -33,7 +33,7 @@ UPSERT INTO articles (id, title, body) VALUES
 SELECT id, title
 FROM articles VIEW ft_idx
 WHERE FulltextMatch(body, "machine learning")
-ORDER BY id;
+LIMIT 20;
 ```
 
 ## Rank documents

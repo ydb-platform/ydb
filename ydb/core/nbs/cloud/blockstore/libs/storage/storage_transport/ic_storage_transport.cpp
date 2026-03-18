@@ -8,26 +8,36 @@ using namespace NActors;
 using namespace NKikimr::NDDisk;
 using namespace NThreading;
 
+namespace {
+
 ////////////////////////////////////////////////////////////////////////////////
 
-TICStorageTransport::TICStorageTransport(NActors::TActorSystem* actorSystem)
-    : ActorSystem(actorSystem)
+NActors::TActorId CreateTransportActor()
 {
     auto actor = std::make_unique<TICStorageTransportActor>();
 
-    ICStorageTransportActorId = NActors::TActivationContext::Register(
+    return NActors::TActivationContext::Register(
         actor.release(),
         NActors::TActorId(),
         NActors::TMailboxType::ReadAsFilled,
         NKikimr::AppData()->SystemPoolId);
 }
 
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+TICStorageTransport::TICStorageTransport(NActors::TActorSystem* actorSystem)
+    : ActorSystem(actorSystem)
+    , ICStorageTransportActorId(CreateTransportActor())
+{}
+
 TFuture<NKikimrBlobStorage::NDDisk::TEvConnectResult>
 TICStorageTransport::Connect(
     const NActors::TActorId serviceId,
     const TQueryCredentials credentials)
 {
-    auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvConnectResult>();
+    auto promise = NewPromise<TEvConnectResult>();
     auto future = promise.GetFuture();
 
     ActorSystem->Send(
@@ -50,8 +60,7 @@ TICStorageTransport::WritePersistentBuffer(
     TGuardedSgList data,
     NWilson::TSpan& span)
 {
-    auto promise = NewPromise<
-        NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>();
+    auto promise = NewPromise<TEvWritePersistentBufferResult>();
     auto future = promise.GetFuture();
 
     span.Event("Before_ActorSystem_Send");
@@ -79,8 +88,7 @@ TICStorageTransport::ErasePersistentBuffer(
     TVector<ui64> lsns,
     NWilson::TSpan& span)
 {
-    auto promise = NewPromise<
-        NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>();
+    auto promise = NewPromise<TEvErasePersistentBufferResult>();
     auto future = promise.GetFuture();
 
     span.Event("Before_ActorSystem_Send");
@@ -99,7 +107,7 @@ TICStorageTransport::ErasePersistentBuffer(
 }
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>
-TICStorageTransport::ReadPersistentBuffer(
+TICStorageTransport::ReadFromPBuffer(
     const NActors::TActorId serviceId,
     const TQueryCredentials credentials,
     const TBlockSelector selector,
@@ -129,7 +137,8 @@ TICStorageTransport::ReadPersistentBuffer(
     return future;
 }
 
-TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> TICStorageTransport::Read(
+TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult>
+TICStorageTransport::ReadFromDDisk(
     const NActors::TActorId serviceId,
     const TQueryCredentials credentials,
     const TBlockSelector selector,
@@ -137,7 +146,7 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> TICStorageTransport::Read(
     TGuardedSgList data,
     NWilson::TSpan& span)
 {
-    auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvReadResult>();
+    auto promise = NewPromise<TEvReadResult>();
     auto future = promise.GetFuture();
 
     span.Event("Before_ActorSystem_Send");
@@ -157,7 +166,7 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> TICStorageTransport::Read(
 }
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>
-TICStorageTransport::SyncWithPersistentBuffer(
+TICStorageTransport::FlushFromPBuffer(
     const NActors::TActorId serviceId,
     const NKikimr::NDDisk::TQueryCredentials credentials,
     TVector<NKikimr::NDDisk::TBlockSelector> selectors,
@@ -166,8 +175,7 @@ TICStorageTransport::SyncWithPersistentBuffer(
     const ui64 ddiskInstanceGuid,
     NWilson::TSpan& span)
 {
-    auto promise = NewPromise<
-        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>();
+    auto promise = NewPromise<TEvSyncWithPersistentBufferResult>();
     auto future = promise.GetFuture();
 
     span.Event("Before_ActorSystem_Send");
@@ -190,11 +198,9 @@ TICStorageTransport::SyncWithPersistentBuffer(
 TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>
 TICStorageTransport::ListPersistentBuffer(
     const NActors::TActorId serviceId,
-    const NKikimr::NDDisk::TQueryCredentials credentials,
-    const ui64 requestId)
+    const NKikimr::NDDisk::TQueryCredentials credentials)
 {
-    auto promise =
-        NewPromise<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>();
+    auto promise = NewPromise<TEvListPersistentBufferResult>();
     auto future = promise.GetFuture();
 
     ActorSystem->Send(
@@ -202,7 +208,6 @@ TICStorageTransport::ListPersistentBuffer(
         new TEvICStorageTransportPrivate::TEvListPersistentBuffer(
             serviceId,
             credentials,
-            requestId,
             std::move(promise)));
 
     return future;
@@ -260,7 +265,7 @@ void TICStorageTransportActor::HandleConnectResult(
         ConnectEventsByRequestId.erase(requestId);
     } else {
         // That means that request is already completed
-        LOG_DEBUG(
+        LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "ConnectEvent with requestId# %lu not found",
@@ -297,8 +302,6 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
         request->AddPayload(std::move(rope));
-    } else {
-        Y_ABORT_UNLESS(false);
     }
 
     ctx.Send(MakeHolder<IEventHandle>(
@@ -330,7 +333,7 @@ void TICStorageTransportActor::HandleWritePersistentBufferResult(
         WritePersistentBufferEventsByRequestId.erase(requestId);
     } else {
         // That means that request is already completed
-        LOG_DEBUG(
+        LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "WritePersistentBufferEvent with requestId# %lu not found",
@@ -359,7 +362,10 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
     auto request =
         std::make_unique<TEvBatchErasePersistentBuffer>(it->second.Credentials);
     for (size_t i = 0; i < it->second.Selectors.size(); ++i) {
-        request->AddErase(it->second.Selectors[i], it->second.Lsns[i]);
+        request->AddErase(
+            it->second.Selectors[i],
+            it->second.Lsns[i],
+            it->second.Credentials.Generation);
     }
 
     ctx.Send(MakeHolder<IEventHandle>(
@@ -391,7 +397,7 @@ void TICStorageTransportActor::HandleErasePersistentBufferResult(
         ErasePersistentBufferEventsByRequestId.erase(requestId);
     } else {
         // That means that request is already completed
-        LOG_DEBUG(
+        LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "ErasePersistentBufferEvent with requestId# %lu not found",
@@ -422,6 +428,7 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
         it->second.Credentials,
         it->second.Selector,
         it->second.Lsn,
+        it->second.Credentials.Generation,
         it->second.Instruction);
 
     ctx.Send(MakeHolder<IEventHandle>(
@@ -454,14 +461,12 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
         if (auto guard = data.Acquire()) {
             const auto& sglist = guard.Get();
             SgListCopy(CreateSgList(ev->Get()->GetPayload()), sglist);
-        } else {
-            Y_ABORT_UNLESS(false);
         }
 
         requestHandler->Promise.SetValue(std::move(ev->Get()->Record));
         ReadPersistentBufferEventsByRequestId.erase(requestId);
     } else {
-        LOG_DEBUG(
+        LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "ReadPersistentBufferEvent with requestId# %lu not found",
@@ -518,15 +523,13 @@ void TICStorageTransportActor::HandleReadResult(
         if (auto guard = requestHandler->Data.Acquire()) {
             const auto& sglist = guard.Get();
             SgListCopy(CreateSgList(ev->Get()->GetPayload()), sglist);
-        } else {
-            Y_ABORT_UNLESS(false);
         }
 
         requestHandler->Promise.SetValue(std::move(ev->Get()->Record));
         ReadEventsByRequestId.erase(requestId);
     } else {
         // That means that request is already completed
-        LOG_DEBUG(
+        LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "ReadEvent with requestId# %lu not found",
@@ -558,7 +561,10 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         it->second.DDiskInstanceGuid);
 
     for (size_t i = 0; i < it->second.Selectors.size(); ++i) {
-        request->AddSegment(it->second.Selectors[i], it->second.Lsns[i]);
+        request->AddSegment(
+            it->second.Selectors[i],
+            it->second.Lsns[i],
+            it->second.Credentials.Generation);
     }
 
     ctx.Send(MakeHolder<IEventHandle>(
@@ -588,7 +594,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferResult(
         SyncEventsByRequestId.erase(requestId);
     } else {
         // That means that request is already completed
-        LOG_DEBUG(
+        LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "SyncEvent with requestId# %lu not found",
@@ -602,6 +608,10 @@ void TICStorageTransportActor::HandleListPersistentBuffer(
 {
     auto* msg = ev->Get();
 
+    const ui64 requestId = ++RequestIdGenerator;
+
+    ListPersistentBufferEventsByRequestId.emplace(requestId, std::move(*msg));
+
     auto request = std::make_unique<NKikimr::NDDisk::TEvListPersistentBuffer>(
         msg->Credentials);
 
@@ -609,11 +619,7 @@ void TICStorageTransportActor::HandleListPersistentBuffer(
         msg->ServiceId,
         request.release(),
         0,   // flags
-        msg->RequestId);
-
-    ListPersistentBufferEventsByRequestId.emplace(
-        msg->RequestId,
-        std::move(*msg));
+        requestId);
 }
 
 void TICStorageTransportActor::HandleListPersistentBufferResult(
@@ -624,10 +630,25 @@ void TICStorageTransportActor::HandleListPersistentBufferResult(
 
     auto requestId = ev->Cookie;
 
-    auto& promise = ListPersistentBufferEventsByRequestId.at(requestId).Promise;
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received HandleListPersistentBufferResult with requestId# %lu",
+        requestId);
 
-    promise.SetValue(std::move(ev->Get()->Record));
-    ListPersistentBufferEventsByRequestId.erase(requestId);
+    if (auto* requestHandler =
+            ListPersistentBufferEventsByRequestId.FindPtr(requestId))
+    {
+        requestHandler->Promise.SetValue(std::move(ev->Get()->Record));
+        ListPersistentBufferEventsByRequestId.erase(requestId);
+    } else {
+        // That means that request is already completed
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "ListPersistentBuffer with requestId# %lu not found",
+            requestId);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

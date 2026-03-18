@@ -13,20 +13,35 @@ class TICStorageTransport: public IStorageTransport
 {
 private:
     NActors::TActorSystem* const ActorSystem;
-    NActors::TActorId ICStorageTransportActorId;
+    const NActors::TActorId ICStorageTransportActorId;
 
 public:
     explicit TICStorageTransport(NActors::TActorSystem* actorSystem);
 
     ~TICStorageTransport() override = default;
 
-    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvConnectResult> Connect(
+    NThreading::TFuture<TEvConnectResult> Connect(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials) override;
 
-    NThreading::TFuture<
-        NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>
-    WritePersistentBuffer(
+    NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
+        const NActors::TActorId serviceId,
+        const NKikimr::NDDisk::TQueryCredentials credentials,
+        const NKikimr::NDDisk::TBlockSelector selector,
+        const ui64 lsn,
+        const NKikimr::NDDisk::TReadInstruction instruction,
+        TGuardedSgList data,
+        NWilson::TSpan& span) override;
+
+    NThreading::TFuture<TEvReadResult> ReadFromDDisk(
+        const NActors::TActorId serviceId,
+        const NKikimr::NDDisk::TQueryCredentials credentials,
+        const NKikimr::NDDisk::TBlockSelector selector,
+        const NKikimr::NDDisk::TReadInstruction instruction,
+        TGuardedSgList data,
+        NWilson::TSpan& span) override;
+
+    NThreading::TFuture<TEvWritePersistentBufferResult> WritePersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
         const NKikimr::NDDisk::TBlockSelector selector,
@@ -35,37 +50,7 @@ public:
         TGuardedSgList data,
         NWilson::TSpan& span) override;
 
-    NThreading::TFuture<
-        NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
-    ErasePersistentBuffer(
-        const NActors::TActorId serviceId,
-        const NKikimr::NDDisk::TQueryCredentials credentials,
-        TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-        TVector<ui64> lsns,
-        NWilson::TSpan& span) override;
-
-    NThreading::TFuture<
-        NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>
-    ReadPersistentBuffer(
-        const NActors::TActorId serviceId,
-        const NKikimr::NDDisk::TQueryCredentials credentials,
-        const NKikimr::NDDisk::TBlockSelector selector,
-        const ui64 lsn,
-        const NKikimr::NDDisk::TReadInstruction instruction,
-        TGuardedSgList data,
-        NWilson::TSpan& span) override;
-
-    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> Read(
-        const NActors::TActorId serviceId,
-        const NKikimr::NDDisk::TQueryCredentials credentials,
-        const NKikimr::NDDisk::TBlockSelector selector,
-        const NKikimr::NDDisk::TReadInstruction instruction,
-        TGuardedSgList data,
-        NWilson::TSpan& span) override;
-
-    NThreading::TFuture<
-        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>
-    SyncWithPersistentBuffer(
+    NThreading::TFuture<TEvSyncWithPersistentBufferResult> FlushFromPBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
@@ -74,12 +59,16 @@ public:
         const ui64 ddiskInstanceGuid,
         NWilson::TSpan& span) override;
 
-    NThreading::TFuture<
-        NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>
-    ListPersistentBuffer(
+    NThreading::TFuture<TEvErasePersistentBufferResult> ErasePersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
-        const ui64 requestId) override;
+        TVector<NKikimr::NDDisk::TBlockSelector> selectors,
+        TVector<ui64> lsns,
+        NWilson::TSpan& span) override;
+
+    NThreading::TFuture<TEvListPersistentBufferResult> ListPersistentBuffer(
+        const NActors::TActorId serviceId,
+        const NKikimr::NDDisk::TQueryCredentials credentials) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

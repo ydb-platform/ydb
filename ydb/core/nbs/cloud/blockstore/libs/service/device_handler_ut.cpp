@@ -1,5 +1,6 @@
 #include "device_handler.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
 

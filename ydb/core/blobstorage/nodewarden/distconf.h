@@ -453,7 +453,7 @@ namespace NKikimr::NStorage {
             bool AutomaticBootstrap = false;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
-            std::optional<TStringBuf> selfAssemblyUUID);
+            std::optional<TStringBuf> selfAssemblyUUID, bool dryRun = false);
 
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 

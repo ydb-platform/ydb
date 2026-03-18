@@ -2,11 +2,7 @@ UNITTEST_FOR(ydb/core/blobstorage/groupinfo)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(cpu:4)
-ELSEIF(SANITIZER_TYPE)
+IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:4)
 ELSE()

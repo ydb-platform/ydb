@@ -75,6 +75,12 @@ IF (OS_LINUX)
     )
 ENDIF()
 
+# Make NBS protos available for include checking on all platforms
+# even though they're only used on Linux
+PEERDIR(
+    ydb/core/nbs/cloud/storage/core/protos
+)
+
 GENERATE_ENUM_SERIALIZATION(percentile.h)
 
 END()

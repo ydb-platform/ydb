@@ -2,12 +2,7 @@ UNITTEST_FOR(ydb/core/tablet_flat)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    TAG(ya:fat)
-    SIZE(LARGE)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:32 cpu:4)

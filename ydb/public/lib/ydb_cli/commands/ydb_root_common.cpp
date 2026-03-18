@@ -547,7 +547,7 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (std::vector<TString> errors = ParseResult->Validate(); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
     }
-    if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, !config.OnlyExplicitProfile ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
+    if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, (!Profile && !config.OnlyExplicitProfile) ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
     }
     if (IsVerbose()) {
@@ -775,7 +775,7 @@ int TClientCommandRootCommon::Run(TConfig& config) {
     TString prompt;
     if (!ProfileName.empty()) {
         prompt = ProfileName;
-    } if (const auto& activeProfileName = ProfileManager->GetActiveProfileName(); !config.OnlyExplicitProfile && activeProfileName) {
+    } else if (const auto& activeProfileName = ProfileManager->GetActiveProfileName(); !config.OnlyExplicitProfile && activeProfileName) {
         prompt = activeProfileName;
     }
 

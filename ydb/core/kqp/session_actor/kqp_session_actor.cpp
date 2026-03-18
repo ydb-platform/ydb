@@ -1,3 +1,4 @@
+#include "kqp_log_query.h"
 #include "kqp_session_actor.h"
 #include "kqp_worker_common.h"
 #include "kqp_query_state.h"
@@ -255,8 +256,8 @@ public:
             TKqpQueryCachePtr queryCache,
             std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager,
             std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory,
-            const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
-            const TKqpWorkerSettings& workerSettings,
+            const TString& sessionId, TIntrusiveConstPtr<NYql::TKikimrConfiguration> kqpConfig,
+            const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
             std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
@@ -275,7 +276,7 @@ public:
         , ModuleResolverState(std::move(moduleResolverState))
         , FederatedQuerySetup(federatedQuerySetup)
         , KqpSettings(kqpSettings)
-        , Config(CreateConfig(kqpSettings, workerSettings))
+        , Config(std::move(kqpConfig))
         , Transactions(*Config->_KqpMaxActiveTxPerSession.Get(), TDuration::Seconds(*Config->_KqpTxIdleTimeoutSec.Get()))
         , QueryServiceConfig(queryServiceConfig)
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
@@ -286,7 +287,7 @@ public:
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
         RequestCounters->DbCounters = Settings.DbCounters;
-        RequestCounters->TxProxyMon = MakeIntrusive<NTxProxy::TTxProxyMon>(AppData()->Counters);
+        RequestCounters->TxProxyMon = Counters->TxProxyMon;
         CompilationCookie = std::make_shared<std::atomic<bool>>(true);
 
         FillSettings.AllResultsBytesLimit = Nothing();
@@ -311,8 +312,6 @@ public:
             (trace_id, TraceId()));
         Counters->ReportSessionActorCreated(Settings.DbCounters);
         CreationTime = TInstant::Now();
-
-        Config->FeatureFlags = AppData()->FeatureFlags;
 
         RequestControls.Reqister(TlsActivationContext->AsActorContext());
         Become(&TKqpSessionActor::ReadyState);
@@ -544,6 +543,8 @@ public:
             (database_id, QueryState->UserRequestContext->DatabaseId),
             (pool_id, QueryState->UserRequestContext->PoolId),
             (trace_id, TraceId()));
+
+        KQP_REQ_LOG(TLogQuery::Started(*QueryState));
 
         switch (action) {
             case NKikimrKqp::QUERY_ACTION_EXPLAIN:
@@ -3099,6 +3100,8 @@ public:
             TlsActivationContext->AsActorContext()
         );
 
+        KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record));
+
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         STLOG_D("Sent query response back to proxy",
             (proxy_request_id, QueryState->ProxyRequestId),
@@ -3803,7 +3806,7 @@ private:
     std::shared_ptr<TKqpQueryState> QueryState;
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
     ui32 QueryId = 0;
-    TKikimrConfiguration::TPtr Config;
+    TIntrusiveConstPtr<TKikimrConfiguration> Config;
     IDataProvider::TFillSettings FillSettings;
     TTransactionsCache Transactions;
     std::unique_ptr<TEvKqp::TEvQueryResponse> QueryResponse;
@@ -3828,6 +3831,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     TKqpQueryCachePtr queryCache,
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager,
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory, const TString& sessionId,
+    TIntrusiveConstPtr<NYql::TKikimrConfiguration> kqpConfig,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
@@ -3839,7 +3843,8 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
 {
     return new TKqpSessionActor(
         owner, std::move(queryCache),
-        std::move(resourceManager), std::move(caFactory), sessionId, kqpSettings, workerSettings, federatedQuerySetup,
+        std::move(resourceManager), std::move(caFactory), sessionId, std::move(kqpConfig),
+                                kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
                                 queryServiceConfig, kqpTempTablesAgentActor, channelService, userSID);
 }

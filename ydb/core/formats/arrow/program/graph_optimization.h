@@ -3,6 +3,7 @@
 #include "graph_execute.h"
 
 #include <library/cpp/json/writer/json_value.h>
+#include <util/stream/output.h>
 #include <util/digest/fnv.h>
 #include <util/digest/numeric.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
@@ -168,6 +169,7 @@ private:
     TConclusion<bool> OptimizeFilterWithCoalesce(TGraphNode* cNode);
     TConclusion<bool> OptimizeFilterWithAnd(TGraphNode* filterNode, TGraphNode* filterArg, const std::shared_ptr<TCalculationProcessor>& calc);
     TConclusion<bool> OptimizeMergeFetching(TGraphNode* baseNode);
+    TConclusion<bool> OptimizeForFetchDictionaryOnly(TGraphNode* node, const THashSet<ui32>& requiredDataColumnIds);
 
 
     bool HasEdge(const TGraphNode* from, const TGraphNode* to, const ui32 resourceId) const;
@@ -176,6 +178,8 @@ private:
     void RemoveNode(const ui32 idenitifier);
     THashMap<ui32, TGraphNode*> GetBranch(TGraphNode* from, const bool backOnly) const;
     void RemoveBranch(TGraphNode* from, const bool backOnly);
+    /** Column ids that are fetched as data in the entire graph (all FetchOriginalData nodes). */
+    THashSet<ui32> CollectRequiredDataColumnIdsFromGraph() const;
     [[nodiscard]] std::shared_ptr<TGraphNode> AddNode(const std::shared_ptr<IResourceProcessor>& processor) {
         auto result = std::make_shared<TGraphNode>(NodeId++, processor);
         Nodes.emplace(result->GetIdentifier(), result);
@@ -237,7 +241,8 @@ public:
             Finished = true;
             TGraph graph(std::move(Processors), Resolver);
             graph.Collapse();
-            return graph.Compile();
+            auto res = graph.Compile();
+            return res;
         }
     };
 };

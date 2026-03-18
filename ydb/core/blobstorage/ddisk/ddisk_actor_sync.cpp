@@ -26,7 +26,7 @@ namespace NKikimr::NDDisk {
         template <typename TSegment>
         static IEventBase* MakeReadQuery(const TQueryCredentials& sourceCreds,
                 const TBlockSelector& selector, const TSegment& segment) {
-            return new TEvReadPersistentBuffer(sourceCreds, selector, segment.GetLsn(), TReadInstruction(true));
+            return new TEvReadPersistentBuffer(sourceCreds, selector, segment.GetLsn(), segment.GetGeneration(), TReadInstruction(true));
         }
     };
 

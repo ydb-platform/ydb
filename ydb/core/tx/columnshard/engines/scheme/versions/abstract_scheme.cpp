@@ -1,6 +1,8 @@
 #include "abstract_scheme.h"
 
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
@@ -346,9 +348,18 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
                 return arrToWrite;
             }
 
-            std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
-                loader->GetAccessorConstructor()->SerializeToString(*arrToWrite, loader->BuildAccessorContext(accessor->GetRecordsCount())),
-                *arrToWrite, TChunkAddress(columnId, 0), columnFeatures) };
+            const auto loadContext = loader->BuildAccessorContext(accessor->GetRecordsCount());
+            std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks;
+            if (loader->GetAccessorConstructor()->GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
+                auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(*arrToWrite, loadContext);
+                columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
+                    std::move(blobAndMeta.Blob), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures,
+                    std::move(blobAndMeta.Meta)) };
+            } else {
+                columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
+                    loader->GetAccessorConstructor()->SerializeToString(*arrToWrite, loadContext),
+                    *arrToWrite, TChunkAddress(columnId, 0), columnFeatures) };
+            }
             AFL_VERIFY(chunks.emplace(columnId, std::move(columnChunks)).second);
             ++itIncoming;
         }

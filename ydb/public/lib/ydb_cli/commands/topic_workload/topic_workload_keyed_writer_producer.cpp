@@ -63,7 +63,7 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
     }
 
     auto result = Producer_->Write(std::move(writeMessage));
-    if (!result.IsSuccess()) {
+    if (!result.IsQueued()) {
         TStringBuilder errorMessage;
         errorMessage << "Failed to write message with id " << MessageId_
                      << " for producer " << ProducerId_
@@ -77,7 +77,7 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
         }
         WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR, errorMessage);
     }
-    Y_ASSERT(result.IsSuccess());
+    Y_ASSERT(result.IsQueued());
 
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
               TStringBuilder() << "Sent keyed message with id " << MessageId_

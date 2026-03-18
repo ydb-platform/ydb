@@ -875,22 +875,23 @@ TEST_F(BasicUsage, TEST_NAME(TProducerBasicWrite_NoAutoPartitioning)) {
         .Path(GetTopicPath(TOPIC_NAME))
         .Codec(ECodec::RAW);
     writeSettings.ProducerIdPrefix(CreateGuidAsString());
-    writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Hash);
+    writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
     writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
     writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
         return std::string{key};
     });
-    writeSettings.MaxBlock(TDuration::Seconds(30));
+    writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
     auto producer = client.CreateProducer(writeSettings);
     auto keyedSession = std::dynamic_pointer_cast<TProducer>(producer);
 
+    std::string data = "message";
     for (size_t i = 0; i < 100; ++i) {
         auto key = CreateGuidAsString();
-        TWriteMessage msg("msg");
+        TWriteMessage msg(data);
         msg.SeqNo(i + 1);
         msg.Key(key);
-        ASSERT_TRUE(producer->Write(std::move(msg)).IsSuccess());
+        ASSERT_TRUE(producer->Write(std::move(msg)).IsQueued());
     }
 
     ASSERT_TRUE(producer->Close(TDuration::Seconds(10)).IsSuccess());

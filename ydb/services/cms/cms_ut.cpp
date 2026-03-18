@@ -46,7 +46,7 @@ struct TCmsTestSettingsWithAuth : TCmsTestSettings {
 
 using TKikimrWithGrpcAndRootSchema = NYdb::TBasicKikimrWithGrpcAndRootSchema<TCmsTestSettings>;
 
-static Ydb::StatusIds::StatusCode WaitForOperationStatus(std::shared_ptr<grpc::Channel> channel, const TString& opId, const TString &token = "") {
+static Ydb::StatusIds::StatusCode WaitForOperationStatus(std::shared_ptr<grpc::Channel> channel, const TString& opId,  const TString& database, const TString &token = "") {
     std::unique_ptr<Ydb::Operation::V1::OperationService::Stub> stub;
     stub = Ydb::Operation::V1::OperationService::NewStub(channel);
     Ydb::Operations::GetOperationRequest request;
@@ -57,6 +57,8 @@ static Ydb::StatusIds::StatusCode WaitForOperationStatus(std::shared_ptr<grpc::C
         grpc::ClientContext context;
         if (token)
             context.AddMetadata(YDB_AUTH_TICKET_HEADER, token);
+        context.AddMetadata(YDB_DATABASE_HEADER, database);
+
         auto status = stub->GetOperation(&context, request, &response);
         UNIT_ASSERT(status.ok());  //GRpc layer - OK
         if (response.operation().ready() == false) {
@@ -172,7 +174,7 @@ static void doSimpleTenantsTest(bool sync) {
     }
 
     if (!sync) {
-        auto status = WaitForOperationStatus(channel, id);
+        auto status = WaitForOperationStatus(channel, id, "/Root");
         UNIT_ASSERT_EQUAL(status, Ydb::StatusIds::SUCCESS);
     }
 
@@ -251,7 +253,7 @@ static void doSimpleTenantsTest(bool sync) {
         }
     }
     if (!sync) {
-        auto status = WaitForOperationStatus(channel, id);
+        auto status = WaitForOperationStatus(channel, id, "/Root");
         UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
     }
 
@@ -321,7 +323,7 @@ void CheckCreateDatabase(NYdb::TBasicKikimrWithGrpcAndRootSchema<TTestSettings> 
         id = response.operation().id();
     }
     {
-        auto status = WaitForOperationStatus(channel, id, token);
+        auto status = WaitForOperationStatus(channel, id, "/Root", token);
         UNIT_ASSERT_VALUES_EQUAL(status, Ydb::StatusIds::SUCCESS);
     }
 
@@ -357,7 +359,7 @@ void CheckRemoveDatabase(std::shared_ptr<grpc::Channel> channel,
     }
 
     {
-        auto status = WaitForOperationStatus(channel, id);
+        auto status = WaitForOperationStatus(channel, id, "/Root");
         UNIT_ASSERT(status == code);
     }
 }

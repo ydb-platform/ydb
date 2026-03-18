@@ -30,8 +30,8 @@ void TTestShardSetGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger
 #error SETUP_TESTSHARDSET_METHOD macro already defined
 #endif
 
-#define SETUP_TESTSHARD_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, testshard, auditMode, EEmptyDatabaseMode::EmptyDatabaseForbidden)
+#define SETUP_TESTSHARDSET_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, testshardset, auditMode, EEmptyDatabaseMode::EmptyDatabaseForbidden)
 
     SETUP_TESTSHARDSET_METHOD(CreateTestShardSet, DoCreateTestShardSet, RLMODE(Rps), TESTSHARDSET_CREATETESTSHARDSET, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_TESTSHARDSET_METHOD(DeleteTestShardSet, DoDeleteTestShardSet, RLMODE(Rps), TESTSHARDSET_DELETETESTSHARDSET, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));

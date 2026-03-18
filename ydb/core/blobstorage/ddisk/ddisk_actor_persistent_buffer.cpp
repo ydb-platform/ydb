@@ -714,6 +714,7 @@ namespace NKikimr::NDDisk {
         auto recordIt = it->second.Records.begin();
         while (recordIt != it->second.Records.end() && recordIt->first <= lsn) {
             erases.emplace_back(recordIt->first, generation);
+            recordIt++;
         }
 
         ErasePersistentBuffer(*ev, creds, erases);

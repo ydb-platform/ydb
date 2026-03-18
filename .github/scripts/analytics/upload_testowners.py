@@ -59,6 +59,7 @@ def main():
             'Postcommit_relwithdebinfo', 
             'Postcommit_asan'
         ) 
+        and (pull IS NULL OR NOT String::Contains(pull, 'manual'))
         WINDOW w AS (
             PARTITION BY test_name, 
             suite_folder 

@@ -1570,6 +1570,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         str << " UsedChunks# " << UsedChunks;
         str << " NumSlots# " << NumSlots;
         str << " NumActiveSlots# " << NumActiveSlots;
+        str << " ExpectedSlotCount# " << ExpectedSlotCount;
         str << " ErrorReason# \"" << ErrorReason << "\"";
         str << " LogStatusFlags# " << StatusFlagsToString(LogStatusFlags);
         str << "}";

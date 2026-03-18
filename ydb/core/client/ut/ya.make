@@ -10,7 +10,7 @@ IF (SANITIZER_TYPE == "thread")
     REQUIREMENTS(
         ram:32
     )
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

@@ -30,32 +30,15 @@ public:
         Auto         // Automatically decide based on portion size
     };
 
-    static bool ShouldUseStreamingMode(ui32 recordsCount) {
-        if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasStreamingConfig()) {
-            // Default behavior: auto mode with 50000 records threshold
-            return recordsCount >= 50000;
-        }
-        
-        const auto& config = AppDataVerified().ColumnShardConfig.GetStreamingConfig();
-        const auto strategy = static_cast<EStrategy>(config.GetStrategy());
-        
-        switch (strategy) {
-            case EStrategy::Always:
-                return true;
-            case EStrategy::Never:
-                return false;
-            case EStrategy::Auto:
-                return recordsCount >= config.GetMinRecordsForPaging();
-        }
-        return false;
-    }
+    static bool ShouldUseStreamingMode(ui32 recordsCount);
+    static ui32 GetMaxPagesInFlight();
     
-    static ui32 GetMaxPagesInFlight() {
-        if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasStreamingConfig()) {
-            return 8; // Default value
-        }
-        return AppDataVerified().ColumnShardConfig.GetStreamingConfig().GetMaxPagesInFlight();
-    }
+    // Validates the streaming configuration. Returns an error if the config is
+    // invalid and streaming could be activated (i.e. strategy != Never).
+    static TConclusionStatus Validate();
+
+private:
+    static EStrategy GetStrategy();
 };
 
 class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {

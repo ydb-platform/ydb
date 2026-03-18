@@ -11,6 +11,52 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
+bool TStreamingConfigHelper::ShouldUseStreamingMode(ui32 recordsCount) {
+    if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasStreamingConfig()) {
+        // Default behavior: auto mode with 50000 records threshold
+        return recordsCount >= 50000;
+    }
+    
+    const auto& config = AppDataVerified().ColumnShardConfig.GetStreamingConfig();
+    const auto strategy = static_cast<EStrategy>(config.GetStrategy());
+    
+    switch (strategy) {
+        case EStrategy::Always:
+            return true;
+        case EStrategy::Never:
+            return false;
+        case EStrategy::Auto:
+            return recordsCount >= config.GetMinRecordsForPaging();
+    }
+    return false;
+}
+
+ui32 TStreamingConfigHelper::GetMaxPagesInFlight() {
+    if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasStreamingConfig()) {
+        return 8; // Default value
+    }
+    return AppDataVerified().ColumnShardConfig.GetStreamingConfig().GetMaxPagesInFlight();
+}
+
+TStreamingConfigHelper::EStrategy TStreamingConfigHelper::GetStrategy() {
+    if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasStreamingConfig()) {
+        return EStrategy::Auto;
+    }
+    return static_cast<EStrategy>(AppDataVerified().ColumnShardConfig.GetStreamingConfig().GetStrategy());
+}
+
+TConclusionStatus TStreamingConfigHelper::Validate() {
+    if (GetStrategy() == EStrategy::Never) {
+        // Streaming is fully disabled – no constraints on other parameters.
+        return TConclusionStatus::Success();
+    }
+    if (GetMaxPagesInFlight() == 0) {
+        return TConclusionStatus::Fail(
+            "MaxPagesInFlight must be greater than zero when streaming is enabled (strategy != Never)");
+    }
+    return TConclusionStatus::Success();
+}
+
 std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     const std::shared_ptr<NCommon::IDataSource>& sourceExt, const bool isFinalSyncPoint) {
     const bool partialUsageByPK = [&]() {

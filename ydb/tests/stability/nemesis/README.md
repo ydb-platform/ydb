@@ -23,7 +23,7 @@
 
 ```bash
 # Из директории с бинарником nemesis_app
-nemesis_app run
+./nemesis_app --yaml-config-location /your/path/to/config.yamlinstall
 ```
 
 Первый хост из `cluster.yaml` становится orchestrator, остальные — агентами.
@@ -33,7 +33,7 @@ nemesis_app run
 ## Остановка сервисов
 
 ```bash
-python -m nemesis_app stop
+./nemesis_app stop
 ```
 
 ## UI

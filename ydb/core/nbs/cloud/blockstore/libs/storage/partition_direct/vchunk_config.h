@@ -28,6 +28,7 @@ struct TVChunkConfig
     [[nodiscard]] bool IsValid() const;
 
     [[nodiscard]] ui8 GetHostIndex(ELocation location) const;
+    [[nodiscard]] THashMap<ui8, ELocation> GetPBuffersMap() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

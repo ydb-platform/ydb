@@ -187,6 +187,13 @@ public:
         ScriptCursor = std::move(scriptCursor);
     }
 
+    // Returns true if the source still has a pending cursor (i.e. ContinueCursor has
+    // not been called yet for the current page).  Used by ISyncPoint::Continue to
+    // avoid double-fetching when the pre-fetch was already started in OnSourceReady.
+    bool HasCursor() const {
+        return !!ScriptCursor;
+    }
+
     void ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;

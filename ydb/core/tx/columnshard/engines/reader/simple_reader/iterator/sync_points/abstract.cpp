@@ -86,11 +86,33 @@ TString ISyncPoint::DebugString() const {
 
 void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& /*reader*/) {
     AFL_VERIFY(PointIndex == continueAddress.GetSyncPointIndex());
-    AFL_VERIFY(SourcesSequentially.size() && SourcesSequentially.front()->GetSourceIdx() == continueAddress.GetSourceIdx())("first_source_idx", SourcesSequentially.front()->GetSourceIdx())(
-                                                   "continue_source_idx", continueAddress.GetSourceIdx());
+    // In streaming mode with pre-fetch, a source can have multiple pages in-flight
+    // simultaneously.  When the source emits its last page it is popped from
+    // SourcesSequentially (ESourceAction::ProvideNext / Finish), but the already-emitted
+    // pages are still being consumed by the client.  When those pages are acked,
+    // Continue() is called with the old source's address.  At that point the source is
+    // no longer at the front (or the queue is empty), so there is nothing to continue –
+    // the fetch was already triggered by the pre-fetch in OnSourceReady.
+    // We simply skip the ContinueCursor call in that case.
+    if (SourcesSequentially.empty() || SourcesSequentially.front()->GetSourceIdx() != continueAddress.GetSourceIdx()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_source_already_finished")
+            ("continue_source_idx", continueAddress.GetSourceIdx())
+            ("queue_empty", SourcesSequentially.empty())
+            ("front_source_idx", SourcesSequentially.empty() ? Max<ui32>() : SourcesSequentially.front()->GetSourceIdx());
+        return;
+    }
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "continue_source");
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", SourcesSequentially.front()->GetSourceIdx());
-    SourcesSequentially.front()->MutableAs<IDataSource>()->ContinueCursor(SourcesSequentially.front());
+    auto* source = SourcesSequentially.front()->MutableAs<IDataSource>();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", SourcesSequentially.front()->GetSourceIdx())
+        ("has_cursor", source->HasCursor());
+    // HasCursor() is false when ContinueCursor was already called in OnSourceReady as a
+    // pre-fetch (streaming mode, pages-in-flight count was below the limit).  In that
+    // case the next page fetch is already in progress and we must not start it again.
+    // HasCursor() is true when the pre-fetch was suppressed (limit reached) or in
+    // non-streaming mode – both cases require us to trigger the fetch now.
+    if (source->HasCursor()) {
+        source->ContinueCursor(SourcesSequentially.front());
+    }
 }
 
 void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {

@@ -226,6 +226,7 @@ message TPQConfig {
     message TCloudEventsConfig {
         optional bool Enabled = 1 [default = false];
         optional string UaURI = 2;
+        optional string FilePath = 3;
     }
 
     optional TCloudEventsConfig CloudEventsConfig = 61;

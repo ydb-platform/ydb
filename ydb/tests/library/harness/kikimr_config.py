@@ -779,7 +779,7 @@ class KikimrConfigGenerator(object):
             topic_cloud_events_path = os.path.join(self.__working_dir, 'topic_cloud_events.json')
             self.yaml_config['pqconfig']['cloud_events_config'] = {
                 'enabled': True,
-                'ua_uri': 'file://' + topic_cloud_events_path,
+                'file_path': topic_cloud_events_path,
             }
 
     @property

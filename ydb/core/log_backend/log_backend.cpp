@@ -210,6 +210,7 @@ TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> Create
             auto format = auditConfig.GetStderrBackend().GetFormat();
             logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetStderrBackend().GetLogJsonEnvelope()));
         }
+
         if (auditConfig.HasFileBackend()) {
             auto logBackend = CreateAuditLogFileBackend(runConfig);
             if (logBackend) {
@@ -217,6 +218,7 @@ TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> Create
                 logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetFileBackend().GetLogJsonEnvelope()));
             }
         }
+
         if (auditConfig.HasUnifiedAgentBackend()) {
             auto logBackend = CreateAuditLogUnifiedAgentBackend(runConfig, counters);
             if (logBackend) {

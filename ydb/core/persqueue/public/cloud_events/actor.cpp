@@ -278,17 +278,12 @@ TCloudEventsActor::TCloudEventsActor()
     }
 
     const auto& cfg = pqConfig.GetCloudEventsConfig();
-    const TString& uri = cfg.GetUaURI();
 
-    if (uri.StartsWith("file://")) {
-        TString filePath = uri.substr(7);
-        if (filePath.StartsWith("//")) {
-            filePath = filePath.substr(1);
-        }
-        EventsWriter = MakeHolder<TFileEventsWriter>(filePath);
-    } else if (uri) {
+    if (cfg.HasFilePath()) {
+        EventsWriter = MakeHolder<TFileEventsWriter>(cfg.GetFilePath());
+    } else if (cfg.HasUaURI()) {
         auto counters = GetServiceCounters(AppData()->Counters.Get(), "pq.cloud_events");
-        EventsWriter = MakeHolder<TUaEventsWriter>(uri, counters);
+        EventsWriter = MakeHolder<TUaEventsWriter>(cfg.GetUaURI(), counters);
     }
 }
 

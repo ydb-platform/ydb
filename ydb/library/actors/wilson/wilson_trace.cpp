@@ -107,4 +107,10 @@ namespace NWilson {
     TString TTraceId::GetHexTraceId() const {
         return HexEncode(GetTraceIdPtr(), GetTraceIdSize());
     }
+
+    TString TTraceId::GetHexTraceIdLowerCase() const {
+        TString hexTraceId = GetHexTraceId();
+        hexTraceId.to_lower();
+        return hexTraceId;
+    }
 }

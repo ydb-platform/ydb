@@ -167,7 +167,7 @@ private:
             (requester, requester),
             (tasks_count, msg.GetTasks().size()),
             (task_ids, TasksIdsStr(msg.GetTasks())),
-            (trace_id, ev->TraceId.GetHexTraceId()));
+            (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
 
         auto now = TAppData::TimeProvider->Now();
         NKqpNode::TTasksRequest request(txId, ev->Sender, now);
@@ -183,7 +183,8 @@ private:
         if (bucket.Exists(txId, requester)) {
             STLOG_E("Request already exists",
                 (tx_id, txId),
-                (requester, requester));
+                (requester, requester),
+                (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
             return ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
         }
 
@@ -320,7 +321,7 @@ private:
                 (tx_id, txId),
                 (task_id, taskCtx.TaskId),
                 (compute_actor_id, taskCtx.ComputeActorId),
-                (trace_id, ev->TraceId.GetHexTraceId()));
+                (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
 
             auto* startedTask = reply->Record.AddStartedTasks();
             startedTask->SetTaskId(taskCtx.TaskId);
@@ -368,7 +369,7 @@ private:
                 (final_reason, finalReason),
                 (node_id, SelfId().NodeId()),
                 (tx_id, msg.TxId),
-                (trace_id, ev->TraceId.GetHexTraceId()));
+                (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
             for (const auto& [taskId, computeActorId]: tasksToAbort) {
                 if (msg.TaskId != taskId)
                     continue;

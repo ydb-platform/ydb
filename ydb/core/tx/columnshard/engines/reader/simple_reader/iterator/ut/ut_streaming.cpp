@@ -320,8 +320,6 @@ void TestBackpressure() {
 // pre-produce up to MaxPagesInFlight pages before the client consumes the first
 // one.  With MinRecordsForPaging=500 and 100 000 records the server produces
 // ~200 pages, so the limit will be hit many times.
-//
-// maxPagesInFlight == 0 is treated as "use default (8)".
 void TestBackpressureSlowConsumerWithLimit(const ui32 maxPagesInFlight) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -369,11 +367,35 @@ void TestBackpressureSlowConsumerWithLimit(const ui32 maxPagesInFlight) {
     // ReadAll uses the Ack/Receive protocol: the client sends Ack only after
     // receiving a batch, so the server can pre-produce pages up to the limit
     // before the client consumes any – the consumer is genuinely slower.
+    // To ensure backpressure is triggered, we use manual Ack/Receive with guaranteed delays.
     TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
     reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
 
-    auto rb = reader.ReadAll();
+    // Initialize scanner manually to control the Ack/Receive loop
+    UNIT_ASSERT(reader.InitializeScanner());
+
+    // Send first Ack to start receiving data
+    reader.Ack();
+
+    // Process data with guaranteed delay to ensure consumer is slower than producer
+    while (true) {
+        bool hasMore = reader.Receive();
+
+        if (!hasMore) {
+            // Finished
+            break;
+        }
+
+        // Add guaranteed delay to make consumer slower than producer
+        // This ensures backpressure is actually triggered
+        Sleep(TDuration::MilliSeconds(99));
+        
+        // Send Ack to request next batch
+        reader.Ack();
+    }
+
     UNIT_ASSERT(reader.IsCorrectlyFinished());
+    auto rb = reader.GetResult();
     UNIT_ASSERT(rb);
     UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
 

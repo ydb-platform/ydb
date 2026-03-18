@@ -162,7 +162,7 @@ class YdbTopicWorkload(WorkloadBase):
             producers=20,  # producers=int(self.producers),
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
-            byte_rate=self.config.DEFAULT_BYTE_RATE
+            byte_rate="500K"  # byte_rate=self.config.DEFAULT_BYTE_RATE
         ))
 
     def __two_tablets_distributed_transaction(self):
@@ -172,7 +172,7 @@ class YdbTopicWorkload(WorkloadBase):
             producers=20,  # producers=int(self.producers),
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
-            byte_rate=self.config.DEFAULT_BYTE_RATE
+            byte_rate="500K"  # byte_rate=self.config.DEFAULT_BYTE_RATE
         ))
 
     def __a_wide_transaction_with_multiple_partitions_in_one_tablet(self):
@@ -182,7 +182,7 @@ class YdbTopicWorkload(WorkloadBase):
             producers=20,
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
-            byte_rate=self.config.DEFAULT_BYTE_RATE
+            byte_rate="10M"  # byte_rate=self.config.DEFAULT_BYTE_RATE
         ))
 
     def __wide_transaction_one_tablet_contains_one_partition(self):
@@ -192,7 +192,7 @@ class YdbTopicWorkload(WorkloadBase):
             producers=20,
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
-            byte_rate=self.config.DEFAULT_BYTE_RATE
+            byte_rate="10M"  # byte_rate=self.config.DEFAULT_BYTE_RATE
         ))
 
     def __immediate_transaction(self):
@@ -202,7 +202,7 @@ class YdbTopicWorkload(WorkloadBase):
             producers=20,  # producers=int(self.producers),
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
-            byte_rate=self.config.SMALL_BYTE_RATE
+            byte_rate="50K"  # byte_rate=self.config.SMALL_BYTE_RATE
         ))
 
     def __non_transactional_workload(self):
@@ -212,7 +212,7 @@ class YdbTopicWorkload(WorkloadBase):
             producers=20,  # producers=int(self.producers),
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
-            byte_rate=self.config.DEFAULT_BYTE_RATE
+            byte_rate="10M"  # byte_rate=self.config.DEFAULT_BYTE_RATE
         ))
 
     @property

@@ -298,4 +298,8 @@ bool TKikimrConfiguration::GetDqHashOperatorsUseBlocks() const {
     return DqHashOperatorsUseBlocks.Get().GetOrElse(TTableServiceConfig::GetDqHashOperatorsUseBlocks());
 }
 
+bool TKikimrConfiguration::GetUseBlockHashJoin() const {
+    return UseBlockHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoin());
+}
+
 }

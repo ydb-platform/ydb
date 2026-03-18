@@ -479,6 +479,47 @@ void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
 
+void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir, const TString&) {
+    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
+
+    trans->SetWorkingDir(workingDir);
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup);
+
+    auto *pqgroup = trans->MutableCreatePersQueueGroup();
+    pqgroup->SetName("streamImpl");
+    pqgroup->SetTotalGroupCount(1);
+
+    auto * config = pqgroup->MutablePQTabletConfig();
+    config->SetTopicName("streamImpl");
+    config->SetTopicPath(TStringBuilder() << workingDir << "streamImpl");
+    config->MutablePartitionConfig()->SetLifetimeSeconds(*ValidatedAttributes_.MessageRetentionPeriod);
+
+    auto* consumer = config->AddConsumers();
+    consumer->SetName("sqs_consumer");
+    consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
+    consumer->SetKeepMessageOrder(IsFifo_);
+    if (ValidatedAttributes_.DelaySeconds) {
+        consumer->SetDefaultDelayMessageTimeMs(SecondsToMs(*ValidatedAttributes_.DelaySeconds));
+    }
+    if (ValidatedAttributes_.VisibilityTimeout) {
+        consumer->SetDefaultProcessingTimeoutSeconds(*ValidatedAttributes_.VisibilityTimeout);
+    }
+    if (ValidatedAttributes_.ReceiveMessageWaitTimeSeconds) {
+        consumer->SetDefaultReceiveMessageWaitTimeMs(SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds));
+    }
+    if (ValidatedAttributes_.ContentBasedDeduplication) {
+        consumer->SetContentBasedDeduplication(*ValidatedAttributes_.ContentBasedDeduplication);
+    }
+    if (ValidatedAttributes_.RedrivePolicy.MaxReceiveCount) {
+        consumer->SetMaxProcessingAttempts(*ValidatedAttributes_.RedrivePolicy.MaxReceiveCount);
+    }
+
+    Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
+
+    Y_ABORT_S("TEST");
+}
+
 void TCreateQueueSchemaActorV2::RequestLeaderTabletId() {
     RLOG_SQS_TRACE("Requesting leader tablet id for path id " << TableWithLeaderPathId_.second);
     THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
@@ -531,6 +572,10 @@ void TCreateQueueSchemaActorV2::CreateComponents() {
             AddRPSQuota();
             break;
         }
+        case ECreateComponentsStep::MakeTopic: {
+            RegisterMakeTopicActor(QueuePath_.GetQueuePath(), VersionName_);
+            break;
+        }
         case ECreateComponentsStep::Commit: {
             CommitNewVersion();
             break;
@@ -568,6 +613,8 @@ void TCreateQueueSchemaActorV2::Step() {
             } else {
                 if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
                     CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
+                } else if (true || AppData()->FeatureFlags.GetEnableSQSMigrationTopicCreation()) {
+                    CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
                 } else {
                     CurrentCreationStep_ = ECreateComponentsStep::Commit;
                 }
@@ -595,12 +642,22 @@ void TCreateQueueSchemaActorV2::Step() {
         case ECreateComponentsStep::DiscoverLeaderTabletId: {
             if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
                 CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
+            } else if (true || AppData()->FeatureFlags.GetEnableSQSMigrationTopicCreation()) {
+                CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
             } else {
                 CurrentCreationStep_ = ECreateComponentsStep::Commit;
             }
             break;
         }
         case ECreateComponentsStep::AddQuoterResource: {
+            if (true || AppData()->FeatureFlags.GetEnableSQSMigrationTopicCreation()) {
+                CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
+            } else {
+                CurrentCreationStep_ = ECreateComponentsStep::Commit;
+            }
+            break;
+        }
+        case ECreateComponentsStep::MakeTopic: {
             CurrentCreationStep_ = ECreateComponentsStep::Commit;
             break;
         }

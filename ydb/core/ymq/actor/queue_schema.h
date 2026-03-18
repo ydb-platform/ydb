@@ -59,6 +59,7 @@ public:
 
     void RequestTablesFormatSettings(const TString& accountName);
     void RegisterMakeDirActor(const TString& workingDir, const TString& dirName);
+    void RegisterMakeTopicActor(const TString& workingDir, const TString& dirName);
 
     void RequestLeaderTabletId();
 
@@ -105,6 +106,7 @@ public:
         GetTablesFormatSetting,
         MakeQueueDir,
         MakeQueueVersionDir,
+        MakeTopic,
         MakeShards,
         MakeTables,
         DiscoverLeaderTabletId,

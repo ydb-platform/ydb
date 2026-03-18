@@ -86,6 +86,8 @@ def schedule_process(process_type: str, interval: int = None):
                 if not scheduled_tasks[process_type]['enabled']:
                     target_hosts = PROCESS_TYPES[process_type]['runner'].affected_hosts
                     logger.info(f"Extracting {process_type} from {target_hosts}")
+                    if not target_hosts or len(target_hosts) == 0:
+                        break
                     with ThreadPoolExecutor(max_workers=min(len(target_hosts), 10)) as executor:
                         futures = [
                             executor.submit(run_process_on_host, host, process_type, "extract", True)
@@ -131,7 +133,7 @@ def get_all_host_processes(host: str):
         return jsonify(get_all_processes_helper())
     else:
         port = get_app_port()
-        resp = requests.get(f"http://{host}:{port}/api/processes")
+        resp = requests.get(f"http://{host}:{port}/api/processes", timeout=5)
         return jsonify(resp.json())
 
 

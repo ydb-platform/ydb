@@ -1,5 +1,4 @@
 import logging
-import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed

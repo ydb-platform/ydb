@@ -52,11 +52,10 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
     InflightMessagesCreateTs_.Insert(MessageId_, enqueueTimestamp);
     InflightMessagesCount_.fetch_add(1, std::memory_order_relaxed);
 
-    NYdb::NTopic::TWriteMessage writeMessage(data);
+    NYdb::NTopic::TWriteMessage writeMessage(key, data);
     writeMessage.SeqNo(MessageId_);
     writeMessage.CreateTimestamp(enqueueTimestamp);
     writeMessage.MessageMeta(NYdb::NConsoleClient::NTopicWorkloadWriterInternal::MakeKeyMeta(key));
-    writeMessage.Key(key);
 
     if (transaction.has_value()) {
         writeMessage.Tx(transaction.value());

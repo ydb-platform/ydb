@@ -29,13 +29,12 @@ class AbstractAgentNemesis(base.AbstractMonitoredNemesis):
         self.on_success_inject_fault()
         self.__logger.info("=== INJECT_FAULT SUCCESS: %s ===", str(self))
 
-    def prepare_fault(self, hosts, config):
+    def prepare_fault(self, hosts):
         """
         Determine the action (inject/extract) and target hosts for the next execution.
 
         Args:
             hosts: List of available hosts in the cluster
-            config: Configuration dictionary with nemesis-specific settings
 
         Returns:
             tuple: (action, target_hosts) where action is 'inject' or 'extract',
@@ -64,14 +63,14 @@ class NetworkNemesis(AbstractAgentNemesis):
         self.__logger = logging.getLogger(self.__class__.__name__)
         self.affected_hosts = set()
 
-    def prepare_fault(self, hosts, config):
+    def prepare_fault(self, hosts):
         """
         Implements stateful network isolation logic.
 
         Accumulates isolated hosts up to max_affected_nodes, then performs
         a full rollback to restore all nodes simultaneously.
         """
-        max_affected = config.get('max_affected_nodes', 4)
+        max_affected = 4
 
         if len(self.affected_hosts) >= max_affected:
             # Rollback all
@@ -533,7 +532,7 @@ class StopStartNodeNemesis(AbstractAgentNemesis):
         self._stop_duration = stop_duration
         self._is_stopped = False
 
-    def prepare_fault(self, hosts, config):
+    def prepare_fault(self, hosts):
         if self._is_stopped:
             new_host = random.choice(hosts)
             self.affected_hosts.add(new_host)

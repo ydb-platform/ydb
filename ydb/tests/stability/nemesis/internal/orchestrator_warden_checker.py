@@ -10,12 +10,12 @@ from datetime import datetime
 from typing import Dict, List, Any
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
-from ydb.tests.stability.nemesis_app.internal.config import get_master_settings
-from ydb.tests.stability.nemesis_app.internal.agent_warden_checker import (
+from ydb.tests.stability.nemesis.internal.config import get_master_settings
+from ydb.tests.stability.nemesis.internal.agent_warden_checker import (
     WardenCheckResult,
     WardenCheckReport,
 )
-from ydb.tests.stability.nemesis_app.internal.event_loop import BackgroundEventLoop
+from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
 
 
 logger = logging.getLogger(__name__)
@@ -315,7 +315,7 @@ class OrchestratorWardenChecker:
 
     def _run_liveness_checks_sync(self, timeout_seconds: int = 60) -> List[WardenCheckResult]:
         """Run liveness checks via subprocess with timeout."""
-        from ydb.tests.stability.nemesis_app.internal.config import Settings
+        from ydb.tests.stability.nemesis.internal.config import Settings
 
         # Get config path from settings
         try:
@@ -472,7 +472,7 @@ class OrchestratorWardenChecker:
         """Aggregate VERIFY failed errors from all agents."""
         import asyncio
         import requests
-        from ydb.tests.stability.nemesis_app.routers.orchestrator_router import hosts, get_app_port, is_local_host
+        from ydb.tests.stability.nemesis.routers.orchestrator_router import hosts, get_app_port, is_local_host
 
         port = get_app_port()
 
@@ -480,7 +480,7 @@ class OrchestratorWardenChecker:
             """Get the warden check status from an agent."""
             try:
                 if is_local_host(host):
-                    from ydb.tests.stability.nemesis_app.routers.agent_router import warden_checker
+                    from ydb.tests.stability.nemesis.routers.agent_router import warden_checker
                     return warden_checker.get_last_result()
                 else:
                     resp = requests.get(f"http://{host}:{port}/api/warden/result", timeout=10)

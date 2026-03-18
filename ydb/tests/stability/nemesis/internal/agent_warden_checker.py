@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field
 
-from ydb.tests.stability.nemesis_app.internal.event_loop import BackgroundEventLoop
+from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
 
 
 logger = logging.getLogger(__name__)

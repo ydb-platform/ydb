@@ -1,14 +1,12 @@
 from functools import lru_cache
-import json
-import os
 
 from flask import Flask, jsonify
 
 from ydb.tests.library.stability.healthcheck.healthcheck_reporter import HealthCheckReporter
-from ydb.tests.stability.nemesis_app.internal import config
-from ydb.tests.stability.nemesis_app.internal.install import get_hosts_from_yaml
-from ydb.tests.stability.nemesis_app.internal.agent_warden_checker import AgentWardenChecker
-from ydb.tests.stability.nemesis_app.internal.orchestrator_warden_checker import OrchestratorWardenChecker
+from ydb.tests.stability.nemesis.internal import config
+from ydb.tests.stability.nemesis.internal.install import get_hosts_from_yaml
+from ydb.tests.stability.nemesis.internal.agent_warden_checker import AgentWardenChecker
+from ydb.tests.stability.nemesis.internal.orchestrator_warden_checker import OrchestratorWardenChecker
 
 
 @lru_cache
@@ -21,23 +19,7 @@ def get_settings():
 # Global state for orchestrator mode
 hosts = []
 healthcheck_reporter = None
-nemesis_config = {}
 app_initialized = False
-
-
-def load_nemesis_config():
-    global nemesis_config
-    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'nemesis_config.json')
-    try:
-        with open(config_path, 'r') as f:
-            nemesis_config = json.load(f)
-    except FileNotFoundError:
-        print(f"Config file not found at {config_path}, using defaults")
-        nemesis_config = {}
-    except Exception as e:
-        print(f"Failed to load config: {e}")
-        nemesis_config = {}
-    return nemesis_config
 
 
 def initialize_app():
@@ -49,7 +31,7 @@ def initialize_app():
     settings = get_settings()
 
     # Initialize agent WardenChecker (always, for both agent and orchestrator modes)
-    from ydb.tests.stability.nemesis_app.routers import agent_router
+    from ydb.tests.stability.nemesis.routers import agent_router
     agent_router.warden_checker = AgentWardenChecker()
 
     # Orchestrator-specific initialization
@@ -58,15 +40,12 @@ def initialize_app():
         hosts = get_hosts_from_yaml(settings.yaml_config_location)
         print(f"Loaded hosts: {hosts}")
 
-        # Load config
-        load_nemesis_config()
-
         # Start healthcheck reporter
         healthcheck_reporter = HealthCheckReporter(hosts, store_results=True)
         healthcheck_reporter.start_healthchecks()
 
         # Share state with orchestrator router
-        from ydb.tests.stability.nemesis_app.routers import orchestrator_router
+        from ydb.tests.stability.nemesis.routers import orchestrator_router
         orchestrator_router.hosts = hosts
         orchestrator_router.orchestrator_warden_checker = OrchestratorWardenChecker(hosts=hosts, mon_port=orchestrator_router.mon_port)
 
@@ -84,7 +63,7 @@ def cleanup_app(exception=None):
             healthcheck_reporter.stop_healthchecks()
 
         # Stop all scheduled tasks
-        from ydb.tests.stability.nemesis_app.routers import orchestrator_router
+        from ydb.tests.stability.nemesis.routers import orchestrator_router
         for task_info in orchestrator_router.scheduled_tasks.values():
             if 'task' in task_info:
                 task_info['enabled'] = False
@@ -117,7 +96,7 @@ def create_app():
         return jsonify({"status": "ok"})
 
     # Always include agent router (available in both modes)
-    from ydb.tests.stability.nemesis_app.routers.agent_router import blueprint as agent_blueprint
+    from ydb.tests.stability.nemesis.routers.agent_router import blueprint as agent_blueprint
     app.register_blueprint(agent_blueprint)
 
     # Include routers based on configuration
@@ -126,7 +105,7 @@ def create_app():
         print("Running in AGENT mode")
     else:
         # Orchestrator mode: include orchestrator router
-        from ydb.tests.stability.nemesis_app.routers.orchestrator_router import blueprint as orchestrator_blueprint
+        from ydb.tests.stability.nemesis.routers.orchestrator_router import blueprint as orchestrator_blueprint
         app.register_blueprint(orchestrator_blueprint)
         print("Running in ORCHESTRATOR mode (with agent endpoints)")
 

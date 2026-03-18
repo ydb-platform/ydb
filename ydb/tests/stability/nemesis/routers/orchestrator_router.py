@@ -7,8 +7,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from flask import Blueprint, request, jsonify
 
-from ydb.tests.stability.nemesis_app.internal.nemesis.catalog import PROCESS_TYPES
-from ydb.tests.stability.nemesis_app.internal.orchestrator_warden_checker import (
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import PROCESS_TYPES
+from ydb.tests.stability.nemesis.internal.orchestrator_warden_checker import (
     OrchestratorWardenChecker,
     get_all_warden_definitions,
 )
@@ -30,7 +30,7 @@ scheduled_tasks_lock = threading.Lock()
 
 def get_app_port() -> int:
     """Get the configured app port from settings"""
-    from ydb.tests.stability.nemesis_app.internal.config import Settings
+    from ydb.tests.stability.nemesis.internal.config import Settings
     return Settings().app_port
 
 
@@ -38,7 +38,7 @@ def is_local_host(host: str) -> bool:
     """Check if the host is the local machine"""
     try:
         # Get configured app_host from settings
-        from ydb.tests.stability.nemesis_app.internal.config import Settings
+        from ydb.tests.stability.nemesis.internal.config import Settings
         settings = Settings()
         app_host = settings.app_host
 
@@ -63,7 +63,7 @@ def run_process_on_host(host, process_type, action='run', track_history=False):
         # Check if this is a call to ourselves
         if is_local_host(host):
             # Direct call to avoid HTTP deadlock with single worker
-            from ydb.tests.stability.nemesis_app.routers.agent_router import create_process_helper
+            from ydb.tests.stability.nemesis.routers.agent_router import create_process_helper
 
             # Call the helper function directly
             result = create_process_helper(process_type, action)
@@ -91,7 +91,7 @@ def run_process_on_host(host, process_type, action='run', track_history=False):
         print(f"Failed to start process {process_type} on {host}: {e}")
 
 
-def schedule_process(process_type: str, nemesis_config: dict, custom_interval: int = None):
+def schedule_process(process_type: str, interval: int = None):
     while True:
         with scheduled_tasks_lock:
             if process_type not in scheduled_tasks or not scheduled_tasks[process_type]['enabled']:
@@ -111,16 +111,12 @@ def schedule_process(process_type: str, nemesis_config: dict, custom_interval: i
                 break
 
         # Get config for this process type
-        p_config = nemesis_config.get(process_type, {})
         process_def = PROCESS_TYPES[process_type]
-
-        # Use custom interval if provided, otherwise fall back to config
-        interval = custom_interval if custom_interval is not None else p_config.get('schedule', process_def.get('schedule', 60))
 
         if 'runner' in process_def:
             runner = process_def['runner']
             # Delegate logic to the runner
-            action, target_hosts = runner.prepare_fault(hosts, p_config)
+            action, target_hosts = runner.prepare_fault(hosts)
 
             if action and target_hosts:
                 # Run processes on hosts in parallel using thread pool
@@ -143,7 +139,7 @@ def schedule_process(process_type: str, nemesis_config: dict, custom_interval: i
 def get_all_host_processes(host: str):
     if is_local_host(host):
         # Direct call to avoid HTTP deadlock
-        from ydb.tests.stability.nemesis_app.routers.agent_router import get_all_processes_helper
+        from ydb.tests.stability.nemesis.routers.agent_router import get_all_processes_helper
         return jsonify(get_all_processes_helper())
     else:
         port = get_app_port()
@@ -155,7 +151,7 @@ def fetch_host_processes(host):
     try:
         if is_local_host(host):
             # Direct call to avoid HTTP deadlock
-            from ydb.tests.stability.nemesis_app.routers.agent_router import get_all_processes_helper
+            from ydb.tests.stability.nemesis.routers.agent_router import get_all_processes_helper
             return host, get_all_processes_helper()
         else:
             port = get_app_port()
@@ -205,7 +201,7 @@ def create_host_process():
     try:
         if is_local_host(host):
             # Direct call to avoid HTTP deadlock
-            from ydb.tests.stability.nemesis_app.routers.agent_router import create_process_helper
+            from ydb.tests.stability.nemesis.routers.agent_router import create_process_helper
             result = create_process_helper(process_type, action)
             return jsonify(result)
         else:
@@ -335,9 +331,6 @@ def set_schedule():
     if process_type not in PROCESS_TYPES:
         return jsonify({"status": "error", "message": "Invalid process type"}), 400
 
-    # Import here to get the current nemesis_config
-    from ydb.tests.stability.nemesis_app.app import nemesis_config
-
     with scheduled_tasks_lock:
         if enabled:
             if process_type in scheduled_tasks and scheduled_tasks[process_type]['enabled']:
@@ -350,7 +343,7 @@ def set_schedule():
             # Start scheduling in a daemon thread
             thread = threading.Thread(
                 target=schedule_process,
-                args=(process_type, nemesis_config, interval)
+                args=(process_type, interval)
             )
             thread.daemon = True
             thread.start()
@@ -393,20 +386,11 @@ def get_schedule_history():
 @blueprint.route("/api/healthcheck", methods=["GET"])
 def get_healthcheck():
     # Import here to get the current healthcheck_reporter
-    from ydb.tests.stability.nemesis_app.app import healthcheck_reporter
+    from ydb.tests.stability.nemesis.app import healthcheck_reporter
 
     if healthcheck_reporter:
         return jsonify(healthcheck_reporter.last_results)
     return jsonify({})
-
-
-@blueprint.route("/api/config/reload", methods=["POST"])
-def reload_config():
-    # Import here to get the load function
-    from ydb.tests.stability.nemesis_app.app import load_nemesis_config
-
-    config = load_nemesis_config()
-    return jsonify({"status": "ok", "config": config})
 
 
 @blueprint.route("/api/hosts/warden/start", methods=["POST"])
@@ -425,7 +409,7 @@ def start_warden_checks_on_all_hosts():
             logger.debug(f"Starting safety checks on agent: {host}")
             if is_local_host(host):
                 # Direct call to avoid HTTP deadlock
-                from ydb.tests.stability.nemesis_app.routers.agent_router import start_warden_checks_helper
+                from ydb.tests.stability.nemesis.routers.agent_router import start_warden_checks_helper
                 result = start_warden_checks_helper()
                 logger.debug(f"Agent {host} (local): {result.get('status', 'unknown')}")
                 return host, result
@@ -489,7 +473,7 @@ def get_warden_results_from_all_hosts():
         try:
             if is_local_host(host):
                 # Direct call to avoid HTTP deadlock
-                from ydb.tests.stability.nemesis_app.routers.agent_router import get_warden_result_helper
+                from ydb.tests.stability.nemesis.routers.agent_router import get_warden_result_helper
                 result = get_warden_result_helper()
                 logger.debug(f"Agent {host} (local): status={result.get('status', 'unknown')}, checks={len(result.get('safety_checks', []))}")
                 return host, result

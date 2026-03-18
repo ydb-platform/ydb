@@ -1,10 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
 import os
-import shlex
 import subprocess
 
 import yaml
-from ydb.tests.stability.nemesis_app.internal.config import Settings, AgentSettings
+from ydb.tests.stability.nemesis.internal.config import Settings, AgentSettings
 
 
 def upload_binary(host, is_orchestrator=False, yaml_config_location=None):

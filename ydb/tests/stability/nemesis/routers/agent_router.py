@@ -3,9 +3,9 @@ import socket
 
 from flask import Blueprint, request, jsonify
 
-from ydb.tests.stability.nemesis_app.internal.nemesis.catalog import PROCESS_TYPES
-from ydb.tests.stability.nemesis_app.internal.nemesis.runner import NemesisManager
-from ydb.tests.stability.nemesis_app.internal.agent_warden_checker import AgentWardenChecker
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import PROCESS_TYPES
+from ydb.tests.stability.nemesis.internal.nemesis.runner import NemesisManager
+from ydb.tests.stability.nemesis.internal.agent_warden_checker import AgentWardenChecker
 
 
 logger = logging.getLogger(__name__)

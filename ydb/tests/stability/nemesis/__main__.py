@@ -3,8 +3,8 @@ import json
 import logging
 import sys
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
-from ydb.tests.stability.nemesis_app.internal.config import get_master_settings
-from ydb.tests.stability.nemesis_app.internal.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
+from ydb.tests.stability.nemesis.internal.config import get_master_settings
+from ydb.tests.stability.nemesis.internal.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
 
 
 def parse_args():
@@ -182,7 +182,7 @@ def main():
     elif args.command == "run":
         # run the application
         # threaded=True is important for concurrent request handling
-        from ydb.tests.stability.nemesis_app.app import app
+        from ydb.tests.stability.nemesis.app import app
         app.run(
             host=settings.app_host,
             port=settings.app_port,

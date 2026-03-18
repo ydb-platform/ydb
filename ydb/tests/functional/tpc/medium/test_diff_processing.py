@@ -33,11 +33,6 @@ class TestTpchDiffProcessing(Tpch1, FunctionalTestBase):
         cls.run_cli(['workload', 'tpch', '-p', 'olap_yatests/tpch/s1', 'init', '--store=column'])
         super().setup_class()
 
-    @classmethod
-    def do_teardown_class(cls) -> None:
-        if cls.cluster is not None:
-            cls.cluster.stop()
-
 
 class TestTpcdsDiffProcessing(Tpcds1, FunctionalTestBase):
     iterations: int = 1
@@ -59,11 +54,6 @@ class TestTpcdsDiffProcessing(Tpcds1, FunctionalTestBase):
         cls.run_cli(['workload', 'tpcds', '-p', 'olap_yatests/tpcds/s1', 'init', '--store=column'])
         super().setup_class()
 
-    @classmethod
-    def do_teardown_class(cls) -> None:
-        if cls.cluster is not None:
-            cls.cluster.stop()
-
 
 class TestClickbenchDiffProcessing(Clickbench, FunctionalTestBase):
     iterations: int = 1
@@ -84,8 +74,3 @@ class TestClickbenchDiffProcessing(Clickbench, FunctionalTestBase):
         cls.setup_cluster()
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column'])
         super().setup_class()
-
-    @classmethod
-    def do_teardown_class(cls) -> None:
-        if cls.cluster is not None:
-            cls.cluster.stop()

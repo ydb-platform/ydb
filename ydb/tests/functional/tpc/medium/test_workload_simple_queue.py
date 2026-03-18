@@ -7,8 +7,3 @@ class TestWorkloadSimpleQueue(workload_simple_queue.TestSimpleQueue, FunctionalT
     def setup_class(cls) -> None:
         cls.setup_cluster()
         workload_simple_queue.TestSimpleQueue.setup_class()
-
-    @classmethod
-    def do_teardown_class(cls) -> None:
-        if cls.cluster is not None:
-            cls.cluster.stop()

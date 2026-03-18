@@ -14,11 +14,6 @@ class TestClickbench(clickbench.TestClickbench, FunctionalTestBase):
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input', yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
         super().setup_class()
 
-    @classmethod
-    def do_teardown_class(cls) -> None:
-        if cls.cluster is not None:
-            cls.cluster.stop()
-
 
 class TestClickbenchParallel(clickbench.TestClickbenchParallel8, FunctionalTestBase):
     verify_data: bool = False
@@ -31,11 +26,6 @@ class TestClickbenchParallel(clickbench.TestClickbenchParallel8, FunctionalTestB
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input', yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
         super().setup_class()
 
-    @classmethod
-    def do_teardown_class(cls) -> None:
-        if cls.cluster is not None:
-            cls.cluster.stop()
-
 
 class TestClickbenchPg(clickbench.TestClickbenchPg, FunctionalTestBase):
     verify_data: bool = False
@@ -47,8 +37,3 @@ class TestClickbenchPg(clickbench.TestClickbenchPg, FunctionalTestBase):
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column', '--datetime-types=dt64'])
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input', yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
         super().setup_class()
-
-    @classmethod
-    def do_teardown_class(cls) -> None:
-        if cls.cluster is not None:
-            cls.cluster.stop()

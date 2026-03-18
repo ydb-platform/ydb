@@ -11,8 +11,3 @@ class TestTpccW10T4(tpcc.TpccSuiteBase, FunctionalTestBase):
     def setup_class(cls) -> None:
         cls.setup_cluster()
         super().setup_class()
-
-    @classmethod
-    def do_teardown_class(cls) -> None:
-        if cls.cluster is not None:
-            cls.cluster.stop()

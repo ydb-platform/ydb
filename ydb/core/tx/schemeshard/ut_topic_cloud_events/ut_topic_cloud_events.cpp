@@ -1,63 +1,24 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-
-#include <ydb/core/audit/audit_log_service.h>
-#include <ydb/core/audit/audit_log.h>
+#include <ydb/core/persqueue/public/cloud_events/actor.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
-#include <library/cpp/logger/backend.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/blocking_queue/blocking_queue.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+using namespace NPQ::NCloudEvents;
 
 namespace {
 
-using TLogQueue = NThreading::TBlockingQueue<TString>;
-using TLogQueuePtr = std::shared_ptr<TLogQueue>;
+using TCloudEventQueue = NThreading::TBlockingQueue<TString>;
+using TCloudEventQueuePtr = std::shared_ptr<TCloudEventQueue>;
 
-class TTestLogBackend : public TLogBackend {
-public:
-    explicit TTestLogBackend(TLogQueuePtr queue)
-        : Queue(std::move(queue))
-    {}
-
-    void WriteData(const TLogRecord& rec) override {
-        Queue->Push(TString(rec.Data, rec.Len));
-    }
-
-    void ReopenLog() override {}
-
-private:
-    TLogQueuePtr Queue;
-};
-
-void AddTopicCloudEventsAuditService(TTestActorRuntime& runtime, TLogQueuePtr logQueue) {
-    NAudit::TAuditLogBackends backends;
-    backends[NKikimrConfig::TAuditConfig::JSON].emplace_back(MakeHolder<TTestLogBackend>(logQueue));
-
-    auto auditActor = NAudit::CreateAuditWriter(std::move(backends));
-    TActorId auditActorId = runtime.Register(auditActor.release(), 0);
-
-    runtime.RegisterService(NAudit::MakeTopicCloudEventsAuditServiceID(), auditActorId, 0);
-}
-
-static NJson::TJsonValue ParseCloudEventFromAuditLog(const TString& log) {
-    size_t jsonStart = log.find(": ");
-    UNIT_ASSERT_C(jsonStart != TString::npos, "Log must contain timestamp prefix: " << log);
-    TStringBuf jsonPart(log.data() + jsonStart + 2, log.size() - jsonStart - 2);
-
-    NJson::TJsonValue root;
-    UNIT_ASSERT_C(NJson::ReadJsonTree(jsonPart, &root), "Failed to parse audit log JSON: " << log);
-
-    const auto* cloudEventJson = root.GetValueByPath("cloud_event_json");
-    UNIT_ASSERT_C(cloudEventJson != nullptr, "Missing cloud_event_json in audit log");
-    TString innerJson = cloudEventJson->GetString();
-
+static NJson::TJsonValue ParseCloudEventJson(const TString& json) {
     NJson::TJsonValue cloudEvent;
-    UNIT_ASSERT_C(NJson::ReadJsonTree(innerJson, &cloudEvent), "Failed to parse cloud_event_json: " << innerJson);
+    UNIT_ASSERT_C(NJson::ReadJsonTree(json, &cloudEvent), "Failed to parse cloud event JSON: " << json);
     return cloudEvent;
 }
 
@@ -73,16 +34,60 @@ static void AssertCloudEventFields(const NJson::TJsonValue& cloudEvent,
     UNIT_ASSERT_STRINGS_EQUAL((*details)["path"].GetString(), expectedPath);
 }
 
+static void PopAndAssertTwoEvents(TCloudEventQueue& queue,
+                                 const TString& expectedType1,
+                                 const TString& expectedType2,
+                                 const TString& expectedPath,
+                                 TDuration timeout) {
+    auto ev1 = queue.Pop(timeout);
+    UNIT_ASSERT_C(ev1.Defined(), "Expected first cloud event");
+    auto ev2 = queue.Pop(timeout);
+    UNIT_ASSERT_C(ev2.Defined(), "Expected second cloud event");
+
+    auto json1 = ParseCloudEventJson(*ev1);
+    auto json2 = ParseCloudEventJson(*ev2);
+
+    const auto* meta1 = json1.GetValueByPath("event_metadata");
+    const auto* meta2 = json2.GetValueByPath("event_metadata");
+    UNIT_ASSERT_C(meta1 != nullptr, "Missing event_metadata in first event");
+    UNIT_ASSERT_C(meta2 != nullptr, "Missing event_metadata in second event");
+
+    TString type1 = (*meta1)["event_type"].GetString();
+    TString type2 = (*meta2)["event_type"].GetString();
+
+    auto check = [&](const TString& type, const NJson::TJsonValue& j) {
+        if (type == expectedType1 || type == expectedType2) {
+            AssertCloudEventFields(j, type, expectedPath);
+            return true;
+        }
+        return false;
+    };
+    UNIT_ASSERT_C(check(type1, json1), "Unexpected event type: " << type1);
+    UNIT_ASSERT_C(check(type2, json2), "Unexpected event type: " << type2);
+    UNIT_ASSERT_C(type1 != type2, "Expected different event types, got " << type1 << " twice");
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardTopicCloudEvents) {
 
     Y_UNIT_TEST(CreateTopicCloudEvent) {
         TTestBasicRuntime runtime;
-        auto logQueue = std::make_shared<TLogQueue>(0);
+        auto cloudEventQueue = std::make_shared<TCloudEventQueue>(0);
+
+        runtime.SetEventFilter([queue = cloudEventQueue](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NPQ::NEvents::InternalEventSpaceBegin(NPQ::NEvents::EServices::CLOUD_EVENTS)) {
+                auto* cloudEv = ev->Get<NPQ::NCloudEvents::TCloudEvent>();
+                if (cloudEv) {
+                    TString json = BuildTopicCloudEventJson(cloudEv->Info);
+                    queue->Push(std::move(json));
+                    return true; // drop event (don't deliver to actor)
+                }
+            }
+            return false; // deliver other events
+        });
 
         TTestEnv env(runtime);
-        AddTopicCloudEventsAuditService(runtime, logQueue);
         ui64 txId = 1000;
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot",
@@ -96,10 +101,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicCloudEvents) {
 
         runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
-        auto log = logQueue->Pop(TDuration::Seconds(5));
-        UNIT_ASSERT_C(log.Defined(), "Expected cloud event audit log");
+        auto json = cloudEventQueue->Pop(TDuration::Seconds(5));
+        UNIT_ASSERT_C(json.Defined(), "Expected cloud event from TCloudEventsActor");
 
-        auto cloudEvent = ParseCloudEventFromAuditLog(*log);
+        auto cloudEvent = ParseCloudEventJson(*json);
         AssertCloudEventFields(cloudEvent,
             "yandex.cloud.events.ydb.topics.CreateTopic",
             "/MyRoot/MyTopic");
@@ -107,10 +112,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicCloudEvents) {
 
     Y_UNIT_TEST(AlterTopicCloudEvent) {
         TTestBasicRuntime runtime;
-        auto logQueue = std::make_shared<TLogQueue>(0);
+        auto cloudEventQueue = std::make_shared<TCloudEventQueue>(0);
+
+        runtime.SetEventFilter([queue = cloudEventQueue](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NPQ::NEvents::InternalEventSpaceBegin(NPQ::NEvents::EServices::CLOUD_EVENTS)) {
+                auto* cloudEv = ev->Get<NPQ::NCloudEvents::TCloudEvent>();
+                if (cloudEv) {
+                    TString json = BuildTopicCloudEventJson(cloudEv->Info);
+                    queue->Push(std::move(json));
+                    return true; // drop event
+                }
+            }
+            return false;
+        });
 
         TTestEnv env(runtime);
-        AddTopicCloudEventsAuditService(runtime, logQueue);
         ui64 txId = 1000;
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot",
@@ -131,25 +147,32 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicCloudEvents) {
             )");
         env.TestWaitNotification(runtime, txId);
 
-        runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(3));
 
-        auto createLog = logQueue->Pop(TDuration::Seconds(1));
-        auto alterLog = logQueue->Pop(TDuration::Seconds(5));
-        UNIT_ASSERT_C(createLog.Defined(), "Expected CreateTopic cloud event");
-        UNIT_ASSERT_C(alterLog.Defined(), "Expected AlterTopic cloud event");
-
-        auto alterCloudEvent = ParseCloudEventFromAuditLog(*alterLog);
-        AssertCloudEventFields(alterCloudEvent,
+        PopAndAssertTwoEvents(*cloudEventQueue,
+            "yandex.cloud.events.ydb.topics.CreateTopic",
             "yandex.cloud.events.ydb.topics.AlterTopic",
-            "/MyRoot/MyTopic");
+            "/MyRoot/MyTopic",
+            TDuration::Seconds(10));
     }
 
     Y_UNIT_TEST(DropTopicCloudEvent) {
         TTestBasicRuntime runtime;
-        auto logQueue = std::make_shared<TLogQueue>(0);
+        auto cloudEventQueue = std::make_shared<TCloudEventQueue>(0);
+
+        runtime.SetEventFilter([queue = cloudEventQueue](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NPQ::NEvents::InternalEventSpaceBegin(NPQ::NEvents::EServices::CLOUD_EVENTS)) {
+                auto* cloudEv = ev->Get<NPQ::NCloudEvents::TCloudEvent>();
+                if (cloudEv) {
+                    TString json = BuildTopicCloudEventJson(cloudEv->Info);
+                    queue->Push(std::move(json));
+                    return true; // drop event
+                }
+            }
+            return false;
+        });
 
         TTestEnv env(runtime);
-        AddTopicCloudEventsAuditService(runtime, logQueue);
         ui64 txId = 1000;
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot",
@@ -166,15 +189,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicCloudEvents) {
 
         runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(3));
 
-        auto createLog = logQueue->Pop(TDuration::Seconds(1));
-        runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
-        auto dropLog = logQueue->Pop(TDuration::Seconds(10));
-        UNIT_ASSERT_C(createLog.Defined(), "Expected CreateTopic cloud event");
-        UNIT_ASSERT_C(dropLog.Defined(), "Expected DeleteTopic cloud event");
-
-        auto dropCloudEvent = ParseCloudEventFromAuditLog(*dropLog);
-        AssertCloudEventFields(dropCloudEvent,
+        PopAndAssertTwoEvents(*cloudEventQueue,
+            "yandex.cloud.events.ydb.topics.CreateTopic",
             "yandex.cloud.events.ydb.topics.DeleteTopic",
-            "/MyRoot/MyTopic");
+            "/MyRoot/MyTopic",
+            TDuration::Seconds(10));
     }
 }

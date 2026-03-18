@@ -2141,10 +2141,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TAuditWriterInitializer(runConfig));
     }
 
-    if (serviceMask.EnableTopicCloudEventsAuditWriter) {
-        sil->AddServiceInitializer(new TTopicAuditWriterInitializer(runConfig));
-    }
-
     if (serviceMask.EnableLongTxService) {
         sil->AddServiceInitializer(new TLongTxServiceInitializer(runConfig));
     }

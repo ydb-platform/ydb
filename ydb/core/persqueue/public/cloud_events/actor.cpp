@@ -6,6 +6,8 @@
 #include <google/protobuf/util/time_util.h>
 #include <ydb/core/audit/audit_log_impl.h>
 #include <ydb/core/audit/audit_log_service.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -84,25 +86,20 @@ void FillTopicDetails(TopicDetails* details, const NKikimrSchemeOp::TPersQueueGr
         if (partCfg.HasWriteSpeedInBytesPerSecond()) {
             details->set_partition_write_speed_bytes_per_second(partCfg.GetWriteSpeedInBytesPerSecond());
         }
-
         if (partCfg.HasLifetimeSeconds()) {
             auto* retention = details->mutable_retention_period();
             *retention = google::protobuf::util::TimeUtil::SecondsToDuration(partCfg.GetLifetimeSeconds());
         }
-
         if (partCfg.HasStorageLimitBytes()) {
             constexpr ui64 BYTES_IN_MB = 1024ull * 1024ull;
             details->set_retention_storage_mb(partCfg.GetStorageLimitBytes() / BYTES_IN_MB);
         }
-
         if (cfg.HasMeteringMode()) {
             details->set_metering_mode(ConvertMeteringMode(cfg.GetMeteringMode()));
         }
-
         if (cfg.HasMetricsLevel()) {
             details->set_metrics_level(cfg.GetMetricsLevel());
         }
-
         for (const auto& c : cfg.GetConsumers()) {
             if (c.HasName()) {
                 auto* consumer = details->add_consumers();
@@ -250,33 +247,68 @@ TString SerializeEvent(const TEvent& ev) {
     return json;
 }
 
+} // anonymous namespace
+
+TString BuildTopicCloudEventJson(const TCloudEventInfo& info) {
+    TString json;
+
+    auto type = info.ModifyScheme.GetOperationType();
+    if (type == NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup) {
+        TCreateTopicEvent proto;
+        Fill(proto, info);
+        json = SerializeEvent(proto);
+    } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup) {
+        TAlterTopicEvent proto;
+        Fill(proto, info);
+        json = SerializeEvent(proto);
+    } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup) {
+        TDeleteTopicEvent proto;
+        Fill(proto, info);
+        json = SerializeEvent(proto);
+    }
+
+    return json;
 }
+
+TCloudEventsActor::TCloudEventsActor()
+{
+    const auto& pqConfig = AppData()->PQConfig;
+    if (!pqConfig.HasCloudEventsConfig() || !pqConfig.GetCloudEventsConfig().GetEnabled()) {
+        return;
+    }
+
+    const auto& cfg = pqConfig.GetCloudEventsConfig();
+    const TString& uri = cfg.GetUaURI();
+
+    if (uri.StartsWith("file://")) {
+        TString filePath = uri.substr(7);
+        if (filePath.StartsWith("//")) {
+            filePath = filePath.substr(1);
+        }
+        EventsWriter = MakeHolder<TFileEventsWriter>(filePath);
+    } else if (uri) {
+        auto counters = GetServiceCounters(AppData()->Counters.Get(), "pq.cloud_events");
+        EventsWriter = MakeHolder<TUaEventsWriter>(uri, counters);
+    }
+}
+
+TCloudEventsActor::TCloudEventsActor(IEventsWriter::TPtr eventsWriter)
+    : EventsWriter(std::move(eventsWriter))
+{}
 
 void TCloudEventsActor::Bootstrap() {
     Become(&TCloudEventsActor::StateWork);
 }
 
 void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
-    TString json;
-
-    auto type = ev.Get()->Get()->Info.ModifyScheme.GetOperationType();
-    if (type == NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup) {
-        TCreateTopicEvent proto;
-        Fill(proto, ev.Get()->Get()->Info);
-        json = SerializeEvent(proto);
-    } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup) {
-        TAlterTopicEvent proto;
-        Fill(proto, ev.Get()->Get()->Info);
-        json = SerializeEvent(proto);
-    } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup) {
-        TDeleteTopicEvent proto;
-        Fill(proto, ev.Get()->Get()->Info);
-        json = SerializeEvent(proto);
+    if (!EventsWriter) {
+        return;
     }
 
-    AUDIT_LOG_A(NAudit::MakeTopicCloudEventsAuditServiceID(),
-        AUDIT_PART("cloud_event_json", json)
-    );
+    TString json = BuildTopicCloudEventJson(ev.Get()->Get()->Info);
+    if (EventsWriter) {
+        EventsWriter->Write(json + "\n");
+    }
 }
 
 } // namespace NKikimr::NPQ::NCloudEvents

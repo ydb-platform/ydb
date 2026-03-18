@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -40,5 +41,17 @@ void FinishWithError(
     NKikimrScheme::EStatus status,
     const TString& errStr,
     TOperationContext& context);
+
+class TPQDoneWithCloudEvents : public TDone {
+public:
+    explicit TPQDoneWithCloudEvents(const TOperationId& id, const TTxTransaction& tx);
+
+    bool ProgressState(TOperationContext&) override;
+
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override;
+
+private:
+    const TTxTransaction Transaction;
+};
 
 } // NKikimr::NSchemeShard

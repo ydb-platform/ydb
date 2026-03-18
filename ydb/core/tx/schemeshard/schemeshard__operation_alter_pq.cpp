@@ -75,7 +75,7 @@ class TAlterPQ: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+        return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction);
         default:
             return nullptr;
         }
@@ -1056,13 +1056,6 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(oldReserve.Storage);
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionsToCreate);
-
-        // Emit topic CloudEvent after successful alter
-        ScheduleSendTopicCloudEvent(
-            Transaction,
-            context,
-            NKikimrScheme::StatusSuccess,
-            TString());
 
         SetState(NextState());
         return result;

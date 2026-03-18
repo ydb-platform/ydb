@@ -107,14 +107,14 @@ def _database(ydb_cluster, ydb_root):
 
 
 @pytest.fixture(scope='module')
-def topic_audit_file_path(ydb_cluster):
-    return ydb_cluster.config.audit_file_path
+def topic_cloud_events_file_path(ydb_cluster):
+    return ydb_cluster.config.topic_cloud_events_file_path
 
 
-def test_create_topic(ydb_cluster, _database, topic_audit_file_path):
+def test_create_topic(ydb_cluster, _database, topic_cloud_events_file_path):
     """Create topic and compare cloud event with canondata."""
     topic_name = 'CanonicalTopic'
-    capture = CanonicalCaptureCloudEventOutput(topic_audit_file_path, _database)
+    capture = CanonicalCaptureCloudEventOutput(topic_cloud_events_file_path, _database)
 
     with capture:
         create_topic(ydb_cluster, _database, topic_name)
@@ -123,10 +123,10 @@ def test_create_topic(ydb_cluster, _database, topic_audit_file_path):
     return capture.canonize()
 
 
-def test_alter_topic(ydb_cluster, _database, topic_audit_file_path):
+def test_alter_topic(ydb_cluster, _database, topic_cloud_events_file_path):
     """Create, alter topic and compare AlterTopic cloud event with canondata."""
     topic_name = 'CanonicalAlterTopic'
-    capture = CanonicalCaptureCloudEventOutput(topic_audit_file_path, _database)
+    capture = CanonicalCaptureCloudEventOutput(topic_cloud_events_file_path, _database)
 
     create_topic(ydb_cluster, _database, topic_name)
     time.sleep(1)
@@ -138,10 +138,10 @@ def test_alter_topic(ydb_cluster, _database, topic_audit_file_path):
     return capture.canonize()
 
 
-def test_drop_topic(ydb_cluster, _database, topic_audit_file_path):
+def test_drop_topic(ydb_cluster, _database, topic_cloud_events_file_path):
     """Create, drop topic and compare DeleteTopic cloud event with canondata."""
     topic_name = 'CanonicalDropTopic'
-    capture = CanonicalCaptureCloudEventOutput(topic_audit_file_path, _database)
+    capture = CanonicalCaptureCloudEventOutput(topic_cloud_events_file_path, _database)
 
     create_topic(ydb_cluster, _database, topic_name)
     time.sleep(1)
@@ -153,10 +153,10 @@ def test_drop_topic(ydb_cluster, _database, topic_audit_file_path):
     return capture.canonize()
 
 
-def test_create_topic_error(ydb_cluster, _database, topic_audit_file_path):
+def test_create_topic_error(ydb_cluster, _database, topic_cloud_events_file_path):
     """Create topic with invalid params, compare ERROR cloud event with canondata."""
     topic_name = 'InvalidCanonicalTopic'
-    capture = CanonicalCaptureCloudEventOutput(topic_audit_file_path, _database)
+    capture = CanonicalCaptureCloudEventOutput(topic_cloud_events_file_path, _database)
 
     with capture:
         create_topic_invalid(ydb_cluster, _database, topic_name)
@@ -165,10 +165,10 @@ def test_create_topic_error(ydb_cluster, _database, topic_audit_file_path):
     return capture.canonize()
 
 
-def test_alter_topic_error(ydb_cluster, _database, topic_audit_file_path):
+def test_alter_topic_error(ydb_cluster, _database, topic_cloud_events_file_path):
     """Alter topic with invalid params, compare ERROR cloud event with canondata."""
     topic_name = 'AlterErrorCanonicalTopic'
-    capture = CanonicalCaptureCloudEventOutput(topic_audit_file_path, _database)
+    capture = CanonicalCaptureCloudEventOutput(topic_cloud_events_file_path, _database)
 
     create_topic(ydb_cluster, _database, topic_name)
     time.sleep(1)

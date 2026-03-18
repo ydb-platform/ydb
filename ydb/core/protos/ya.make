@@ -12,7 +12,6 @@ ENDIF()
 SRCS(
     alloc.proto
     auth.proto
-    audit.proto
     backup.proto
     base.proto
     bind_channel_storage_pool.proto
@@ -166,7 +165,6 @@ SRCS(
     tx_proxy.proto
     tx_scheme.proto
     tx_sequenceshard.proto
-    ua_config.proto
     whiteboard_disk_states.proto
     whiteboard_flags.proto
     workload_manager_config.proto

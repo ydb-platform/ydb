@@ -19,15 +19,6 @@
 
 #define AUDIT_LOG(expr) AUDIT_LOG_S((::NActors::TActivationContext::ActorSystem()), expr)
 
-#define AUDIT_LOG_A(actorId, expr)                                                                                              \
-    do {                                                                                                                        \
-        if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {                                                                      \
-            TVector<std::pair<TString, TString>> auditParts;                                                                    \
-            expr                                                                                                                \
-            ::NKikimr::NAudit::SendAuditLog(::NActors::TActivationContext::ActorSystem(), actorId, std::move(auditParts));      \
-        }                                                                                                                       \
-    } while (0) /**/
-
 #define AUDIT_PART_NO_COND(key, value) AUDIT_PART_COND(key, value, true)
 #define AUDIT_PART_COND(key, value, condition)                                                                                    \
     do {                                                                                                                          \
@@ -50,7 +41,5 @@ using TAuditLogParts = TVector<std::pair<TString, TString>>;
 extern std::atomic<bool> AUDIT_LOG_ENABLED;
 
 void SendAuditLog(const NActors::TActorSystem* sys, TAuditLogParts&& parts);
-
-void SendAuditLog(const NActors::TActorSystem* sys, NActors::TActorId actorId, TAuditLogParts&& parts);
 
 }   // namespace NKikimr::NAudit

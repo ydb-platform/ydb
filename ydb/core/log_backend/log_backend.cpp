@@ -198,35 +198,6 @@ THolder<TLogBackend> MaybeWrapWithJsonEnvelope(THolder<TLogBackend> logBackend, 
     return MakeHolder<TLogBackendWithJsonEnvelope>(jsonEnvelope, std::move(logBackend));
 }
 
-
-void AddAuditConfigLogBackends(
-    const NKikimrConfig::TAuditConfig& auditConfig,
-    TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>>& logBackends,
-    const TKikimrRunConfig& runConfig,
-    NMonitoring::TDynamicCounterPtr counters) {
-    if (auditConfig.HasStderrBackend()) {
-        auto logBackend = NActors::CreateStderrBackend();
-        auto format = auditConfig.GetStderrBackend().GetFormat();
-        logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetStderrBackend().GetLogJsonEnvelope()));
-    }
-
-    if (auditConfig.HasFileBackend()) {
-        auto logBackend = CreateAuditLogFileBackend(runConfig);
-        if (logBackend) {
-            auto format = auditConfig.GetFileBackend().GetFormat();
-            logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetFileBackend().GetLogJsonEnvelope()));
-        }
-    }
-
-    if (auditConfig.HasUnifiedAgentBackend()) {
-        auto logBackend = CreateAuditLogUnifiedAgentBackend(runConfig, counters);
-        if (logBackend) {
-            auto format = auditConfig.GetUnifiedAgentBackend().GetFormat();
-            logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetUnifiedAgentBackend().GetLogJsonEnvelope()));
-        }
-    }
-}
-
 TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> CreateAuditLogBackends(
         const TKikimrRunConfig& runConfig,
         NMonitoring::TDynamicCounterPtr counters) {
@@ -234,10 +205,31 @@ TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> Create
 
     if (runConfig.AppConfig.HasAuditConfig()) {
         const auto& auditConfig = runConfig.AppConfig.GetAuditConfig();
-        AddAuditConfigLogBackends(auditConfig, logBackends, runConfig, counters);
+        if (auditConfig.HasStderrBackend()) {
+            auto logBackend = NActors::CreateStderrBackend();
+            auto format = auditConfig.GetStderrBackend().GetFormat();
+            logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetStderrBackend().GetLogJsonEnvelope()));
+        }
+    
+        if (auditConfig.HasFileBackend()) {
+            auto logBackend = CreateAuditLogFileBackend(runConfig);
+            if (logBackend) {
+                auto format = auditConfig.GetFileBackend().GetFormat();
+                logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetFileBackend().GetLogJsonEnvelope()));
+            }
+        }
+    
+        if (auditConfig.HasUnifiedAgentBackend()) {
+            auto logBackend = CreateAuditLogUnifiedAgentBackend(runConfig, counters);
+            if (logBackend) {
+                auto format = auditConfig.GetUnifiedAgentBackend().GetFormat();
+                logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetUnifiedAgentBackend().GetLogJsonEnvelope()));
+            }
+        }
     }
 
     return logBackends;
 }
+
 
 } // NKikimr

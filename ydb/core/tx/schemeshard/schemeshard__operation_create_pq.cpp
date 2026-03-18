@@ -278,7 +278,7 @@ class TCreatePQ: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction);
         default:
             return nullptr;
         }
@@ -560,13 +560,6 @@ public:
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
         IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
-
-        // Emit topic CloudEvent after successful create
-        ScheduleSendTopicCloudEvent(
-            Transaction,
-            context,
-            NKikimrScheme::StatusSuccess,
-            TString());
 
         SetState(NextState());
         return result;

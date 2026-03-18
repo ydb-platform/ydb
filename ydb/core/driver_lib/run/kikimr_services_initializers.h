@@ -573,15 +573,6 @@ private:
     const TKikimrRunConfig& KikimrRunConfig;
 };
 
-class TTopicAuditWriterInitializer : public IKikimrServicesInitializer {
-public:
-    TTopicAuditWriterInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-private:
-    const TKikimrRunConfig& KikimrRunConfig;
-};
-
 class TSchemeBoardMonitoringInitializer : public IKikimrServicesInitializer {
 public:
     TSchemeBoardMonitoringInitializer(const TKikimrRunConfig& runConfig);

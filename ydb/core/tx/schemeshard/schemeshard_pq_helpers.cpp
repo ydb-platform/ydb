@@ -86,4 +86,35 @@ void ScheduleSendTopicCloudEvent(
         new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
 }
 
+TPQDoneWithCloudEvents::TPQDoneWithCloudEvents(const TOperationId& id, const TTxTransaction& tx)
+    : TDone(id)
+    , Transaction(tx)
+{
+    auto events = AllIncomingEvents();
+    events.erase(TEvPrivate::TEvCompleteBarrier::EventType);
+    IgnoreMessages(DebugHint(), events);
+}
+
+bool TPQDoneWithCloudEvents::ProgressState(TOperationContext& context)
+{
+    context.OnComplete.Barrier(OperationId, "DoneBarrier");
+
+    return false;
+}
+
+bool TPQDoneWithCloudEvents::HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context)
+{
+    if (!TDone::Process(context)) {
+        return false;
+    }
+
+    ScheduleSendTopicCloudEvent(
+        Transaction,
+        context,
+        NKikimrScheme::StatusSuccess,
+        TString());
+
+    return true;
+}
+
 } // NKikimr::NSchemeShard

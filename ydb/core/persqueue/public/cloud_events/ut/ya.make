@@ -1,15 +1,15 @@
 UNITTEST_FOR(ydb/core/persqueue/public/cloud_events)
 
+YQL_LAST_ABI_VERSION()
+
 PEERDIR(
     ydb/core/audit
     ydb/core/persqueue/public/cloud_events
     ydb/core/persqueue/events
     ydb/core/protos
-    ydb/library/actors/testlib
     library/cpp/json
-    library/cpp/logger
     library/cpp/testing/unittest
-    library/cpp/threading/blocking_queue
+    ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
 )
 
 SRCS(

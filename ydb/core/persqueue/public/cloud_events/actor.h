@@ -1,5 +1,7 @@
 #pragma once
 
+#include "events_writer.h"
+
 #include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -44,13 +46,18 @@ struct TCloudEvent : public NActors::TEventLocal<TCloudEvent, static_cast<ui32>(
     {}
 };
 
+TString BuildTopicCloudEventJson(const TCloudEventInfo& info);
+
 class TCloudEventsActor : public NActors::TActorBootstrapped<TCloudEventsActor> {
 public:
-    TCloudEventsActor() = default;
+    TCloudEventsActor();
+    explicit TCloudEventsActor(IEventsWriter::TPtr eventsWriter);
 
     void Bootstrap();
 
 private:
+    IEventsWriter::TPtr EventsWriter;
+
     void Handle(TCloudEvent::TPtr& ev);
 
     STRICT_STFUNC(StateWork,

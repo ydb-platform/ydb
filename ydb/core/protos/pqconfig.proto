@@ -4,7 +4,6 @@ import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 
 import "ydb/core/protos/base.proto";
-import "ydb/core/protos/audit.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_limits.proto";
@@ -224,8 +223,12 @@ message TPQConfig {
     optional uint64 MaxMessageSizeBytes = 59 [default = 125829120]; // 120MB
     optional uint64 MLPBatchWindowMilliSeconds = 60 [default = 10];
 
-    // Per-topic cloud events audit configuration (uses NKikimrConfig.TAuditConfig from audit.proto).
-    optional NKikimrConfig.TAuditConfig TopicCloudEventsAudit = 61;
+    message TCloudEventsConfig {
+        optional bool Enabled = 1 [default = false];
+        optional string UaURI = 2;
+    }
+
+    optional TCloudEventsConfig CloudEventsConfig = 61;
 }
 
 message TChannelProfile {

@@ -3015,31 +3015,6 @@ void TAuditWriterInitializer::InitializeServices(TActorSystemSetup* setup, const
     }
 }
 
-TTopicAuditWriterInitializer::TTopicAuditWriterInitializer(const TKikimrRunConfig &runConfig)
-    : IKikimrServicesInitializer(runConfig)
-    , KikimrRunConfig(runConfig)
-{
-}
-
-void TTopicAuditWriterInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData)
-{
-
-    TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> logBackends;
-    if (KikimrRunConfig.AppConfig.HasPQConfig() && KikimrRunConfig.AppConfig.GetPQConfig().HasTopicCloudEventsAudit()) {
-        const auto& auditConfig = KikimrRunConfig.AppConfig.GetPQConfig().GetTopicCloudEventsAudit();
-        AddAuditConfigLogBackends(auditConfig, logBackends, KikimrRunConfig, appData->Counters);
-    }
-
-    if (logBackends.size() == 0)
-        return;
-
-    auto actor = NAudit::CreateAuditWriter(std::move(logBackends));
-
-    setup->LocalServices.emplace_back(
-        NAudit::MakeTopicCloudEventsAuditServiceID(),
-        TActorSetupCmd(std::move(actor), TMailboxType::HTSwap, appData->IOPoolId));
-}
-
 TSchemeBoardMonitoringInitializer::TSchemeBoardMonitoringInitializer(const TKikimrRunConfig &runConfig)
     : IKikimrServicesInitializer(runConfig)
 {

@@ -1,106 +1,25 @@
 #include <ydb/core/persqueue/public/cloud_events/actor.h>
 
-#include <ydb/core/audit/audit_log_service.h>
-#include <ydb/core/audit/audit_log.h>
-
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
-#include <library/cpp/logger/backend.h>
-#include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/threading/blocking_queue/blocking_queue.h>
 
 #include <util/generic/string.h>
 
 namespace NKikimr::NPQ::NCloudEvents {
 
-using TLogQueue = NThreading::TBlockingQueue<TString>;
-using TLogQueuePtr = std::shared_ptr<TLogQueue>;
-
-class TTestLogBackend : public TLogBackend {
-public:
-    explicit TTestLogBackend(TLogQueuePtr queue)
-        : Queue(std::move(queue))
-    {
-    }
-
-    void WriteData(const TLogRecord& rec) override {
-        Queue->Push(TString(rec.Data, rec.Len));
-    }
-
-    void ReopenLog() override {
-    }
-
-private:
-    TLogQueuePtr Queue;
-};
-
-struct TTestCloudEventsActorSystem : public NActors::TTestActorRuntimeBase {
-    TTestCloudEventsActorSystem()
-        : TTestActorRuntimeBase(1, true)
-    {
-    }
-
-    void Init(NAudit::TAuditLogBackends&& backends) {
-        AddLocalService(
-            NAudit::MakeTopicCloudEventsAuditServiceID(),
-            NActors::TActorSetupCmd(
-                NAudit::CreateAuditWriter(std::move(backends)),
-                NActors::TMailboxType::Simple,
-                0
-            )
-        );
-        InitNodes();
-        SetLogBackend(new TStreamLogBackend(&Cerr));
-        AppendToLogSettings(
-            NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            NKikimrServices::EServiceKikimr_Name<NActors::NLog::EComponent>
-        );
-    }
-};
-
-class TTestCloudEventsAuditService {
-public:
-    explicit TTestCloudEventsAuditService(NKikimrConfig::TAuditConfig::EFormat format) {
-        NAudit::TAuditLogBackends backends;
-        backends[format].emplace_back(MakeHolder<TTestLogBackend>(LogQueue));
-        Runtime.Init(std::move(backends));
-    }
-
-    NActors::TActorId RegisterCloudEventsActor() {
-        return Runtime.Register(new TCloudEventsActor());
-    }
-
-    void SendCloudEvent(NActors::TActorId cloudEventsActorId, TCloudEventInfo&& info) {
-        Runtime.SingleSys()->Send(
-            cloudEventsActorId,
-            new TCloudEvent(std::move(info))
-        );
-    }
-
-    TString WaitAuditLog() {
-        auto log = LogQueue->Pop();
-        UNIT_ASSERT_C(log.Defined(), "Expected audit log");
-        return std::move(*log);
-    }
-
-    NActors::TTestActorRuntimeBase& GetRuntime() {
-        return Runtime;
-    }
-
-private:
-    TLogQueuePtr LogQueue = std::make_shared<TLogQueue>(0);
-    TTestCloudEventsActorSystem Runtime;
-};
+using namespace NPersQueue;
+using namespace NYdb;
+using namespace NYdb::NQuery;
+using namespace NYdb::NTopic::NTests;
 
 static TCloudEventInfo MakeCreateTopicEventInfo(const TString& topicPath = "/root/db/topic1") {
     NKikimrSchemeOp::TModifyScheme modifyScheme;
@@ -112,7 +31,6 @@ static TCloudEventInfo MakeCreateTopicEventInfo(const TString& topicPath = "/roo
     info.FolderId = "folder1";
     info.TopicPath = topicPath;
     info.Issue = "";
-    info.UserAgent = "test-user-agent";
     info.UserSID = "user@iam";
     info.RemoteAddress = "127.0.0.1";
     info.CreatedAt = TInstant::Now();
@@ -121,22 +39,9 @@ static TCloudEventInfo MakeCreateTopicEventInfo(const TString& topicPath = "/roo
     return info;
 }
 
-static NJson::TJsonValue ParseAuditLogJson(const TString& log) {
-    size_t jsonStart = log.find(": ");
-    UNIT_ASSERT_C(jsonStart != TString::npos, "Log must contain timestamp prefix: " << log);
-    TStringBuf jsonPart(log.data() + jsonStart + 2, log.size() - jsonStart - 2);
-    NJson::TJsonValue root;
-    UNIT_ASSERT_C(NJson::ReadJsonTree(jsonPart, &root), "Failed to parse audit log JSON: " << log);
-    return root;
-}
-
-static NJson::TJsonValue ParseCloudEventFromAuditLog(const TString& log) {
-    NJson::TJsonValue root = ParseAuditLogJson(log);
-    const auto* cloudEventJson = root.GetValueByPath("cloud_event_json");
-    UNIT_ASSERT_C(cloudEventJson != nullptr, "Missing cloud_event_json in audit log");
-    TString innerJson = cloudEventJson->GetString();
+static NJson::TJsonValue ParseCloudEventJson(const TString& json) {
     NJson::TJsonValue cloudEvent;
-    UNIT_ASSERT_C(NJson::ReadJsonTree(innerJson, &cloudEvent), "Failed to parse cloud_event_json: " << innerJson);
+    UNIT_ASSERT_C(NJson::ReadJsonTree(json, &cloudEvent), "Failed to parse cloud event json: " << json);
     return cloudEvent;
 }
 
@@ -170,7 +75,6 @@ static TCloudEventInfo MakeDeleteTopicEventInfo(const TString& topicPath = "/roo
     info.TopicPath = topicPath;
     info.Issue = "";
     info.UserSID = "user@iam";
-    info.UserAgent = "test-user-agent";
     info.RemoteAddress = "127.0.0.1";
     info.CreatedAt = TInstant::Now();
     info.ModifyScheme = std::move(modifyScheme);
@@ -178,47 +82,88 @@ static TCloudEventInfo MakeDeleteTopicEventInfo(const TString& topicPath = "/roo
     return info;
 }
 
+class TInMemoryEventsWriter final : public IEventsWriter {
+public:
+    void Write(const TString& data) override {
+        Events.push_back(data);
+    }
+
+    const TVector<TString>& GetEvents() const {
+        return Events;
+    }
+
+private:
+    TVector<TString> Events;
+};
+
 Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
     Y_UNIT_TEST(CreateTopicEventAudit) {
-        TTestCloudEventsAuditService test(NKikimrConfig::TAuditConfig::JSON);
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        setup->GetServer().EnableLogs(
+            {NKikimrServices::PERSQUEUE, NKikimrServices::PQ_WRITE_PROXY},
+            NActors::NLog::PRI_INFO
+        );
 
-        auto cloudEventsActorId = test.RegisterCloudEventsActor();
-        test.GetRuntime().DispatchEvents();
+        auto writer = MakeHolder<TInMemoryEventsWriter>();
+        auto* writerPtr = writer.Get();
 
-        test.SendCloudEvent(cloudEventsActorId, MakeCreateTopicEventInfo("/root/my/topic"));
-        test.GetRuntime().DispatchEvents();
+        auto& runtime = setup->GetRuntime();
+        auto edgeId = runtime.AllocateEdgeActor();
+        auto actorId = runtime.Register(new TCloudEventsActor(std::move(writer)));
+        runtime.EnableScheduleForActor(actorId);
 
-        TString log = test.WaitAuditLog();
-        NJson::TJsonValue cloudEvent = ParseCloudEventFromAuditLog(log);
+        runtime.Send(new NActors::IEventHandle(actorId, edgeId, new TCloudEvent(MakeCreateTopicEventInfo("/root/my/topic"))), 0, true);
+        runtime.DispatchEvents();
+
+        UNIT_ASSERT_VALUES_EQUAL(writerPtr->GetEvents().size(), 1u);
+        NJson::TJsonValue cloudEvent = ParseCloudEventJson(writerPtr->GetEvents().front());
         AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.CreateTopic", "/root/my/topic");
     }
 
     Y_UNIT_TEST(DeleteTopicEventAudit) {
-        TTestCloudEventsAuditService test(NKikimrConfig::TAuditConfig::TXT);
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        setup->GetServer().EnableLogs(
+            {NKikimrServices::PERSQUEUE, NKikimrServices::PQ_WRITE_PROXY},
+            NActors::NLog::PRI_INFO
+        );
 
-        auto cloudEventsActorId = test.RegisterCloudEventsActor();
-        test.GetRuntime().DispatchEvents();
+        auto writer = MakeHolder<TInMemoryEventsWriter>();
+        auto* writerPtr = writer.Get();
 
-        test.SendCloudEvent(cloudEventsActorId, MakeDeleteTopicEventInfo("/root/my/deleted_topic"));
-        test.GetRuntime().DispatchEvents();
+        auto& runtime = setup->GetRuntime();
+        auto edgeId = runtime.AllocateEdgeActor();
+        auto actorId = runtime.Register(new TCloudEventsActor(std::move(writer)));
+        runtime.EnableScheduleForActor(actorId);
 
-        TString log = test.WaitAuditLog();
-        UNIT_ASSERT_STRING_CONTAINS(log, "cloud_event_json");
-        UNIT_ASSERT_STRING_CONTAINS(log, "DeleteTopic");
-        UNIT_ASSERT_STRING_CONTAINS(log, "/root/my/deleted_topic");
+        runtime.Send(new NActors::IEventHandle(actorId, edgeId, new TCloudEvent(MakeDeleteTopicEventInfo("/root/my/deleted_topic"))), 0, true);
+        runtime.DispatchEvents();
+
+        UNIT_ASSERT_VALUES_EQUAL(writerPtr->GetEvents().size(), 1u);
+        const auto& json = writerPtr->GetEvents().front();
+        UNIT_ASSERT_STRING_CONTAINS(json, "DeleteTopic");
+        UNIT_ASSERT_STRING_CONTAINS(json, "/root/my/deleted_topic");
     }
 
     Y_UNIT_TEST(CloudEventJsonFormat) {
-        TTestCloudEventsAuditService test(NKikimrConfig::TAuditConfig::JSON);
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false);
+        setup->GetServer().EnableLogs(
+            {NKikimrServices::PERSQUEUE, NKikimrServices::PQ_WRITE_PROXY},
+            NActors::NLog::PRI_INFO
+        );
 
-        auto cloudEventsActorId = test.RegisterCloudEventsActor();
-        test.GetRuntime().DispatchEvents();
+        auto writer = MakeHolder<TInMemoryEventsWriter>();
+        auto* writerPtr = writer.Get();
 
-        test.SendCloudEvent(cloudEventsActorId, MakeCreateTopicEventInfo());
-        test.GetRuntime().DispatchEvents();
+        auto& runtime = setup->GetRuntime();
+        auto edgeId = runtime.AllocateEdgeActor();
+        auto actorId = runtime.Register(new TCloudEventsActor(std::move(writer)));
+        runtime.EnableScheduleForActor(actorId);
 
-        TString log = test.WaitAuditLog();
-        NJson::TJsonValue cloudEvent = ParseCloudEventFromAuditLog(log);
+        runtime.Send(new NActors::IEventHandle(actorId, edgeId, new TCloudEvent(MakeCreateTopicEventInfo())), 0, true);
+        runtime.DispatchEvents();
+
+        UNIT_ASSERT_VALUES_EQUAL(writerPtr->GetEvents().size(), 1u);
+        NJson::TJsonValue cloudEvent = ParseCloudEventJson(writerPtr->GetEvents().front());
         AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.CreateTopic", "/root/db/topic1");
 
         const auto* requestParams = cloudEvent.GetValueByPath("request_parameters");

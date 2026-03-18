@@ -275,7 +275,7 @@ class TDropPQ: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction);
         default:
             return nullptr;
         }
@@ -444,13 +444,6 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, parentDir.Base()->PathId);
             context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
         }
-
-        // Emit topic CloudEvent after successful drop
-        ScheduleSendTopicCloudEvent(
-            Transaction,
-            context,
-            NKikimrScheme::StatusSuccess,
-            TString());
 
         // Activate main tx state machine
         SetState(NextState());

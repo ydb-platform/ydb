@@ -3,9 +3,14 @@ LIBRARY()
 SRCS(
     actor.cpp
     actor.h
+    events_writer.cpp
+    events_writer.h
 )
 
 PEERDIR(
+    library/cpp/json
+    library/cpp/unified_agent_client
+    library/cpp/monlib/dynamic_counters
     ydb/core/persqueue/public/cloud_events/proto
     ydb/core/protos
     ydb/core/protos/schemeshard

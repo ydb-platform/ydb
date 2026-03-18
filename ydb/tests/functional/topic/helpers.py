@@ -58,8 +58,10 @@ TOPIC_CLOUD_EVENT_TYPES = (
 
 class CanonicalCaptureCloudEventOutput:
     """
-    Captures topic cloud events from audit log, normalizes variable fields,
-    outputs one JSON line per event. Use with yatest.common.canonical_file via canonize().
+    Captures topic cloud events from file (audit log or topic_cloud_events.json),
+    normalizes variable fields, outputs one JSON line per event.
+    Use with yatest.common.canonical_file via canonize().
+    Supports two formats: audit log (cloud_event_json wrapper) and raw JSON from TFileEventsWriter.
     """
 
     def __init__(self, filename, database_path):
@@ -69,6 +71,8 @@ class CanonicalCaptureCloudEventOutput:
         self.read_lines = 0
 
     def __enter__(self):
+        if not os.path.exists(self.filename):
+            open(self.filename, 'a').close()
         size = os.path.getsize(self.filename)
         last_read_time = time.time()
         with open(self.filename, 'rb', buffering=0) as f:
@@ -114,7 +118,7 @@ class CanonicalCaptureCloudEventOutput:
 
         # request_metadata.remote_address (port varies per run)
         req_meta = event.get('request_metadata') or {}
-        if req_meta.get('remote_address'):
+        if 'remote_address' in req_meta:
             req_meta['remote_address'] = '<canonized_remote_address>'
         if req_meta.get('user_agent'):
             req_meta['user_agent'] = '<canonized_user_agent>'
@@ -122,25 +126,38 @@ class CanonicalCaptureCloudEventOutput:
         return event
 
     def _process_line(self, line_str):
-        if 'cloud_event_json' not in line_str:
-            return None
         if not any(t in line_str for t in TOPIC_CLOUD_EVENT_TYPES):
             return None
 
         json_start = line_str.find('{')
         if json_start == -1:
             return None
-        try:
-            outer = json.loads(line_str[json_start:])
-        except json.JSONDecodeError:
-            return None
-        inner_json = outer.get('cloud_event_json')
-        if not inner_json:
-            return None
-        try:
-            event = json.loads(inner_json)
-        except json.JSONDecodeError:
-            return None
+
+        # Format 1: audit log with cloud_event_json wrapper
+        if 'cloud_event_json' in line_str:
+            try:
+                outer = json.loads(line_str[json_start:])
+            except json.JSONDecodeError:
+                return None
+            inner_json = outer.get('cloud_event_json')
+            if not inner_json:
+                return None
+            try:
+                event = json.loads(inner_json)
+            except json.JSONDecodeError:
+                return None
+        else:
+            # Format 2: raw JSON from TFileEventsWriter (topic_cloud_events.json)
+            try:
+                event = json.loads(line_str[json_start:])
+            except json.JSONDecodeError:
+                return None
+            if not isinstance(event, dict):
+                return None
+            meta = event.get('event_metadata') or {}
+            if meta.get('event_type') not in TOPIC_CLOUD_EVENT_TYPES:
+                return None
+
         event = self._canonize_event(event)
         return json.dumps(event, sort_keys=True) + '\n'
 
@@ -159,10 +176,15 @@ class CanonicalCaptureCloudEventOutput:
                     last_read_time = time.time()
 
     def canonize(self):
+        # Use only the last captured event: tests that run setup (e.g. create_topic) before
+        # the capture block may receive setup's event asynchronously; we want only the event
+        # from the operation inside the capture block.
+        lines = [s for s in self.captured.strip().split('\n') if s]
+        content = (lines[-1] + '\n') if lines else ''
         return yatest.common.canonical_file(
             local=True,
             universal_lines=True,
-            path=make_test_file_with_content('topic_cloud_events.json', self.captured)
+            path=make_test_file_with_content('topic_cloud_events.json', content)
         )
 
 

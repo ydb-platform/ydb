@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/audit/audit_log.h>
-#include <ydb/core/protos/audit.pb.h>
 #include <ydb/core/protos/config.pb.h>
 
 

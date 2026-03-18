@@ -211,12 +211,6 @@ void SendAuditLog(const NActors::TActorSystem* sys, TAuditLogParts&& parts)
     sys->Send(MakeAuditServiceID(), request.Release());
 }
 
-void SendAuditLog(const NActors::TActorSystem* sys, NActors::TActorId actorId, TAuditLogParts&& parts)
-{
-    auto request = MakeHolder<TEvAuditLog::TEvWriteAuditLog>(Now(), std::move(parts));
-    sys->Send(actorId, request.Release());
-}
-
 // Service interface implementation
 //
 

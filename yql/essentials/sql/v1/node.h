@@ -742,11 +742,17 @@ struct TCompression {
     TMap<TString, TNodePtr> Entries;
 };
 
+struct TEncoding {
+    TString Name;
+    TMap<TString, TNodePtr> Entries;
+};
+
 struct TColumnOptions {
     TNodePtr DefaultExpr;
     TVector<TIdentifier> Families;
     TMaybe<TCompression> Compression;
     bool Nullable = true;
+    TMaybe<TVector<TEncoding>> ColumnEncoding;
 };
 
 struct TColumnSchema {
@@ -758,6 +764,7 @@ struct TColumnSchema {
         SetCompression,
         SetDefault,
         DropDefault,
+        SetEncoding,
     };
 
     TPosition Pos;
@@ -769,6 +776,7 @@ struct TColumnSchema {
     const ETypeOfChange TypeOfChange = ETypeOfChange::Nothing;
     bool Nullable = false;
     bool Serial = false;
+    TMaybe<TVector<TEncoding>> ColumnEncoding;
 };
 
 struct TColumns: public TSimpleRefCount<TColumns> {

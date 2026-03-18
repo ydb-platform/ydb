@@ -216,7 +216,8 @@ ui64 RestoreInFlightBytes() {
 } // anonymous namespace
 
 class TDryRunExecutor
-    : public NFlatExecutorSetup::IExecutor
+    : public TActor<TDryRunExecutor>
+    , public NFlatExecutorSetup::IExecutor
     , public IExecuting
 {
     struct TDryRunPages : public NTable::IPages {
@@ -229,45 +230,46 @@ class TDryRunExecutor
 
 public:
     explicit TDryRunExecutor(ui64 tabletId)
-        : TabletId(tabletId)
+        : TActor(&TThis::StateWork)
+        , TabletId(tabletId)
     {}
 
-    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override {
-        if (Executing) {
-            PendingTx.push_back(transaction);
-            return;
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvWakeup, HandleWakeup);
         }
-        Executing = true;
-        ExecuteImpl(transaction, ctx);
-        while (!PendingTx.empty()) {
-            auto next = std::move(PendingTx.front());
-            PendingTx.pop_front();
-            ExecuteImpl(next, ctx);
-        }
-        Executing = false;
+    }
+
+    void HandleWakeup(TEvents::TEvWakeup::TPtr&) {
+        ProcessPendingScheduled = false;
+        ProcessPending();
+    }
+
+    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext&) override {
+        PendingTx.push_back(transaction);
+        ScheduleProcessPending();
+    }
+
+    void DetachTablet() override {
+        PassAway();
     }
 
     const NTable::TScheme& Scheme() const override { return DB.GetScheme(); }
     const TExecutorStats& GetStats() const override { return Stats; }
-    void DetachTablet() override {}
+
     TExecutorCounters* GetCounters() override { return nullptr; }
     void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) override {}
-
     void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr& ev) const override {
-        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
-            new NMon::TEvRemoteHttpInfoRes("Not supported")));
+        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Not supported"));
     }
     void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr& ev) const override {
-        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
-            new NMon::TEvRemoteHttpInfoRes("Not supported")));
+        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Not supported"));
     }
     void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext&) const override {
-        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
-            new NMon::TEvRemoteHttpInfoRes("Not supported")));
+        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Not supported"));
     }
     void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr& ev) override {
-        TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient,
-            new TEvTablet::TEvGetCountersResponse()));
+        Send(ev->Sender, new TEvTablet::TEvGetCountersResponse());
     }
 
     void Boot(TEvTablet::TEvBoot::TPtr&, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
@@ -320,26 +322,45 @@ public:
     ui64 MissingReferencesSize() const override { Y_TABLET_ERROR("Not supported"); }
 
 private:
-    void ExecuteImpl(TAutoPtr<ITransaction>& transaction, const TActorContext &ctx) {
+    void ScheduleProcessPending() {
+        if (!PendingTx.empty() && !ProcessPendingScheduled) {
+            ProcessPendingScheduled = true;
+            Send(SelfId(), new TEvents::TEvWakeup());
+        }
+    }
+
+    void ProcessPending() {
+        constexpr size_t MaxTxPerBatch = 10;
+        for (size_t count = 0; !PendingTx.empty() && count < MaxTxPerBatch; ++count) {
+            auto next = std::move(PendingTx.front());
+            PendingTx.pop_front();
+            ExecuteImpl(next);
+        }
+        ScheduleProcessPending();
+    }
+
+    void Process(TAutoPtr<ITransaction>& transaction) {
         ++Step0;
         NTable::TTxStamp stamp(Generation0, Step0);
         DB.Begin(stamp, Pages);
         NWilson::TSpan span;
         TTransactionContext txc(TabletId, Generation0, Step0, DB, *this, Max<ui64>(), 0, span);
-        bool ready = transaction->Execute(txc, ctx);
+        bool ready = transaction->Execute(txc, TActivationContext::AsActorContext());
         DB.Commit(stamp, ready);
         if (ready) {
             transaction->Complete(ctx);
         } else {
-            PendingTx.push_back(std::move(transaction));
+            Y_TABLET_ERROR("Dry-run transaction is not ready to commit");
         }
     }
+
+    ui64 TabletId;
 
     NTable::TDatabase DB;
     TDryRunPages Pages;
     TDryRunStats Stats;
-    ui64 TabletId;
-    bool Executing = false;
+    
+    bool ProcessPendingScheduled = false;
     TDeque<TAutoPtr<ITransaction>> PendingTx;
 };
 
@@ -412,9 +433,9 @@ public:
         TotalBytes = ev->Get()->TotalBytes;
 
         if (DryRun) {
-            DryRunExec = std::make_unique<TDryRunExecutor>(TabletID());
-            Executor0 = DryRunExec.get();
-            ITablet::ExecutorActorID = ctx.SelfID;
+            auto* dryRunExec = new TDryRunExecutor(TabletID());
+            Executor0 = dryRunExec;
+            ITablet::ExecutorActorID = ctx.RegisterWithSameMailbox(dryRunExec);
             OnActivateExecutor(ctx);
         } else {
             using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;
@@ -660,7 +681,6 @@ private:
     TActorId RestoreSubscriber; // only for tests
 
     bool DryRun = false;
-    std::unique_ptr<TDryRunExecutor> DryRunExec;
 }; // TRecoveryShard
 
 class TUploadTxResult {

@@ -30,13 +30,10 @@ def initialize_app():
 
     settings = get_settings()
 
-    # Initialize agent WardenChecker (always, for both agent and orchestrator modes)
     from ydb.tests.stability.nemesis.routers import agent_router
     agent_router.warden_checker = AgentWardenChecker()
 
-    # Orchestrator-specific initialization
     if settings.nemesis_type != 'agent':
-        # Load hosts from config (no installation here - that's done via 'install' command)
         hosts = get_hosts_from_yaml(settings.yaml_config_location)
         print(f"Loaded hosts: {hosts}")
 
@@ -54,22 +51,17 @@ def initialize_app():
 
 def cleanup_app(exception=None):
     """Cleanup application resources"""
-    global healthcheck_reporter
     settings = get_settings()
 
-    # Orchestrator-specific cleanup
     if settings.nemesis_type != 'agent':
-        if healthcheck_reporter:
-            healthcheck_reporter.stop_healthchecks()
+        healthcheck_reporter.stop_healthchecks()
 
-        # Stop all scheduled tasks
         from ydb.tests.stability.nemesis.routers import orchestrator_router
         for task_info in orchestrator_router.scheduled_tasks.values():
-            if 'task' in task_info:
-                task_info['enabled'] = False
-                if 'thread' in task_info and task_info['thread'].is_alive():
-                    # Thread will exit on next iteration due to enabled=False
-                    pass
+            task_info['enabled'] = False
+            if 'thread' in task_info and task_info['thread'].is_alive():
+                # Thread will exit on next iteration due to enabled=False
+                pass
 
 
 def create_app():

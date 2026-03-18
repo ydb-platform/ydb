@@ -13,7 +13,7 @@ def upload_binary(host, is_orchestrator=False, yaml_config_location=None):
 
     subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g",
                            "--rsh={}".format(ssh_rsh),
-                           "--rsync-path=sudo rsync", "--progress", './nemesis_app', f'{host}:/Berkanavt/nemesis/bin/agent'],
+                           "--rsync-path=sudo rsync", "--progress", './nemesis', f'{host}:/Berkanavt/nemesis/bin/agent'],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Upload static files and config for orchestrator

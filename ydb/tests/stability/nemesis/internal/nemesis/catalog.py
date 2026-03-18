@@ -45,7 +45,7 @@ class AbstractAgentNemesis(base.AbstractMonitoredNemesis):
         """
         if hosts:
             new_host = random.choice(hosts)
-            self.affected_hosts.add(random.choice(hosts))
+            self.affected_hosts.add(new_host)
             return 'inject', [new_host]
         return None, []
 
@@ -534,12 +534,12 @@ class StopStartNodeNemesis(AbstractAgentNemesis):
 
     def prepare_fault(self, hosts):
         if self._is_stopped:
+            self._is_stopped = False
+            return 'extract', [self.affected_hosts.pop()]
+        else:
             new_host = random.choice(hosts)
             self.affected_hosts.add(new_host)
             return 'inject', [new_host]
-        else:
-            self._is_stopped = False
-            return 'extract', [self.affected_hosts.pop()]
 
     def inject_fault(self):
         """Stop the YDB service."""

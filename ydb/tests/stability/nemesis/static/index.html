@@ -24,6 +24,8 @@
         :nemesis-list="groupData.nemesis"
         :hosts="hosts"
         :processes="processes"
+        :schedule-status="scheduleStatus"
+        :process-types="processTypes"
       ></nemesis-group-accordion>
     </div>
 
@@ -119,6 +121,7 @@
       const processes = ref({}) // { host: [ProcessInfo, ...] }
       const errors = ref([])
       const scheduleHistory = ref([]) // Array of scheduled execution history
+      const scheduleStatus = ref({}) // Schedule status for all nemesis types
       const wardenResults = ref({}) // Warden check results per host
       const wardenLoading = ref(false)
 
@@ -205,6 +208,16 @@
           })
       }
 
+      function get_schedule_status() {
+        axios.get('/api/schedule')
+          .then(response => {
+            scheduleStatus.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch schedule status', err)
+          })
+      }
+
       function get_warden_results() {
         axios.get('/api/hosts/warden/results')
           .then(response => {
@@ -240,6 +253,7 @@
       get_all_processes()
       get_healthcheck()
       get_schedule_history()
+      get_schedule_status()
       get_warden_results()
 
       // Poll every 5 seconds
@@ -248,6 +262,7 @@
         get_all_processes()
         get_healthcheck()
         get_schedule_history()
+        get_schedule_status()
         get_warden_results()
       }, 5000)
 
@@ -261,6 +276,7 @@
         processes,
         errors,
         scheduleHistory,
+        scheduleStatus,
         wardenResults,
         wardenLoading,
         getProcessesByType,

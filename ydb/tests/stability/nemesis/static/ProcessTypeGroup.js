@@ -8,53 +8,65 @@ export default {
     type: String,
     description: String,
     hosts: Object, // { hostName: hostData }
-    processes: Object // { hostName: [ProcessInfo] }
+    processes: Object, // { hostName: [ProcessInfo] }
+    scheduleStatus: Object, // Schedule status for all nemesis types
+    processTypes: Array // All process types with their configurations
   },
   setup(props) {
     const { ref, computed } = Vue
-    const isEnabled = ref(false)
     const isDescriptionExpanded = ref(false)
     const customInterval = ref(null)
     
-    // Get default interval from PROCESS_TYPES
-    const defaultInterval = computed(() => {
-      // This will be fetched from backend via process_types endpoint
-      return 60 // fallback
+    // Get schedule state from props
+    const isEnabled = computed(() => {
+      const scheduleData = props.scheduleStatus[props.type]
+      return scheduleData ? (scheduleData.enabled || false) : false
     })
-
-    // Fetch initial schedule state
-    axios.get('/api/schedule')
-      .then(response => {
-        const scheduleData = response.data[props.type]
-        if (scheduleData !== undefined) {
-          isEnabled.value = scheduleData.enabled || false
-          if (scheduleData.interval !== null && scheduleData.interval !== undefined) {
-            customInterval.value = scheduleData.interval
-          }
-        }
-      })
     
-    // Fetch default interval from process types
-    axios.get('/api/process_types')
-      .then(response => {
-        const processType = response.data.find(pt => pt.name === props.type)
-        if (processType && !customInterval.value) {
-          // Set default from config if not already set
-          customInterval.value = processType.schedule || 60
-        }
-      })
+    // Get default interval from process types
+    const defaultInterval = computed(() => {
+      const processType = props.processTypes.find(pt => pt.name === props.type)
+      return processType ? (processType.schedule || 60) : 60
+    })
+    
+    // Initialize custom interval from schedule status or default
+    const initializeCustomInterval = () => {
+      const scheduleData = props.scheduleStatus[props.type]
+      if (scheduleData && scheduleData.interval !== null && scheduleData.interval !== undefined) {
+        customInterval.value = scheduleData.interval
+      } else {
+        customInterval.value = defaultInterval.value
+      }
+    }
+    
+    // Initialize on component mount
+    initializeCustomInterval()
+    
+    // Watch for changes in schedule status to update custom interval
+    Vue.watch(() => props.scheduleStatus[props.type], (newVal) => {
+      if (newVal && newVal.interval !== null && newVal.interval !== undefined) {
+        customInterval.value = newVal.interval
+      }
+    })
 
     function toggleSchedule() {
       const newState = !isEnabled.value
       const interval = customInterval.value ? parseInt(customInterval.value) : null
       
+      if(interval == null){
+        console.error(`Interval is null. Parsed from ${customInterval.value}`)
+        alert('Schedule interval is null')
+        return
+      }
+
       axios.post('/api/schedule', {
         type: props.type,
         enabled: newState,
         interval: interval
       })
         .then(() => {
-          isEnabled.value = newState
+          // The parent component will update scheduleStatus via polling
+          // No need to manually update isEnabled here
         })
         .catch(err => {
           console.error('Failed to update schedule', err)

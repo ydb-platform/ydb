@@ -15,10 +15,6 @@ PY_SRCS(
     app.py
 )
 
-DATA(
-    arcadia/ydb/tests/stability/nemesis_app/static
-)
-
 DEPENDS(
     ydb/tools/cfg/bin
     ydb/tests/tools/nemesis/driver

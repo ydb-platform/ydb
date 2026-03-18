@@ -41,18 +41,7 @@ def is_local_host(host: str) -> bool:
         from ydb.tests.stability.nemesis.internal.config import Settings
         settings = Settings()
         app_host = settings.app_host
-
-        # Check if it's localhost or the configured app_host
-        if host in ('localhost', '127.0.0.1', '::1', app_host):
-            return True
-
-        # Check if it resolves to the same IP as app_host
-        try:
-            host_ip = socket.gethostbyname(host)
-            app_host_ip = socket.gethostbyname(app_host)
-            return host_ip == app_host_ip
-        except Exception:
-            return False
+        return host in ('localhost', '127.0.0.1', '::1', app_host)
     except Exception:
         return False
 
@@ -96,7 +85,7 @@ def schedule_process(process_type: str, interval: int = None):
         with scheduled_tasks_lock:
             if process_type not in scheduled_tasks or not scheduled_tasks[process_type]['enabled']:
                 if not scheduled_tasks[process_type]['enabled']:
-                    target_hosts = PROCESS_TYPES[process_type].affected_hosts
+                    target_hosts = PROCESS_TYPES[process_type]['runner'].affected_hosts
                     logger.info(f"Extracting {process_type} from {target_hosts}")
                     with ThreadPoolExecutor(max_workers=min(len(target_hosts), 10)) as executor:
                         futures = [

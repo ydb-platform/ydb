@@ -63,14 +63,14 @@ class BaseSettings:
 
 
 class Settings(BaseSettings):
-    app_name: str = "Nemesis App"
+    app_name: str = "Nemesis"
     nemesis_type: str = 'master'
     static_location: str = 'static'
     hosts: list[str] = []
     app_host: str = '::'
     app_port: int = 31434
     mon_port: int = 8765
-    yaml_config_location: str = '/home/pefavel/ydbwork/arcadia/kikimr/ci/stability/resources/ydb_myt_3_dc_stability_testing/cluster.yaml'
+    yaml_config_location: str = ''
 
 
 class AgentSettings(BaseSettings):

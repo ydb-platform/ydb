@@ -9,7 +9,9 @@ export default {
     groupDescription: String,
     nemesisList: Array, // Array of {name, description}
     hosts: Object,
-    processes: Object
+    processes: Object,
+    scheduleStatus: Object, // Schedule status for all nemesis types
+    processTypes: Array // All process types with their configurations
   },
   setup(props) {
     const { ref, computed } = Vue
@@ -28,27 +30,17 @@ export default {
       return count
     })
 
-    // Count enabled schedules
-    const enabledCount = ref(0)
-    
-    // Fetch schedule status for all nemesis in this group
-    function updateScheduleStatus() {
-      axios.get('/api/schedule')
-        .then(response => {
-          let count = 0
-          for (const nemesis of props.nemesisList) {
-            const scheduleData = response.data[nemesis.name]
-            if (scheduleData && scheduleData.enabled) {
-              count++
-            }
-          }
-          enabledCount.value = count
-        })
-    }
-    
-    updateScheduleStatus()
-    // Update every 5 seconds
-    setInterval(updateScheduleStatus, 5000)
+    // Count enabled schedules (computed from scheduleStatus prop)
+    const enabledCount = computed(() => {
+      let count = 0
+      for (const nemesis of props.nemesisList) {
+        const scheduleData = props.scheduleStatus[nemesis.name]
+        if (scheduleData && scheduleData.enabled) {
+          count++
+        }
+      }
+      return count
+    })
 
     function getProcessesByType(type) {
       const result = {}
@@ -100,13 +92,15 @@ export default {
       
       <!-- Expanded Content -->
       <div v-show="isExpanded" class="mt-2 ml-4 border-l-2 border-base-300 pl-4">
-        <process-type-group 
-          v-for="nemesis in nemesisList" 
+        <process-type-group
+          v-for="nemesis in nemesisList"
           :key="nemesis.name"
           :type="nemesis.name"
           :description="nemesis.description"
           :hosts="hosts"
           :processes="getProcessesByType(nemesis.name)"
+          :schedule-status="scheduleStatus"
+          :process-types="processTypes"
         ></process-type-group>
       </div>
     </div>

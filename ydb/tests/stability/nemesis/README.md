@@ -22,8 +22,8 @@
 ## Установка на кластер и запуск
 
 ```bash
-# Из директории с бинарником nemesis_app
-./nemesis_app --yaml-config-location /your/path/to/config.yamlinstall
+# Из директории с бинарником nemesis
+./nemesis --yaml-config-location /your/path/to/config.yaml install
 ```
 
 Первый хост из `cluster.yaml` становится orchestrator, остальные — агентами.
@@ -33,7 +33,7 @@
 ## Остановка сервисов
 
 ```bash
-./nemesis_app stop
+./nemesis stop
 ```
 
 ## UI

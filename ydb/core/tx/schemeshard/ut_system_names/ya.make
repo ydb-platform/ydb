@@ -7,6 +7,9 @@ IF (WITH_VALGRIND)
 ENDIF()
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 PEERDIR(
     library/cpp/getopt

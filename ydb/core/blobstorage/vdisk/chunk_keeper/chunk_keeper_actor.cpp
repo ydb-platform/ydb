@@ -44,8 +44,12 @@ public:
         if (IsActive) {
             Become(&TThis::StateAccepting);
         } else {
-            if (!ReadOnly && !Committed->Chunks.empty()) {
-                DropAllChunks();
+            if (!ReadOnly) {
+                if (!Committed->Chunks.empty()) {
+                    DropAllChunks();
+                } else {
+                    Send(LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, Max<ui64>()));
+                }
             }
             Become(&TThis::StateError);
         }

@@ -2335,7 +2335,6 @@ Y_UNIT_TEST_SUITE(Backup) {
     Y_UNIT_TEST(NewSnapshotChangelogSize) {
         TEnv env;
 
-
         // Small limit
         env->GetAppData().SystemTabletBackupConfig.SetNewBackupChangelogMinBytes(100);
 

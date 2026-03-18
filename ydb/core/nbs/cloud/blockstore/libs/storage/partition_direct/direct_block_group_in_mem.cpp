@@ -177,8 +177,8 @@ TInMemoryDirectBlockGroup::WriteBlocksToPBuffer(
         {.Error = MakeError(S_OK)});
 }
 
-NThreading::TFuture<TDBGSyncBlocksResponse>
-TInMemoryDirectBlockGroup::SyncWithPersistentBuffer(
+NThreading::TFuture<TDBGFlushResponse>
+TInMemoryDirectBlockGroup::FlushFromPBuffer(
     ui32 vChunkIndex,
     ui8 hostIndex,
     const TVector<TPBufferSegment>& segments,
@@ -189,12 +189,12 @@ TInMemoryDirectBlockGroup::SyncWithPersistentBuffer(
     Y_UNUSED(segments);
     Y_UNUSED(traceId);
 
-    TDBGSyncBlocksResponse response;
+    TDBGFlushResponse response;
     for (const auto& _: segments) {
         response.Errors.push_back(MakeError(S_OK));
     }
 
-    return NThreading::MakeFuture<TDBGSyncBlocksResponse>(std::move(response));
+    return NThreading::MakeFuture<TDBGFlushResponse>(std::move(response));
 }
 
 NThreading::TFuture<TDBGReadBlocksResponse>

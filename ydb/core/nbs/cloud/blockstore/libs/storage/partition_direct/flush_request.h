@@ -38,7 +38,7 @@ public:
 
 private:
     void SendFlushRequest(ELocation location);
-    void OnFlushResponse(const TDBGSyncBlocksResponse& response);
+    void OnFlushResponse(const TDBGFlushResponse& response);
     void Reply(TVector<ui64> flushOk, TVector<ui64> flushFailed);
 
     NActors::TActorSystem const* ActorSystem;

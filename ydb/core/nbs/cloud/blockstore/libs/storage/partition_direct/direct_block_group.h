@@ -25,7 +25,7 @@ struct TDBGWriteBlocksResponse
     NProto::TError Error;
 };
 
-struct TDBGSyncBlocksResponse
+struct TDBGFlushResponse
 {
     TVector<NProto::TError> Errors;
 };
@@ -84,8 +84,7 @@ public:
         TGuardedSgList guardedSglist,
         NWilson::TTraceId traceId) = 0;
 
-    virtual NThreading::TFuture<TDBGSyncBlocksResponse>
-    SyncWithPersistentBuffer(
+    virtual NThreading::TFuture<TDBGFlushResponse> FlushFromPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
         const TVector<TPBufferSegment>& segments,
@@ -115,8 +114,8 @@ public:
         TExecutorPtr executor,
         ui64 tabletId,
         ui32 generation,
-        TVector<NKikimr::NBsController::TDDiskId> ddisksIds,
-        TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds);
+        const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
+        const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds);
 
     ~TDirectBlockGroup() override = default;
 
@@ -151,7 +150,7 @@ public:
         TGuardedSgList guardedSglist,
         NWilson::TTraceId traceId) override;
 
-    NThreading::TFuture<TDBGSyncBlocksResponse> SyncWithPersistentBuffer(
+    NThreading::TFuture<TDBGFlushResponse> FlushFromPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
         const TVector<TPBufferSegment>& segments,
@@ -167,7 +166,7 @@ public:
         ui32 vChunkIndex) override;
 
 private:
-    enum EConnectionType
+    enum class EConnectionType
     {
         DDisk,
         PBuffer,
@@ -178,37 +177,25 @@ private:
         NKikimr::NBsController::TDDiskId DDiskId;
         NKikimr::NDDisk::TQueryCredentials Credentials;
 
-        TDDiskConnection(
-            const NKikimr::NBsController::TDDiskId& ddiskId,
-            const NKikimr::NDDisk::TQueryCredentials& credentials)
-            : DDiskId(ddiskId)
-            , Credentials(credentials)
-        {}
-
-        [[nodiscard]] NActors::TActorId GetServiceId() const
-        {
-            return NKikimr::MakeBlobStorageDDiskId(
-                DDiskId.NodeId,
-                DDiskId.PDiskId,
-                DDiskId.DDiskSlotId);
-        }
+        [[nodiscard]] NActors::TActorId GetServiceId() const;
     };
 
+    void DoEstablishConnections();
     void DoEstablishConnection(
         EConnectionType connectionType,
         size_t index,
         const TDDiskConnection& connection);
-    void HandleConnectionEstablished(
+    void OnConnectionEstablished(
         EConnectionType connectionType,
         size_t index,
-        NKikimrBlobStorage::NDDisk::TEvConnectResult result);
+        const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
 
     void DoRestore(
         NThreading::TPromise<TDBGRestoreResponse> promise,
         ui32 vChunkIndex);
 
     NActors::TActorSystem* const ActorSystem = nullptr;
-    TExecutorPtr Executor;
+    const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const ui64 TabletId;
 

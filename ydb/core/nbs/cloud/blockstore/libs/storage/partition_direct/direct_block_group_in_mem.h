@@ -64,7 +64,7 @@ public:
         TGuardedSgList guardedSglist,
         NWilson::TTraceId traceId) override;
 
-    NThreading::TFuture<TDBGSyncBlocksResponse> SyncWithPersistentBuffer(
+    NThreading::TFuture<TDBGFlushResponse> FlushFromPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
         const TVector<TPBufferSegment>& segments,

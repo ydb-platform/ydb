@@ -36,14 +36,14 @@ TFlushRequestExecutor::~TFlushRequestExecutor()
 
 void TFlushRequestExecutor::Run()
 {
-    auto future = DirectBlockGroup->SyncWithPersistentBuffer(
+    auto future = DirectBlockGroup->FlushFromPBuffer(
         VChunkConfig.VChunkIndex,
         VChunkConfig.GetHostIndex(Location),
         Hint.Segments,
         NWilson::TTraceId(TraceId));
     future.Subscribe(
         [self = shared_from_this()]   //
-        (const NThreading::TFuture<TDBGSyncBlocksResponse>& f)
+        (const NThreading::TFuture<TDBGFlushResponse>& f)
         {
             //
             self->OnFlushResponse(f.GetValue());
@@ -56,8 +56,7 @@ TFlushRequestExecutor::GetFuture() const
     return Promise.GetFuture();
 }
 
-void TFlushRequestExecutor::OnFlushResponse(
-    const TDBGSyncBlocksResponse& response)
+void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
 {
     Y_ABORT_UNLESS(Hint.Segments.size() == response.Errors.size());
 

@@ -200,6 +200,7 @@ protected:
     );
 
     TMaybe<TString> GetAttributeType(const TString& attributeName);
+    std::shared_ptr<TTreeNode> CreateLeafNode(TMaybe<TString> attribute);
 
     double ComputeSelectivity(
         const std::shared_ptr<TTreeNode>& node,

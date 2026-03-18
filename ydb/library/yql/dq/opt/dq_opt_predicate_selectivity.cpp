@@ -10,6 +10,8 @@ namespace {
 
     using namespace NYql::NDq;
 
+    const double TWO_COLUMNS_DEFAULT_SELECTIVITY = 0.3;
+
     THashSet<TString> PgComparisonSigns = {
         "<", "<=", ">", ">=", "=", "<>", "!="};
 
@@ -420,7 +422,7 @@ TExprNode::TPtr FindNode(const TExprBase& input) {
     return nullptr;
 }
 
-TMaybe<TString> TPredicateSelectivityComputer::GetAttributeType(const TString& attributeName) {
+TMaybe<TString> NYql::NDq::TPredicateSelectivityComputer::GetAttributeType(const TString& attributeName) {
     if (Stats && Stats->ColumnStatistics) {
         return Stats->ColumnStatistics->Data[attributeName].Type;
     }
@@ -439,9 +441,9 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(
 
     if (auto attribute = IsAttribute(left)) {
         // It seems like this is not possible in current version ?!
-        // In case both arguments refer to an attribute, return 0.3
+        // In case both arguments refer to an attribute, return TWO_COLUMNS_DEFAULT_SELECTIVITY
         if (IsAttribute(right)) {
-            return 0.3;
+            return TWO_COLUMNS_DEFAULT_SELECTIVITY;
         } else if (IsConstantExprWithParams(right.Ptr())) {
             const TString attributeName = attribute.GetRef();
             if (!IsConstantExpr(right.Ptr())) {
@@ -460,11 +462,10 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(
             if (const auto eqWidthHistogram = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
                 const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
                 TMaybe<ui64> estimation = EstimateInequalityPredicateByHistogram(right, columnType, eqWidthHistogram, predicate);
-                if (!estimation.Defined()) {
+                if (!estimation.Defined() || !Stats->Nrows) {
                     return DefaultInequalitySelectivity(Stats, attributeName);
                 }
                 // Should we compare the number of rows in histogram against `Nrows` and adjust `value` based on that ?!
-                Y_ASSERT(Stats->Nrows);
                 return estimation.GetRef() / Stats->Nrows;
             }
             return DefaultInequalitySelectivity(Stats, attributeName);
@@ -484,7 +485,7 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
     }
 
     if (auto attribute = IsAttribute(left)) {
-        // In case both arguments refer to an attribute, return 0.3
+        // In case both arguments refer to an attribute, return TWO_COLUMNS_DEFAULT_SELECTIVITY
         if (IsAttribute(right)) {
             if (collectMembers) {
                 auto maybeMember = IsMember(left);
@@ -493,7 +494,7 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
                     MemberEqualities.emplace_back(maybeMember.GetRef(), maybeAnotherMember.GetRef());
                 }
             }
-            return 0.3;
+            return TWO_COLUMNS_DEFAULT_SELECTIVITY;
         }
 
         // In case the right side is a constant that can be extracted, compute the selectivity using statistics
@@ -522,10 +523,9 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
             if (const auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch) {
                 const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
                 TMaybe<ui32> estimation = EstimateEqualityPredicateBySketch(right, columnType, countMinSketch);
-                if (!estimation.Defined()) {
+                if (!estimation.Defined() || !Stats->Nrows) {
                     return DefaultEqualitySelectivity(Stats, attributeName);
                 }
-                Y_ASSERT(Stats->Nrows);
                 return estimation.GetRef() / Stats->Nrows;
             }
             return DefaultEqualitySelectivity(Stats, attributeName);
@@ -545,9 +545,9 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeComparisonSelectivity(
     }
 
     if (IsAttribute(left)) {
-        // In case both arguments refer to an attribute, return 0.3
+        // In case both arguments refer to an attribute, return TWO_COLUMNS_DEFAULT_SELECTIVITY
         if (IsAttribute(right)) {
-            return 0.3;
+            return TWO_COLUMNS_DEFAULT_SELECTIVITY;
         }
         // In case the right side is a constant that can be extracted, compute the selectivity using statistics
         // Currently, we just return 0.5 for LIKE str% and 0.1 for LIKE %str% string predicates
@@ -562,7 +562,32 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeComparisonSelectivity(
     return 1.0;
 }
 
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessStringPredicate(
+std::shared_ptr<TTreeNode> NYql::NDq::TPredicateSelectivityComputer::CreateLeafNode(TMaybe<TString> attribute) {
+    auto node = std::make_shared<TTreeNode>();
+    node->Operator = ELogicalOperator::Leaf;
+
+    if (!attribute.Defined()) {
+        return node;
+    }
+
+    TString ref = attribute.GetRef();
+    size_t dotPos = ref.find('.');
+    if (dotPos != TString::npos) {
+        node->TableAlias = ref.substr(0, dotPos);
+        node->Column = ref.substr(dotPos + 1);
+    } else {
+        node->Column = ref;
+    }
+
+    TMaybe<TString> colType = GetAttributeType(ref);
+    if (colType.Defined()) {
+        node->ColumnType = colType.GetRef();
+    }
+
+    return node;
+}
+
+std::shared_ptr<TTreeNode> NYql::NDq::TPredicateSelectivityComputer::ProcessStringPredicate(
     const TExprBase& left,
     const TExprBase& right,
     bool underNot,
@@ -578,27 +603,14 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessStringPredicate
     double resSelectivity = ComputeComparisonSelectivity(left, right, containString);
     resSelectivity = underNot ? 1.0 - resSelectivity : resSelectivity;
 
-    auto node = std::make_shared<TTreeNode>();
-    node->Operator = ELogicalOperator::Leaf;
+    std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
     node->Selectivity = resSelectivity;
 
-    TString ref = leftAttr.GetRef();
-    size_t dotPos = ref.find('.');
-    if (dotPos != TString::npos) {
-        node->TableAlias = ref.substr(0, dotPos);
-        node->Column = ref.substr(dotPos + 1);
-    } else {
-        node->Column = ref;
-    }
-    TMaybe<TString> colType = GetAttributeType(ref);
-    if (colType.Defined()) {
-        node->ColumnType = colType.GetRef();
-    }
 
     return node;
 }
 
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessRegexPredicte(
+std::shared_ptr<TTreeNode> NYql::NDq::TPredicateSelectivityComputer::ProcessRegexPredicte(
     bool underNot,
     bool collectMembers
 ) {
@@ -607,15 +619,14 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessRegexPredicte(
     // NOTE: TCoAtom is not a Callable and consider NOT
     double resSelectivity = underNot ? 1.0 - 0.5 : 0.5;
 
-    auto node = std::make_shared<TTreeNode>();
-    node->Operator = ELogicalOperator::Leaf;
+    // TODO: temporal column naming
+    std::shared_ptr<TTreeNode> node = CreateLeafNode("Re2");
     node->Selectivity = resSelectivity;
-    node->Column = "Re2"; // TODO: temporal column naming
 
     return node;
 }
 
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRange(
+std::shared_ptr<TTreeNode> NYql::NDq::TPredicateSelectivityComputer::ConvertInequalityToRange(
     const TExprBase& left,
     const TExprBase& right,
     bool underNot,
@@ -627,29 +638,37 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRan
 
     // the case when both are attributes
     if (leftAttr.Defined() && rightAttr.Defined()) {
-        return nullptr;
+        std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
+        node->Selectivity = TWO_COLUMNS_DEFAULT_SELECTIVITY;
+        return node;
     } else if (!leftAttr.Defined() && !rightAttr.Defined()) {
-        return nullptr;
+        std::shared_ptr<TTreeNode> node = CreateLeafNode("EmptyAttr");
+        node->Selectivity = 1.0;
+        return node;
     }
 
     auto leftConstParam = IsConstantExprWithParams(left.Ptr());
     auto rightConstParam = IsConstantExprWithParams(right.Ptr());
 
     // the case when both are literals
-    if (leftConstParam && rightConstParam) {
-        return nullptr;
-    } else if (!leftConstParam && !rightConstParam) {
-        return nullptr;
+    if ((leftConstParam && rightConstParam) || (!leftConstParam && !rightConstParam)) {
+        std::shared_ptr<TTreeNode> node = CreateLeafNode("ConstantExprWithParams");
+        node->Selectivity = 1.0;
+        return node;
     }
 
     auto leftConst = IsConstantExpr(left.Ptr());
     auto rightConst = IsConstantExpr(right.Ptr());
 
     // the case when both are literals
-    if (leftConst && rightConst) {
-        return nullptr;
-    } else if (leftConst && rightConst) {
-        return nullptr;
+    if ((leftConst && rightConst) || (!leftConst && !rightConst)) {
+        std::shared_ptr<TTreeNode> node = CreateLeafNode("EmptyConstantExpr");
+        if (leftAttr.Defined()) {
+            node->Selectivity = DefaultEqualitySelectivity(Stats, leftAttr.GetRef());
+        } else {
+            node->Selectivity = DefaultEqualitySelectivity(Stats, rightAttr.GetRef());
+        }
+        return node;
     }
 
     const TExprBase* leftPtr = &left;
@@ -670,8 +689,7 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRan
         inclusive = true;
     }
 
-    auto node = std::make_shared<TTreeNode>();
-    node->Operator = ELogicalOperator::Leaf;
+    std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
     node->Selectivity = ComputeInequalitySelectivity(*leftPtr, *rightPtr, collectMembers, inequalitySign);
 
     TMaybe<TString> literal = ExtractLiteral(*rightPtr);
@@ -685,23 +703,11 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRan
         }
     }
 
-    TString ref = leftAttr.GetRef();
-    size_t dotPos = ref.find('.');
-    if (dotPos != TString::npos) {
-        node->TableAlias = ref.substr(0, dotPos);
-        node->Column = ref.substr(dotPos + 1);
-    } else {
-        node->Column = ref;
-    }
-    TMaybe<TString> colType = GetAttributeType(ref);
-    if (colType.Defined()) {
-        node->ColumnType = colType.GetRef();
-    }
 
     return node;
 }
 
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange(
+std::shared_ptr<TTreeNode> NYql::NDq::TPredicateSelectivityComputer::ConvertEqualityToRange(
     const TExprBase& left,
     const TExprBase& right,
     bool underNot,
@@ -712,29 +718,37 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange
 
     // the case when both are attributes
     if (leftAttr.Defined() && rightAttr.Defined()) {
-        return nullptr;
+        std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
+        node->Selectivity = TWO_COLUMNS_DEFAULT_SELECTIVITY;
+        return node;
     } else if (!leftAttr.Defined() && !rightAttr.Defined()) {
-        return nullptr;
+        std::shared_ptr<TTreeNode> node = CreateLeafNode("EmptyAttr");
+        node->Selectivity = 1.0;
+        return node;
     }
 
     auto leftConstParam = IsConstantExprWithParams(left.Ptr());
     auto rightConstParam = IsConstantExprWithParams(right.Ptr());
 
     // the case when both are literals
-    if (leftConstParam && rightConstParam) {
-        return nullptr;
-    } else if (!leftConstParam && !rightConstParam) {
-        return nullptr;
+    if ((leftConstParam && rightConstParam) || (!leftConstParam && !rightConstParam)) {
+        std::shared_ptr<TTreeNode> node = CreateLeafNode("ConstantExprWithParams");
+        node->Selectivity = 1.0;
+        return node;
     }
 
     auto leftConst = IsConstantExpr(left.Ptr());
     auto rightConst = IsConstantExpr(right.Ptr());
 
     // the case when both are literals
-    if (leftConst && rightConst) {
-        return nullptr;
-    } else if (leftConst && rightConst) {
-        return nullptr;
+    if ((leftConst && rightConst) || (!leftConst && !rightConst)) {
+        std::shared_ptr<TTreeNode> node = CreateLeafNode("EmptyConstantExpr");
+        if (leftAttr.Defined()) {
+            node->Selectivity = DefaultEqualitySelectivity(Stats, leftAttr.GetRef());
+        } else {
+            node->Selectivity = DefaultEqualitySelectivity(Stats, rightAttr.GetRef());
+        }
+        return node;
     }
 
     const TExprBase* leftPtr = &left;
@@ -745,10 +759,9 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange
         std::swap(leftAttr, rightAttr);
     }
 
-    auto node = std::make_shared<TTreeNode>();
-
     if (underNot) {
         // converting not equality into two ranges (col < x) OR (col > x)
+        auto node = std::make_shared<TTreeNode>();
         node->Operator = ELogicalOperator::Or;
 
         std::shared_ptr<TTreeNode> left = ConvertInequalityToRange(*leftPtr, *rightPtr, false, collectMembers, EInequalityPredicateType::Less);
@@ -764,21 +777,8 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange
         return node;
     }
 
-    node->Operator = ELogicalOperator::Leaf;
+    std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
     node->Selectivity = ComputeEqualitySelectivity(*leftPtr, *rightPtr, collectMembers);
-
-    TString ref = leftAttr.GetRef();
-    size_t dotPos = ref.find('.');
-    if (dotPos != TString::npos) {
-        node->TableAlias = ref.substr(0, dotPos);
-        node->Column = ref.substr(dotPos + 1);
-    } else {
-        node->Column = ref;
-    }
-    TMaybe<TString> colType = GetAttributeType(ref);
-    if (colType.Defined()) {
-        node->ColumnType = colType.GetRef();
-    }
 
     TMaybe<TString> literal = ExtractLiteral(*rightPtr);
     if (literal.Defined()) {
@@ -789,7 +789,7 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange
     return node;
 }
 
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessSetPredicate(
+std::shared_ptr<TTreeNode> NYql::NDq::TPredicateSelectivityComputer::ProcessSetPredicate(
     const TExprBase& left,
     const TExprNode::TPtr list,
     bool underNot,
@@ -812,7 +812,7 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessSetPredicate(
     return node;
 }
 
-double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName, TPredicateRange& mergedRange) {
+double NYql::NDq::TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName, TPredicateRange& mergedRange) {
     // unbounded range
     if (!mergedRange.LeftBound.Defined() && !mergedRange.RightBound.Defined()) {
         return 1.0;
@@ -1071,7 +1071,7 @@ TMaybe<TVector<TPredicateRange>> UnionOverlappingDisjunctions(TVector<std::share
     return mergedRanges;
 }
 
-double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<TTreeNode>& node, TSet<TString>& tableAliases) {
+double NYql::NDq::TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<TTreeNode>& node, TSet<TString>& tableAliases) {
     if (!node) { // it is empty tree, i.e. no selection predicates
         return 1.0;
     }
@@ -1177,7 +1177,7 @@ double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<T
     return 1.0; // fallback
 }
 
-double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
+double NYql::NDq::TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
     std::shared_ptr<TTreeNode> rootNode = ComputeImpl(input, false, CollectConstantMembers || CollectMemberEqualities);
     if (!rootNode) {
         return 1.0;
@@ -1195,7 +1195,7 @@ double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
 /**
  * ComputeImpl - traverses (depth-first post-order) the predicate tree and computes the selectivity of a predicate using available statistics.
  */
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
+std::shared_ptr<TTreeNode> NYql::NDq::TPredicateSelectivityComputer::ComputeImpl(
     const TExprBase& input,
     bool underNot,
     bool collectMembers

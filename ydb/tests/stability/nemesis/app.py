@@ -54,7 +54,7 @@ def initialize_app():
 
 def cleanup_app(exception=None):
     """Cleanup application resources"""
-    global hosts, healthcheck_reporter
+    global healthcheck_reporter
     settings = get_settings()
 
     # Orchestrator-specific cleanup

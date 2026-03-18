@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # Data Classes
 # =============================================================================
 
+
 @dataclass
 class WardenCheckResult:
     """Result of a single warden check."""

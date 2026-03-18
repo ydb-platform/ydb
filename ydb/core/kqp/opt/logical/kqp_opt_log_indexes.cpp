@@ -2091,8 +2091,10 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
 
     auto take = node.Maybe<TCoTake>().Cast();
 
-    auto maybeFlatMap = take.Input().Maybe<TCoFlatMap>();
-    TExprBase input = maybeFlatMap ? maybeFlatMap.Cast().Input() : take.Input();
+    auto maybeSkip = take.Input().Maybe<TCoSkip>();
+
+    auto maybeFlatMap = maybeSkip ? take.Input().Cast<TCoSkip>().Input().Maybe<TCoFlatMap>() : take.Input().Maybe<TCoFlatMap>();
+    TExprBase input = maybeFlatMap ? maybeFlatMap.Cast().Input() : (maybeSkip ? maybeSkip.Cast().Input() : take.Input());
 
     auto readTableIndex = TReadMatch::MatchIndexedRead(input, kqpCtx);
     if (!readTableIndex)
@@ -2140,8 +2142,12 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
             }
         }
 
+        if (maybeSkip) {
+            takeChild = TExprBase(ctx.ChangeChild(*maybeSkip.Cast().Ptr(), TCoSkip::idx_Input, takeChild.Ptr()));
+        }
         // Change input for TCoTake. New input is result of TKqlReadTable.
-        return TExprBase(ctx.ChangeChild(*node.Ptr(), 0, takeChild.Ptr()));
+        auto result = TExprBase(ctx.ChangeChild(*node.Ptr(), TCoTake::idx_Input, takeChild.Ptr()));
+        return result;
     };
 
     if (!hasResidual) {

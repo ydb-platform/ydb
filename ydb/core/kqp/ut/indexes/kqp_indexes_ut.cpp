@@ -7107,6 +7107,463 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
+    Y_UNIT_TEST(AutoSelectIndexWithParameterizedLimitOffset) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/documents` (
+                    id Utf8 NOT NULL,
+                    exec_dt Timestamp,
+                    creation_dt Timestamp,
+                    sys_state Utf8,
+                    buh_state Utf8,
+                    acc_dt_id Utf8,
+                    acc_kt_id Utf8,
+                    amount Decimal(22,9),
+                    num Utf8,
+                    purpose Utf8,
+                    kind_id Utf8,
+                    INDEX ix_exec_dt GLOBAL ON (exec_dt) COVER (sys_state, buh_state, acc_dt_id, acc_kt_id),
+                    INDEX ix_creation_dt GLOBAL ON (creation_dt),
+                    INDEX ix_sys_state GLOBAL ON (sys_state),
+                    PRIMARY KEY (id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                UPSERT INTO `/Root/documents` (id, exec_dt, creation_dt, sys_state, buh_state, acc_dt_id, acc_kt_id, amount, num, purpose, kind_id) VALUES
+                    ("d1", Timestamp("2025-03-01T00:00:00Z"), Timestamp("2025-02-28T10:00:00Z"), "ACTIVE",   "OK",      "A1", "K1", Decimal("100.5",   22, 9), "N001", "Payment",  "PAY"),
+                    ("d2", Timestamp("2025-03-01T00:00:00Z"), Timestamp("2025-02-28T11:00:00Z"), "ACTIVE",   "OK",      "A2", "K2", Decimal("200.0",   22, 9), "N002", "Transfer", "TRF"),
+                    ("d3", Timestamp("2025-03-01T00:00:00Z"), Timestamp("2025-02-28T12:00:00Z"), "ACTIVE",   "PENDING", "A3", "K3", Decimal("50.75",   22, 9), "N003", "Fee",      "FEE"),
+                    ("d4", Timestamp("2025-03-01T00:00:00Z"), Timestamp("2025-03-01T09:00:00Z"), "REJECTED", "OK",      "A4", "K4", Decimal("1000.0",  22, 9), "N004", "Salary",   "SAL"),
+                    ("d5", Timestamp("2025-03-01T00:00:00Z"), Timestamp("2025-03-01T10:00:00Z"), "ACTIVE",   "OK",      "A5", "K5", Decimal("75.25",   22, 9), "N005", "Refund",   "REF"),
+                    ("d6", Timestamp("2025-03-02T00:00:00Z"), Timestamp("2025-03-01T11:00:00Z"), "ACTIVE",   "OK",      "A6", "K6", Decimal("300.0",   22, 9), "N006", "Payment",  "PAY"),
+                    ("d7", Timestamp("2025-03-02T00:00:00Z"), Timestamp("2025-03-01T12:00:00Z"), "ACTIVE",   "PENDING", "A7", "K7", Decimal("450.0",   22, 9), "N007", "Transfer", "TRF"),
+                    ("d8", Timestamp("2025-03-02T00:00:00Z"), Timestamp("2025-03-02T09:00:00Z"), "ACTIVE",   "OK",      "A8", "K8", Decimal("25.0",    22, 9), "N008", "Fee",      "FEE");
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto explainSettings = NYdb::NQuery::TExecuteQuerySettings()
+            .ExecMode(NYdb::NQuery::EExecMode::Explain);
+
+        // No ORDER BY, LIMIT only: ReadLimit must be pushed to index scan
+        {
+            TString query = R"(
+                DECLARE $dt AS Timestamp;
+                DECLARE $limit AS Uint64;
+
+                SELECT * FROM `/Root/documents`
+                WHERE exec_dt = $dt
+                LIMIT $limit;
+            )";
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST (no ORDER BY, LIMIT only): " << *ast << Endl;
+
+            UNIT_ASSERT_C(ast->contains("ix_exec_dt/indexImplTable"),
+                "Expected index auto-select on ix_exec_dt in AST: " << *ast);
+            UNIT_ASSERT_C(ast->contains("ItemsLimit"),
+                "Expected limit pushed to index read (ItemsLimit in KqpRowsSourceSettings): " << *ast);
+            UNIT_ASSERT_C(ast->contains("KqpCnStreamLookup"),
+                "Expected stream lookup to main table for uncovered columns: " << *ast);
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan (no ORDER BY, LIMIT only): " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable"), 1,
+                "Expected index auto-select on ix_exec_dt, plan: " << *plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(planJson, "Table", "documents"), 1,
+                "Expected main table lookup for uncovered columns, plan: " << *plan);
+
+            auto indexScan = FindPlanNodeByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable");
+            UNIT_ASSERT_C(indexScan.IsDefined(), "Index scan node not found in plan");
+            auto readLimits = FindPlanNodes(indexScan, "ReadLimit");
+            UNIT_ASSERT_C(!readLimits.empty(),
+                "Expected ReadLimit pushed to index scan with LIMIT only, plan: " << *plan);
+
+            auto params = TParamsBuilder()
+                .AddParam("$dt").Timestamp(TInstant::ParseIso8601("2025-03-01T00:00:00Z")).Build()
+                .AddParam("$limit").Uint64(3).Build()
+                .Build();
+
+            auto result = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
+        }
+
+        // No ORDER BY, LIMIT + OFFSET: ReadLimit must also be pushed to index scan
+        {
+            TString query = R"(
+                DECLARE $dt AS Timestamp;
+                DECLARE $limit AS Uint64;
+                DECLARE $offset AS Uint64;
+
+                SELECT * FROM `/Root/documents`
+                WHERE exec_dt = $dt
+                LIMIT $limit OFFSET $offset;
+            )";
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST (no ORDER BY, LIMIT+OFFSET): " << *ast << Endl;
+
+            UNIT_ASSERT_C(ast->contains("ix_exec_dt/indexImplTable"),
+                "Expected index auto-select on ix_exec_dt in AST: " << *ast);
+            UNIT_ASSERT_C(ast->contains("ItemsLimit"),
+                "Expected limit pushed to index read (ItemsLimit in KqpRowsSourceSettings): " << *ast);
+            UNIT_ASSERT_C(ast->contains("KqpCnStreamLookup"),
+                "Expected stream lookup to main table for uncovered columns: " << *ast);
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan (no ORDER BY, LIMIT+OFFSET): " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable"), 1,
+                "Expected index auto-select on ix_exec_dt, plan: " << *plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(planJson, "Table", "documents"), 1,
+                "Expected main table lookup for uncovered columns, plan: " << *plan);
+
+            auto indexScan = FindPlanNodeByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable");
+            UNIT_ASSERT_C(indexScan.IsDefined(), "Index scan node not found in plan");
+            auto readLimits = FindPlanNodes(indexScan, "ReadLimit");
+            UNIT_ASSERT_C(!readLimits.empty(),
+                "Expected ReadLimit pushed to index scan with LIMIT+OFFSET, plan: " << *plan);
+
+            auto params = TParamsBuilder()
+                .AddParam("$dt").Timestamp(TInstant::ParseIso8601("2025-03-01T00:00:00Z")).Build()
+                .AddParam("$limit").Uint64(2).Build()
+                .AddParam("$offset").Uint64(2).Build()
+                .Build();
+
+            auto result = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 2);
+        }
+
+        // ORDER BY id (aligned with index sort) with parameterized LIMIT
+        // Index ix_exec_dt is sorted by (exec_dt, id). After point lookup
+        // WHERE exec_dt=$dt, remaining rows are sorted by id. So ORDER BY id
+        // aligns with index — can collect top N from index, then stream lookup.
+        // ReadLimit and ItemsLimit must be pushed.
+        {
+            TString query = R"(
+                DECLARE $dt AS Timestamp;
+                DECLARE $limit AS Uint64;
+
+                SELECT id, num, sys_state FROM `/Root/documents`
+                WHERE exec_dt = $dt
+                ORDER BY id
+                LIMIT $limit;
+            )";
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST (ORDER BY id, LIMIT only): " << *ast << Endl;
+
+            UNIT_ASSERT_C(ast->contains("ix_exec_dt/indexImplTable"),
+                "Expected index auto-select on ix_exec_dt in AST: " << *ast);
+            UNIT_ASSERT_C(ast->contains("ItemsLimit"),
+                "Expected limit pushed to index read (ItemsLimit in KqpRowsSourceSettings): " << *ast);
+            UNIT_ASSERT_C(ast->contains("KqpCnStreamLookup"),
+                "Expected stream lookup to main table for uncovered columns: " << *ast);
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan (ORDER BY id, LIMIT only): " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable"), 1,
+                "Expected index auto-select on ix_exec_dt, plan: " << *plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(planJson, "Table", "documents"), 1,
+                "Expected main table lookup for uncovered columns, plan: " << *plan);
+
+            auto indexScan = FindPlanNodeByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable");
+            UNIT_ASSERT_C(indexScan.IsDefined(), "Index scan node not found in plan");
+            auto readLimits = FindPlanNodes(indexScan, "ReadLimit");
+            UNIT_ASSERT_C(!readLimits.empty(),
+                "Expected ReadLimit pushed to index scan with LIMIT only, plan: " << *plan);
+
+            auto params = TParamsBuilder()
+                .AddParam("$dt").Timestamp(TInstant::ParseIso8601("2025-03-01T00:00:00Z")).Build()
+                .AddParam("$limit").Uint64(3).Build()
+                .Build();
+
+            auto result = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                ["d1";["N001"];["ACTIVE"]];
+                ["d2";["N002"];["ACTIVE"]];
+                ["d3";["N003"];["ACTIVE"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        // ORDER BY id (aligned with index sort) with parameterized LIMIT + OFFSET
+        // Same alignment reasoning: after WHERE exec_dt=$dt, index rows are
+        // sorted by id. ReadLimit=limit+offset must be pushed to index scan,
+        // then stream lookup only those rows.
+        {
+            TString query = R"(
+                DECLARE $dt AS Timestamp;
+                DECLARE $limit AS Uint64;
+                DECLARE $offset AS Uint64;
+
+                SELECT id, num, sys_state FROM `/Root/documents`
+                WHERE exec_dt = $dt
+                ORDER BY id
+                LIMIT $limit OFFSET $offset;
+            )";
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST (ORDER BY id, LIMIT+OFFSET): " << *ast << Endl;
+
+            UNIT_ASSERT_C(ast->contains("ix_exec_dt/indexImplTable"),
+                "Expected index auto-select on ix_exec_dt in AST: " << *ast);
+            UNIT_ASSERT_C(ast->contains("ItemsLimit"),
+                "Expected limit pushed to index read (ItemsLimit in KqpRowsSourceSettings): " << *ast);
+            UNIT_ASSERT_C(ast->contains("KqpCnStreamLookup"),
+                "Expected stream lookup to main table for uncovered columns: " << *ast);
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan (ORDER BY id, LIMIT+OFFSET): " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable"), 1,
+                "Expected index auto-select on ix_exec_dt, plan: " << *plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(planJson, "Table", "documents"), 1,
+                "Expected main table lookup for uncovered columns, plan: " << *plan);
+
+            auto indexScan = FindPlanNodeByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable");
+            UNIT_ASSERT_C(indexScan.IsDefined(), "Index scan node not found in plan");
+            auto readLimits = FindPlanNodes(indexScan, "ReadLimit");
+            UNIT_ASSERT_C(!readLimits.empty(),
+                "Expected ReadLimit pushed to index scan with LIMIT+OFFSET, plan: " << *plan);
+
+            auto params = TParamsBuilder()
+                .AddParam("$dt").Timestamp(TInstant::ParseIso8601("2025-03-01T00:00:00Z")).Build()
+                .AddParam("$limit").Uint64(2).Build()
+                .AddParam("$offset").Uint64(2).Build()
+                .Build();
+
+            auto result = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                ["d3";["N003"];["ACTIVE"]];
+                ["d4";["N004"];["REJECTED"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        // ORDER BY num DESC (not aligned with index sort) with parameterized LIMIT
+        // Index ix_exec_dt is sorted by (exec_dt, id), ORDER BY num doesn't match,
+        // so ReadLimit cannot be pushed — must read all matching rows from index,
+        // lookup all, sort by num, then take top N
+        {
+            TString query = R"(
+                DECLARE $dt AS Timestamp;
+                DECLARE $limit AS Uint64;
+
+                SELECT id, num, sys_state FROM `/Root/documents`
+                WHERE exec_dt = $dt
+                ORDER BY num DESC
+                LIMIT $limit;
+            )";
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST (ORDER BY num DESC, LIMIT): " << *ast << Endl;
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan (ORDER BY num DESC, LIMIT): " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable"), 1,
+                "Expected index auto-select on ix_exec_dt, plan: " << *plan);
+
+            auto indexScan = FindPlanNodeByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable");
+            UNIT_ASSERT_C(indexScan.IsDefined(), "Index scan node not found in plan");
+            auto readLimits = FindPlanNodes(indexScan, "ReadLimit");
+            UNIT_ASSERT_C(readLimits.empty(),
+                "ReadLimit should NOT be pushed when ORDER BY doesn't align with index, plan: " << *plan);
+
+            auto params = TParamsBuilder()
+                .AddParam("$dt").Timestamp(TInstant::ParseIso8601("2025-03-01T00:00:00Z")).Build()
+                .AddParam("$limit").Uint64(3).Build()
+                .Build();
+
+            auto result = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                ["d5";["N005"];["ACTIVE"]];
+                ["d4";["N004"];["REJECTED"]];
+                ["d3";["N003"];["ACTIVE"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        // ORDER BY num DESC (not aligned) with parameterized LIMIT + OFFSET
+        {
+            TString query = R"(
+                DECLARE $dt AS Timestamp;
+                DECLARE $limit AS Uint64;
+                DECLARE $offset AS Uint64;
+
+                SELECT id, num, sys_state FROM `/Root/documents`
+                WHERE exec_dt = $dt
+                ORDER BY num DESC
+                LIMIT $limit OFFSET $offset;
+            )";
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST (ORDER BY num DESC, LIMIT+OFFSET): " << *ast << Endl;
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan (ORDER BY num DESC, LIMIT+OFFSET): " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable"), 1,
+                "Expected index auto-select on ix_exec_dt, plan: " << *plan);
+
+            auto indexScan = FindPlanNodeByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable");
+            UNIT_ASSERT_C(indexScan.IsDefined(), "Index scan node not found in plan");
+            auto readLimits = FindPlanNodes(indexScan, "ReadLimit");
+            UNIT_ASSERT_C(readLimits.empty(),
+                "ReadLimit should NOT be pushed when ORDER BY doesn't align with index, plan: " << *plan);
+
+            auto params = TParamsBuilder()
+                .AddParam("$dt").Timestamp(TInstant::ParseIso8601("2025-03-01T00:00:00Z")).Build()
+                .AddParam("$limit").Uint64(2).Build()
+                .AddParam("$offset").Uint64(1).Build()
+                .Build();
+
+            auto result = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                ["d4";["N004"];["REJECTED"]];
+                ["d3";["N003"];["ACTIVE"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        // ORDER BY id (aligned with index suffix) + WHERE sys_state filter,
+        // parameterized LIMIT + OFFSET. Index ix_exec_dt is sorted by (exec_dt, id),
+        // so after WHERE exec_dt=$dt the scan is sorted by id. But sys_state filter
+        // is post-filter so we cannot push ReadLimit.
+        {
+            TString query = R"(
+                DECLARE $dt AS Timestamp;
+                DECLARE $state AS Utf8;
+                DECLARE $limit AS Uint64;
+                DECLARE $offset AS Uint64;
+
+                SELECT id, num, sys_state FROM `/Root/documents`
+                WHERE exec_dt = $dt AND sys_state = $state
+                ORDER BY id
+                LIMIT $limit OFFSET $offset;
+            )";
+
+            auto explainResult = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            UNIT_ASSERT(explainResult.GetStats());
+            auto ast = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(ast);
+            Cerr << "AST (WHERE exec_dt + sys_state, ORDER BY id, LIMIT+OFFSET): " << *ast << Endl;
+
+            UNIT_ASSERT_C(ast->contains("ix_exec_dt/indexImplTable"),
+                "Expected index auto-select on ix_exec_dt in AST: " << *ast);
+
+            auto plan = explainResult.GetStats()->GetPlan();
+            UNIT_ASSERT(plan);
+            Cerr << "Plan (WHERE exec_dt + sys_state, ORDER BY id, LIMIT+OFFSET): " << *plan << Endl;
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(planJson, "Table", "documents/ix_exec_dt/indexImplTable"), 1,
+                "Expected index auto-select on ix_exec_dt, plan: " << *plan);
+
+            auto params = TParamsBuilder()
+                .AddParam("$dt").Timestamp(TInstant::ParseIso8601("2025-03-01T00:00:00Z")).Build()
+                .AddParam("$state").Utf8("ACTIVE").Build()
+                .AddParam("$limit").Uint64(2).Build()
+                .AddParam("$offset").Uint64(1).Build()
+                .Build();
+
+            auto result = queryClient.ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                ["d2";["N002"];["ACTIVE"]];
+                ["d3";["N003"];["ACTIVE"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
 }
 }
 }

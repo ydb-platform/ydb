@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         }
 
         NYdb::NTopic::TTopicClient topicClient(driver);
-        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/streamImpl").GetValueSync();
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl").GetValueSync();
         UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
 
         driver.Stop(true);
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
 
         NYdb::NTopic::TTopicClient topicClient(driver);
-        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/streamImpl").GetValueSync();
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/v4/streamImpl").GetValueSync();
         UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
 
         auto& description = describe.GetTopicDescription();

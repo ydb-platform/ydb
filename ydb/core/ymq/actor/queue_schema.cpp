@@ -480,11 +480,11 @@ void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
 
-void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir, const TString&) {
+void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir, const TString& dirName) {
     auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
 
-    trans->SetWorkingDir(workingDir);
+    trans->SetWorkingDir(TStringBuilder() << workingDir << "/" << dirName);
     trans->SetOperationType(NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup);
 
     auto *pqgroup = trans->MutableCreatePersQueueGroup();

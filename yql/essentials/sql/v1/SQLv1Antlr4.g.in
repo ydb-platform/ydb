@@ -861,7 +861,7 @@ nullability: NOT? NULL;
 default_value: DEFAULT expr;
 encoding: ENCODING LPAREN (encoding_config (COMMA encoding_config)*)? COMMA? RPAREN;
 encoding_config: encoding_config_name (LPAREN (encoding_setting_entry (COMMA encoding_setting_entry)*)? COMMA? RPAREN)?;
-encoding_config_name: an_id | DICT;
+encoding_config_name: an_id_or_type;
 encoding_setting_entry: an_id EQUALS encoding_setting_value;
 encoding_setting_value: integer | id;
 

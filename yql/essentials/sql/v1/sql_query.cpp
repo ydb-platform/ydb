@@ -3100,15 +3100,16 @@ bool TSqlQuery::AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_c
 }
 
 bool TSqlQuery::AlterTableAlterColumnSetEncoding(const TRule_alter_table_alter_column_set_encoding& node, TAlterTableParameters& params) {
-    const TString name = Id(node.GetRule_an_id3(), *this);
-    const TPosition pos(Context().Pos());
+    TString name = Id(node.GetRule_an_id3(), *this);
+    TPosition pos(Context().Pos());
     auto encoding = ColumnEncoding(node.GetRule_encoding5(), *this);
     if (!encoding) {
         return false;
     }
+
     params.AlterColumns.push_back({
-        .Pos = pos,
-        .Name = name,
+        .Pos = std::move(pos),
+        .Name = std::move(name),
         .TypeOfChange = TColumnSchema::ETypeOfChange::SetEncoding,
         .ColumnEncoding = std::move(encoding),
     });

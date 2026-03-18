@@ -1663,7 +1663,7 @@ TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslati
     return compression;
 }
 
-static bool EncodingSettingEntry(const TRule_encoding_setting_entry& node, TTranslation& ctx, TEncoding& encoding) {
+bool EncodingSettingEntry(const TRule_encoding_setting_entry& node, TTranslation& ctx, TEncoding& encoding) {
     const auto id = to_lower(Id(node.GetRule_an_id1(), ctx));
     const auto& value = node.GetRule_encoding_setting_value3();
     if (encoding.Entries.contains(id)) {
@@ -1680,8 +1680,8 @@ static bool EncodingSettingEntry(const TRule_encoding_setting_entry& node, TTran
             break;
         }
         case TRule_encoding_setting_value::kAltEncodingSettingValue2: {
-            const auto result = Id(value.GetAlt_encoding_setting_value2().GetRule_id1(), ctx);
-            encoding.Entries[id] = BuildLiteralRawString(ctx.Context().Pos(), result);
+            auto result = Id(value.GetAlt_encoding_setting_value2().GetRule_id1(), ctx);
+            encoding.Entries[id] = BuildLiteralRawString(ctx.Context().Pos(), std::move(result));
             break;
         }
         case TRule_encoding_setting_value::ALT_NOT_SET:
@@ -1690,19 +1690,8 @@ static bool EncodingSettingEntry(const TRule_encoding_setting_entry& node, TTran
     return true;
 }
 
-static TString EncodingConfigName(const TRule_encoding_config_name& node, TTranslation& ctx) {
-    switch (node.Alt_case()) {
-        case TRule_encoding_config_name::kAltEncodingConfigName1:
-            return to_lower(Id(node.GetAlt_encoding_config_name1().GetRule_an_id1(), ctx));
-        case TRule_encoding_config_name::kAltEncodingConfigName2:
-            return "dict";
-        case TRule_encoding_config_name::ALT_NOT_SET:
-            Y_UNREACHABLE();
-    }
-}
-
-static bool ParseEncodingConfig(const TRule_encoding_config& node, TTranslation& ctx, TEncoding& encoding) {
-    encoding.Name = EncodingConfigName(node.GetRule_encoding_config_name1(), ctx);
+bool ParseEncodingConfig(const TRule_encoding_config& node, TTranslation& ctx, TEncoding& encoding) {
+    encoding.Name = to_lower(Id(node.GetRule_encoding_config_name1().GetRule_an_id_or_type1(), ctx));
     if (!node.HasBlock2()) {
         return true;
     }
@@ -1716,33 +1705,36 @@ static bool ParseEncodingConfig(const TRule_encoding_config& node, TTranslation&
     if (!EncodingSettingEntry(inner.GetRule_encoding_setting_entry1(), ctx, encoding)) {
         return false;
     }
-    for (int i = 0; i < inner.block2_size(); ++i) {
-        if (!EncodingSettingEntry(inner.GetBlock2(i).GetRule_encoding_setting_entry2(), ctx, encoding)) {
+    for (const auto& block2 : inner.GetBlock2()) {
+        if (!EncodingSettingEntry(block2.GetRule_encoding_setting_entry2(), ctx, encoding)) {
             return false;
         }
     }
     return true;
 }
 
+// When option is present we return Just(...); ENCODING() => Just(empty vector)
 TMaybe<TVector<TEncoding>> ColumnEncoding(const TRule_encoding& node, TTranslation& ctx) {
     // encoding: ENCODING LPAREN (encoding_config (COMMA encoding_config)*)? COMMA? RPAREN;
-    // When option is present we return Just(...); ENCODING() => Just(empty vector)
     TVector<TEncoding> configs;
-    if (node.HasBlock3()) {
-        const auto& block = node.GetBlock3();
-        TEncoding first;
-        if (!ParseEncodingConfig(block.GetRule_encoding_config1(), ctx, first)) {
+    if (!node.HasBlock3()) {
+        return configs;
+    }
+
+    const auto& block = node.GetBlock3();
+    TEncoding first;
+    if (!ParseEncodingConfig(block.GetRule_encoding_config1(), ctx, first)) {
+        return Nothing();
+    }
+    configs.push_back(std::move(first));
+    for (const auto& block2 : block.GetBlock2()) {
+        TEncoding enc;
+        if (!ParseEncodingConfig(block2.GetRule_encoding_config2(), ctx, enc)) {
             return Nothing();
         }
-        configs.push_back(std::move(first));
-        for (const auto& block2 : block.GetBlock2()) {
-            TEncoding enc;
-            if (!ParseEncodingConfig(block2.GetRule_encoding_config2(), ctx, enc)) {
-                return Nothing();
-            }
-            configs.push_back(std::move(enc));
-        }
+        configs.push_back(std::move(enc));
     }
+
     return configs;
 }
 

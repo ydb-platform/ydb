@@ -426,6 +426,20 @@ INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode
         node.Q(node.Y(node.Q("state"), node.Q(state))));
 }
 
+INode::TPtr CreateEncodingsListSettings(const TVector<TEncoding>& columnEncoding, const INode& node) {
+    auto encodingsList = node.Y();
+    for (const auto& encoding : columnEncoding) {
+        auto encodingParamsList = node.Y();
+        encodingParamsList = node.L(encodingParamsList, node.Q(node.Y(node.Q("name"), node.Q(to_lower(encoding.Name)))));
+        for (const auto& [key, value] : encoding.Entries) {
+            encodingParamsList = node.L(encodingParamsList, node.Q(node.Y(node.Q(key), value)));
+        }
+        encodingsList = node.L(encodingsList, node.Q(encodingParamsList));
+    }
+
+    return encodingsList;
+}
+
 } // namespace
 
 class TPrepTableKeys: public ITableKeys {
@@ -1308,16 +1322,7 @@ public:
                 columnDesc = L(columnDesc, Q(familiesDesc));
 
                 if (col.ColumnEncoding) {
-                    auto encodingsList = Y();
-                    for (const auto& enc : *col.ColumnEncoding) {
-                        auto encodingParamsList = Y();
-                        encodingParamsList = L(encodingParamsList, Q(Y(Q("name"), Q(to_lower(enc.Name)))));
-                        for (const auto& [key, value] : enc.Entries) {
-                            encodingParamsList = L(encodingParamsList, Q(Y(Q(key), value)));
-                        }
-                        encodingsList = L(encodingsList, Q(encodingParamsList));
-                    }
-                    columnDesc = L(columnDesc, Q(Y(Q("columnEncoding"), Q(encodingsList))));
+                    columnDesc = L(columnDesc, Q(Y(Q("columnEncoding"), Q(CreateEncodingsListSettings(*col.ColumnEncoding, *this)))));
                 }
             }
 
@@ -1654,16 +1659,7 @@ public:
                 columnDesc = L(columnDesc, Q(familiesDesc));
 
                 if (col.ColumnEncoding) {
-                    auto encodingsList = Y();
-                    for (const auto& enc : *col.ColumnEncoding) {
-                        auto encodingParamsList = Y();
-                        encodingParamsList = L(encodingParamsList, Q(Y(Q("name"), Q(to_lower(enc.Name)))));
-                        for (const auto& [key, value] : enc.Entries) {
-                            encodingParamsList = L(encodingParamsList, Q(Y(Q(key), value)));
-                        }
-                        encodingsList = L(encodingsList, Q(encodingParamsList));
-                    }
-                    columnDesc = L(columnDesc, Q(Y(Q("columnEncoding"), Q(encodingsList))));
+                    columnDesc = L(columnDesc, Q(Y(Q("columnEncoding"), Q(CreateEncodingsListSettings(*col.ColumnEncoding, *this)))));
                 }
 
                 columns = L(columns, Q(columnDesc));
@@ -1756,16 +1752,11 @@ public:
                         auto columnDesc = Y();
                         columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
 
-                        auto encodingsList = Y();
+                        TPtr encodingsList;
                         if (col.ColumnEncoding) {
-                            for (const auto& enc : *col.ColumnEncoding) {
-                                auto encodingParamsList = Y();
-                                encodingParamsList = L(encodingParamsList, Q(Y(Q("name"), Q(to_lower(enc.Name)))));
-                                for (const auto& [key, value] : enc.Entries) {
-                                    encodingParamsList = L(encodingParamsList, Q(Y(Q(key), value)));
-                                }
-                                encodingsList = L(encodingsList, Q(encodingParamsList));
-                            }
+                            encodingsList = CreateEncodingsListSettings(*col.ColumnEncoding, *this);
+                        } else {
+                            encodingsList = Y();
                         }
                         columnDesc = L(columnDesc, Q(Y(Q("changeEncoding"), Q(encodingsList))));
                         columns = L(columns, Q(columnDesc));

@@ -49,6 +49,7 @@ bool TOlapColumnsDescription::ApplyUpdate(
         if (newColumn.GetKeyOrder()) {
             Y_ABORT_UNLESS(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
         }
+
         Y_ABORT_UNLESS(ColumnsByName.emplace(newColumn.GetName(), newColumn.GetId()).second);
         Y_ABORT_UNLESS(Columns.emplace(newColumn.GetId(), std::move(newColumn)).second);
     }

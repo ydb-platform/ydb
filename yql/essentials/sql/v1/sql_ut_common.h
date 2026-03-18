@@ -4101,211 +4101,255 @@ Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
 }
 
 Y_UNIT_TEST(AlterTableAlterColumnSetEncodingOffAstCorrect) {
-    auto reqSetEncodingOff = SqlToYql(R"sql(
-            USE ydb;
-            ALTER TABLE tableName ALTER COLUMN val SET ENCODING(OFF);
-        )sql");
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ALTER COLUMN val SET ENCODING(OFF);
+    )sql");
 
-    UNIT_ASSERT_C(reqSetEncodingOff.IsOk(), reqSetEncodingOff.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat({TString("\'mode \'alter")});
-    TString program = VerifyProgram(reqSetEncodingOff, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+    const TString modeAlter = "'mode 'alter";
+    const TString changeEncoding = "'('changeEncoding '('('('name 'off))))";
 
-    const TString expectedStructure = "'('changeEncoding '('('('name 'off))))";
-    UNIT_ASSERT_C(program.Contains(expectedStructure), "changeEncoding must have full structure (lowercase). Expected structure: " << expectedStructure << ", got: " << program);
+    TWordCountHive elementStat{{modeAlter, changeEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[changeEncoding]);
 }
 
 Y_UNIT_TEST(AlterTableAlterColumnSetEncodingDictAstCorrect) {
-    auto reqSetEncodingDict = SqlToYql(R"sql(
-            USE ydb;
-            ALTER TABLE tableName ALTER COLUMN val SET ENCODING(DICT);
-        )sql");
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ALTER COLUMN val SET ENCODING(DICT);
+    )sql");
 
-    UNIT_ASSERT_C(reqSetEncodingDict.IsOk(), reqSetEncodingDict.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat({TString("\'mode \'alter")});
-    TString program = VerifyProgram(reqSetEncodingDict, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+    const TString modeAlter = "'mode 'alter";
+    const TString changeEncoding = "'('changeEncoding '('('('name 'dict))))";
 
-    const TString expectedStructure = "'('changeEncoding '('('('name 'dict))))";
-    UNIT_ASSERT_C(program.Contains(expectedStructure), "changeEncoding must have full structure (lowercase). Expected structure: " << expectedStructure << ", got: " << program);
+    TWordCountHive elementStat{{modeAlter, changeEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[changeEncoding]);
 }
 
 Y_UNIT_TEST(AlterTableAlterColumnSetEncodingEmptyAstCorrect) {
-    auto reqSetEncodingEmpty = SqlToYql(R"sql(
-            USE ydb;
-            ALTER TABLE tableName ALTER COLUMN val SET ENCODING();
-        )sql");
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ALTER COLUMN val SET ENCODING();
+    )sql");
 
-    UNIT_ASSERT_C(reqSetEncodingEmpty.IsOk(), reqSetEncodingEmpty.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat({TString("\'mode \'alter")});
-    TString program = VerifyProgram(reqSetEncodingEmpty, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+    const TString modeAlter = "'mode 'alter";
+    const TString changeEncoding = "'('changeEncoding '())";
 
-    const TString expectedStructure = "'('changeEncoding '())";
-    UNIT_ASSERT_C(program.Contains(expectedStructure), "changeEncoding() must pass empty list. Expected structure: " << expectedStructure << ", got: " << program);
+    TWordCountHive elementStat{{modeAlter, changeEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[changeEncoding]);
 }
 
 Y_UNIT_TEST(AlterTableAlterColumnSetEncodingDictWithParamsAstCorrect) {
-    auto reqSetEncodingDictParams = SqlToYql(R"sql(
-            USE ydb;
-            ALTER TABLE tableName ALTER COLUMN val SET ENCODING(DICT(max_size=100));
-        )sql");
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ALTER COLUMN val SET ENCODING(DICT(max_size=100));
+    )sql");
 
-    UNIT_ASSERT_C(reqSetEncodingDictParams.IsOk(), reqSetEncodingDictParams.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat({TString("\'mode \'alter")});
-    TString program = VerifyProgram(reqSetEncodingDictParams, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+    const TString modeAlter = "'mode 'alter";
+    const TString changeEncoding = "'('changeEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\")))))";
 
-    const TString expectedStructure = "'('changeEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\")))))";
-    UNIT_ASSERT_C(program.Contains(expectedStructure), "changeEncoding must have full structure (lowercase, with params). Expected structure: " << expectedStructure << ", got: " << program);
+    TWordCountHive elementStat{{modeAlter, changeEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[changeEncoding]);
+}
+
+Y_UNIT_TEST(AlterTableSetEncodingDictAndOffOrderAndParamsAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ALTER COLUMN val SET ENCODING(DICT(max_size=100), OFF);
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "'mode 'alter";
+    const TString changeEncoding = "'('changeEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\"))) '('('name 'off))))";
+
+    TWordCountHive elementStat{{modeAlter, changeEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[changeEncoding]);
 }
 
 Y_UNIT_TEST(CreateTableSetEncodingDictAstCorrect) {
-    auto reqCreateEncodingDict = SqlToYql(R"sql(
-            USE ydb;
-            CREATE TABLE tableName (
-                id Uint32 ENCODING(DICT),
-                PRIMARY KEY (id)
-            );
-        )sql");
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32 ENCODING(DICT),
+            PRIMARY KEY (id)
+        );
+    )sql");
 
-    UNIT_ASSERT_C(reqCreateEncodingDict.IsOk(), reqCreateEncodingDict.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    TString program = VerifyProgram(reqCreateEncodingDict, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '('('('name 'dict))))";
 
-    const TString expectedStructure = "'('columnEncoding '('('('name 'dict))))";
-    UNIT_ASSERT_C(program.Contains(expectedStructure), "columnEncoding must have full structure (lowercase). Expected structure: " << expectedStructure << ", got: " << program);
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
 }
 
 Y_UNIT_TEST(CreateTableSetEncodingEmptyAstCorrect) {
-    auto reqCreateEncodingEmpty = SqlToYql(R"sql(
-            USE ydb;
-            CREATE TABLE tableName (
-                id Uint32 ENCODING(),
-                PRIMARY KEY (id)
-            );
-        )sql");
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32 ENCODING(),
+            PRIMARY KEY (id)
+        );
+    )sql");
 
-    UNIT_ASSERT_C(reqCreateEncodingEmpty.IsOk(), reqCreateEncodingEmpty.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    TString program = VerifyProgram(reqCreateEncodingEmpty, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '())";
 
-    const TString expectedStructure = "'('columnEncoding '())";
-    UNIT_ASSERT_C(program.Contains(expectedStructure), "ENCODING() must pass empty list. Expected structure: " << expectedStructure << ", got: " << program);
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
 }
 
 Y_UNIT_TEST(CreateTableSetEncodingOffAstCorrect) {
-    auto reqCreateEncodingOff = SqlToYql(R"sql(
-            USE ydb;
-            CREATE TABLE tableName (
-                id Uint32 ENCODING(OFF),
-                PRIMARY KEY (id)
-            );
-        )sql");
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32 ENCODING(OFF),
+            PRIMARY KEY (id)
+        );
+    )sql");
 
-    UNIT_ASSERT_C(reqCreateEncodingOff.IsOk(), reqCreateEncodingOff.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    TString program = VerifyProgram(reqCreateEncodingOff, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '('('('name 'off))))";
 
-    const TString expectedStructure = "'('columnEncoding '('('('name 'off))))";
-    UNIT_ASSERT_C(program.Contains(expectedStructure), "columnEncoding must have full structure (lowercase). Expected structure: " << expectedStructure << ", got: " << program);
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
 }
 
 Y_UNIT_TEST(CreateTableSetEncodingDictWithParamsAstCorrect) {
-    auto reqCreateEncodingDictParams = SqlToYql(R"sql(
-            USE ydb;
-            CREATE TABLE tableName (
-                id Uint32 ENCODING(DICT(max_size=100)),
-                PRIMARY KEY (id)
-            );
-        )sql");
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32 ENCODING(DICT(max_size=100)),
+            PRIMARY KEY (id)
+        );
+    )sql");
 
-    UNIT_ASSERT_C(reqCreateEncodingDictParams.IsOk(), reqCreateEncodingDictParams.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    TString program = VerifyProgram(reqCreateEncodingDictParams, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\")))))";
 
-    const TString expectedStructure = "'('columnEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\")))))";
-    UNIT_ASSERT_C(program.Contains(expectedStructure), "columnEncoding must have full structure (lowercase, with params). Expected structure: " << expectedStructure << ", got: " << program);
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
 }
 
 Y_UNIT_TEST(CreateTableSetEncodingDictAndOffOrderAndParamsAstCorrect) {
-    auto reqCreateEncodingDictAndOff = SqlToYql(R"sql(
-            USE ydb;
-            CREATE TABLE tableName (
-                id Uint32 ENCODING(DICT(max_size=100), OFF),
-                PRIMARY KEY (id)
-            );
-        )sql");
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32 ENCODING(DICT(max_size=100), OFF),
+            PRIMARY KEY (id)
+        );
+    )sql");
 
-    UNIT_ASSERT_C(reqCreateEncodingDictAndOff.IsOk(), reqCreateEncodingDictAndOff.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    TString program = VerifyProgram(reqCreateEncodingDictAndOff, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\"))) '('('name 'off))))";
 
-    const TString expectedStructure = "'('columnEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\"))) '('('name 'off))))";
-    UNIT_ASSERT_C(program.Contains(expectedStructure), "columnEncoding must have full structure (order: dict with params, then off; lowercase). Expected to find: " << expectedStructure << ", got: " << program);
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
 }
 
 Y_UNIT_TEST(CreateTableNotSetEncodingAstCorrect) {
-    auto reqCreateNoEncoding = SqlToYql(R"sql(
-            USE ydb;
-            CREATE TABLE tableName (
-                id Uint32,
-                PRIMARY KEY (id)
-            );
-        )sql");
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32,
+            PRIMARY KEY (id)
+        );
+    )sql");
 
-    UNIT_ASSERT_C(reqCreateNoEncoding.IsOk(), reqCreateNoEncoding.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    TString program = VerifyProgram(reqCreateNoEncoding, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "columnEncoding";
 
-    UNIT_ASSERT_C(!program.Contains("columnEncoding"), "no encoding must be passed when ENCODING is not specified. Got: " << program);
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(0, elementStat[columnEncoding]);
 }
 
-Y_UNIT_TEST(AlterTableAddColumnSetEncodingDictAstCorrect) {
-    auto reqAddColumnEncodingDict = SqlToYql(R"sql(
-            USE ydb;
-            ALTER TABLE tableName ADD COLUMN val Uint32 ENCODING(DICT);
-        )sql");
+Y_UNIT_TEST(AlterTableAddColumnSetEncodingAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ADD COLUMN val Uint32 ENCODING(DICT(max_size=100), OFF)
+    )sql");
 
-    UNIT_ASSERT_C(reqAddColumnEncodingDict.IsOk(), reqAddColumnEncodingDict.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat({TString("\'mode \'alter")});
-    TString program = VerifyProgram(reqAddColumnEncodingDict, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\"))) '('('name 'off))))";
 
-    const TString expectedStructure = "'('columnEncoding '('('('name 'dict))))";
-    UNIT_ASSERT_C(program.Contains(expectedStructure), "columnEncoding must have full structure (lowercase). Expected to find: " << expectedStructure << ", got: " << program);
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
 }
 
 Y_UNIT_TEST(AlterTableAddColumnNotSetEncodingAstCorrect) {
-    auto reqAddColumnNoEncoding = SqlToYql(R"sql(
-            USE ydb;
-            ALTER TABLE tableName ADD COLUMN val Uint32;
-        )sql");
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ADD COLUMN val Uint32;
+    )sql");
 
-    UNIT_ASSERT_C(reqAddColumnNoEncoding.IsOk(), reqAddColumnNoEncoding.Issues.ToOneLineString());
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive elementStat({TString("\'mode \'alter")});
-    TString program = VerifyProgram(reqAddColumnNoEncoding, elementStat);
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+    const TString modeAlter = "'mode 'alter";
+    const TString columnEncoding = "columnEncoding";
 
-    UNIT_ASSERT_C(!program.Contains("columnEncoding"), "no encoding must be passed when ENCODING is not specified on ADD COLUMN. Got: " << program);
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(0, elementStat[columnEncoding]);
 }
 
 Y_UNIT_TEST(AlterTableYtNotSupported) {

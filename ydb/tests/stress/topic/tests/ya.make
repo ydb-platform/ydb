@@ -15,6 +15,8 @@ IF (SANITIZER_TYPE)
     ENV(YDB_STRESS_TEST_LIMIT_MEMORY=1)
 ENDIF()
 
+FORK_SUBTESTS()
+
 DEPENDS(
     ydb/apps/ydb
     ydb/tests/stress/topic

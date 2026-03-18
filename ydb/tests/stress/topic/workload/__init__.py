@@ -159,7 +159,7 @@ class YdbTopicWorkload(WorkloadBase):
         self.run_topic_write_with_tx(TestConfig(
             partitions=10,
             partitions_per_tablet=10,
-            producers=20,  #producers=int(self.producers),
+            producers=20,  # producers=int(self.producers),
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
             byte_rate=self.config.DEFAULT_BYTE_RATE
@@ -169,7 +169,7 @@ class YdbTopicWorkload(WorkloadBase):
         self.run_topic_write_with_tx(TestConfig(
             partitions=10,
             partitions_per_tablet=5,
-            producers=20,  #producers=int(self.producers),
+            producers=20,  # producers=int(self.producers),
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
             byte_rate=self.config.DEFAULT_BYTE_RATE
@@ -199,7 +199,7 @@ class YdbTopicWorkload(WorkloadBase):
         self.run_topic_write_with_tx(TestConfig(
             partitions=1,
             partitions_per_tablet=1,
-            producers=20,  #producers=int(self.producers),
+            producers=20,  # producers=int(self.producers),
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
             byte_rate=self.config.SMALL_BYTE_RATE
@@ -209,7 +209,7 @@ class YdbTopicWorkload(WorkloadBase):
         self.run_topic_write_without_tx(TestConfig(
             partitions=200,
             partitions_per_tablet=10,
-            producers=20,  #producers=int(self.producers),
+            producers=20,  # producers=int(self.producers),
             consumers=int(self.consumers),
             consumer_threads=int(self.consumers),
             byte_rate=self.config.DEFAULT_BYTE_RATE

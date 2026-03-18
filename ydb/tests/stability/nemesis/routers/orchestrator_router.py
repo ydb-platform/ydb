@@ -295,7 +295,7 @@ def get_hosts_health():
                 aggregated_health[host] = {"status": "ok"}
             else:
                 port = get_app_port()
-                resp = requests.get(f"http://{host}:{port}/health")
+                resp = requests.get(f"http://{host}:{port}/health", timeout=5)
                 aggregated_health[host] = resp.json()
         except Exception as e:
             aggregated_health[host] = {"status": "error", "message": str(e)}

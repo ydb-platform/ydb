@@ -219,6 +219,13 @@ namespace NKikimr::NDDisk {
             ProcessPersistentBufferQueue();
         }
     }
+
+    TRope TrimData(TRope&& data, ui32 offset, ui32 size, ui32 selectorOffset, ui32 selectorSize) {
+        Y_ABORT_UNLESS(selectorOffset >= offset && offset + size >= selectorOffset + selectorSize);
+        auto start = data.Begin() + (selectorOffset - offset);
+        return data.Extract(start, start + selectorSize);
+    }
+
     void TDDiskActor::Handle(TDDiskActor::TEvPrivate::TEvReadPersistentBufferPart::TPtr ev) {
         if (ev->Get()->IsRestore) {
             RestorePersistentBufferChunk(ev);
@@ -257,7 +264,7 @@ namespace NKikimr::NDDisk {
                         pr.DataParts.clear();
                         pr.PartsCount = 0;
                     } else {
-                        data = pr.JoinData(SectorSize);
+                        data = TrimData(pr.JoinData(SectorSize), pr.OffsetInBytes, pr.Size, inflight.OffsetInBytes, inflight.Size);
                         PersistentBufferInMemoryCacheSize += pr.Size;
                         SanitizePersistentBufferInMemoryCache(pr);
                     }
@@ -470,8 +477,14 @@ namespace NKikimr::NDDisk {
             return;
         }
         TPersistentBuffer::TRecord& pr = jt->second;
-        Y_ABORT_UNLESS(pr.OffsetInBytes == selector.OffsetInBytes);
-        Y_ABORT_UNLESS(pr.Size == selector.Size);
+        if (pr.OffsetInBytes > selector.OffsetInBytes ||
+            pr.OffsetInBytes + pr.Size < selector.Size + selector.OffsetInBytes) {
+            Counters.Interface.ReadPersistentBuffer.Reply(false);
+            span.End();
+            SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST, "Selector range is out of record bounds"));
+            return;
+        }
 
         ui64 operationCookie = NextCookie++;
         auto [inflightIt, inserted] = PersistentBufferDiskOperationInflight.try_emplace(operationCookie, TPersistentBufferDiskOperationInFlight{
@@ -484,12 +497,15 @@ namespace NKikimr::NDDisk {
             .Generation = generation,
             .VChunkIdx = selector.VChunkIndex,
             .Lsn = lsn,
+            .OffsetInBytes = selector.OffsetInBytes,
+            .Size = selector.Size,
         });
         Y_ABORT_UNLESS(inserted);
 
         if (!pr.DataParts.empty()) {
             Y_ABORT_UNLESS(pr.DataParts.size() == pr.PartsCount);
-            ReplyReadPersistentBuffer(operationCookie, pr.JoinData(SectorSize));
+            auto data = TrimData(pr.JoinData(SectorSize), pr.OffsetInBytes, pr.Size, selector.OffsetInBytes, selector.Size);
+            ReplyReadPersistentBuffer(operationCookie, std::move(data));
         } else {
             Y_ABORT_UNLESS(pr.DataParts.empty() && pr.PartsCount == 0 && pr.Sectors.size() > 1);
             // Zero sector contains persistent buffer header, we skip it

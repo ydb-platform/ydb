@@ -543,14 +543,15 @@ namespace NKikimr::NDDisk {
                 std::vector<TPersistentBufferSectorInfo> Sectors;
                 std::map<ui64, TRope> DataParts;
                 ui32 PartsCount;
-
+                ui64 VChunkIndex;
+                
                 TRope JoinData(ui32 sectorSize);
             };
 
             std::map<ui64, TRecord> Records;
         };
 
-        std::map<std::tuple<ui64, ui32, ui64>, TPersistentBuffer> PersistentBuffers;
+        std::map<std::tuple<ui64, ui32>, TPersistentBuffer> PersistentBuffers;
         ui64 PersistentBufferInMemoryCacheSize = 0;
 
         ui64 CalcPersistentBufferInMemoryCacheSize();

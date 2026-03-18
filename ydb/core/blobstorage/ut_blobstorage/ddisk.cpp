@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                     << " lsn# " << lsn << "\n";
 
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvErasePersistentBuffer(
-                    PBCreds, {VChunkIndex, offsetInBytes, size}, lsn, PBCreds.Generation)),
+                    PBCreds, lsn, PBCreds.Generation)),
                     Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == status);
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
 
         double BatchErasePB() {
-            std::vector<std::tuple<NDDisk::TBlockSelector, ui64, ui32>> erases;
+            std::vector<std::tuple<ui64, ui32>> erases;
             std::set<ui64> lsns;
             for (ui64 lsn : PersistentBuffers | std::views::keys) {
                 lsns.emplace(lsn);
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 auto lsn = lsns.begin();
                 std::advance(lsn, RandomNumber(lsns.size()));
                 const auto& [offsetInBytes, size, buffer] = PersistentBuffers.at(*lsn);
-                erases.push_back({{VChunkIndex, offsetInBytes, size}, *lsn, PBCreds.Generation});
+                erases.push_back({*lsn, PBCreds.Generation});
                 lsns.erase(lsn);
             }
 

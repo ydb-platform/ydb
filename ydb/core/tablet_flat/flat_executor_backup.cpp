@@ -172,24 +172,27 @@ ui64 MaxBackupsLimit() {
 using TGenStep = std::pair<ui32, ui32>;
 
 std::optional<TGenStep> ParseBackupGenStep(const TString& name) {
-    auto parts = StringSplitter(name).Split('_').ToList<TString>();
+    auto parts = StringSplitter(name).Split('_').ToList<TStringBuf>();
     if (parts.size() < 4) {
         return std::nullopt;
     }
 
-    try {
-        const auto& genPart = parts[2];
-        const auto& stepPart = parts[3];
-        if (!genPart.StartsWith('g') || !stepPart.StartsWith('s')) {
-            return std::nullopt;
-        }
-        ui32 gen = FromString<ui32>(genPart.substr(1));
-        ui32 step = FromString<ui32>(stepPart.substr(1));
-        return std::make_pair(gen, step);
-    } catch (const std::exception& e) {
-        LOG_E("Failed to parse backup gen step from " << name << ": " << e.what());
+    if (parts[0] != "backup") {
         return std::nullopt;
     }
+
+    const auto genPart = parts[2];
+    const auto stepPart = parts[3];
+    if (!genPart.StartsWith('g') || !stepPart.StartsWith('s')) {
+        return std::nullopt;
+    }
+
+    ui32 gen, step;
+    if (!TryFromString(genPart.SubStr(1), gen) || !TryFromString(stepPart.SubStr(1), step)) {
+        return std::nullopt;
+    }
+
+    return std::make_pair(gen, step);
 }
 
 ui64 NewBackupChangelogMinBytes() {
@@ -285,12 +288,19 @@ public:
             TVector<std::pair<TGenStep, TFsPath>> backups;
             for (const auto& child : children) {
                 auto genStep = ParseBackupGenStep(child.Basename());
+
+                // not a backup directory
+                if (!genStep) {
+                    continue;
+                }
     
-                if (genStep && child.Child("snapshot").Exists()) {
+                // valid backup directory
+                if (child.Child("snapshot").Exists()) {
                     backups.emplace_back(*genStep, child);
                     continue;
                 }
     
+                // newer backup
                 if (genStep >= backupGenStep) {
                     continue;
                 }

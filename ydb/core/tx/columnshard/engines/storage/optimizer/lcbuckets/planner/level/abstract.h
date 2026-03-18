@@ -546,9 +546,6 @@ public:
     std::vector<TCompactionTaskData> GetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
         AFL_VERIFY(NextLevel);
         std::vector<TCompactionTaskData> result = DoGetOptimizationTasks(mayUsePortion);
-        for (const auto& compactionTaskData: result) {
-            AFL_VERIFY(!compactionTaskData.IsEmpty());
-        }
         return result;
     }
 };

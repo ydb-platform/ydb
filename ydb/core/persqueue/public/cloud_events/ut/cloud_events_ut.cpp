@@ -1,9 +1,12 @@
 #include <ydb/core/persqueue/public/cloud_events/actor.h>
+#include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+
+#include <google/protobuf/util/json_util.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
@@ -39,10 +42,46 @@ static TCloudEventInfo MakeCreateTopicEventInfo(const TString& topicPath = "/roo
     return info;
 }
 
-static NJson::TJsonValue ParseCloudEventJson(const TString& json) {
-    NJson::TJsonValue cloudEvent;
-    UNIT_ASSERT_C(NJson::ReadJsonTree(json, &cloudEvent), "Failed to parse cloud event json: " << json);
-    return cloudEvent;
+static NJson::TJsonValue ParseCloudEventProtobuf(const TString& data) {
+    using namespace yandex::cloud::events::ydb::topics;
+    for (const auto* msg : {static_cast<const google::protobuf::Message*>(static_cast<const CreateTopic*>(nullptr)),
+                           static_cast<const google::protobuf::Message*>(static_cast<const AlterTopic*>(nullptr)),
+                           static_cast<const google::protobuf::Message*>(static_cast<const DeleteTopic*>(nullptr))}) {
+        (void)msg;
+    }
+    CreateTopic createEv;
+    if (createEv.ParseFromString(data) && createEv.event_metadata().event_type().find("CreateTopic") != TString::npos) {
+        TString json;
+        google::protobuf::util::JsonPrintOptions opts;
+        opts.preserve_proto_field_names = true;
+        opts.always_print_primitive_fields = true;
+        Y_ABORT_UNLESS(google::protobuf::util::MessageToJsonString(createEv, &json, opts).ok());
+        NJson::TJsonValue out;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(json, &out), "MessageToJsonString ok but ReadJsonTree failed");
+        return out;
+    }
+    AlterTopic alterEv;
+    if (alterEv.ParseFromString(data) && alterEv.event_metadata().event_type().find("AlterTopic") != TString::npos) {
+        TString json;
+        google::protobuf::util::JsonPrintOptions opts;
+        opts.preserve_proto_field_names = true;
+        opts.always_print_primitive_fields = true;
+        Y_ABORT_UNLESS(google::protobuf::util::MessageToJsonString(alterEv, &json, opts).ok());
+        NJson::TJsonValue out;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(json, &out), "MessageToJsonString ok but ReadJsonTree failed");
+        return out;
+    }
+    DeleteTopic deleteEv;
+    UNIT_ASSERT_C(deleteEv.ParseFromString(data) && deleteEv.event_metadata().event_type().find("DeleteTopic") != TString::npos,
+        "Failed to parse as CreateTopic, AlterTopic, or DeleteTopic protobuf");
+    TString json;
+    google::protobuf::util::JsonPrintOptions opts;
+    opts.preserve_proto_field_names = true;
+    opts.always_print_primitive_fields = true;
+    Y_ABORT_UNLESS(google::protobuf::util::MessageToJsonString(deleteEv, &json, opts).ok());
+    NJson::TJsonValue out;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(json, &out), "MessageToJsonString ok but ReadJsonTree failed");
+    return out;
 }
 
 static void AssertCloudEventJsonStructure(const NJson::TJsonValue& cloudEvent, const TString& expectedEventType, const TString& expectedPath) {
@@ -116,7 +155,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         runtime.DispatchEvents();
 
         UNIT_ASSERT_VALUES_EQUAL(writerPtr->GetEvents().size(), 1u);
-        NJson::TJsonValue cloudEvent = ParseCloudEventJson(writerPtr->GetEvents().front());
+        NJson::TJsonValue cloudEvent = ParseCloudEventProtobuf(writerPtr->GetEvents().front());
         AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.CreateTopic", "/root/my/topic");
     }
 
@@ -139,9 +178,8 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         runtime.DispatchEvents();
 
         UNIT_ASSERT_VALUES_EQUAL(writerPtr->GetEvents().size(), 1u);
-        const auto& json = writerPtr->GetEvents().front();
-        UNIT_ASSERT_STRING_CONTAINS(json, "DeleteTopic");
-        UNIT_ASSERT_STRING_CONTAINS(json, "/root/my/deleted_topic");
+        NJson::TJsonValue cloudEvent = ParseCloudEventProtobuf(writerPtr->GetEvents().front());
+        AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.DeleteTopic", "/root/my/deleted_topic");
     }
 
     Y_UNIT_TEST(CloudEventJsonFormat) {
@@ -163,7 +201,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         runtime.DispatchEvents();
 
         UNIT_ASSERT_VALUES_EQUAL(writerPtr->GetEvents().size(), 1u);
-        NJson::TJsonValue cloudEvent = ParseCloudEventJson(writerPtr->GetEvents().front());
+        NJson::TJsonValue cloudEvent = ParseCloudEventProtobuf(writerPtr->GetEvents().front());
         AssertCloudEventJsonStructure(cloudEvent, "yandex.cloud.events.ydb.topics.CreateTopic", "/root/db/topic1");
 
         const auto* requestParams = cloudEvent.GetValueByPath("request_parameters");

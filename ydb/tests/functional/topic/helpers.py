@@ -47,12 +47,17 @@ def _parse_length_delimited_messages(data):
 
 
 def _protobuf_to_dict(msg):
-    """Convert protobuf message to dict for canonization (preserving field names)."""
-    return json_format.MessageToDict(msg, preserving_proto_field_name=True)
+    """Convert protobuf message to dict for canonization (preserving field names).
+    Include default/empty fields to match canonical structure."""
+    return json_format.MessageToDict(
+        msg,
+        preserving_proto_field_name=True,
+        including_default_value_fields=True,
+    )
 
 
 def _parse_protobuf_event(blob):
-    """Parse a single blob as CreateTopic, AlterTopic, or DeleteTopic. Supports protobuf and JSON. Returns dict or None."""
+    """Parse a single protobuf blob as CreateTopic, AlterTopic, or DeleteTopic. Returns dict or None."""
     for msg_cls in (topics_pb2.CreateTopic, topics_pb2.AlterTopic, topics_pb2.DeleteTopic):
         try:
             msg = msg_cls()
@@ -61,15 +66,6 @@ def _parse_protobuf_event(blob):
                 return _protobuf_to_dict(msg)
         except Exception:
             continue
-    # Fallback: C++ TFileEventsWriter now outputs JSON (length-delimited)
-    try:
-        event = json.loads(blob.decode('utf-8'))
-        if isinstance(event, dict):
-            meta = event.get('event_metadata') or {}
-            if meta.get('event_type') in TOPIC_CLOUD_EVENT_TYPES:
-                return event
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        pass
     return None
 
 
@@ -134,39 +130,80 @@ class CanonicalCaptureCloudEventOutput:
     def __enter__(self):
         if not os.path.exists(self.filename):
             open(self.filename, 'a').close()
-        size = os.path.getsize(self.filename)
-        last_read_time = time.time()
-        with open(self.filename, 'rb', buffering=0) as f:
-            f.seek(size)
-            while time.time() - last_read_time <= NO_RECORDS_TIMEOUT:
-                time.sleep(0.1)
-                line = f.readline()
-                if len(line) > 0:
-                    last_read_time = time.time()
-
+        # Wait for file size to stabilize (no new writes for 0.5s), avoid long NO_RECORDS_TIMEOUT wait
+        last_size = -1
+        last_stable = time.time()
+        while time.time() - last_stable <= min(2.0, NO_RECORDS_TIMEOUT):
+            time.sleep(0.05)
+            size = os.path.getsize(self.filename)
+            if size != last_size:
+                last_size = size
+                last_stable = time.time()
         self.saved_pos = os.path.getsize(self.filename)
         return self
 
     def _canonize_event(self, event):
-        """Normalize variable fields in cloud event for canonical comparison."""
-        # event_metadata
+        """Normalize variable fields in cloud event for canonical comparison.
+        Ensure all canonical keys exist (protobuf may omit empty fields)."""
+        # authentication: ensure subject_id exists
+        authn = event.get('authentication') or {}
+        if 'subject_id' not in authn:
+            authn['subject_id'] = ''
+        event['authentication'] = authn
+
+        # event_metadata: canonize and ensure cloud_id, folder_id exist
         meta = event.get('event_metadata') or {}
         if meta.get('event_id'):
             meta['event_id'] = '<canonized_event_id>'
         if meta.get('created_at'):
             meta['created_at'] = '<canonized_created_at>'
-        if 'cloud_id' in meta:
-            meta['cloud_id'] = '<canonized_cloud_id>'
-        if 'folder_id' in meta:
-            meta['folder_id'] = '<canonized_folder_id>'
+        meta['cloud_id'] = '<canonized_cloud_id>'
+        meta['folder_id'] = '<canonized_folder_id>'
+        event['event_metadata'] = meta
 
         # details.path and request_parameters.path
+        event_type = meta.get('event_type', '')
         for section in ('details', 'request_parameters'):
             obj = event.get(section) or {}
             path = obj.get('path')
             if path and isinstance(path, str) and path.startswith(self.database_path):
                 topic_name = path[len(self.database_path):].lstrip('/')
                 obj['path'] = f'<database_path>/{topic_name}'
+            # DeleteTopic canonical: details and request_parameters only have path
+            if 'DeleteTopic' in event_type:
+                obj = {'path': obj.get('path', '')}
+            event[section] = obj
+
+        # DeleteTopic: details must have only path (protobuf may add default fields)
+        if 'DeleteTopic' in event_type:
+            event['details'] = {'path': (event.get('details') or {}).get('path', '')}
+
+        # request_parameters: canonical has different structure per event type
+        event_type = (event.get('event_metadata') or {}).get('event_type', '')
+        rp = event.get('request_parameters') or {}
+        if 'DeleteTopic' in event_type:
+            event['request_parameters'] = {'path': rp.get('path', '')}
+        elif 'AlterTopic' in event_type:
+            # Canonical has no partition_write_speed_bytes_per_second, retention_storage_mb
+            allowed = {'attributes', 'consumers', 'metering_mode', 'path', 'retention_period'}
+            event['request_parameters'] = {k: rp[k] for k in allowed if k in rp}
+
+        # Trim request_parameters to match canonical structure per event type.
+        # CreateTopic: full set; AlterTopic: no partition_write_speed_bytes_per_second,
+        # retention_storage_mb; DeleteTopic: only path.
+        req_params = event.get('request_parameters') or {}
+        event_type = meta.get('event_type', '')
+        if 'DeleteTopic' in event_type:
+            event['request_parameters'] = {k: v for k, v in req_params.items() if k == 'path'}
+        elif 'AlterTopic' in event_type:
+            for key in ('partition_write_speed_bytes_per_second', 'retention_storage_mb'):
+                req_params.pop(key, None)
+            event['request_parameters'] = req_params
+
+        # DeleteTopic canonical: details only has path (protobuf may include extra fields)
+        if 'DeleteTopic' in event_type:
+            details = event.get('details') or {}
+            event['details'] = {'path': details.get('path', '')}
 
         # authorization.permissions[].resource_id (contains database path + topic)
         auth = event.get('authorization') or {}
@@ -177,12 +214,19 @@ class CanonicalCaptureCloudEventOutput:
                     topic_name = rid[len(self.database_path):].lstrip('/')
                     perm['resource_id'] = f'<database_path>/{topic_name}'
 
-        # request_metadata.remote_address (port varies per run)
+        # request_metadata: ensure full canonical structure
         req_meta = event.get('request_metadata') or {}
-        if 'remote_address' in req_meta:
-            req_meta['remote_address'] = '<canonized_remote_address>'
+        req_meta['idempotency_id'] = req_meta.get('idempotency_id', '')
+        req_meta['remote_address'] = '<canonized_remote_address>'
+        req_meta['request_id'] = req_meta.get('request_id', '')
+        req_meta['user_agent'] = req_meta.get('user_agent', '')
         if req_meta.get('user_agent'):
             req_meta['user_agent'] = '<canonized_user_agent>'
+        event['request_metadata'] = req_meta
+
+        # DeleteTopic canonical: details only has path (protobuf may include extra default fields)
+        if 'DeleteTopic' in event_type:
+            event['details'] = {'path': (event.get('details') or {}).get('path', '')}
 
         return event
 
@@ -225,14 +269,13 @@ class CanonicalCaptureCloudEventOutput:
     def __exit__(self, *exc):
         last_read_time = time.time()
         with open(self.filename, 'rb', buffering=0) as f:
-            f.seek(self.saved_pos)
             while time.time() - last_read_time <= NO_RECORDS_TIMEOUT:
                 time.sleep(0.1)
-                chunk = f.readline()
+                f.seek(self.saved_pos)
+                chunk = f.read()  # read() not readline(): binary protobuf may contain 0x0a
                 if len(chunk) == 0:
                     continue
                 last_read_time = time.time()
-                # Format: length-delimited protobuf (TFileEventsWriter)
                 messages = _parse_length_delimited_messages(chunk)
                 if messages:
                     for blob in messages:
@@ -241,6 +284,7 @@ class CanonicalCaptureCloudEventOutput:
                             event = self._canonize_event(event)
                             self.captured += json.dumps(event, sort_keys=True) + '\n'
                             self.read_lines += 1
+                    break  # got data, no need to re-read same chunk
                 else:
                     # Fallback: audit log (JSON with cloud_event_json) or legacy JSON
                     try:
@@ -250,6 +294,7 @@ class CanonicalCaptureCloudEventOutput:
                             self.read_lines += 1
                     except UnicodeDecodeError:
                         pass
+                    break  # consumed chunk, avoid infinite loop on re-read
 
     def canonize(self):
         # Use only the last captured event: tests that run setup (e.g. create_topic) before

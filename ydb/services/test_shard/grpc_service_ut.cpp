@@ -97,6 +97,7 @@ Y_UNIT_TEST_SUITE(TestShardGRPCService) {
     template <typename TCtx>
     void AdjustCtxForDB(TCtx &ctx) {
         ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
+        ctx.AddMetadata("x-ydb-database", "/Root");
     }
 
     void MakeDirectory(auto &channel, const TString &path) {

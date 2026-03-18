@@ -7,6 +7,7 @@
 #include "segment_manager.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
+#include <ydb/core/util/hp_timer_helpers.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -82,6 +83,7 @@ namespace NKikimr::NDDisk {
         static constexpr ui32 MaxInFlight = 256; // TODO: make configurable
 
         class TDirectIoOpBase;
+        class TDDiskIoOp;
         class TPersistentBufferPartIoOp;
         class TInternalSyncWriteOp;
 
@@ -90,24 +92,37 @@ namespace NKikimr::NDDisk {
         NPDisk::TDiskFormatPtr DiskFormat{nullptr, nullptr};
 
     private:
-        struct TInterfaceOpCounters {
+        struct TOpCountersBase {
             NMonitoring::TDynamicCounters::TCounterPtr Requests;
-            NMonitoring::TDynamicCounters::TCounterPtr ReplyOk;
-            NMonitoring::TDynamicCounters::TCounterPtr ReplyErr;
             NMonitoring::TDynamicCounters::TCounterPtr Bytes;
+            NMonitoring::TDynamicCounters::TCounterPtr BytesInFlight;
+            NMonitoring::THistogramPtr RequestSizeKiB;
+            NMonitoring::THistogramPtr ResponseTime;
 
             void Request(ui32 bytes = 0) {
                 ++*Requests;
                 if (bytes) {
                     *Bytes += bytes;
+                    *BytesInFlight += bytes;
+                    RequestSizeKiB->Collect(bytes >> 10);
                 }
             }
 
-            void Reply(bool ok, ui32 bytes = 0) {
-                ++*(ok ? ReplyOk : ReplyErr);
-                if (bytes) {
-                    *Bytes += bytes;
+            void Done(ui32 bytes, double durationMs = 0) {
+                *BytesInFlight -= bytes;
+                if (durationMs != 0) {
+                    ResponseTime->Collect(durationMs);
                 }
+            }
+        };
+
+        struct TInterfaceOpCounters : public TOpCountersBase {
+            NMonitoring::TDynamicCounters::TCounterPtr ReplyOk;
+            NMonitoring::TDynamicCounters::TCounterPtr ReplyErr;
+
+            void Reply(bool ok, ui32 bytes = 0, double durationMs = 0) {
+                ++*(ok ? ReplyOk : ReplyErr);
+                Done(bytes, durationMs);
             }
         };
 
@@ -136,11 +151,19 @@ namespace NKikimr::NDDisk {
             } Chunks;
 
             struct {
+                TOpCountersBase Write;
+                TOpCountersBase Read;
+
                 NMonitoring::TDynamicCounters::TCounterPtr ShortReads;
                 NMonitoring::TDynamicCounters::TCounterPtr ShortWrites;
+
                 NMonitoring::TDynamicCounters::TCounterPtr RegularUringCount;
                 NMonitoring::TDynamicCounters::TCounterPtr FallbackUringCount;
                 NMonitoring::TDynamicCounters::TCounterPtr FallbackPDiskCount;
+
+                NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
+                NMonitoring::TDynamicCounters::TCounterPtr RunningCount;
+                NMonitoring::THistogramPtr QueueTime;
             } DirectIO;
         };
 
@@ -387,7 +410,7 @@ namespace NKikimr::NDDisk {
 
             auto registerError = [&] {
                 if constexpr (!std::is_same_v<TCountersPtr, std::nullptr_t>) {
-                    counters->Request();
+                    counters->Request(0);
                     counters->Reply(false);
                 }
             };
@@ -446,7 +469,7 @@ namespace NKikimr::NDDisk {
 
         // Regular direct I/O.
         // Note: releases the op on success (returns true).
-        void DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
+        void DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true, bool isShort = false);
 
         // Do not call manually!
         bool DirectUringOpImpl(std::unique_ptr<TDirectIoOpBase>& op, bool flush = true);
@@ -580,6 +603,8 @@ namespace NKikimr::NDDisk {
 
             NKikimrBlobStorage::NDDisk::TReplyStatus::E Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
             std::optional<TString> ErrorMessage = std::nullopt;
+
+            NHPTimer::STime StartTs{};
         };
 
         std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;

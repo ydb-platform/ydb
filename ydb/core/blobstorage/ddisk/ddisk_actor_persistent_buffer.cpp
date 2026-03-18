@@ -3,6 +3,7 @@
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
+#include <ydb/core/util/hp_timer_helpers.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/util/pb.h>
 
@@ -295,7 +296,8 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(eraseCnt == 1);
         if (inflight.OperationCookies.empty()) {
             if (ev->Get()->IsErase) {
-                Counters.Interface.ErasePersistentBuffer.Reply(!inflight.ErrorMessage);
+                Counters.Interface.ErasePersistentBuffer.Reply(!inflight.ErrorMessage, inflight.Size,
+                    HPMilliSecondsFloat(HPNow() - inflight.StartTs));
 
                 auto replyEv = std::make_unique<TEvErasePersistentBufferResult>(
                     inflight.Status, inflight.ErrorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
@@ -305,7 +307,8 @@ namespace NKikimr::NDDisk {
                 }
                 TActivationContext::Send(h.release());
             } else {
-                Counters.Interface.WritePersistentBuffer.Reply(!inflight.ErrorMessage);
+                Counters.Interface.WritePersistentBuffer.Reply(!inflight.ErrorMessage, inflight.Size,
+                    HPMilliSecondsFloat(HPNow() - inflight.StartTs));
                 if (!inflight.ErrorMessage) {
                     auto& buffer = PersistentBuffers[{inflight.TabletId, inflight.Generation, inflight.VChunkIdx}];
                     auto [it, inserted] = buffer.Records.try_emplace(inflight.Lsn);
@@ -392,8 +395,10 @@ namespace NKikimr::NDDisk {
             .VChunkIdx = selector.VChunkIndex,
             .Lsn = lsn,
             .OffsetInBytes = selector.OffsetInBytes,
+            .Size = selector.Size,
             .Sectors = std::move(sectors),
             .Data = std::move(payload),
+            .StartTs = HPNow(),
         };
 
         // TODO: make uring to call flush just once
@@ -418,7 +423,7 @@ namespace NKikimr::NDDisk {
         const TBlockSelector selector(record.GetSelector());
         if (selector.Size > MaxSectorsPerBufferRecord * SectorSize) {
             Counters.Interface.WritePersistentBuffer.Request(selector.Size);
-            Counters.Interface.WritePersistentBuffer.Reply(false);
+            Counters.Interface.WritePersistentBuffer.Reply(false, selector.Size);
             SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                 TStringBuilder() << "persistent buffer write limit "
@@ -448,7 +453,7 @@ namespace NKikimr::NDDisk {
         const ui64 lsn = record.GetLsn();
         const ui32 generation = record.GetGeneration();
 
-        Counters.Interface.ReadPersistentBuffer.Request();
+        Counters.Interface.ReadPersistentBuffer.Request(selector.Size);
 
         auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.ReadPersistentBuffer",
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
@@ -460,7 +465,7 @@ namespace NKikimr::NDDisk {
 
         auto it = PersistentBuffers.find({creds.TabletId, generation, selector.VChunkIndex});
         if (it == PersistentBuffers.end()) {
-            Counters.Interface.ReadPersistentBuffer.Reply(false);
+            Counters.Interface.ReadPersistentBuffer.Reply(false, selector.Size);
             span.End();
             SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
@@ -470,7 +475,7 @@ namespace NKikimr::NDDisk {
 
         auto jt = buffer.Records.find(lsn);
         if (jt == buffer.Records.end()) {
-            Counters.Interface.ReadPersistentBuffer.Reply(false);
+            Counters.Interface.ReadPersistentBuffer.Reply(false, selector.Size);
             span.End();
             SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
@@ -479,7 +484,7 @@ namespace NKikimr::NDDisk {
         TPersistentBuffer::TRecord& pr = jt->second;
         if (pr.OffsetInBytes > selector.OffsetInBytes ||
             pr.OffsetInBytes + pr.Size < selector.Size + selector.OffsetInBytes) {
-            Counters.Interface.ReadPersistentBuffer.Reply(false);
+            Counters.Interface.ReadPersistentBuffer.Reply(false, selector.Size);
             span.End();
             SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST, "Selector range is out of record bounds"));
@@ -499,6 +504,7 @@ namespace NKikimr::NDDisk {
             .Lsn = lsn,
             .OffsetInBytes = selector.OffsetInBytes,
             .Size = selector.Size,
+            .StartTs = HPNow(),
         });
         Y_ABORT_UNLESS(inserted);
 
@@ -544,7 +550,8 @@ namespace NKikimr::NDDisk {
         TActivationContext::Send(h.release());
 
         const bool ok = (inflight.Status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-        Counters.Interface.ReadPersistentBuffer.Reply(ok, data.size());
+        Counters.Interface.ReadPersistentBuffer.Reply(ok, inflight.Size,
+            HPMilliSecondsFloat(HPNow() - inflight.StartTs));
         inflight.Span.End();
         PersistentBufferDiskOperationInflight.erase(inflightIt);
     }
@@ -603,7 +610,7 @@ namespace NKikimr::NDDisk {
 
         const auto& record = ev->Get()->Record;
 
-        Counters.Interface.ErasePersistentBuffer.Request();
+        Counters.Interface.ErasePersistentBuffer.Request(0);
 
         auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.BatchErasePersistentBuffer",
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem()));
@@ -630,7 +637,8 @@ namespace NKikimr::NDDisk {
             .Sender = ev->Sender,
             .Cookie = ev->Cookie,
             .Session = ev->InterconnectSession,
-            .Span = std::move(span)
+            .Span = std::move(span),
+            .StartTs = HPNow(),
         });
         Y_ABORT_UNLESS(inserted);
 
@@ -689,7 +697,7 @@ namespace NKikimr::NDDisk {
         const ui64 lsn = record.GetLsn();
         const ui32 generation = record.GetGeneration();
 
-        Counters.Interface.ErasePersistentBuffer.Request();
+        Counters.Interface.ErasePersistentBuffer.Request(selector.Size);
 
         auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.ErasePersistentBuffer",
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
@@ -704,7 +712,7 @@ namespace NKikimr::NDDisk {
 
         const auto it = PersistentBuffers.find({creds.TabletId, generation, selector.VChunkIndex});
         if (it == PersistentBuffers.end()) {
-            Counters.Interface.ErasePersistentBuffer.Reply(false);
+            Counters.Interface.ErasePersistentBuffer.Reply(false, selector.Size);
             span.End();
             SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
@@ -714,7 +722,7 @@ namespace NKikimr::NDDisk {
 
         const auto jt = buffer.Records.find(lsn);
         if (jt == buffer.Records.end()) {
-            Counters.Interface.ErasePersistentBuffer.Reply(false);
+            Counters.Interface.ErasePersistentBuffer.Reply(false, selector.Size);
             span.End();
             SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
@@ -736,7 +744,8 @@ namespace NKikimr::NDDisk {
             .Sender = ev->Sender,
             .Cookie = ev->Cookie,
             .Session = ev->InterconnectSession,
-            .Span = std::move(span)
+            .Span = std::move(span),
+            .StartTs = HPNow(),
         });
         Y_ABORT_UNLESS(inserted);
 
@@ -771,7 +780,7 @@ namespace NKikimr::NDDisk {
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
 
-        Counters.Interface.ListPersistentBuffer.Request();
+        Counters.Interface.ListPersistentBuffer.Request(0);
 
         auto reply = std::make_unique<TEvListPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
         auto& rr = reply->Record;
@@ -790,7 +799,7 @@ namespace NKikimr::NDDisk {
             }
         }
 
-        Counters.Interface.ListPersistentBuffer.Reply(true, reply->CalculateSerializedSizeCached());
+        Counters.Interface.ListPersistentBuffer.Reply(true, 0);
         SendReply(*ev, std::move(reply));
     }
 

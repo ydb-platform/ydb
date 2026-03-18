@@ -59,8 +59,18 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 tabletConfig->SetYdbDatabasePath(parameters.databasePath);
                 tabletConfig->SetFederationAccount(parameters.account);
             } else {
-                tabletConfig->SetTopicName("rt3.dc1--asdfgs--topic");
-                tabletConfig->SetTopicPath("/Root/PQ/rt3.dc1--asdfgs--topic");
+                const TString account = parameters.account;
+                const TString dbRoot = runtime.GetAppData().PQConfig.GetRoot().empty()
+                    ? TString("/Root/LbCommunal")
+                    : runtime.GetAppData().PQConfig.GetRoot();
+                const TString dbPath = parameters.databasePath.empty()
+                    ? TStringBuilder() << dbRoot << "/" << account
+                    : parameters.databasePath;
+
+                tabletConfig->SetTopicName("topic");
+                tabletConfig->SetTopicPath(dbPath + "/topic");
+                tabletConfig->SetFederationAccount(account);
+                tabletConfig->SetYdbDatabasePath(dbPath);
             }
             tabletConfig->SetTopic("topic");
             tabletConfig->SetVersion(version);
@@ -261,8 +271,14 @@ void PQBalancerPrepare(const TBalancerParams& params) {
             request->Record.SetTxId(12345);
             request->Record.SetPathId(1);
             request->Record.SetVersion(version);
-            request->Record.SetTopicName(params.Topic);
-            request->Record.SetPath("/Root/" + params.Topic);
+            const TString topicPath = params.Topic.StartsWith("/")
+                ? params.Topic
+                : TStringBuilder() << "/Root/" << params.Topic;
+
+            const size_t pos = topicPath.find_last_of('/');
+            const TString topicName = (pos == TString::npos) ? topicPath : topicPath.substr(pos + 1);
+            request->Record.SetTopicName(topicName);
+            request->Record.SetPath(topicPath);
             request->Record.SetSchemeShardId(params.SsId);
             request->Record.MutableTabletConfig()->AddConsumers()->SetName("client");
             for (const auto& c : params.XtraConsumers) {

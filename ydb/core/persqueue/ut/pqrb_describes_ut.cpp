@@ -8,17 +8,33 @@ using namespace NPersQueue;
 Y_UNIT_TEST_SUITE(TPQRBDescribes) {
 
     Y_UNIT_TEST(PartitionLocations) {
+        const TString DbRoot = "/Root/LbCommunal";
+        const TString Account = "account";
+        const TString DbPath = DbRoot + "/" + Account;
+        const TString TopicShortName = "topic";
+        const TString TopicName = Account + "/" + TopicShortName;
+        const TString TopicPath = DbPath + "/" + TopicShortName;
 
-        NPersQueue::TTestServer server;
-        TString topicName = "rt3.dc1--topic";
-        TString topicPath = TString("/Root/PQ/") + topicName;
+        auto serverSettings = NPersQueueTests::PQSettings(0).SetDomainName("Root").SetNodeCount(1);
+        serverSettings.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(DbRoot);
+        serverSettings.PQConfig.SetTestDatabaseRoot(DbRoot);
+        serverSettings.PQConfig.SetTopicsAreFirstClassCitizen(false);
+
+        NPersQueue::TTestServer server(serverSettings);
+
         ui32 totalPartitions = 5;
-        server.AnnoyingClient->CreateTopic(topicName, totalPartitions);
+
+        server.AnnoyingClient->MkDir("/Root", "LbCommunal");
+        server.AnnoyingClient->MkDir("/Root/LbCommunal", "account");
+        server.AnnoyingClient->CreateTopicNoLegacy(
+            TopicPath, totalPartitions, true, true, {}, {}, Account
+        );
+        server.WaitInit(TopicName);
 
         auto* runtime = server.CleverServer->GetRuntime();
         const auto edge = runtime->AllocateEdgeActor();
 
-        auto pathDescr = server.AnnoyingClient->Describe(runtime, topicPath).GetPathDescription().GetPersQueueGroup();
+        auto pathDescr = server.AnnoyingClient->Describe(runtime, TopicPath).GetPathDescription().GetPersQueueGroup();
         ui64 balancerTabletId = pathDescr.GetBalancerTabletID();
 
         auto checkResponse = [&](TEvPersQueue::TEvGetPartitionsLocation* request, bool ok, ui64 partitionsCount = 0) {
@@ -41,7 +57,8 @@ Y_UNIT_TEST_SUITE(TPQRBDescribes) {
             }
             return ev;
         };
-        auto pollBalancer = [&] (ui64 retriesCount) {
+
+        auto pollBalancer = [&](ui64 retriesCount) {
             auto waitTime = TDuration::MilliSeconds(500);
             while (retriesCount) {
                 auto* req = new TEvPersQueue::TEvGetPartitionsLocation();
@@ -56,8 +73,8 @@ Y_UNIT_TEST_SUITE(TPQRBDescribes) {
                 }
             }
             UNIT_FAIL("Could not get positive response from balancer");
-
         };
+
         pollBalancer(5);
         checkResponse(new TEvPersQueue::TEvGetPartitionsLocation(), true, totalPartitions);
         {
@@ -71,7 +88,6 @@ Y_UNIT_TEST_SUITE(TPQRBDescribes) {
             req->Record.AddPartitions(50);
             checkResponse(req, false);
         }
-
     }
 };
 

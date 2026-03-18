@@ -6,8 +6,13 @@
 #include "helpers/writer.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
@@ -156,6 +161,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute(GetDictionarySettings());
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST(CreateWithEncodingDictionary) {
         auto settings = TKikimrSettings()
             .SetEnableCsDictionaryEncoding(true)
@@ -293,6 +299,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
 <<<<<<< HEAD
 =======
 
+=======
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     TString scriptGroupBySomeDictionary = R"(
         STOP_COMPACTION
         ------
@@ -300,16 +308,30 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
             otherPk Uint64 NOT NULL,
+<<<<<<< HEAD
             message Utf8 ENCODING(DICT),
+=======
+            message Utf8,
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
             other Uint64,
             PRIMARY KEY (pk, otherPk)
         )
         PARTITION BY HASH(pk, otherPk)
+<<<<<<< HEAD
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+<<<<<<< HEAD
+=======
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
             (1u, 1u, 'a', 4u),
@@ -395,7 +417,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: 6
     )";
     Y_UNIT_TEST(GroupBySomeDictionary) {
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionary)).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionary)).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     TString scriptGroupBySomeDictionaryWithCompaction = R"(
@@ -405,16 +431,30 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
             otherPk Uint64 NOT NULL,
+<<<<<<< HEAD
             message Utf8 ENCODING(DICT),
+=======
+            message Utf8,
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
             other Uint64,
             PRIMARY KEY (pk, otherPk)
         )
         PARTITION BY HASH(pk, otherPk)
+<<<<<<< HEAD
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+<<<<<<< HEAD
+=======
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
             (1u, 1u, 'a', 4u),
@@ -512,7 +552,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: 6
     )";
     Y_UNIT_TEST(GroupBySomeDictionaryWithCompaction) {
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionaryWithCompaction)).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionaryWithCompaction)).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     // TODO: fix bug that return "" here (and 2 more tests after):
@@ -528,16 +572,30 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
             otherPk Uint64 NOT NULL,
+<<<<<<< HEAD
             message Utf8 ENCODING(DICT),
+=======
+            message Utf8,
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
             other Uint64,
             PRIMARY KEY (pk, otherPk)
         )
         PARTITION BY HASH(pk, otherPk)
+<<<<<<< HEAD
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+<<<<<<< HEAD
+=======
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
             (1u, 1u, 'a', 4u),
@@ -626,7 +684,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: 6
     )";
     Y_UNIT_TEST(GroupBySomeDictionaryWithNulls) {
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionaryWithNulls)).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionaryWithNulls)).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     TString scriptGroupBySomeDoubleNullInsert = R"(
@@ -635,15 +697,29 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
+<<<<<<< HEAD
             message Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+            message Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+<<<<<<< HEAD
+=======
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
             (1u, NULL);
@@ -683,6 +759,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: 2
     )";
     Y_UNIT_TEST(GroupBySomeDictionaryDoubleNullInsert) {
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDoubleNullInsert)).Execute(GetDictionarySettings());
     }
 
@@ -748,6 +825,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     )";
     Y_UNIT_TEST(AddDictionaryColumnThenUpsertOtherPkAndCompact) {
         Variator::ToExecutor(Variator::SingleScript(scriptAddDictColumnThenUpsertOtherPk)).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDoubleNullInsert)).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     TString scriptDeleteOneDictionaryValue = R"(
@@ -756,15 +836,29 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
+<<<<<<< HEAD
             message Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+            message Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+<<<<<<< HEAD
+=======
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
             (1u, 'a'),
@@ -802,6 +896,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: 1
     )";
     Y_UNIT_TEST(DeleteDictionaryOneDictionaryValue) {
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(scriptDeleteOneDictionaryValue)).Execute(GetDictionarySettings());
     }
 
@@ -858,6 +953,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     )";
     Y_UNIT_TEST(DeleteDictionaryOneFullDictionaryValue) {
         Variator::ToExecutor(Variator::SingleScript(scriptDeleteOneFullDictionaryValue)).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(scriptDeleteOneDictionaryValue)).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     TString scriptDeleteOneNullDictionaryValue = R"(
@@ -866,15 +964,29 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
+<<<<<<< HEAD
             message Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+            message Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+<<<<<<< HEAD
+=======
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
             (1u, 'a'),
@@ -908,7 +1020,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: 1
     )";
     Y_UNIT_TEST(DeleteDictionaryOneNullDictionaryValue) {
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(scriptDeleteOneNullDictionaryValue)).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(scriptDeleteOneNullDictionaryValue)).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     TString scriptDeleteAllDictionaryValues = R"(
@@ -917,15 +1033,29 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
+<<<<<<< HEAD
             message Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+            message Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+<<<<<<< HEAD
+=======
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
             (1u, 'a'),
@@ -959,7 +1089,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: 0
     )";
     Y_UNIT_TEST(DeleteDictionaryAllDictionaryValues) {
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(scriptDeleteAllDictionaryValues)).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(scriptDeleteAllDictionaryValues)).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     TString scriptDictCompactionAndActualization = R"(
@@ -972,7 +1106,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
+<<<<<<< HEAD
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels":[{"class_name":"Zero","portions_count_limit":1048576,"expected_blobs_size":1048576,"portions_count_available":1,"portions_live_duration":"1s"},{"class_name":"OneLayer","expected_portion_size":2097152,"size_limit_guarantee":134217728}]}`)
@@ -1001,9 +1139,15 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             cycleBlocks += dataBlock;
             cycleBlocks += readCheck;
             if (i % 2 == 0) {
+<<<<<<< HEAD
                 cycleBlocks += "SCHEMA:\nALTER TABLE `/Root/ColumnTable` ALTER COLUMN `field` SET ENCODING(DICT);\n------\n";
             } else {
                 cycleBlocks += "SCHEMA:\nALTER TABLE `/Root/ColumnTable` ALTER COLUMN `field` SET ENCODING(OFF);\n------\n";
+=======
+                cycleBlocks += "SCHEMA:\nALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)\n------\n";
+            } else {
+                cycleBlocks += "SCHEMA:\nALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`)\n------\n";
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
             }
             cycleBlocks += readCheck;
             cycleBlocks += dataBlock;
@@ -1015,7 +1159,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             cycleBlocks += "ONE_ACTUALIZATION\n------\n";
             cycleBlocks += readCheck;
         }
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(Sprintf(scriptDictCompactionAndActualization.c_str(), cycleBlocks.c_str()))).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(scriptDictCompactionAndActualization.c_str(), cycleBlocks.c_str()))).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     // Multiple inserts and compactions: 150+150, compact; 300+150, compact; 300+300, compact. Verify correct data after each step (incl. uint16 dictionary path).
@@ -1026,11 +1174,19 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
+<<<<<<< HEAD
             field Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels":[{"class_name":"Zero","portions_count_limit":1048576,"expected_blobs_size":1048576,"portions_count_available":1,"portions_live_duration":"1s"},{"class_name":"OneLayer","expected_portion_size":2097152,"size_limit_guarantee":134217728}]}`)
@@ -1038,6 +1194,12 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+<<<<<<< HEAD
+=======
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         )";
         const std::vector<std::pair<ui32, ui32>> steps = {
             {150, 0},    // 150 rows, pk start 0
@@ -1081,7 +1243,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             injection += isLast ? "\n" : (delimiter + "\n");
             ++expectedIdx;
         }
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(scriptPrefix + injection)).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(scriptPrefix + injection)).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     // Corner cases: 254+254, 254+255, 255+255 (no nulls) then same pattern with nulls. Compaction merges same/different portion sizes; every step must succeed.
@@ -1092,11 +1258,19 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
+<<<<<<< HEAD
             field Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels":[{"class_name":"Zero","portions_count_limit":1048576,"expected_blobs_size":1048576,"portions_count_available":1,"portions_live_duration":"1s"},{"class_name":"OneLayer","expected_portion_size":2097152,"size_limit_guarantee":134217728}]}`)
@@ -1104,6 +1278,12 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+<<<<<<< HEAD
+=======
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         )";
         NArrow::NConstruction::TStringPoolFiller sPool(260, 52);
         const TString delimiter = "------\n";
@@ -1152,7 +1332,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             }
         }
         injection += "STOP_COMPACTION\n";
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(scriptPrefix + injection)).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(scriptPrefix + injection)).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     // ChunkDetails in .sys/primary_index_stats for dictionary column: check deterministic output for 1 row.
@@ -1162,11 +1346,22 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
+<<<<<<< HEAD
             field Utf8 ENCODING(DICT) COMPRESSION(algorithm=off),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+            field Utf8 COMPRESSION(algorithm=off),
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`)
@@ -1180,7 +1375,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: [[["{\"positions_blob_size\":152,\"dictionary_blob_size\":176}"]]]
     )";
     Y_UNIT_TEST(ChunkDetailsDictionary) {
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsDictionary)).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsDictionary)).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     // One table with a column per supported (comparable) type; set DICTIONARY on each, insert one row, read back.
@@ -1191,6 +1390,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
+<<<<<<< HEAD
             c_bool Bool ENCODING(DICT),
             c_int8 Int8 ENCODING(DICT),
             c_int16 Int16 ENCODING(DICT),
@@ -1211,11 +1411,34 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         )
         PARTITION BY HASH(pk)
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+            c_bool Bool,
+            c_int8 Int8,
+            c_int16 Int16,
+            c_int32 Int32,
+            c_int64 Int64,
+            c_uint8 Uint8,
+            c_uint16 Uint16,
+            c_uint32 Uint32,
+            c_uint64 Uint64,
+            c_float Float,
+            c_double Double,
+            c_utf8 Utf8,
+            c_string String,
+            c_date Date,
+            c_datetime Datetime,
+            c_timestamp Timestamp,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
         SCHEMA:
+<<<<<<< HEAD
         ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_bool` SET ENCODING(DICT)
         ------
         SCHEMA:
@@ -1262,6 +1485,54 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_timestamp` SET ENCODING(DICT)
+=======
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_bool, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int8, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int16, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int32, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int64, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint8, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint16, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint32, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint64, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_float, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_double, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_utf8, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_string, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_date, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_datetime, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_timestamp, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, c_bool, c_int8, c_int16, c_int32, c_int64, c_uint8, c_uint16, c_uint32, c_uint64, c_float, c_double, c_utf8, c_string, c_date, c_datetime, c_timestamp) VALUES
@@ -1271,7 +1542,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         EXPECTED: [[1u;[%true];[1];[2];[3];[4];[5u];[6u];[7u];[8u];[1.];[2.];["u"];["s"];[18262u];[1577836800u];[1577836800000000u]]]
     )";
     Y_UNIT_TEST(DictionarySupportedTypes) {
+<<<<<<< HEAD
         Variator::ToExecutor(Variator::SingleScript(scriptDictionarySupportedTypes)).Execute(GetDictionarySettings());
+=======
+        Variator::ToExecutor(Variator::SingleScript(scriptDictionarySupportedTypes)).Execute();
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
     }
 
     // Dictionary cannot be applied to non-comparable types (Json, JsonDocument, Yson). ALTER must fail for each.
@@ -1292,17 +1567,28 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
                 PRIMARY KEY (pk)
             )
             PARTITION BY HASH(pk)
+<<<<<<< HEAD
             WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+=======
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
         )";
         auto createResult = session.ExecuteSchemeQuery(createTable).GetValueSync();
         UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
         for (const TString& col : {"jcol", "jdcol", "ycol"}) {
+<<<<<<< HEAD
             TString alterQuery = "ALTER TABLE `/Root/UnsupportedTypesTable` ALTER COLUMN `" + col + "` SET ENCODING(DICT)";
+=======
+            TString alterQuery = "ALTER OBJECT `/Root/UnsupportedTypesTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=" + col + ", `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)";
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_C(!alterResult.IsSuccess(), TString("ALTER COLUMN DICTIONARY on ") + col + " must fail");
         }
     }
+<<<<<<< HEAD
 >>>>>>> b8744e7d637 (Add Dictionary Encoding support (#34784))
+=======
+>>>>>>> 7602b92518c (Add new dictionary layout (#35456))
 }
 
 }   // namespace NKikimr::NKqp

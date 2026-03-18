@@ -219,7 +219,6 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-
         TTypeInfoHelper helper;
         TSides<std::unique_ptr<IBlockLayoutConverter>> layouts;
         const auto& userTypes = Meta_->UserTypes;
@@ -231,7 +230,8 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
         }
         const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->Settings.LeftIsBuild()) ? userTypes.Probe : userTypes.Build;
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_, std::move(layouts), Meta_.get(), userNullTypes);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_,
+            std::move(layouts), Meta_.get(), userNullTypes);
     }
 
   private:
@@ -277,8 +277,11 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             if (Finished_) {
                 return NYql::NUdf::EFetchStatus::Finish;
             }
-            while (Output_.SizeTuples() < Threshold_) {
-                auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn());
+            auto outputIsFull = [&]() {
+                return Output_.SizeTuples() >= MaxOutputRows_;
+            };
+            while (!outputIsFull()) {
+                auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn(), outputIsFull);
                 switch (res) {
                 case EFetchResult::Finish: {
                     if (Output_.SizeTuples() == 0) {
@@ -302,7 +305,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         JoinType Join_;
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Kind> Output_;
-        const int Threshold_ = 10000;
+        static constexpr i64 MaxOutputRows_ = 10000;
         bool Finished_ = false;
     };
 

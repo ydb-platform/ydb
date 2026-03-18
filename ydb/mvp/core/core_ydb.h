@@ -355,7 +355,7 @@ struct TYdbLocation {
         return name;
     }
 
-    TString GetDatabaseName(const TRequest& request) const;
+    TString BuildMetaDatabasePath(const TRequest& request, TStringBuf databaseParameterName = "database") const;
     TString GetServerlessProxyUrl(const TString& database) const;
 
 private:

@@ -18,6 +18,7 @@ RECURSE(
     large_serializable
     limits
     minidumps
+    mvp/meta_support_links
     nbs
     postgresql
     query_cache

@@ -28,14 +28,9 @@ public:
         : SourceConfig(std::move(config))
     {}
 
-    const TSupportLinkEntryConfig& Config() const override {
-        return SourceConfig;
-    }
-
-    TResolveOutput Resolve(const TResolveInput&) const override {
+    TResolveOutput Resolve(const TLinkResolveInput&, const TResolveContext&) const override {
         TResolveOutput out;
         out.Name = SourceConfig.GetSource();
-        out.Ready = true;
         out.Links = MakeMockLinks();
         return out;
     }
@@ -46,13 +41,13 @@ private:
 
 class TMockReplyActor final : public NActors::TActorBootstrapped<TMockReplyActor> {
 public:
-    TMockReplyActor(NActors::TActorId parent, size_t place)
-        : Parent(parent)
+    TMockReplyActor(NActors::TActorId owner, size_t place)
+        : Owner(owner)
         , Place(place)
     {}
 
     void Bootstrap() {
-        Send(Parent, new NSupportLinks::TEvPrivate::TEvSourceResponse(
+        Send(Owner, new NSupportLinks::TEvPrivate::TEvSourceResponse(
             Place,
             MakeMockLinks(),
             {}));
@@ -60,7 +55,7 @@ public:
     }
 
 private:
-    NActors::TActorId Parent;
+    NActors::TActorId Owner;
     size_t Place = 0;
 };
 
@@ -70,17 +65,12 @@ public:
         : SourceConfig(std::move(config))
     {}
 
-    const TSupportLinkEntryConfig& Config() const override {
-        return SourceConfig;
-    }
-
-    TResolveOutput Resolve(const TResolveInput& input) const override {
+    TResolveOutput Resolve(const TLinkResolveInput&, const TResolveContext& context) const override {
         TResolveOutput out;
         out.Name = SourceConfig.GetSource();
-        out.Ready = false;
         auto actorId = NActors::TActivationContext::Register(
-            new TMockReplyActor(input.Parent, input.Place),
-            input.Parent);
+            new TMockReplyActor(context.Owner, context.Place),
+            context.Owner);
         out.Actor = actorId;
         return out;
     }
@@ -95,11 +85,6 @@ inline std::shared_ptr<ILinkSource> MakeMockLinkSourceSync(TSupportLinkEntryConf
 
 inline std::shared_ptr<ILinkSource> MakeMockLinkSourceAsync(TSupportLinkEntryConfig config) {
     return std::make_shared<TMockLinkSourceAsync>(std::move(config));
-}
-
-inline void RegisterMockLinkSources() {
-    RegisterLinkSource("mock/sourceSync", &MakeMockLinkSourceSync);
-    RegisterLinkSource("mock/sourceAsync", &MakeMockLinkSourceAsync);
 }
 
 } // namespace NMVP::NTest

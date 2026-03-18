@@ -4,6 +4,8 @@
 #include <ydb/mvp/core/core_ydbc.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/utils.h>
+#include <ydb/mvp/meta/support_links/events.h>
+#include <ydb/mvp/meta/support_links/grafana_dashboard_source.h>
 #include <ydb/mvp/meta/support_links/source.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
@@ -16,10 +18,13 @@
 #include <ydb/library/actors/protos/services_common.pb.h>
 
 #include <google/protobuf/text_format.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <yaml-cpp/yaml.h>
 
 #include <util/datetime/base.h>
+#include <util/string/cast.h>
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/system/hostname.h>
@@ -28,6 +33,249 @@
 using namespace NMVP;
 
 NMVP::TMVP* NMVP::InstanceMVP;
+
+namespace {
+
+class TGrafanaDashboardSearchResolveActor final : public NActors::TActorBootstrapped<TGrafanaDashboardSearchResolveActor> {
+public:
+    TGrafanaDashboardSearchResolveActor(
+        NMVP::TSupportLinkEntryConfig config,
+        TString grafanaEndpoint,
+        TString grafanaTokenName,
+        NActors::TActorId owner,
+        NActors::TActorId httpProxyId,
+        size_t place,
+        THashMap<TString, TString> clusterColumns,
+        NHttp::TUrlParameters urlParameters)
+        : Config(std::move(config))
+        , GrafanaEndpoint(std::move(grafanaEndpoint))
+        , GrafanaTokenName(std::move(grafanaTokenName))
+        , Owner(owner)
+        , HttpProxyId(httpProxyId)
+        , Place(place)
+        , ClusterColumns(std::move(clusterColumns))
+        , UrlParameters(std::move(urlParameters))
+    {}
+
+    void Bootstrap() {
+        const TString authHeaderValue = FindAuthorizationHeaderValue();
+        if (authHeaderValue.empty()) {
+            ReplyAndDie();
+            return;
+        }
+
+        NHttp::THttpOutgoingRequestPtr request = NHttp::THttpOutgoingRequest::CreateRequestGet(BuildSearchUrl());
+        request->Set("Authorization", authHeaderValue);
+
+        auto event = MakeHolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(request);
+        event->Timeout = TDuration::Seconds(30);
+        Send(HttpProxyId, event.Release());
+
+        Become(&TGrafanaDashboardSearchResolveActor::StateWork, TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
+        }
+    }
+
+private:
+    static bool IsAbsoluteUrl(const TString& url) {
+        return url.StartsWith("http://") || url.StartsWith("https://");
+    }
+
+    static TString JoinUrl(const TString& endpoint, const TString& path) {
+        const bool endpointHasSlash = endpoint.EndsWith('/');
+        const bool pathHasSlash = path.StartsWith('/');
+        if (endpointHasSlash && pathHasSlash) {
+            return endpoint.substr(0, endpoint.size() - 1) + path;
+        }
+        if (!endpointHasSlash && !pathHasSlash) {
+            return endpoint + "/" + path;
+        }
+        return endpoint + path;
+    }
+
+    static TString AppendQueryParam(const TString& url, TStringBuf key, TStringBuf value) {
+        TStringBuilder result;
+        result << url << (url.Contains('?') ? '&' : '?') << key << "=" << CGIEscapeRet(value);
+        return result;
+    }
+
+    TString ResolveGrafanaUrl(const TString& configuredUrl) const {
+        if (IsAbsoluteUrl(configuredUrl)) {
+            return configuredUrl;
+        }
+        return JoinUrl(GrafanaEndpoint, configuredUrl);
+    }
+
+    TString BuildSearchUrl() const {
+        TString url = Config.GetUrl().empty() ? TString("/api/search") : Config.GetUrl();
+        url = ResolveGrafanaUrl(url);
+        if (Config.HasTag() && Config.GetTag()) {
+            url = AppendQueryParam(url, "tag", Config.GetTag());
+        }
+        if (Config.HasFolder() && Config.GetFolder()) {
+            url = AppendQueryParam(url, "folderUIDs", Config.GetFolder());
+        }
+        return url;
+    }
+
+    TString FindAuthorizationHeaderValue() {
+        if (GrafanaTokenName.empty()) {
+            Errors.emplace_back(NMVP::NSupportLinks::TSupportError{
+                .Source = Config.GetSource(),
+                .Message = TStringBuilder() << "meta.meta_database_token_name is required for source=" << Config.GetSource(),
+            });
+            return {};
+        }
+
+        auto* appData = NMVP::MVPAppData();
+        if (!appData || !appData->Tokenator) {
+            Errors.emplace_back(NMVP::NSupportLinks::TSupportError{
+                .Source = Config.GetSource(),
+                .Message = "Tokenator is unavailable",
+            });
+            return {};
+        }
+
+        const TString authHeaderValue = appData->Tokenator->GetToken(GrafanaTokenName);
+        if (!authHeaderValue.empty()) {
+            return authHeaderValue;
+        }
+
+        Errors.emplace_back(NMVP::NSupportLinks::TSupportError{
+            .Source = Config.GetSource(),
+            .Message = TStringBuilder() << "IAM token '" << GrafanaTokenName << "' is not available from tokenator",
+        });
+        return {};
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
+        if (!event->Get()->Error.empty() || !event->Get()->Response || event->Get()->Response->Status != "200") {
+            NMVP::NSupportLinks::TSupportError error;
+            error.Source = Config.GetSource();
+            if (!event->Get()->Error.empty()) {
+                error.Message = event->Get()->Error;
+            } else if (event->Get()->Response) {
+                ui32 status = 0;
+                if (TryFromString<ui32>(event->Get()->Response->Status, status)) {
+                    error.Status = status;
+                }
+                error.Reason = TString(event->Get()->Response->Message);
+                error.Message = TStringBuilder() << event->Get()->Response->Status << " " << event->Get()->Response->Message;
+            } else {
+                error.Message = "Unknown Grafana request error";
+            }
+            Errors.push_back(std::move(error));
+            ReplyAndDie();
+            return;
+        }
+
+        NJson::TJsonValue dashboardsJson;
+        NJson::TJsonReaderConfig jsonReaderConfig;
+        if (!NJson::ReadJsonTree(event->Get()->Response->Body, &jsonReaderConfig, &dashboardsJson)
+            || dashboardsJson.GetType() != NJson::JSON_ARRAY)
+        {
+            Errors.emplace_back(NMVP::NSupportLinks::TSupportError{
+                .Source = Config.GetSource(),
+                .Message = "Invalid JSON from Grafana Search API",
+            });
+            ReplyAndDie();
+            return;
+        }
+
+        for (const auto& item : dashboardsJson.GetArray()) {
+            if (item.GetType() != NJson::JSON_MAP) {
+                continue;
+            }
+
+            TString title;
+            TString dashboardPath;
+            if (item.Has("title") && item["title"].GetType() == NJson::JSON_STRING) {
+                title = item["title"].GetStringRobust();
+            }
+            if (item.Has("url") && item["url"].GetType() == NJson::JSON_STRING) {
+                dashboardPath = item["url"].GetStringRobust();
+            } else if (item.Has("uri") && item["uri"].GetType() == NJson::JSON_STRING) {
+                dashboardPath = item["uri"].GetStringRobust();
+            }
+
+            if (dashboardPath.empty()) {
+                continue;
+            }
+
+            Links.emplace_back(NMVP::NSupportLinks::TResolvedLink{
+                .Title = std::move(title),
+                .Url = ResolveDashboardUrl(dashboardPath),
+            });
+        }
+
+        ReplyAndDie();
+    }
+
+    TString ResolveDashboardUrl(const TString& dashboardPath) {
+        TString url = ResolveGrafanaUrl(dashboardPath);
+
+        static constexpr TStringBuf WorkspaceColumn = "k8s_namespace";
+        static constexpr TStringBuf DatasourceColumn = "datasource";
+
+        const auto workspaceIt = ClusterColumns.find(WorkspaceColumn);
+        if (workspaceIt == ClusterColumns.end() || workspaceIt->second.empty()) {
+            Errors.emplace_back(NMVP::NSupportLinks::TSupportError{
+                .Source = "meta",
+                .Message = TStringBuilder() << "Cluster metadata column '" << WorkspaceColumn << "' is missing or empty",
+            });
+        } else {
+            url = AppendQueryParam(url, "var-workspace", workspaceIt->second);
+        }
+
+        const auto datasourceIt = ClusterColumns.find(DatasourceColumn);
+        if (datasourceIt == ClusterColumns.end() || datasourceIt->second.empty()) {
+            Errors.emplace_back(NMVP::NSupportLinks::TSupportError{
+                .Source = "meta",
+                .Message = TStringBuilder() << "Cluster metadata column '" << DatasourceColumn << "' is missing or empty",
+            });
+        } else {
+            url = AppendQueryParam(url, "var-ds", datasourceIt->second);
+        }
+
+        for (const auto& [name, value] : UrlParameters.Parameters) {
+            Y_UNUSED(value);
+            url = AppendQueryParam(url, TStringBuilder() << "var-" << name, UrlParameters[name]);
+        }
+        return url;
+    }
+
+    void HandleTimeout() {
+        Errors.emplace_back(NMVP::NSupportLinks::TSupportError{
+            .Source = Config.GetSource(),
+            .Message = "Timeout while resolving support links source",
+        });
+        ReplyAndDie();
+    }
+
+    void ReplyAndDie() {
+        Send(Owner, new NMVP::NSupportLinks::TEvPrivate::TEvSourceResponse(Place, std::move(Links), std::move(Errors)));
+        PassAway();
+    }
+
+private:
+    NMVP::TSupportLinkEntryConfig Config;
+    TString GrafanaEndpoint;
+    TString GrafanaTokenName;
+    NActors::TActorId Owner;
+    NActors::TActorId HttpProxyId;
+    size_t Place = 0;
+    THashMap<TString, TString> ClusterColumns;
+    NHttp::TUrlParameters UrlParameters;
+    TVector<NMVP::NSupportLinks::TResolvedLink> Links;
+    TVector<NMVP::NSupportLinks::TSupportError> Errors;
+};
+
+} // namespace
 
 const TString& NMVP::GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");
@@ -176,41 +424,12 @@ void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appCon
 
     const auto& config = appConfig.GetMeta();
 
-    MetaApiEndpoint = config.GetMetaApiEndpoint();
-    MetaDatabase = config.GetMetaDatabase();
     MetaCache = config.GetMetaCache();
     MetaDatabaseTokenName = config.GetMetaDatabaseTokenName();
     DbUserTokenSource = config.GetDbUserTokenAccess();
-    MetaSettings.MetaApiEndpoint = MetaApiEndpoint;
-    MetaSettings.MetaDatabase = MetaDatabase;
-    if (MetaSettings.MetaApiEndpoint.empty()) {
-        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified";
-    }
-    if (MetaSettings.MetaDatabase.empty()) {
-        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX << "meta.meta_database must be specified";
-    }
-
-    if (config.HasGrafana()) {
-        MetaSettings.GrafanaEndpoint = config.GetGrafana().GetEndpoint();
-        MetaSettings.GrafanaSecretName = config.GetGrafana().GetSecretName();
-    } else {
-        MetaSettings.GrafanaEndpoint.clear();
-        MetaSettings.GrafanaSecretName.clear();
-    }
-
-    if (config.HasSupportLinks()) {
-        const auto& supportLinks = config.GetSupportLinks();
-        MetaSettings.ClusterLinkSources.clear();
-        MetaSettings.ClusterLinkSources.reserve(supportLinks.GetCluster().size());
-        for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
-            MetaSettings.ClusterLinkSources.push_back(MakeLinkSource(supportLinks.GetCluster(i)));
-        }
-        MetaSettings.DatabaseLinkSources.clear();
-        MetaSettings.DatabaseLinkSources.reserve(supportLinks.GetDatabase().size());
-        for (int i = 0; i < supportLinks.GetDatabase().size(); ++i) {
-            MetaSettings.DatabaseLinkSources.push_back(MakeLinkSource(supportLinks.GetDatabase(i)));
-        }
-    }
+    MetaSettings = BuildMetaSettings(config, StartupOptions.AccessServiceType);
+    MetaApiEndpoint = MetaSettings.MetaApiEndpoint;
+    MetaDatabase = MetaSettings.MetaDatabase;
 }
 
 void TMVP::TryGetMetaOptionsFromConfig() {

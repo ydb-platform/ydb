@@ -2,8 +2,10 @@
 
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydb_impl.h>
+#include <ydb/mvp/meta/meta_cluster_info.h>
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/support_links/events.h>
+#include <ydb/mvp/meta/support_links/response.h>
 #include <ydb/mvp/meta/support_links/source.h>
 #include <ydb/mvp/meta/support_links/support_links_resolver.h>
 
@@ -41,7 +43,7 @@ protected:
     const TMetaSettings Settings;
     TRequest Request;
     EEntityType EntityType = EEntityType::Cluster;
-    THashMap<TString, TString> ClusterColumns;
+    THashMap<TString, TString> ClusterInfo;
 
 private:
     TMaybe<NYdb::NTable::TSession> Session;
@@ -49,7 +51,6 @@ private:
     TVector<NSupportLinks::TSupportError> PendingErrors;
 
 public:
-
     TMetaSupportLinksGetHandlerActor(
         const NActors::TActorId& httpProxyId,
         const TYdbLocation& location,
@@ -65,7 +66,7 @@ public:
     void Bootstrap() {
         Become(&TMetaSupportLinksGetHandlerActor::StateWork, GetTimeout(Request, TDuration::Seconds(60)), new NActors::TEvents::TEvWakeup());
 
-        if (!InitEntityType()) {
+        if (!ValidateAndInitEntityType()) {
             ReplyBadRequestAndDie();
             return;
         }
@@ -73,8 +74,8 @@ public:
         RequestClusterInfo();
     }
 
-    bool InitEntityType() {
-        const TString cluster = Request.Parameters["cluster"];
+    bool ValidateAndInitEntityType() {
+        const TString cluster = GetClusterName();
         const TString database = Request.Parameters["database"];
 
         if (cluster.empty()) {
@@ -88,26 +89,27 @@ public:
     virtual void RequestClusterInfo() {
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         NActors::TActorId actorId = SelfId();
-        Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location))
+        Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location, "metadb"))
             .CreateSession()
             .Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
-                NYdb::NTable::TAsyncCreateSessionResult res(result);
-                actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));
+                SendCreateSessionResult(actorId, actorSystem, result);
             });
     }
 
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr event) {
         const NYdb::NTable::TCreateSessionResult& result(event->Get()->Result);
         if (!result.IsSuccess()) {
-            Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateStatusResponse(Request.Request, result)));
-            PassAway();
+            ReplyStatusAndDie(result);
             return;
         }
 
         Session = result.GetSession();
-        TString query = TStringBuilder() << "DECLARE $name AS Utf8; SELECT * FROM `" << Location.RootDomain << "/ydb/MasterClusterExt.db` WHERE name=$name";
-        NYdb::TParamsBuilder params;
-        params.AddParam("$name", NYdb::TValueBuilder().Utf8(Request.Parameters["cluster"]).Build());
+        RequestClusterInfoRows();
+    }
+
+    void RequestClusterInfoRows() {
+        TString query = BuildClusterInfoQuery(Location.RootDomain);
+        NYdb::TParams params = BuildClusterInfoQueryParams(GetClusterName());
 
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         NActors::TActorId actorId = SelfId();
@@ -116,70 +118,91 @@ public:
             NYdb::NTable::TTxControl::BeginTx(
                 NYdb::NTable::TTxSettings::OnlineRO(
                     NYdb::NTable::TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
-            params.Build())
+            params)
             .Subscribe([actorId, actorSystem, session = Session](const NYdb::NTable::TAsyncDataQueryResult& result) {
-                NYdb::NTable::TAsyncDataQueryResult res(result);
-                actorSystem->Send(actorId, new TEvPrivate::TEvDataQueryResult(res.ExtractValue()));
+                SendDataQueryResult(actorId, actorSystem, result);
             });
+    }
+
+    static void SendCreateSessionResult(
+        const NActors::TActorId& actorId,
+        NActors::TActorSystem* actorSystem,
+        const NYdb::NTable::TAsyncCreateSessionResult& result)
+    {
+        NYdb::NTable::TAsyncCreateSessionResult res(result);
+        actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));
+    }
+
+    TString GetClusterName() const {
+        return Request.Parameters["cluster"];
+    }
+
+    static void SendDataQueryResult(
+        const NActors::TActorId& actorId,
+        NActors::TActorSystem* actorSystem,
+        const NYdb::NTable::TAsyncDataQueryResult& result)
+    {
+        NYdb::NTable::TAsyncDataQueryResult res(result);
+        actorSystem->Send(actorId, new TEvPrivate::TEvDataQueryResult(res.ExtractValue()));
     }
 
     void Handle(TEvPrivate::TEvDataQueryResult::TPtr event) {
         NYdb::NTable::TDataQueryResult& result(event->Get()->Result);
         if (!result.IsSuccess()) {
-            Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateStatusResponse(Request.Request, result)));
-            PassAway();
+            ReplyStatusAndDie(result);
             return;
         }
 
-        auto resultSet = result.GetResultSet(0);
-        const auto& columnsMeta = resultSet.GetColumnsMeta();
-        NYdb::TResultSetParser rsParser(resultSet);
-        if (!rsParser.TryNextRow()) {
-            AddCommonError(TStringBuilder() << "Cluster '" << Request.Parameters["cluster"] << "' is not found in MasterClusterExt.db");
-        } else {
-            for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
-                const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
-                ClusterColumns[columnMeta.Name] = ColumnValueToString(rsParser.ColumnParser(columnNum));
-            }
+        if (!TryExtractClusterInfo(result.GetResultSet(0), ClusterInfo)) {
+            AddCommonError(TStringBuilder() << "Cluster '" << GetClusterName() << "' is not found in MasterClusterExt.db");
         }
-
         ResolveSupportLinks();
     }
 
     void ResolveSupportLinks() {
         SupportLinksResolver = CreateSupportLinksResolver();
         SupportLinksResolver->Start();
-        if (SupportLinksResolver->IsFinished()) {
-            ReplyOkAndDie();
+        if (TryReplyResolvedSupportLinks()) {
             return;
         }
         Become(&TMetaSupportLinksGetHandlerActor::StateResolveSources);
     }
 
-    virtual std::unique_ptr<TSupportLinksResolver> CreateSupportLinksResolver() {
-        return std::make_unique<TSupportLinksResolver>(TSupportLinksResolver::TParams{
+    TSupportLinksResolver::TParams BuildSupportLinksResolverParams() const {
+        return TSupportLinksResolver::TParams{
             .EntityType = EntityType,
             .Settings = &Settings,
-            .ClusterColumns = ClusterColumns,
+            .ClusterInfo = ClusterInfo,
             .UrlParameters = Request.Parameters.UrlParameters,
-            .Parent = SelfId(),
+            .Owner = SelfId(),
             .HttpProxyId = HttpProxyId,
-        });
+        };
     }
 
-    void Handle(NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr event) {
-        SupportLinksResolver->OnSourceResponse(event);
-        if (SupportLinksResolver->IsFinished()) {
-            ReplyOkAndDie();
+    virtual std::unique_ptr<TSupportLinksResolver> CreateSupportLinksResolver() {
+        return std::make_unique<TSupportLinksResolver>(BuildSupportLinksResolverParams());
+    }
+
+    bool TryReplyResolvedSupportLinks() {
+        if (!SupportLinksResolver->IsFinished()) {
+            return false;
         }
+        ReplyOkAndDie();
+        return true;
+    }
+
+    void HandleSourceResponse(NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr event) {
+        SupportLinksResolver->OnSourceResponse(event);
+        TryReplyResolvedSupportLinks();
     }
 
     void HandleTimeout() {
         if (SupportLinksResolver) {
             SupportLinksResolver->HandleTimeout();
-        } else {
-            AddCommonError("Timeout while querying cluster info from MasterClusterExt.db");
+            ReplyOkAndDie();
+            return;
         }
+        AddCommonError("Timeout while querying cluster info from MasterClusterExt.db");
         ReplyOkAndDie();
     }
 
@@ -190,63 +213,32 @@ public:
         });
     }
 
-    void ReplyOkAndDie() {
-        auto response = CreateResponseOK(Request.Request, BuildResponseBody(), "application/json; charset=utf-8");
+    void ReplyStatusAndDie(const NYdb::NTable::TCreateSessionResult& result) {
+        Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateStatusResponse(Request.Request, result)));
+        PassAway();
+    }
+
+    void ReplyStatusAndDie(const NYdb::NTable::TDataQueryResult& result) {
+        Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateStatusResponse(Request.Request, result)));
+        PassAway();
+    }
+
+    void SendJsonResponseAndDie(const NHttp::THttpOutgoingResponsePtr& response) {
         Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
         PassAway();
+    }
+
+    void ReplyOkAndDie() {
+        SendJsonResponseAndDie(CreateResponseOK(Request.Request, BuildResponseBody(), "application/json; charset=utf-8"));
     }
 
     void ReplyBadRequestAndDie() {
-        auto response = CreateResponseBadRequest(Request.Request, BuildResponseBody(), "application/json; charset=utf-8");
-        Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
-        PassAway();
-    }
-
-    static void AppendErrorJson(NJson::TJsonValue& errorsJson, const NSupportLinks::TSupportError& error) {
-        NJson::TJsonValue& item = errorsJson.AppendValue(NJson::TJsonValue());
-        item["source"] = error.Source;
-        if (error.Status) {
-            item["status"] = *error.Status;
-        }
-        if (!error.Reason.empty()) {
-            item["reason"] = error.Reason;
-        }
-        if (!error.Message.empty()) {
-            item["message"] = error.Message;
-        }
+        SendJsonResponseAndDie(CreateResponseBadRequest(Request.Request, BuildResponseBody(), "application/json; charset=utf-8"));
     }
 
     TString BuildResponseBody() const {
-        NJson::TJsonValue root;
-        NJson::TJsonValue& linksJson = root["links"];
-        linksJson.SetType(NJson::JSON_ARRAY);
-
-        NJson::TJsonValue errorsJson;
-        errorsJson.SetType(NJson::JSON_ARRAY);
-
-        if (SupportLinksResolver) {
-            for (const auto& sourceOutput : SupportLinksResolver->GetSourceOutput()) {
-                for (const auto& link : sourceOutput.Links) {
-                    NJson::TJsonValue& linkItem = linksJson.AppendValue(NJson::TJsonValue());
-                    if (!link.Title.empty()) {
-                        linkItem["title"] = link.Title;
-                    }
-                    linkItem["url"] = link.Url;
-                }
-                for (const auto& error : sourceOutput.Errors) {
-                    AppendErrorJson(errorsJson, error);
-                }
-            }
-        }
-
-        for (const auto& error : PendingErrors) {
-            AppendErrorJson(errorsJson, error);
-        }
-
-        if (!errorsJson.GetArray().empty()) {
-            root["errors"] = std::move(errorsJson);
-        }
-        return NJson::WriteJson(root, false);
+        const auto* sourceOutputs = SupportLinksResolver ? &SupportLinksResolver->GetSourceOutput() : nullptr;
+        return NSupportLinks::BuildResponseBody(sourceOutputs, PendingErrors);
     }
 
     STFUNC(StateWork) {
@@ -260,7 +252,7 @@ public:
     // Separate state to avoid mixing event IDs from THandlerActorYdb::TEvPrivate and NSupportLinks::TEvPrivate.
     STFUNC(StateResolveSources) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NSupportLinks::TEvPrivate::TEvSourceResponse, Handle);
+            hFunc(NSupportLinks::TEvPrivate::TEvSourceResponse, HandleSourceResponse);
             cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }

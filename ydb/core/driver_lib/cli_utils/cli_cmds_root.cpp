@@ -5,6 +5,7 @@
 #include <ydb/core/driver_lib/run/factories.h>
 #include <ydb/core/driver_lib/version/version.h>
 #include <library/cpp/malloc/api/malloc.h>
+#include <library/cpp/svnversion/svnversion.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
@@ -25,6 +26,11 @@ void PrintCompatibilityInfoAndExit() {
     if (!compatibilityInfo.EndsWith("\n")) {
         Cout << Endl;
     }
+    exit(0);
+}
+
+void PrintSvnVersionAndExit() {
+    Cout << GetProgramSvnVersion() << Endl;
     exit(0);
 }
 
@@ -85,10 +91,15 @@ public:
             .RequiredArgument("HOST[:PORT]").StoreResult(&Address);
 
         NLastGetopt::TOpts& nOpts = config.Opts->GetOpts();
+        if (auto* opt = nOpts.FindLongOption("svnrevision")) {
+            opt->Handler(&PrintSvnVersionAndExit);
+        }
         nOpts.AddLongOption(0, "allocator-info", "Print the name of allocator linked to the binary and exit")
             .NoArgument().Handler(&PrintAllocatorInfoAndExit);
         nOpts.AddLongOption(0, "compatibility-info", "Print compatibility info of this binary and exit")
             .NoArgument().Handler(&PrintCompatibilityInfoAndExit);
+        config.ExecutableOptions.insert("-V");
+        config.ExecutableOptions.insert("--svnrevision");
         config.ExecutableOptions.insert("--allocator-info");
         config.ExecutableOptions.insert("--compatibility-info");
 

@@ -4100,6 +4100,258 @@ Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
 }
 
+Y_UNIT_TEST(AlterTableAlterColumnSetEncodingOffAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ALTER COLUMN val SET ENCODING(OFF);
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "'mode 'alter";
+    const TString changeEncoding = "'('changeEncoding '('('('name 'off))))";
+
+    TWordCountHive elementStat{{modeAlter, changeEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[changeEncoding]);
+}
+
+Y_UNIT_TEST(AlterTableAlterColumnSetEncodingDictAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ALTER COLUMN val SET ENCODING(DICT);
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "'mode 'alter";
+    const TString changeEncoding = "'('changeEncoding '('('('name 'dict))))";
+
+    TWordCountHive elementStat{{modeAlter, changeEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[changeEncoding]);
+}
+
+Y_UNIT_TEST(AlterTableAlterColumnSetEncodingEmptyAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ALTER COLUMN val SET ENCODING();
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "'mode 'alter";
+    const TString changeEncoding = "'('changeEncoding '())";
+
+    TWordCountHive elementStat{{modeAlter, changeEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[changeEncoding]);
+}
+
+Y_UNIT_TEST(AlterTableAlterColumnSetEncodingDictWithParamsAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ALTER COLUMN val SET ENCODING(DICT(max_size=100));
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "'mode 'alter";
+    const TString changeEncoding = "'('changeEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\")))))";
+
+    TWordCountHive elementStat{{modeAlter, changeEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[changeEncoding]);
+}
+
+Y_UNIT_TEST(AlterTableSetEncodingDictAndOffOrderAndParamsAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ALTER COLUMN val SET ENCODING(DICT(max_size=100), OFF);
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "'mode 'alter";
+    const TString changeEncoding = "'('changeEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\"))) '('('name 'off))))";
+
+    TWordCountHive elementStat{{modeAlter, changeEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[changeEncoding]);
+}
+
+Y_UNIT_TEST(CreateTableSetEncodingDictAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32 ENCODING(DICT),
+            PRIMARY KEY (id)
+        );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '('('('name 'dict))))";
+
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
+}
+
+Y_UNIT_TEST(CreateTableSetEncodingEmptyAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32 ENCODING(),
+            PRIMARY KEY (id)
+        );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '())";
+
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
+}
+
+Y_UNIT_TEST(CreateTableSetEncodingOffAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32 ENCODING(OFF),
+            PRIMARY KEY (id)
+        );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '('('('name 'off))))";
+
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
+}
+
+Y_UNIT_TEST(CreateTableSetEncodingDictWithParamsAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32 ENCODING(DICT(max_size=100)),
+            PRIMARY KEY (id)
+        );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\")))))";
+
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
+}
+
+Y_UNIT_TEST(CreateTableSetEncodingDictAndOffOrderAndParamsAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32 ENCODING(DICT(max_size=100), OFF),
+            PRIMARY KEY (id)
+        );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\"))) '('('name 'off))))";
+
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
+}
+
+Y_UNIT_TEST(CreateTableNotSetEncodingAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (
+            id Uint32,
+            PRIMARY KEY (id)
+        );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "columnEncoding";
+
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(0, elementStat[columnEncoding]);
+}
+
+Y_UNIT_TEST(AlterTableAddColumnSetEncodingAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ADD COLUMN val Uint32 ENCODING(DICT(max_size=100), OFF)
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "Write";
+    const TString columnEncoding = "'('columnEncoding '('('('name 'dict) '('max_size (Uint64 '\"100\"))) '('('name 'off))))";
+
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[columnEncoding]);
+}
+
+Y_UNIT_TEST(AlterTableAddColumnNotSetEncodingAstCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tableName ADD COLUMN val Uint32;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const TString modeAlter = "'mode 'alter";
+    const TString columnEncoding = "columnEncoding";
+
+    TWordCountHive elementStat{{modeAlter, columnEncoding}};
+    TString program = VerifyProgram(res, elementStat);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat[modeAlter]);
+    UNIT_ASSERT_VALUES_EQUAL(0, elementStat[columnEncoding]);
+}
+
 Y_UNIT_TEST(AlterTableYtNotSupported) {
     ExpectFailWithError("ALTER TABLE plato.table ADD COLUMN a int32",
                         "<main>:1:19: Error: ALTER TABLE is not supported for yt provider.\n");

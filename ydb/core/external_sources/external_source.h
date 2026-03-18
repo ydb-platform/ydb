@@ -75,7 +75,8 @@ inline TAuth MakeAws(const TString& accessKey, const TString& secretAccessKey, c
 inline TAuth MakeIamAuth(const TString& serviceAccountId, const TString& resourceId) {
     return TAuth{std::in_place_type_t<TIamAuth>{}, serviceAccountId, resourceId};
 }
-}
+
+} // namespace NAuth
 
 using TAuth = NAuth::TAuth;
 

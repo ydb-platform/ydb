@@ -973,7 +973,7 @@ TString ComposeStructuredTokenJsonForExternalDataSource(const NYql::TExternalSou
             throw yexception() << "Unhandled auth method: unset";
     }
 }
-};
+} // anonymous namespace
 
 // The type is TString or std::pair<TIndexId, TString>
 template<typename TPath>

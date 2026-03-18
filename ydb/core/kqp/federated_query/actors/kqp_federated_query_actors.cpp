@@ -590,7 +590,7 @@ inline bool IsRetryableError(const NYdb::TStatus status) {
 }
 // XXX end duplicated code
 
-class TDescribeResourceIdActor: public NActors::TActorBootstrapped<TDescribeResourceIdActor> {
+class TDescribeResourceIdActor : public NActors::TActorBootstrapped<TDescribeResourceIdActor> {
 public:
     using TRetryPolicy = IRetryPolicy<NYdb::TStatus>;
 

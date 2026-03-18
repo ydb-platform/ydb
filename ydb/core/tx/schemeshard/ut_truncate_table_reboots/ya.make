@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 
 IF (BUILD_TYPE == "DEBUG" OR SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

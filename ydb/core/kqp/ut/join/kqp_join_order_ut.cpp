@@ -1001,6 +1001,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT_C(joinOrder.find(R"(["T","U"])") != TString::npos, joinOrder);
     }
 
+    Y_UNIT_TEST(TPCH9Hints){
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch9_hints.sql", "stats/tpch100s.json", false, true);
+        auto joinOrder = GetJoinOrder(plan).GetStringRobust();
+        UNIT_ASSERT_C(joinOrder.find(R"([[[["partsupp","part"],["supplier","nation"]],"lineitem"],"orders"])") != TString::npos, joinOrder);
+    }
+
     void CanonizedJoinOrderTest(
         const TString& queryPath, const TString& statsPath, TString correctJoinOrderPath, bool useStreamLookupJoin, bool useColumnStore
     ) {

@@ -470,8 +470,7 @@ namespace NKikimr::NDDisk {
             return;
         }
         TPersistentBuffer::TRecord& pr = jt->second;
-        Y_ABORT_UNLESS(pr.OffsetInBytes == selector.OffsetInBytes);
-        Y_ABORT_UNLESS(pr.Size == selector.Size);
+        Y_ABORT_UNLESS(pr.Size <= selector.Size + selector.OffsetInBytes);
 
         ui64 operationCookie = NextCookie++;
         auto [inflightIt, inserted] = PersistentBufferDiskOperationInflight.try_emplace(operationCookie, TPersistentBufferDiskOperationInFlight{
@@ -484,6 +483,8 @@ namespace NKikimr::NDDisk {
             .Generation = generation,
             .VChunkIdx = selector.VChunkIndex,
             .Lsn = lsn,
+            .OffsetInBytes = selector.OffsetInBytes,
+            .Size = selector.Size,
         });
         Y_ABORT_UNLESS(inserted);
 
@@ -519,8 +520,10 @@ namespace NKikimr::NDDisk {
         auto inflightIt = PersistentBufferDiskOperationInflight.find(operationCookie);
         Y_ABORT_UNLESS(inflightIt != PersistentBufferDiskOperationInflight.end());
         auto& inflight = inflightIt->second;
+        auto start = data.Begin() + inflight.OffsetInBytes;
+        TRope dataPart = data.Extract(start, start + inflight.Size);
 
-        auto replyEv = std::make_unique<TEvReadPersistentBufferResult>(inflight.Status, inflight.ErrorMessage, data);
+        auto replyEv = std::make_unique<TEvReadPersistentBufferResult>(inflight.Status, inflight.ErrorMessage, dataPart);
         auto h = std::make_unique<IEventHandle>(inflight.Sender, SelfId(), replyEv.release(), 0, inflight.Cookie);
         if (inflight.Session) {
             h->Rewrite(TEvInterconnect::EvForward, inflight.Session);

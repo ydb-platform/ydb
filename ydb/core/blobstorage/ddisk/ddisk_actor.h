@@ -574,6 +574,7 @@ namespace NKikimr::NDDisk {
             ui64 VChunkIdx;
             ui64 Lsn;
             ui32 OffsetInBytes;
+            ui32 Size;
             std::vector<TPersistentBufferSectorInfo> Sectors;
             TRope Data;
 

@@ -193,6 +193,14 @@ private:
     }
 
 public:
+    const std::vector<TColumnChainInfo>& GetAggregationKeys() const {
+        return AggregationKeys;
+    }
+
+    const std::vector<TWithKeysAggregationOption>& GetAggregations() const {
+        return Aggregations;
+    }
+
     static const char* GetHouseGroupByName() {
         return "ch.group_by";
     }

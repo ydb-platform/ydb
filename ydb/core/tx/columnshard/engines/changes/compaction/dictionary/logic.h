@@ -13,7 +13,7 @@ private:
     using TBase = IColumnMerger::TBaseIterator<NArrow::NAccessor::TDictionaryArray>;
     std::optional<arrow::Type::type> CurrentRecordsType;
     virtual void OnInitArray(const std::shared_ptr<NArrow::NAccessor::TDictionaryArray>& arr) override {
-        CurrentRecordsType = arr->GetRecords()->type()->id();
+        CurrentRecordsType = arr->GetPositions()->type()->id();
     }
 
 public:

@@ -5,6 +5,7 @@
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 
 extern "C" {
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
@@ -236,7 +237,16 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         }
     }
     if (!!diffColumn.GetAccessorConstructor()) {
-        auto conclusion = diffColumn.GetAccessorConstructor()->BuildConstructor();
+        const auto& accessorContainer = diffColumn.GetAccessorConstructor();
+        if (accessorContainer.GetObjectPtr() && accessorContainer.GetObjectPtr()->GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
+            if (!IsAllowedDictionaryType(Type.GetTypeId())) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                    << "DICTIONARY accessor is not supported for column '" << GetName() << "' of type " << GetTypeName()
+                    << "; use comparable types (e.g. String, Utf8, numeric, Date, Datetime, Timestamp)");
+                return false;
+            }
+        }
+        auto conclusion = accessorContainer.GetObjectPtr()->BuildConstructor();
         if (conclusion.IsFail()) {
             errors.AddError(conclusion.GetErrorMessage());
             return false;
@@ -320,6 +330,30 @@ bool TOlapColumnBase::IsAllowedPkType(ui32 typeId) {
         case NYql::NProto::Timestamp64:
         case NYql::NProto::Interval64:
         case NYql::NProto::Decimal:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool TOlapColumnBase::IsAllowedDictionaryType(ui32 typeId) {
+    switch (typeId) {
+        case NYql::NProto::Bool:
+        case NYql::NProto::Int8:
+        case NYql::NProto::Uint8:
+        case NYql::NProto::Int16:
+        case NYql::NProto::Uint16:
+        case NYql::NProto::Int32:
+        case NYql::NProto::Uint32:
+        case NYql::NProto::Int64:
+        case NYql::NProto::Uint64:
+        case NYql::NProto::Float:
+        case NYql::NProto::Double:
+        case NYql::NProto::String:
+        case NYql::NProto::Utf8:
+        case NYql::NProto::Date:
+        case NYql::NProto::Datetime:
+        case NYql::NProto::Timestamp:
             return true;
         default:
             return false;

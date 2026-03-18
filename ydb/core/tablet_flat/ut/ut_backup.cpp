@@ -1699,7 +1699,7 @@ Y_UNIT_TEST_SUITE(Backup) {
                 json["prev_sha256"] = prevHash;
             }
             lines[i] = NJson::WriteJson(json, false);
-            prevHash = ComputeChecksum(lines[i]);
+            prevHash = ComputeChecksum(lines[i] + '\n');
         }
 
         {

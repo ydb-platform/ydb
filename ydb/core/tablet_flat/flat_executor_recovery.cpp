@@ -1430,7 +1430,7 @@ public:
                     }
                 }
 
-                prevHash = NBackup::ComputeChecksum(line);
+                prevHash = NBackup::ComputeChecksum(line + '\n');
                 prevLine = std::move(line);
                 prevStep = json["step"].GetUInteger();
                 failOnError = prevStep < metaStep;

@@ -202,7 +202,7 @@ ui64 NewBackupChangelogMinBytes() {
 
 } // anonymous namespace
 
-class TSnapshotWriter : public TActorBootstrapped<TSnapshotWriter> {
+class TSnapshotWriter : public TActorBootstrapped<TSnapshotWriter>, public IActorExceptionHandler {
 public:
     using TBase = TActorBootstrapped<TSnapshotWriter>;
 
@@ -255,7 +255,7 @@ public:
             SchemaFile.Write(stringOut.Data(), stringOut.Size());
             SchemaSha256.Update(stringOut.Data(), stringOut.Size());
             WrittenBytes += stringOut.Size();
-        } catch (const TIoException& e) {
+        } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
 
@@ -434,7 +434,7 @@ public:
             TFile checksumFile(checksumPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
             checksumFile.Write(manifestChecksum.data(), manifestChecksum.size());
             checksumFile.Flush();
-        } catch (const TIoException& e) {
+        } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to write manifest: " << e.what());
         }
 
@@ -465,6 +465,11 @@ public:
 
     void ScanFailed(const TString& tableName, const TString& error) {
         return ReplyAndDie(false, TStringBuilder() << "Snapshot scan for " << tableName << " failed: " << error);
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        ReplyAndDie(false, TStringBuilder() << "Unhandled exception: " << exc.what());
+        return true;
     }
 
 private:
@@ -744,7 +749,7 @@ private:
     std::function<void()> BeginCommit;
 };
 
-class TChangelogWriter : public TActorBootstrapped<TChangelogWriter> {
+class TChangelogWriter : public TActorBootstrapped<TChangelogWriter>, public IActorExceptionHandler {
     struct TEvPrivate {
         enum EEv {
             EvMailboxCleaned = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -788,7 +793,7 @@ public:
 
         try {
             WriteChangelogMeta();
-        } catch (const TIoException& e) {
+        } catch (const std::exception& e) {
             return ReplyAndDie(TStringBuilder() << "Failed to write changelog meta " << ChangelogMetaPath << ": " << e.what());
         }
 
@@ -908,12 +913,11 @@ public:
                 b.WriteString(PreviousChecksum);
             }
             b.EndObject();
+            out << '\n';
 
             TStringBuf commit(Buffer.data() + commitStart, Buffer.Size() - commitStart);
             PreviousChecksum = ComputeChecksum(commit);
             Step = msg->Step;
-
-            out << '\n';
         }
 
         if (Buffer.Size() >= 1_MB) {
@@ -956,7 +960,7 @@ public:
 
             try {
                 WriteChangelogMeta();
-            } catch (const TIoException& e) {
+            } catch (const std::exception& e) {
                 return ReplyAndDie(TStringBuilder() << "Failed to write changelog meta " << ChangelogMetaPath << ": " << e.what());
             }
 
@@ -1006,6 +1010,11 @@ public:
         TFile(ChangelogMetaPath.Parent(), EOpenModeFlag::RdOnly).Flush();
     }
 
+    bool OnUnhandledException(const std::exception& exc) override {
+        ReplyAndDie(TStringBuilder() << "Unhandled exception: " << exc.what());
+        return true;
+    }
+
 private:
     TActorId Owner;
 
@@ -1025,8 +1034,8 @@ private:
 
     TString PreviousChecksum;
 
-    ui64 TabletId;
-    ui32 Generation;
+    const ui64 TabletId;
+    const ui32 Generation;
     ui32 Step;
 };
 

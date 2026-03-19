@@ -879,14 +879,8 @@ void TKafkaBalancerActor::HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TE
         return;
     }
 
-    if (!groupStatus->Exists ||
-        groupStatus->Exists && groupStatus->Generation == GenerationId + 1 && groupStatus->State != GROUP_STATE_WORKING ||
-        groupStatus->State != GROUP_STATE_WORKING) {
+    if (!groupStatus->Exists || groupStatus->Generation != GenerationId || groupStatus->State != GROUP_STATE_WORKING) {
         SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::REBALANCE_IN_PROGRESS, "Group state changed. Rejoin required");
-        return;
-    }
-    if (groupStatus->Generation != GenerationId) {
-        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::ILLEGAL_GENERATION, "Old or unknown group generation");
         return;
     }
 
@@ -1129,7 +1123,7 @@ bool TKafkaBalancerActor::ParseDeadsAndSessionTimeout(
     auto& resp = record.GetResponse();
 
     if (resp.GetYdbResults().size() < 2) {
-        return true;
+        return false;
     }
 
     {
@@ -1147,10 +1141,9 @@ bool TKafkaBalancerActor::ParseDeadsAndSessionTimeout(
     {
         NYdb::TResultSetParser parser(resp.GetYdbResults(1));
         if (!parser.TryNextRow()) {
-            sessionTimeoutMs = DEFAULT_SESSION_TIMEOUT_MS;
-        } else {
-            sessionTimeoutMs = parser.ColumnParser("session_timeout_ms").GetOptionalUint32().value_or(DEFAULT_SESSION_TIMEOUT_MS);
+            return false;
         }
+        sessionTimeoutMs = parser.ColumnParser("session_timeout_ms").GetOptionalUint32().value_or(DEFAULT_SESSION_TIMEOUT_MS);
         if (parser.TryNextRow()) {
             return false;
         }

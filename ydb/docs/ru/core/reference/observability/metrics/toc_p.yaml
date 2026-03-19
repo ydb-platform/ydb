@@ -1,5 +1,6 @@
 items:
 - name: Справка по метрикам
   href: index.md
-- name: Дашборды Grafana 
+- name: Дашборды Grafana
   href: grafana-dashboards.md
+  when: audience != "tech"

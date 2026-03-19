@@ -27,8 +27,7 @@ public:
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        // AlterMoveShadow is only applicable when ALTER TABLE
-        // or CREATE PERSISTENT SNAPSHOT with PublishShadow is in the transaction
+        // AlterMoveShadow is only applicable when AlterTable or PrepareIndexValidation is in the transaction
         auto& schemeTx = tx->GetSchemeTx();
         bool shadowDisabled = false;
         ui64 tableId = 0;
@@ -45,11 +44,11 @@ public:
                 Y_ENSURE(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
                 tableId = pathId.GetLocalId();
             }
-        } else if (schemeTx.HasCreatePersistentSnapshot()) {
-            const auto& snap = schemeTx.GetCreatePersistentSnapshot();
-            shadowDisabled = snap.GetPublishShadow();
-            tableId = snap.GetPathId();
-            Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetOwnerId());
+        } else if (schemeTx.HasPrepareIndexValidation()) {
+            const auto& snap = schemeTx.GetPrepareIndexValidation();
+            shadowDisabled = true;
+            tableId = snap.GetIndexId().GetLocalId();
+            Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetIndexId().GetOwnerId());
         } else {
             return EExecutionStatus::Executed;
         }

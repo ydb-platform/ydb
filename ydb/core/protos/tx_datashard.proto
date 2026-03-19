@@ -447,6 +447,12 @@ message TInitiateBuildIndex {
     optional NKikimrSchemeOp.TIndexDescription IndexDescription = 4;
 }
 
+message TPrepareIndexValidation {
+    optional NKikimrDataEvents.TPathId IndexId = 1;
+    optional string SnapshotName = 2;
+    optional uint64 TableSchemaVersion = 3;
+}
+
 message TFinalizeBuildIndex {
     optional NKikimrProto.TPathID PathId = 1;
 
@@ -576,6 +582,8 @@ message TFlatSchemeTransaction {
     optional TCreateIncrementalBackupSrc CreateIncrementalBackupSrc = 23;
 
     optional TTruncateTable TruncateTable = 25;
+
+    optional TPrepareIndexValidation PrepareIndexValidation = 26;
 }
 
 message TDistributedEraseTransaction {

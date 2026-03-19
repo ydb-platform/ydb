@@ -67,11 +67,9 @@ public:
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
 
-            auto* createSnapshot = tx.MutableCreatePersistentSnapshot();
-            createSnapshot->SetOwnerId(pathId.OwnerId);
-            createSnapshot->SetPathId(pathId.LocalPathId);
-            createSnapshot->SetName("Snapshot0");
-            createSnapshot->SetPublishShadow(true);
+            auto* createSnapshot = tx.MutablePrepareIndexValidation();
+            pathId.ToProto(createSnapshot->MutableIndexId());
+            createSnapshot->SetSnapshotName("Snapshot0");
             createSnapshot->SetTableSchemaVersion(table->AlterVersion+1);
 
             context.SS->FillSeqNo(tx, seqNo);

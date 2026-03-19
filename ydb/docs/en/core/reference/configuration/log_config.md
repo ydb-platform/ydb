@@ -148,7 +148,7 @@ log_config:
       level: 6  # INFO
 ```
 
-Once enabled, the server writes structured logs on every lock conflict, including identifiers and query texts for both victims and breakers. For details on the log entry format, event correlation, and the `find_tli_chain` utility, see [{#T}](../../troubleshooting/performance/queries/tli-logging.md).
+Once enabled, the server writes logs on every lock conflict, including identifiers and query texts for both victims and breakers. For details on the log entry format, event correlation, and the `find_tli_chain` utility, see [{#T}](../../troubleshooting/performance/queries/tli-logging.md).
 
 ### Sampling Configuration
 

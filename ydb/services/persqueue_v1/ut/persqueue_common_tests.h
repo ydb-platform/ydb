@@ -315,7 +315,7 @@ public:
             }
 
             Cerr << "DURATION " << (TInstant::Now() - start) << "\n";
-            UNIT_ASSERT(TInstant::Now() - start > minTime);
+            UNIT_ASSERT_GT(TInstant::Now() - start, minTime);
         }
     }
 

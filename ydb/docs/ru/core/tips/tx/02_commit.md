@@ -40,8 +40,11 @@ err := db.Query().Do(scope.Ctx, func(ctx context.Context, s query.Session) error
 
     _, err = tx.Exec(ctx, 
         "INSERT INTO logs (user_id, action) VALUES (1, 'activated')",
-        query.WithCommit(), // Коммит вместе с запросом
     )
+    if err != nil {
+        tx.Rollback(ctx)
+        return err
+    }
 
     // Явный коммит создает лишний сетевой запрос
     return tx.CommitTx(ctx)

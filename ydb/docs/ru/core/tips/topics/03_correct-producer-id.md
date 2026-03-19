@@ -55,7 +55,7 @@ import socket
 import ydb
 
 def get_stable_producer_id(partition):
-    """Генерирует стабильный producerId на основе имени хоста, нзвании сервиса и номера партиции"""
+    """Генерирует стабильный producerId на основе имени хоста, названии сервиса и номера партиции"""
     hostname = socket.gethostname()
     service_name = "my-service"
     return f"{service_name}-{hostname}-{partition}"

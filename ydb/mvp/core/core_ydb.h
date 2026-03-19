@@ -98,10 +98,6 @@ struct TRequest {
         , Parameters(request)
     {}
 
-    static inline TString BlackBoxTokenFromSessionId(TStringBuf sessionId, TStringBuf userIp = NKikimr::NSecurity::DefaultUserIp()) {
-        return NKikimr::NSecurity::BlackBoxTokenFromSessionId(sessionId, userIp);
-    }
-
     TString GetAuthToken() const;
     TString GetAuthToken(const NHttp::THeaders& headers) const;
     TString GetAuthTokenForIAM() const;

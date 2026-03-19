@@ -312,7 +312,9 @@ TString TRequest::GetAuthToken(const NHttp::THeaders& headers) const {
     }
     TStringBuf sessionId = cookies["Session_id"];
     if (!sessionId.empty()) {
-        return BlackBoxTokenFromSessionId(sessionId);
+        // TODO: check later
+        // return BlackBoxTokenFromSessionId(sessionId);
+        return TString();
     }
     return TString();
 }

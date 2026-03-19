@@ -784,16 +784,14 @@ struct THandlerActorYdb {
         }
     }
 
-    static TString BlackBoxTokenFromSessionId(TStringBuf sessionId, TStringBuf userIp = NKikimr::NSecurity::DefaultUserIp()) {
-        return NKikimr::NSecurity::BlackBoxTokenFromSessionId(sessionId, userIp);
-    }
-
     static TString GetAuthToken(NHttp::THttpIncomingRequestPtr request) {
         NHttp::THeaders headers(request->Headers);
         NHttp::TCookies cookies(headers["Cookie"]);
         TStringBuf sessionId = cookies["Session_id"];
         if (!sessionId.empty()) {
-            return BlackBoxTokenFromSessionId(sessionId);
+            // TODO: Check later
+            // return BlackBoxTokenFromSessionId(sessionId);
+            return TString();
         }
         TStringBuf authorization = headers["Authorization"];
         if (!authorization.empty()) {

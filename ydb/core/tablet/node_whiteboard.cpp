@@ -100,9 +100,9 @@ protected:
 
     struct TThreadPoolCounters {
         NMonitoring::TDynamicCounters::TCounterPtr Threads;
-        NMonitoring::TDynamicCounters::TCounterPtr SystemCoresConsumed;
-        NMonitoring::TDynamicCounters::TCounterPtr UserCoresConsumed;
-        NMonitoring::TDynamicCounters::TCounterPtr TotalCoresConsumed;
+        NMonitoring::TDynamicCounters::TCounterPtr SystemCorePercents;
+        NMonitoring::TDynamicCounters::TCounterPtr UserCorePercents;
+        NMonitoring::TDynamicCounters::TCounterPtr TotalCorePercents;
         NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults;
         NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults;
     };
@@ -169,8 +169,8 @@ protected:
         return static_cast<ui64>(std::abs(static_cast<int>(b) - static_cast<int>(a)));
     }
 
-    static i64 ToConsumedCores(double usage, ui32 threads) {
-        return static_cast<i64>(usage * threads + 0.5);
+    static i64 ToCorePercents(double usage, ui32 threads) {
+        return static_cast<i64>(usage * threads * 100 + 0.5);
     }
 
     template <typename PropertyType>
@@ -1127,9 +1127,9 @@ protected:
         if (!counters.Threads) {
             auto group = ThreadPoolsGroup->GetSubgroup("pool", name);
             counters.Threads = group->GetCounter("Threads");
-            counters.SystemCoresConsumed = group->GetCounter("SystemCoresConsumed", true);
-            counters.UserCoresConsumed = group->GetCounter("UserCoresConsumed", true);
-            counters.TotalCoresConsumed = group->GetCounter("TotalCoresConsumed", true);
+            counters.SystemCorePercents = group->GetCounter("SystemCorePercents", true);
+            counters.UserCorePercents = group->GetCounter("UserCorePercents", true);
+            counters.TotalCorePercents = group->GetCounter("TotalCorePercents", true);
             counters.MajorPageFaults = group->GetCounter("MajorPageFaults", true);
             counters.MinorPageFaults = group->GetCounter("MinorPageFaults", true);
         }
@@ -1145,9 +1145,9 @@ protected:
             seenThreadPools.insert(threadPool.Name);
 
             counters.Threads->Set(threadPool.Threads);
-            *counters.SystemCoresConsumed += ToConsumedCores(threadPool.SystemUsage, threadPool.Threads);
-            *counters.UserCoresConsumed += ToConsumedCores(threadPool.UserUsage, threadPool.Threads);
-            *counters.TotalCoresConsumed += ToConsumedCores(threadPool.SystemUsage + threadPool.UserUsage, threadPool.Threads);
+            *counters.SystemCorePercents += ToCorePercents(threadPool.SystemUsage, threadPool.Threads);
+            *counters.UserCorePercents += ToCorePercents(threadPool.UserUsage, threadPool.Threads);
+            *counters.TotalCorePercents += ToCorePercents(threadPool.SystemUsage + threadPool.UserUsage, threadPool.Threads);
             *counters.MajorPageFaults += threadPool.MajorPageFaults;
             *counters.MinorPageFaults += threadPool.MinorPageFaults;
         }

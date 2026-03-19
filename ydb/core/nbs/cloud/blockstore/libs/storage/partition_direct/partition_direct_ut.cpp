@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/protos/config.pb.h>
@@ -53,6 +54,7 @@ void SetupStorage(TEnvironmentSetup& env)
     storageConfig->SetDDiskPoolName(DDiskPoolName);
     storageConfig->SetPersistentBufferDDiskPoolName(
         PersistentBufferDDiskPoolName);
+    storageConfig->SetSyncRequestsBatchSize(3);
     CreateNbsService(nbsConfig);
     StartNbsService();
 }

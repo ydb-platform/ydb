@@ -13,8 +13,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 class TRegion
 {
 public:
-    static constexpr ui64 RegionSize = 4_GB;
-
     TRegion(
         NActors::TActorSystem* actorSystem,
         TVector<IDirectBlockGroupPtr> directBlockGroups,

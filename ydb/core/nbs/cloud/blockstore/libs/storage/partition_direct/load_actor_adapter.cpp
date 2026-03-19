@@ -1,5 +1,6 @@
 #include "load_actor_adapter.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/public/api/protos/io.pb.h>
 
@@ -46,7 +47,7 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
 
     // Round up
     // Move to separate function
-    totalSize = (totalSize + BlockSize - 1) / BlockSize * BlockSize;
+    totalSize = (totalSize + DefaultBlockSize - 1) / DefaultBlockSize * DefaultBlockSize;
 
     Y_ABORT_UNLESS(totalSize == 4096);
 
@@ -62,7 +63,7 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
 
     auto request = std::make_shared<TWriteBlocksLocalRequest>(
         TRequestHeaders{},
-        TBlockRange64::WithLength(startIndex, totalSize / BlockSize));
+        TBlockRange64::WithLength(startIndex, totalSize / DefaultBlockSize));
     request->Sglist = TGuardedSgList(std::move(sglist));
 
     auto future = FastPathService->WriteBlocksLocal(

@@ -383,17 +383,13 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 TVector<std::shared_ptr<TRegion>> TPartitionActor::CreateRegions(
     TVector<IDirectBlockGroupPtr> directBlockGroups)
 {
-    // Round up
-    const ui64 regionsCount =
-        (BlockCount * BlockSize + TRegion::RegionSize - 1) /
-        TRegion::RegionSize;
-
+    const ui64 regionsCount = ceil((BlockCount * BlockSize) / RegionSize);
     TVector<std::shared_ptr<TRegion>> regions(regionsCount);
     for (size_t i = 0; i < regionsCount; i++) {
         regions[i] = std::make_shared<TRegion>(
             TActorContext::ActorSystem(),
             directBlockGroups,
-            3,   // syncRequestsBatchSize
+            StorageConfig.GetSyncRequestsBatchSize(),
             TDuration::MilliSeconds(StorageConfig.GetTraceSamplePeriod()));
     }
 

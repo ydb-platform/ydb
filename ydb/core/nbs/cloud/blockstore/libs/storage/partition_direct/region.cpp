@@ -32,10 +32,10 @@ NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
 {
-    auto vChunkIndex = GetVChunkIndex(request->Range.Start);
-    request->Range = TBlockRange64::WithLength(
-        GetVChunkOffset(request->Range.Start),
-        request->Range.Size());
+    auto vChunkIndex = GetVChunkIndex(request->RegionRange.Start);
+    request->VChunkRange = TBlockRange64::WithLength(
+        GetVChunkOffset(request->RegionRange.Start),
+        request->RegionRange.Size());
 
     return VChunks[vChunkIndex]->ReadBlocksLocal(
         std::move(callContext),
@@ -48,10 +48,10 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
 {
-    auto vChunkIndex = GetVChunkIndex(request->Range.Start);
-    request->Range = TBlockRange64::WithLength(
-        GetVChunkOffset(request->Range.Start),
-        request->Range.Size());
+    auto vChunkIndex = GetVChunkIndex(request->RegionRange.Start);
+    request->VChunkRange = TBlockRange64::WithLength(
+        GetVChunkOffset(request->RegionRange.Start),
+        request->RegionRange.Size());
 
     return VChunks[vChunkIndex]->WriteBlocksLocal(
         std::move(callContext),

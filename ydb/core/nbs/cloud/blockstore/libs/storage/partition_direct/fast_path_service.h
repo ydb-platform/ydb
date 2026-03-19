@@ -11,11 +11,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr size_t BlockSize = 4096;
-constexpr size_t BlocksPerRegion = TRegion::RegionSize / BlockSize;
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TFastPathService
     : public IStorage
     , public std::enable_shared_from_this<TFastPathService>

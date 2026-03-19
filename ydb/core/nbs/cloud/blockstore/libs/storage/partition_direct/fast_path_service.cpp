@@ -3,6 +3,7 @@
 #include "direct_block_group_in_mem.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
@@ -87,11 +88,11 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
 
     Counters.RequestStarted(
         EBlockStoreRequest::ReadBlocks,
-        request->Range.Size() * BlockSize);
+        request->Range.Size() * DefaultBlockSize);
 
     const size_t regionIndex = GetRegionIndex(request->Range.Start);
     const ui64 regionOffset = GetRegionOffset(request->Range.Start);
-    request->Range =
+    request->RegionRange =
         TBlockRange64::WithLength(regionOffset, request->Range.Size());
 
     auto result = Regions[regionIndex]->ReadBlocksLocal(
@@ -122,11 +123,11 @@ TFastPathService::WriteBlocksLocal(
 
     Counters.RequestStarted(
         EBlockStoreRequest::WriteBlocks,
-        request->Range.Size() * BlockSize);
+        request->Range.Size() * DefaultBlockSize);
 
     const size_t regionIndex = GetRegionIndex(request->Range.Start);
     const ui64 regionOffset = GetRegionOffset(request->Range.Start);
-    request->Range =
+    request->RegionRange =
         TBlockRange64::WithLength(regionOffset, request->Range.Size());
 
     auto result = Regions[regionIndex]->WriteBlocksLocal(

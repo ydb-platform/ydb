@@ -48,9 +48,7 @@ TString TFilterAccumulator::DebugString() const {
 
 void TFiltersBuilder::AddImpl(const ui64 portionId, const bool value) {
     auto filterIt = Filters.find(portionId);
-    if (filterIt == Filters.end()) {
-        return;
-    }
+    AFL_VERIFY(filterIt != Filters.end());
     auto& filterInfo = filterIt->second;
     filterInfo.Filter.Add(value);
     if (filterInfo.RowsCount != filterInfo.Filter.GetRecordsCount().value_or(0)) {
@@ -97,15 +95,6 @@ bool TFiltersBuilder::NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& con
     constructor->AddFilter(std::move(filterInfo.Filter));
     Filters.erase(filterIt);
     return true;
-}
-
-NArrow::TColumnFilter&& TFiltersBuilder::ExtractFilter(const ui64 portionId) && {
-    auto filterIt = Filters.find(portionId);
-    AFL_VERIFY(filterIt != Filters.end());
-    auto& filterInfo = filterIt->second;
-    auto&& filter = std::move(filterInfo.Filter);
-    Filters.erase(filterIt);
-    return std::move(filter);
 }
 
 void TFiltersBuilder::AddSource(const ui64 portionId, ui64 rowsCount) {

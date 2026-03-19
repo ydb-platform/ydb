@@ -53,7 +53,6 @@ public:
     void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const;
     bool IsBufferExhausted() const;
     bool NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& constructor);
-    NArrow::TColumnFilter&& ExtractFilter(const ui64 portionId) &&;
     void AddSource(const ui64 portionId, ui64 rowsCount);
     void AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor);
 };

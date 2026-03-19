@@ -532,7 +532,7 @@ private:
         }
     }
 
-    template<>
+    template <>
     void UploadScheme<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
         Y_UNUSED(ctx);
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
@@ -622,7 +622,7 @@ private:
         return true;
     }
 
-    template<>
+    template <>
     bool FillExportMetadata<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, TString& issues) {
         Y_UNUSED(exportInfo);
         Y_UNUSED(issues);
@@ -644,7 +644,7 @@ private:
         return true;
     }
 
-    template<>
+    template <>
     bool UploadExportMetadata<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, const TActorContext& ctx) {
         Y_UNUSED(exportInfo);
         Y_UNUSED(ctx);

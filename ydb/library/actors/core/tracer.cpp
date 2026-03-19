@@ -3,57 +3,91 @@
 #include "actor.h"
 #include "actorid.h"
 
-#include <library/cpp/containers/concurrent_hash/concurrent_hash.h>
-#include <library/cpp/containers/ring_buffer/ring_buffer.h>
-
 #include <util/datetime/base.h>
-#include <util/system/thread.h>
+
+#include <atomic>
+#include <cstring>
+#include <vector>
 
 namespace NActors::NTracing {
 
+    struct TThreadBuffer {
+        std::vector<TTraceEvent> Events;
+        std::atomic<ui64> WritePos{0};
+
+        explicit TThreadBuffer(size_t capacity) {
+            Events.resize(capacity);
+        }
+    };
+
     class TInternalTracer {
     public:
-        explicit TInternalTracer(TSettings&& settings)
-            : Settings(std::move(settings))
-        {}
+        explicit TInternalTracer(TSettings settings)
+            : BufferSize(settings.MaxBufferSizePerThread)
+            , MaxThreads(settings.MaxThreads)
+        {
+            Buffers.reserve(MaxThreads);
+            for (size_t i = 0; i < MaxThreads; ++i) {
+                Buffers.push_back(std::make_unique<TThreadBuffer>(BufferSize));
+            }
+        }
 
-        void AddEvent(TTraceEvent event) {
+        TThreadBuffer* AcquireBuffer() {
+            ui32 idx = NextBufferIdx.fetch_add(1, std::memory_order_relaxed);
+            if (idx >= MaxThreads) {
+                return nullptr;
+            }
+            return Buffers[idx].get();
+        }
+
+        void AddEvent(TThreadBuffer* buf, TTraceEvent event) {
             event.Timestamp = TInstant::Now().MicroSeconds();
-            auto& threadData = ThreadId2Data.InsertIfAbsentWithInit(
-                TThread::CurrentThreadId(),
-                [&settings = this->Settings] {
-                    return TThreadData{
-                        .Buffer = MakeAtomicShared<TRingBuffer>(settings.MaxBufferSizePerThread),
-                    };
-                }
-            );
-            threadData.Buffer->PushBack(std::move(event));
+            ui64 pos = buf->WritePos.fetch_add(1, std::memory_order_release);
+            buf->Events[pos % BufferSize] = event;
         }
 
         void RegisterEventTypeName(ui32 typeIndex, const TString& typeName) {
-            auto threadId = TThread::CurrentThreadId();
-            auto& bucket = ThreadId2Data.GetBucketForKey(threadId);
-            TThreadIdMapping::TBucketGuard guard(bucket.GetMutex());
-            bucket.GetUnsafe(threadId).EventNameDict.emplace(typeIndex, typeName);
+            TGuard<TAdaptiveLock> guard(EventNamesDictLock);
+            EventNamesDict.emplace(typeIndex, typeName);
         }
 
         TTraceChunk GetTraceChunk() {
-            auto [events, eventNamesDict] = CollectEvents();
+            TVector<TTraceEvent> events;
+            ui32 usedBuffers = NextBufferIdx.load(std::memory_order_acquire);
+            usedBuffers = std::min<ui32>(usedBuffers, MaxThreads);
+
+            for (ui32 i = 0; i < usedBuffers; ++i) {
+                auto& buf = *Buffers[i];
+                ui64 pos = buf.WritePos.load(std::memory_order_acquire);
+                if (pos == 0) continue;
+
+                ui64 total = pos;
+                ui64 first = (total > BufferSize) ? total - BufferSize : 0;
+                ui64 safeEnd = (total > 0) ? total - 1 : 0;
+
+                for (ui64 j = first; j < safeEnd; ++j) {
+                    events.push_back(buf.Events[j % BufferSize]);
+                }
+            }
+
+            TEventNamesDict eventNames;
+            {
+                TGuard<TAdaptiveLock> guard(EventNamesDictLock);
+                eventNames = EventNamesDict;
+            }
+
             return {
                 .ActivityDict = BuildActivityDict(),
-                .EventNamesDict = std::move(eventNamesDict),
+                .EventNamesDict = std::move(eventNames),
                 .Events = std::move(events),
             };
         }
 
-        void ClearBuffers() {
-            for (size_t i = 0; i < DEFAULT_BUCKET_COUNT; ++i) {
-                auto& bucket = ThreadId2Data.Buckets[i];
-                TThreadIdMapping::TBucketGuard guard(bucket.GetMutex());
-                for (auto& [threadId, threadData] : bucket.GetMap()) {
-                    threadData.Buffer->Clear();
-                    threadData.EventNameDict.clear();
-                }
+        void ResetBuffers() {
+            ui32 usedBuffers = NextBufferIdx.load(std::memory_order_acquire);
+            usedBuffers = std::min<ui32>(usedBuffers, MaxThreads);
+            for (ui32 i = 0; i < usedBuffers; ++i) {
+                Buffers[i]->WritePos.store(0, std::memory_order_release);
             }
         }
 
@@ -70,36 +104,14 @@ namespace NActors::NTracing {
             return dict;
         }
 
-        std::pair<TVector<TTraceEvent>, TEventNamesDict> CollectEvents() {
-            TVector<TTraceEvent> events;
-            TEventNamesDict eventNames;
-            for (size_t i = 0; i < DEFAULT_BUCKET_COUNT; ++i) {
-                auto& bucket = ThreadId2Data.Buckets[i];
-                TThreadIdMapping::TBucketGuard guard(bucket.GetMutex());
-                for (auto& [threadId, threadData] : bucket.GetMap()) {
-                    auto& buffer = *threadData.Buffer;
-                    events.reserve(events.size() + buffer.AvailSize());
-                    for (size_t idx = buffer.FirstIndex(); idx < buffer.TotalSize(); ++idx) {
-                        events.push_back(buffer[idx]);
-                    }
-                    eventNames.insert(threadData.EventNameDict.begin(), threadData.EventNameDict.end());
-                }
-            }
-            return {std::move(events), std::move(eventNames)};
-        }
-
     private:
-        TSettings Settings;
-        using TRingBuffer = TSimpleRingBuffer<TTraceEvent>;
-        using TRingBufferPtr = TAtomicSharedPtr<TRingBuffer>;
-        struct TThreadData {
-            TRingBufferPtr Buffer;
-            TEventNamesDict EventNameDict;
-        };
+        size_t BufferSize;
+        size_t MaxThreads;
+        std::vector<std::unique_ptr<TThreadBuffer>> Buffers;
+        std::atomic<ui32> NextBufferIdx{0};
 
-        static constexpr size_t DEFAULT_BUCKET_COUNT = 64;
-        using TThreadIdMapping = TConcurrentHashMap<TThread::TId, TThreadData, DEFAULT_BUCKET_COUNT, TSpinLock>;
-        TThreadIdMapping ThreadId2Data;
+        TAdaptiveLock EventNamesDictLock;
+        TEventNamesDict EventNamesDict;
     };
 
     class TActorTracer : public IActorTracer {
@@ -114,73 +126,103 @@ namespace NActors::NTracing {
         }
 
         void HandleNew(IActor& actor) override {
-            if (!Started.load(std::memory_order_acquire)) {
+            if (State.load(std::memory_order_acquire) != ETracerState::Recording) {
                 return;
             }
+            auto* buf = GetThreadBuffer();
+            if (!buf) return;
             TTraceEvent ev{};
             ev.Type = static_cast<ui8>(ETraceEventType::New);
             ev.Actor1 = actor.SelfId().LocalId();
-            TracerImpl.AddEvent(std::move(ev));
+            TracerImpl.AddEvent(buf, ev);
         }
 
         void HandleDie(IActor& actor) override {
-            if (!Started.load(std::memory_order_acquire)) {
+            if (State.load(std::memory_order_acquire) != ETracerState::Recording) {
                 return;
             }
+            auto* buf = GetThreadBuffer();
+            if (!buf) return;
             TTraceEvent ev{};
             ev.Type = static_cast<ui8>(ETraceEventType::Die);
             ev.Actor1 = actor.SelfId().LocalId();
-            TracerImpl.AddEvent(std::move(ev));
+            TracerImpl.AddEvent(buf, ev);
         }
 
         void HandleSend(IEventHandle& event) override {
-            if (!Started.load(std::memory_order_acquire)) {
+            if (State.load(std::memory_order_acquire) != ETracerState::Recording) {
                 return;
             }
+            auto* buf = GetThreadBuffer();
+            if (!buf) return;
             TTraceEvent ev{};
             ev.Type = static_cast<ui8>(ETraceEventType::SendLocal);
             ev.Actor1 = event.Sender.LocalId();
             ev.Actor2 = event.GetRecipientRewrite().LocalId();
             ev.Aux = event.GetTypeRewrite();
-            TracerImpl.AddEvent(std::move(ev));
+            TracerImpl.AddEvent(buf, ev);
             TracerImpl.RegisterEventTypeName(event.GetTypeRewrite(), event.GetTypeName());
         }
 
         void HandleReceive(IActor& recipient, IEventHandle& event) override {
-            if (!Started.load(std::memory_order_acquire)) {
+            if (State.load(std::memory_order_acquire) != ETracerState::Recording) {
                 return;
             }
+            auto* buf = GetThreadBuffer();
+            if (!buf) return;
             TTraceEvent ev{};
             ev.Type = static_cast<ui8>(ETraceEventType::ReceiveLocal);
             ev.Actor1 = event.Sender.LocalId();
             ev.Actor2 = event.GetRecipientRewrite().LocalId();
             ev.Aux = event.GetTypeRewrite();
             ev.Extra = static_cast<ui16>(recipient.GetActivityType().GetIndex());
-            TracerImpl.AddEvent(std::move(ev));
+            TracerImpl.AddEvent(buf, ev);
             TracerImpl.RegisterEventTypeName(event.GetTypeRewrite(), event.GetTypeName());
         }
 
-        void Start() override {
-            TracerImpl.ClearBuffers();
-            Started.store(true, std::memory_order_release);
+        bool Start() override {
+            auto expected = ETracerState::Idle;
+            if (!State.compare_exchange_strong(expected, ETracerState::Recording)) {
+                return false;
+            }
+            TracerImpl.ResetBuffers();
+            return true;
         }
 
-        void Stop() override {
-            Started.store(false, std::memory_order_release);
+        bool Stop() override {
+            auto expected = ETracerState::Recording;
+            return State.compare_exchange_strong(expected, ETracerState::Idle);
         }
 
         TTraceChunk GetTraceData() override {
-            return TracerImpl.GetTraceChunk();
+            auto expected = ETracerState::Idle;
+            if (!State.compare_exchange_strong(expected, ETracerState::Fetching)) {
+                return {};
+            }
+            auto chunk = TracerImpl.GetTraceChunk();
+            State.store(ETracerState::Idle, std::memory_order_release);
+            return chunk;
         }
 
         ~TActorTracer() override {
-            Stop();
+            auto st = State.load();
+            if (st == ETracerState::Recording) {
+                Stop();
+            }
         }
 
     private:
+        TThreadBuffer* GetThreadBuffer() {
+            thread_local TThreadBuffer* cachedBuffer = nullptr;
+            if (!cachedBuffer) {
+                cachedBuffer = TracerImpl.AcquireBuffer();
+            }
+            return cachedBuffer;
+        }
+
         bool AutoStart = false;
         TInternalTracer TracerImpl;
-        std::atomic<bool> Started{false};
+        std::atomic<ETracerState> State{ETracerState::Idle};
     };
 
     THolder<IActorTracer> CreateActorTracer(TSettings settings) {

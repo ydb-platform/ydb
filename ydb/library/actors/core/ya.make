@@ -116,7 +116,6 @@ PEERDIR(
     ydb/library/actors/trace_data
     ydb/library/actors/util
     ydb/library/services
-    library/cpp/containers/concurrent_hash
     library/cpp/execprofile
     library/cpp/json/writer
     library/cpp/logger

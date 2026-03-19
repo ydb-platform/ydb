@@ -12,8 +12,15 @@ namespace NActors {
     namespace NTracing {
 
         struct TSettings {
-            size_t MaxBufferSizePerThread = 1024;
+            size_t MaxBufferSizePerThread = 10240;
+            size_t MaxThreads = 128;
             bool AutoStart = false;
+        };
+
+        enum class ETracerState : ui32 {
+            Idle = 0,
+            Recording = 1,
+            Fetching = 2,
         };
 
         class IActorTracer : TNonCopyable {
@@ -23,8 +30,8 @@ namespace NActors {
             virtual void HandleDie(IActor& actor) = 0;
             virtual void HandleSend(IEventHandle& event) = 0;
             virtual void HandleReceive(IActor& recipient, IEventHandle& event) = 0;
-            virtual void Start() = 0;
-            virtual void Stop() = 0;
+            virtual bool Start() = 0;
+            virtual bool Stop() = 0;
             virtual TTraceChunk GetTraceData() = 0;
         };
 

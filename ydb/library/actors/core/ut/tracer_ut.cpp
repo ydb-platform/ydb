@@ -186,6 +186,7 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         auto* tracer = actorSystem.GetActorTracer();
         UNIT_ASSERT(tracer != nullptr);
 
+        tracer->Stop();
         auto chunk = tracer->GetTraceData();
 
         actorSystem.Stop();

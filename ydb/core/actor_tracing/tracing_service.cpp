@@ -33,12 +33,11 @@ namespace NKikimr::NActorTracing {
         void Handle(TEvTracing::TEvTraceStart::TPtr& ev, const TActorContext& ctx) {
             auto* tracer = ctx.ActorSystem()->GetActorTracer();
             auto result = MakeHolder<TEvTracing::TEvTraceStartResult>();
-            if (tracer) {
-                tracer->Start();
+            if (tracer && tracer->Start()) {
                 result->Record.SetSuccess(true);
             } else {
                 result->Record.SetSuccess(false);
-                result->Record.SetError("Tracer not available");
+                result->Record.SetError(tracer ? "Wrong state (already recording?)" : "Tracer not available");
             }
             ctx.Send(ev->Sender, result.Release());
         }
@@ -46,12 +45,11 @@ namespace NKikimr::NActorTracing {
         void Handle(TEvTracing::TEvTraceStop::TPtr& ev, const TActorContext& ctx) {
             auto* tracer = ctx.ActorSystem()->GetActorTracer();
             auto result = MakeHolder<TEvTracing::TEvTraceStopResult>();
-            if (tracer) {
-                tracer->Stop();
+            if (tracer && tracer->Stop()) {
                 result->Record.SetSuccess(true);
             } else {
                 result->Record.SetSuccess(false);
-                result->Record.SetError("Tracer not available");
+                result->Record.SetError(tracer ? "Wrong state (not recording?)" : "Tracer not available");
             }
             ctx.Send(ev->Sender, result.Release());
         }

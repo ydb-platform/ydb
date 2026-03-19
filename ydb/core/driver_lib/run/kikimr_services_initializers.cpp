@@ -135,6 +135,9 @@
 
 #include <ydb/core/quoter/quoter_service.h>
 
+#include <ydb/core/raw_socket/sock_ssl.h>
+#include <ydb/core/raw_socket/sock64.h>
+
 #include <ydb/core/scheme/scheme_type_registry.h>
 
 #include <ydb/core/security/ticket_parser.h>
@@ -3157,6 +3160,50 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
         settings.TcpNotDelay = true;
 
+        std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds = std::make_shared<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds>();
+
+        auto readFile = [](std::optional<TString> path) {
+            if (path) {
+                try {
+                    return TFileInput(*path).ReadAll();
+                } catch (const std::exception& ex) {
+                    return TString();
+                }
+            }
+            return TString();
+        };
+
+        TString serverCert = readFile(settings.CertificateFile);
+        TString serverPrivateKey = readFile(settings.PrivateKeyFile);
+        TString caCert = readFile(Config.GetKafkaProxyConfig().GetCA());
+
+        {
+            TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));
+            if (bio) {
+                serverCreds->ServerCert = TSslHolder<X509>(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
+            } else {
+                serverCreds->ServerCert = TSslHolder<X509>();
+            }
+        }
+
+        {
+            TSslHolder<BIO> bio(BIO_new_mem_buf(serverPrivateKey.data(), serverPrivateKey.size()));
+            if (bio) {
+                serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+            } else {
+                serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>();
+            }
+        }
+
+        {
+            TSslHolder<BIO> bio(BIO_new_mem_buf(caCert.data(), caCert.size()));
+            if (bio) {
+                serverCreds->CACert = TSslHolder<X509>(
+                    PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
+            } else {
+                serverCreds->CACert = TSslHolder<X509>();
+            }
+        }
         setup->LocalServices.emplace_back(
             NKafka::MakeKafkaDiscoveryCacheID(),
             TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
@@ -3176,7 +3223,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
 
         setup->LocalServices.emplace_back(
             TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(), serverCreds),
                            TMailboxType::HTSwap, appData->UserPoolId)
         );
 

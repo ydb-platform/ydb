@@ -2,7 +2,10 @@
 
 #include <optional>
 #include <util/network/sock.h>
+#include <util/stream/file.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/core/base/appdata.h>
 #include "sock_settings.h"
 #include "sock_ssl.h"
 
@@ -140,27 +143,118 @@ protected:
 };
 
 class TInet64SecureStreamSocket : public TInet64StreamSocket, TSslLayer<TStreamSocket> {
+public:
+    struct TServerMtlsCreds {
+        TSslHolder<X509> ServerCert;
+        TSslHolder<EVP_PKEY> ServerPrivateKey;
+        TSslHolder<X509> CACert;
+    };
+
+    TInet64SecureStreamSocket(const TSocketSettings& socketSettings = {})
+        : TInet64StreamSocket(socketSettings)
+    {}
+
+    TInet64SecureStreamSocket(TInet64StreamSocket&& socket, NKikimrServices::EServiceKikimr service,
+                const std::optional<std::shared_ptr<TServerMtlsCreds>>& serverCreds = std::nullopt)
+        : TInet64StreamSocket(std::move(socket))
+    {
+        Service = service;
+        if (serverCreds.has_value()) {
+            ServerCreds = *serverCreds;
+            UseMtlsAuth = true;
+        }
+    }
+
+private:
     template<typename T>
     using TSslHolder = TSslLayer<TStreamSocket>::TSslHolder<T>;
 
     TSslHolder<BIO> Bio;
     TSslHolder<SSL> Ssl;
+    std::shared_ptr<TServerMtlsCreds> ServerCreds;
+    bool UseMtlsAuth = false;
+    NKikimrServices::EServiceKikimr Service;
 
 public:
-    TInet64SecureStreamSocket(const TSocketSettings& socketSettings = {})
-        : TInet64StreamSocket(socketSettings)
-    {}
-
-    TInet64SecureStreamSocket(TInet64StreamSocket&& socket)
-        : TInet64StreamSocket(std::move(socket))
-    {}
-
-    void InitServerSsl(SSL_CTX* ctx) {
+    bool InitServerSsl(SSL_CTX* ctx) {
         Bio.reset(BIO_new(TSslLayer<TStreamSocket>::IoMethod()));
         BIO_set_data(Bio.get(), static_cast<TStreamSocket*>(this));
         BIO_set_nbio(Bio.get(), 1);
+
+        if (UseMtlsAuth) {
+            if (!ServerCreds || !ServerCreds->ServerCert || !ServerCreds->ServerPrivateKey || !ServerCreds->CACert) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Not enough data in MTLS configuration.");
+                return false;
+            }
+            SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,&TInet64SecureStreamSocket::Verify);
+
+            int retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCert.get());
+            if (retServerCert != 1) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server certificate to ssl context, it might be incorrect.");
+                return false;
+            }
+
+            if (!ServerCreds->ServerPrivateKey) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't parse server private key, it might be incorrect.");
+                return false;
+            }
+            int retPrivateKey = SSL_CTX_use_PrivateKey(ctx, ServerCreds->ServerPrivateKey.get());
+            if (retPrivateKey != 1) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server private key to ssl context, it might be incorrect.");
+                return false;
+            }
+
+            X509_STORE* store = SSL_CTX_get_cert_store(ctx);
+            if (!store) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't get cert store from SSL context.");
+
+                return false;
+            }
+
+            if (X509_STORE_add_cert(store, ServerCreds->CACert.get()) != 1) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load CA file. Check its correctness.");
+                return false;
+            }
+
+            SSL_CTX_set_verify_depth(ctx, 9);
+            if (SSL_CTX_set_ciphersuites(ctx, "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256") != 1) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load cipher list");
+                return false;
+            }
+
+            const char *session_context = "YdbMtlsContext";
+            if (SSL_CTX_set_session_id_context(ctx, (const unsigned char *)session_context, strlen(session_context)) != 1) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add ssl session id to ssl context.");
+                return false;
+            }
+        } else {
+            SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
+        }
+
         Ssl = TSslHelpers::ConstructSsl(ctx, Bio.get());
-        SSL_set_accept_state(Ssl.get());
+        if (Ssl) {
+            SSL_set_accept_state(Ssl.get());
+            return true;
+        }
+        return false;
+    }
+
+    TSslHolder<X509> GetServerCert(const TString& certificate) {
+        TSslHolder<BIO> bio(BIO_new_mem_buf(certificate.data(), certificate.size()));
+        if (bio) {
+            TSslHolder<X509> cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
+            return cert;
+        }
+        return TSslHolder<X509>();
+    }
+
+     TSslHolder<EVP_PKEY> GetServerPrivateKey(const TString& privateKey) {
+        TSslHolder<BIO> bio(BIO_new_mem_buf(privateKey.data(), privateKey.size()));
+        if (bio) {
+            TSslHolder<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+            return pkey;
+        }
+        return TSslHolder<EVP_PKEY>();
     }
 
     int ProcessResult(int res) {
@@ -182,10 +276,51 @@ public:
 
     int SecureAccept(SSL_CTX* ctx) {
         if (!Ssl) {
-            InitServerSsl(ctx);
+            if (!InitServerSsl(ctx)) {
+                return -EIO;
+            }
         }
         int res = SSL_accept(Ssl.get());
         return ProcessResult(res);
+    }
+
+    static TString ConvertX509ToPEMString(X509* cert) {
+        TSslHolder<BIO> bio = TSslHolder<BIO>(BIO_new(BIO_s_mem()));
+        if (bio && PEM_write_bio_X509(bio.get(), cert)) {
+            char* buffer = NULL;
+            long length = BIO_get_mem_data(bio.get(), &buffer);
+            return TString(buffer, length);
+        }
+        return TString();
+    }
+
+    static int Verify(int preverify, X509_STORE_CTX *ctx) {
+        X509* current = X509_STORE_CTX_get_current_cert(ctx);
+        if (!preverify) {
+            int err = X509_STORE_CTX_get_error(ctx);
+            char buffer[1024];
+            X509_NAME_oneline(X509_get_subject_name(current), buffer, sizeof(buffer));
+            if (err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT) {
+                // Allow self-signed certificates
+                preverify = 1;
+            }
+        }
+        return preverify;
+    }
+
+    int GetSslHandshakeResult() {
+        if (!Ssl) {
+            return -1;
+        }
+        int ret = SSL_do_handshake(Ssl.get());
+        return ret;
+    }
+
+    TSslHolder<X509> GetSslClientCert() {
+        if (!Ssl) {
+            return nullptr;
+        }
+        return TSslHolder<X509>(SSL_get_peer_certificate(Ssl.get()));
     }
 
     ssize_t Send(const void* msg, size_t len, int flags = 0) override {

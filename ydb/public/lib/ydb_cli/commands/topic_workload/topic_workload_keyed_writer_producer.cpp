@@ -135,3 +135,8 @@ size_t TTopicWorkloadKeyedWriterProducer::InflightMessagesCnt() const
 {
     return InflightMessagesCount_.load(std::memory_order_relaxed);
 }
+
+void TTopicWorkloadKeyedWriterProducer::WaitForContinuationToken(const TDuration&)
+{
+    // IProducer doesn't use WriteSession/ContinuationToken - no-op for keyed writer
+}

@@ -32,7 +32,7 @@ SRCS(
     aggregated_result.cpp
     archive.cpp
     config_examples.cpp
-    ddisk_write.cpp
+    ddisk_load.cpp
     interconnect_load.cpp
     keyvalue_write.cpp
     kqp.cpp

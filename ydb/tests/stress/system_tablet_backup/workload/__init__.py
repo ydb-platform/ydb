@@ -78,6 +78,7 @@ class WorkloadRegisterNode(WorkloadBase):
 
 class BackupValidator:
     SELECTOR_NAME = "system_tablet_backup_workload_validator"
+    RESTORE_TIMEOUT_SECONDS = 600
 
     SYSTEM_TABLETS = {
         "FLAT_HIVE":            [72057594037968897],
@@ -211,7 +212,7 @@ class BackupValidator:
         url = f"{self.mon_endpoint}/tablets/?TabletID={tablet_id}"
         for attempt in range(retries):
             try:
-                response = requests.get(url)
+                response = requests.get(url, timeout=30)
                 response.raise_for_status()
                 if "Recovery" in response.text:
                     return
@@ -224,7 +225,7 @@ class BackupValidator:
     def _restart_node_broker(self):
         tablet_id = self.SYSTEM_TABLETS["NODE_BROKER"][0]
         restart_url = f"{self.mon_endpoint}/tablets?RestartTabletID={tablet_id}"
-        response = requests.get(restart_url)
+        response = requests.get(restart_url, timeout=30)
         response.raise_for_status()
         self._wait_recovery_node_broker_alive()
 
@@ -252,7 +253,7 @@ class BackupValidator:
         url = f"{self.mon_endpoint}/tablets?TabletID={tablet_id}"
         for attempt in range(retries):
             try:
-                response = requests.get(url)
+                response = requests.get(url, timeout=30)
                 response.raise_for_status()
                 match = re.search(r'NodeID:\s*(\d+)', response.text)
                 if match:
@@ -265,7 +266,7 @@ class BackupValidator:
             f"Failed to find host for tablet {tablet_id} after {retries} retries")
 
     def _fetch_node_list(self):
-        response = requests.get(f"{self.mon_endpoint}/viewer/json/nodelist")
+        response = requests.get(f"{self.mon_endpoint}/viewer/json/nodelist", timeout=30)
         response.raise_for_status()
         nodes = response.json()
         return {
@@ -314,7 +315,7 @@ class BackupValidator:
 
     def _start_restore(self, hostname, tablet_id, backup_path):
         url = (f"{self._node_mon_url(hostname)}/tablets/app?TabletID={tablet_id}&restoreBackup={quote(backup_path, safe='')}")
-        response = requests.get(url)
+        response = requests.get(url, timeout=30)
         response.raise_for_status()
         return response.text
 
@@ -330,7 +331,7 @@ class BackupValidator:
 
     def _check_restore_status(self, hostname, tablet_id):
         url = f"{self._node_mon_url(hostname)}/tablets/app?TabletID={tablet_id}"
-        response = requests.get(url)
+        response = requests.get(url, timeout=30)
         response.raise_for_status()
         html = response.text
 
@@ -386,7 +387,8 @@ class BackupValidator:
                 self._start_restore(target_host, tablet_id, backup_path)
 
                 restarted = False
-                while True:
+                poll_deadline = time.time() + self.RESTORE_TIMEOUT_SECONDS
+                while time.time() < poll_deadline:
                     time.sleep(2)
                     status, message = self._check_restore_status(target_host, tablet_id)
 
@@ -398,6 +400,12 @@ class BackupValidator:
                         restarted = True
                         break
                     # status == "in_progress" - keep polling
+                else:
+                    return "error", {
+                        "backup": backup_name,
+                        "host": target_host,
+                        "reason": f"restore timed out after {self.RESTORE_TIMEOUT_SECONDS}s in in_progress state",
+                    }
 
                 if not restarted:
                     break

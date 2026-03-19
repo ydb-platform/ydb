@@ -48,7 +48,7 @@ public:
                 if (!Committed->Chunks.empty()) {
                     DropAllChunks();
                 } else {
-                    Send(Ctx.LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, Max<ui64>()));
+                    Send(LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, Max<ui64>()));
                 }
             }
             Become(&TThis::StateError);

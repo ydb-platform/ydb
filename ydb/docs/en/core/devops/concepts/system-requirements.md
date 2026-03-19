@@ -34,7 +34,7 @@ The disk is also used for [spilling](../../concepts/glossary.md#spilling), a mem
 
 A {{ ydb-short-name }} server can be run on servers with a Linux operating system, kernel 4.19 and higher, and libc 2.30. For example, Ubuntu 20.04, Debian 11, Fedora 34, or newer releases. {{ ydb-short-name }} uses the [TCMalloc](https://google.github.io/tcmalloc) memory allocator. To make it efficient, [enable](https://google.github.io/tcmalloc/tuning.html#system-level-optimizations) Transparent Huge Pages and Memory overcommitment.
 
-For better disk and network I/O performance, we recommend disabling `iommu` by setting the Linux boot parameter `intel_iommu=off`. If IOMMU is required for some reason, disable address translation by using `intel_iommu=on iommu=pt`.
+To improve disk and network I/O performance in a trusted environment, you can disable IOMMU by setting the Linux boot parameter `intel_iommu=off` or `amd_iommu=off`. In an untrusted environment, as well as under strict security requirements or with active virtualization use (for example, PCI passthrough and device isolation), disabling IOMMU is not recommended. In such cases, use `intel_iommu=on iommu=pt` or `amd_iommu=on iommu=pt`.
 
 If the server has more than 32 CPU cores, to increase {{ ydb-short-name }} performance, run each dynamic node in a separate taskset/cpuset of 10 to 32 cores. For example, with 128 CPU cores, an optimal setup is to run 4 dynamic nodes, each in its own 32-core taskset. Cores within one taskset/cpuset should belong to the same NUMA node.
 

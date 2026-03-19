@@ -14,7 +14,7 @@ namespace {
 void DoReadFromSectorMap(
     const TIntrusivePtr<NPDisk::TSectorMap>& sectorMap,
     ui32 blockSize,
-    TGuardedSgList& sgList,
+    const TGuardedSgList& sgList,
     TBlockRange64 range,
     NThreading::TPromise<TDBGReadBlocksResponse> promise)
 {
@@ -114,7 +114,7 @@ TInMemoryDirectBlockGroup::WriteBlocksToPBuffer(
     ui8 hostIndex,
     ui64 lsn,
     TBlockRange64 range,
-    TGuardedSgList guardedSglist,
+    const TGuardedSgList& guardedSglist,
     NWilson::TTraceId traceId)
 {
     Y_UNUSED(vChunkIndex);
@@ -180,12 +180,14 @@ TInMemoryDirectBlockGroup::WriteBlocksToPBuffer(
 NThreading::TFuture<TDBGFlushResponse>
 TInMemoryDirectBlockGroup::FlushFromPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    ui8 pbufferHostIndex,
+    ui8 ddiskHostIndex,
     const TVector<TPBufferSegment>& segments,
     NWilson::TTraceId traceId)
 {
     Y_UNUSED(vChunkIndex);
-    Y_UNUSED(hostIndex);
+    Y_UNUSED(pbufferHostIndex);
+    Y_UNUSED(ddiskHostIndex);
     Y_UNUSED(segments);
     Y_UNUSED(traceId);
 
@@ -203,7 +205,7 @@ TInMemoryDirectBlockGroup::ReadBlocksFromPBuffer(
     ui8 hostIndex,
     ui64 lsn,
     TBlockRange64 range,
-    TGuardedSgList sglist,
+    const TGuardedSgList& sglist,
     NWilson::TTraceId traceId)
 {
     Y_UNUSED(vChunkIndex);
@@ -228,7 +230,7 @@ TInMemoryDirectBlockGroup::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
     ui8 hostIndex,
     TBlockRange64 range,
-    TGuardedSgList sglist,
+    const TGuardedSgList& sglist,
     NWilson::TTraceId traceId)
 {
     Y_UNUSED(vChunkIndex);

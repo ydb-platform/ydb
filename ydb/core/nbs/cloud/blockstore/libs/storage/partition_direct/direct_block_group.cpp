@@ -41,13 +41,7 @@ TListPBufferResponse MakeListPBufferResponse(
 
 }   // namespace
 
-NActors::TActorId TDirectBlockGroup::TDDiskConnection::GetServiceId() const
-{
-    return NKikimr::MakeBlobStorageDDiskId(
-        DDiskId.NodeId,
-        DDiskId.PDiskId,
-        DDiskId.DDiskSlotId);
-}
+////////////////////////////////////////////////////////////////////////////////
 
 const TFuture<NProto::TError>&
 TDirectBlockGroup::TDDiskConnection::GetFuture() const
@@ -78,13 +72,14 @@ TDirectBlockGroup::TDirectBlockGroup(
                                    bool fromPersistentBuffer)
     {
         for (const auto& ddiskId: ids) {
-            connections.emplace_back(
-                ddiskId,
-                NDDisk::TQueryCredentials(
-                    TabletId,
-                    generation,
-                    std::nullopt,
-                    fromPersistentBuffer));
+            connections.push_back(TDDiskConnection{
+                .HostConnection = NTransport::THostConnection{
+                    .DDiskId = ddiskId,
+                    .Credentials = NDDisk::TQueryCredentials(
+                        TabletId,
+                        generation,
+                        std::nullopt,
+                        fromPersistentBuffer)}});
         }
     };
 
@@ -120,7 +115,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
     ui8 hostIndex,
     TBlockRange64 range,
-    TGuardedSgList guardedSglist,
+    const TGuardedSgList& guardedSglist,
     NWilson::TTraceId traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -146,8 +141,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
     auto promise = NewPromise<TDBGReadBlocksResponse>();
     auto result = promise.GetFuture();
     auto future = StorageTransport->ReadFromDDisk(
-        connection.GetServiceId(),
-        connection.Credentials,
+        connection.HostConnection,
         NKikimr::NDDisk::TBlockSelector(
             vChunkIndex,
             range.Start * DefaultBlockSize,
@@ -189,7 +183,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
     ui8 hostIndex,
     ui64 lsn,
     TBlockRange64 range,
-    TGuardedSgList guardedSglist,
+    const TGuardedSgList& guardedSglist,
     NWilson::TTraceId traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -215,8 +209,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
     auto promise = NewPromise<TDBGReadBlocksResponse>();
     auto result = promise.GetFuture();
     auto future = StorageTransport->ReadFromPBuffer(
-        connection.GetServiceId(),
-        connection.Credentials,
+        connection.HostConnection,
         NKikimr::NDDisk::TBlockSelector(
             vChunkIndex,
             range.Start * DefaultBlockSize,
@@ -259,7 +252,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
     ui8 hostIndex,
     ui64 lsn,
     TBlockRange64 range,
-    TGuardedSgList guardedSglist,
+    const TGuardedSgList& guardedSglist,
     NWilson::TTraceId traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -284,16 +277,15 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
 
     auto promise = NewPromise<TDBGWriteBlocksResponse>();
     auto result = promise.GetFuture();
-    auto future = StorageTransport->WritePersistentBuffer(
-        connection.GetServiceId(),
-        connection.Credentials,
+    auto future = StorageTransport->WriteToPBuffer(
+        connection.HostConnection,
         NKikimr::NDDisk::TBlockSelector(
             vChunkIndex,
             range.Start * DefaultBlockSize,
             range.Size() * DefaultBlockSize),
         lsn,
         NKikimr::NDDisk::TWriteInstruction(0),
-        std::move(guardedSglist),
+        guardedSglist,
         childSpan);
     future.Subscribe(
         [promise = std::move(promise),
@@ -325,7 +317,8 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
 
 NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::FlushFromPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    ui8 pbufferHostIndex,
+    ui8 ddiskHostIndex,
     const TVector<TPBufferSegment>& segments,
     NWilson::TTraceId traceId)
 {
@@ -334,8 +327,8 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::FlushFromPBuffer(
     using TEvSyncWithPersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
 
-    const auto& ddiskConnection = DDiskConnections[hostIndex];
-    const auto& persistentBufferConnection = PBufferConnections[hostIndex];
+    const auto& ddiskConnection = DDiskConnections[ddiskHostIndex];
+    const auto& pbufferConnection = PBufferConnections[pbufferHostIndex];
 
     TVector<NKikimr::NDDisk::TBlockSelector> selectors;
     TVector<ui64> lsns;
@@ -355,15 +348,10 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::FlushFromPBuffer(
         ActorSystem);
 
     auto future = StorageTransport->FlushFromPBuffer(
-        ddiskConnection.GetServiceId(),
-        ddiskConnection.Credentials,
+        ddiskConnection.HostConnection,
+        pbufferConnection.HostConnection,
         std::move(selectors),
         std::move(lsns),
-        std::make_tuple(
-            persistentBufferConnection.DDiskId.NodeId,
-            persistentBufferConnection.DDiskId.PDiskId,
-            persistentBufferConnection.DDiskId.DDiskSlotId),
-        persistentBufferConnection.Credentials.DDiskInstanceGuid.value(),
         childSpan);
 
     auto promise = NewPromise<TDBGFlushResponse>();
@@ -437,9 +425,8 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
         NWilson::EFlags::NONE,
         ActorSystem);
 
-    auto future = StorageTransport->ErasePersistentBuffer(
-        persistentBufferConnection.GetServiceId(),
-        persistentBufferConnection.Credentials,
+    auto future = StorageTransport->EraseFromPBuffer(
+        persistentBufferConnection.HostConnection,
         std::move(selectors),
         std::move(lsns),
         childSpan);
@@ -528,9 +515,8 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     using TEvListPersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult;
 
-    auto future = StorageTransport->ListPersistentBuffer(
-        connection.GetServiceId(),
-        connection.Credentials);
+    auto future =
+        StorageTransport->ListPBufferEntries(connection.HostConnection);
 
     future.Subscribe(
         [promise = std::move(promise),
@@ -581,9 +567,7 @@ void TDirectBlockGroup::DoEstablishConnection(
 
     using TEvConnectResult = NKikimrBlobStorage::NDDisk::TEvConnectResult;
 
-    auto future = StorageTransport->Connect(
-        connection.GetServiceId(),
-        connection.Credentials);
+    auto future = StorageTransport->Connect(connection.HostConnection);
 
     future.Subscribe(
         [weakSelf = weak_from_this(),
@@ -622,7 +606,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
             ? MakeError(S_OK)
             : MakeError(E_FAIL, result.GetErrorReason());
     if (!HasError(error)) {
-        connection.Credentials.DDiskInstanceGuid =
+        connection.HostConnection.Credentials.DDiskInstanceGuid =
             result.GetDDiskInstanceGuid();
     } else {
         Y_ABORT(
@@ -634,11 +618,11 @@ void TDirectBlockGroup::OnConnectionEstablished(
     const bool allDDiskConnected = AllOf(
         DDiskConnections,
         [](const TDDiskConnection& c)
-        { return c.Credentials.DDiskInstanceGuid.has_value(); });
+        { return c.HostConnection.IsConnected(); });
     const bool allPBufferConnected = AllOf(
         PBufferConnections,
         [](const TDDiskConnection& c)
-        { return c.Credentials.DDiskInstanceGuid.has_value(); });
+        { return c.HostConnection.IsConnected(); });
 
     if (allDDiskConnected && allPBufferConnected) {
         Initialized = true;

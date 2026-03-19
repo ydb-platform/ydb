@@ -38,6 +38,7 @@ void TFlushRequestExecutor::Run()
 {
     auto future = DirectBlockGroup->FlushFromPBuffer(
         VChunkConfig.VChunkIndex,
+        VChunkConfig.GetHostIndex(Location),   // TODO
         VChunkConfig.GetHostIndex(Location),
         Hint.Segments,
         NWilson::TTraceId(TraceId));

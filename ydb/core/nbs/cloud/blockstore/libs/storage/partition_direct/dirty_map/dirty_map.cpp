@@ -36,6 +36,7 @@ TInflightInfo::EState TInflightInfo::GetState() const
                                                   : EState::PBufferFlushing;
     }
 
+    Y_ABORT_UNLESS(WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
     return EState::PBufferWritten;
 }
 

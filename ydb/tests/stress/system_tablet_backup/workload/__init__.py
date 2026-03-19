@@ -1,45 +1,50 @@
 # -*- coding: utf-8 -*-
+import grpc
 import os
+import re
+import requests
 import subprocess
 import threading
 import time
-from urllib.parse import urlparse, quote
-import requests
 import yaml
 import ydb
+import shlex
 
-from ydb.public.api.protos import ydb_discovery_pb2
+from urllib.parse import urlparse, quote
+
 from ydb.public.api.grpc import ydb_discovery_v1_pb2_grpc
-
-from ydb.tests.stress.common.common import WorkloadBase
-from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
-from ydb.public.api.protos.draft import ydb_dynamic_config_pb2 as dynconfig_proto
+from ydb.public.api.protos import ydb_config_pb2 as config_api
+from ydb.public.api.protos import ydb_discovery_pb2
+from ydb.public.api.protos.draft import ydb_dynamic_config_pb2 as dynconfig_api
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.tests.library.clients.kikimr_config_client import ConfigClient
+from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
+from ydb.tests.stress.common.common import WorkloadBase
 
 
 class WorkloadRegisterNode(WorkloadBase):
     def __init__(self, client, stop):
         super().__init__(client, "", "register_node", stop)
         self.registered = 0
-        self.next_port = 0
+        self.next_id = 0
         self.lock = threading.Lock()
 
     def get_stat(self):
         with self.lock:
             return f"Registered: {self.registered}"
 
-    def _get_next_port(self):
+    def _get_next_id(self):
         with self.lock:
-            port = self.next_port
-            self.next_port += 1
-            return port
+            node_id = self.next_id
+            self.next_id += 1
+            return node_id
 
-    def _register_node(self, node_port):
+    def _register_node(self, node_id):
         request = ydb_discovery_pb2.NodeRegistrationRequest(
-            host="localhost",
-            port=node_port,
-            resolve_host="localhost",
-            address="594f:10c7:ad54:eada:99eb:7b5b:eec2:4490",
+            host="system.tablet.backup.fake." + str(node_id),
+            port=19001,
+            resolve_host="system.tablet.backup.fake." + str(node_id),
+            address="594f:10c7:ad54:eada:99eb:7b5b:eec2:0000",
             location=ydb_discovery_pb2.NodeLocation(
                 data_center="DC",
                 module="1",
@@ -60,9 +65,12 @@ class WorkloadRegisterNode(WorkloadBase):
 
     def _register_node_loop(self):
         while not self.is_stop_requested():
-            self._register_node(self._get_next_port())
-            with self.lock:
-                self.registered += 1
+            try:
+                self._register_node(self._get_next_id())
+                with self.lock:
+                    self.registered += 1
+            except (ydb.Unavailable, ydb.ConnectionLost, ydb.GenericError):
+                time.sleep(1)
 
     def get_workload_thread_funcs(self):
         return [self._register_node_loop for x in range(0, 10)]
@@ -87,13 +95,21 @@ class BackupValidator:
     RECOVERY_TABLETS = {"NODE_BROKER"}
 
     def __init__(self, endpoint, mon_endpoint, backup_path):
+        if "://" not in endpoint:
+            endpoint = "grpc://" + endpoint
+        if "://" not in mon_endpoint:
+            mon_endpoint = "http://" + mon_endpoint
+
         parsed = urlparse(endpoint)
+        self.config_client = ConfigClient(parsed.hostname, parsed.port)
         self.dynconfig_client = DynConfigClient(parsed.hostname, parsed.port)
-        self.mon_endpoint = mon_endpoint
-        self.backup_path = backup_path
+
         mon_parsed = urlparse(mon_endpoint)
         self.mon_port = mon_parsed.port
         self.mon_scheme = mon_parsed.scheme
+
+        self.mon_endpoint = mon_endpoint
+        self.backup_path = backup_path
 
     @staticmethod
     def _assert_success(response, operation_name):
@@ -102,27 +118,36 @@ class BackupValidator:
             issues = [issue.message for issue in response.operation.issues]
             raise RuntimeError(f"{operation_name} failed with status {status}: {issues}")
 
-    def _retry(self, func, operation_name, retries=10, delay=1):
+    def _retry(self, func, operation_name, retries=10):
         for attempt in range(retries):
             response = func()
             if response.operation.status == StatusIds.SUCCESS:
                 return response
             if response.operation.status == StatusIds.UNAVAILABLE and attempt < retries - 1:
-                time.sleep(delay)
+                time.sleep(1)
                 continue
             self._assert_success(response, operation_name)
         return response
 
     def _fetch_config(self):
+        try:
+            response = self._retry(self.config_client.fetch_all_configs, "FetchConfig")
+            result = config_api.FetchConfigResult()
+            response.operation.result.Unpack(result)
+            return result.config[0].config
+        except grpc.RpcError as e:
+            if e.code() != grpc.StatusCode.UNIMPLEMENTED:
+                raise
+
         response = self._retry(self.dynconfig_client.fetch_config, "GetConfig")
-        result = dynconfig_proto.GetConfigResult()
+        result = dynconfig_api.GetConfigResult()
         response.operation.result.Unpack(result)
 
         if result.config and result.config[0]:
             return result.config[0]
 
         response = self._retry(self.dynconfig_client.fetch_startup_config, "FetchStartupConfig")
-        result = dynconfig_proto.FetchStartupConfigResult()
+        result = dynconfig_api.FetchStartupConfigResult()
         response.operation.result.Unpack(result)
         full_config = {
             "metadata": {
@@ -135,6 +160,20 @@ class BackupValidator:
         return yaml.dump(full_config)
 
     def _replace_config(self, config_yaml):
+        try:
+            full_config = yaml.safe_load(config_yaml)
+            full_config["metadata"]["version"] += 1
+            versioned_yaml = yaml.dump(full_config)
+            def do_replace():
+                request = config_api.ReplaceConfigRequest()
+                request.replace = versioned_yaml
+                return self.config_client.invoke(request, "ReplaceConfig")
+            self._retry(do_replace, "ReplaceConfig")
+            return
+        except grpc.RpcError as e:
+            if e.code() != grpc.StatusCode.UNIMPLEMENTED:
+                raise
+
         self._retry(lambda: self.dynconfig_client.replace_config(config_yaml), "ReplaceConfig")
 
     def _make_bootstrap_selector(self, erasure_name):
@@ -185,7 +224,8 @@ class BackupValidator:
     def _restart_node_broker(self):
         tablet_id = self.SYSTEM_TABLETS["NODE_BROKER"][0]
         restart_url = f"{self.mon_endpoint}/tablets?RestartTabletID={tablet_id}"
-        requests.get(restart_url)
+        response = requests.get(restart_url)
+        response.raise_for_status()
         self._wait_recovery_node_broker_alive()
 
     def _enable_node_broker_recovery(self):
@@ -203,95 +243,123 @@ class BackupValidator:
         full_config = yaml.safe_load(config_yaml)
         full_config["selector_config"] = [
             s for s in full_config.get("selector_config", [])
-            if s.get("description") != self.SELECTOR_NAME]
+            if s.get("description") != self.SELECTOR_NAME
+        ]
         updated_yaml = yaml.dump(full_config)
         self._replace_config(updated_yaml)
 
-    def _node_mon_url(self, hostname, port=None):
-        return f"{self.mon_scheme}://{hostname}:{port or self.mon_port}"
-
-    def _get_tablet_host(self, tablet_id, retries=10, delay=1):
-        url = f"{self.mon_endpoint}/tablets/?TabletID={tablet_id}"
+    def _get_tablet_host(self, tablet_id, retries=10):
+        url = f"{self.mon_endpoint}/tablets?TabletID={tablet_id}"
         for attempt in range(retries):
             try:
-                response = requests.get(url, allow_redirects=True)
+                response = requests.get(url)
                 response.raise_for_status()
-                final_url = urlparse(response.url)
-                return final_url.hostname, final_url.port
+                match = re.search(r'NodeID:\s*(\d+)', response.text)
+                if match:
+                    node_id = int(match.group(1))
+                    return self.nodes[node_id]["Host"]
             except Exception:
                 pass
-            if attempt < retries - 1:
-                time.sleep(delay)
+            time.sleep(1)
         raise RuntimeError(
             f"Failed to find host for tablet {tablet_id} after {retries} retries")
 
     def _fetch_node_list(self):
-        url = f"{self.mon_endpoint}/viewer/json/nodelist"
-        response = requests.get(url)
+        response = requests.get(f"{self.mon_endpoint}/viewer/json/nodelist")
         response.raise_for_status()
-        return response.json()
+        nodes = response.json()
+        return {
+            node["Id"]: node
+            for node in nodes
+            if not node["Host"].startswith("system.tablet.backup.fake")
+        }
 
     def _run_on_host(self, host, cmd, timeout=30):
-        if host in ("localhost", "127.0.0.1", "::1"):
-            return subprocess.run(
+        is_local = host in ("localhost", "127.0.0.1", "::1")
+        if is_local:
+            result = subprocess.run(
                 ["bash", "-c", cmd],
                 capture_output=True, text=True, timeout=timeout,
             )
-        return subprocess.run(
-            ["ssh", host, cmd],
-            capture_output=True, text=True, timeout=timeout,
-        )
+        else:
+            result = subprocess.run(
+                ["ssh", "-o", "StrictHostKeyChecking=no", host, cmd],
+                capture_output=True, text=True, timeout=timeout,
+            )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Command failed on {host}: rc={result.returncode} stderr={result.stderr.strip()}")
+        return result
 
     def _copy_backup(self, src_host, dst_host, backup_dir):
+        backup_name = os.path.basename(backup_dir)
+        tmp_dir = "~/backup_tmp/" + shlex.quote(backup_name)
         parent_dir = os.path.dirname(backup_dir)
-        self._run_on_host(dst_host, f"mkdir -p {parent_dir}")
-        scp_cmd = f"scp -r {backup_dir} {dst_host}:{backup_dir}"
-        result = self._run_on_host(src_host, scp_cmd, timeout=120)
+        self._run_on_host(dst_host, "mkdir -p ~/backup_tmp")
+        scp_cmd = ["scp", "-o", "StrictHostKeyChecking=no", "-r",
+                   f"{src_host}:{backup_dir}", f"{dst_host}:{tmp_dir}"]
+        result = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(
                 f"Failed to copy backup from {src_host} to {dst_host}: {result.stderr}")
+        self._run_on_host(dst_host, f"sudo mkdir -p {shlex.quote(parent_dir)}")
+        self._run_on_host(dst_host, f"sudo mv {tmp_dir} {shlex.quote(backup_dir)}")
+        self._run_on_host(dst_host, "rmdir ~/backup_tmp 2>/dev/null || true")
 
-    def _start_restore(self, hostname, port, tablet_id, backup_path):
-        url = (f"{self._node_mon_url(hostname, port)}/tablets/app"
-               f"?TabletID={tablet_id}&restoreBackup={quote(backup_path, safe='')}")
+    def _delete_copied_backup(self, host, backup_dir):
+        self._run_on_host(host, f"sudo rm -rf {shlex.quote(backup_dir)}")
+
+    def _node_mon_url(self, hostname):
+        return f"{self.mon_scheme}://{hostname}:{self.mon_port}"
+
+    def _start_restore(self, hostname, tablet_id, backup_path):
+        url = (f"{self._node_mon_url(hostname)}/tablets/app?TabletID={tablet_id}&restoreBackup={quote(backup_path, safe='')}")
         response = requests.get(url)
         response.raise_for_status()
         return response.text
 
-    def _check_restore_status(self, hostname, port, tablet_id):
-        url = f"{self._node_mon_url(hostname, port)}/tablets/app?TabletID={tablet_id}"
+    @staticmethod
+    def _extract_alert_message(html, alert_class):
+        import re
+        pattern = rf'<div[^>]*class="[^"]*{alert_class}[^"]*"[^>]*>(.*?)</div>'
+        match = re.search(pattern, html, re.DOTALL)
+        if match:
+            text = re.sub(r'<[^>]+>', '', match.group(1)).strip()
+            return text
+        return ""
+
+    def _check_restore_status(self, hostname, tablet_id):
+        url = f"{self._node_mon_url(hostname)}/tablets/app?TabletID={tablet_id}"
         response = requests.get(url)
         response.raise_for_status()
         html = response.text
 
         if "alert-success" in html:
-            return "success"
+            return "success", ""
         if "alert-danger" in html:
-            return "error"
+            return "error", self._extract_alert_message(html, "alert-danger")
         if "alert-warning" in html:
-            return "warning"
+            return "warning", self._extract_alert_message(html, "alert-warning")
         if "alert-info" in html:
-            return "in_progress"
-        return "restarted"
+            return "in_progress", ""
+        return "restarted", ""
 
     def _discover_backups(self):
-        hosts = set(node.get("Host") for node in self.nodes if node.get("Host"))
+        hosts = set(node["Host"] for node in self.nodes.values())
         tablet_id = self.SYSTEM_TABLETS["NODE_BROKER"][0]
         tablet_backup_path = f"{self.backup_path}/node_broker/{tablet_id}"
 
         all_backups = []
         for host in sorted(hosts):
             cmd = (
-                f'for d in {tablet_backup_path}/*; do '
+                f'for d in {shlex.quote(tablet_backup_path)}/*; do '
                 f'[ -d "$d/snapshot" ] && basename "$d"; '
-                f'done'
+                f'done; true'
             )
             result = self._run_on_host(host, cmd)
             lines = [line for line in result.stdout.strip().split("\n") if line]
             for backup_name in lines:
                 all_backups.append({
-                    "tablet_type": "NODE_BROKER",
-                    "tablet_id": tablet_id,
                     "host": host,
                     "backup_name": backup_name,
                     "backup_path": f"{tablet_backup_path}/{backup_name}",
@@ -300,75 +368,62 @@ class BackupValidator:
         return all_backups
 
     def _restore_single_backup(self, backup_info, max_retries=3):
-        tablet_id = backup_info["tablet_id"]
-        tablet_type = backup_info["tablet_type"]
+        tablet_id = self.SYSTEM_TABLETS["NODE_BROKER"][0]
         backup_host = backup_info["host"]
         backup_path = backup_info["backup_path"]
         backup_name = backup_info["backup_name"]
 
-        for attempt in range(1, max_retries + 1):
-            self._restart_node_broker()
-            target_host, target_port = self._get_tablet_host(tablet_id)
+        copied_to_host = None
+        try:
+            for attempt in range(1, max_retries + 1):
+                self._restart_node_broker()
+                target_host = self._get_tablet_host(tablet_id)
 
-            if target_host != backup_host:
-                self._copy_backup(backup_host, target_host, backup_path)
+                if target_host != backup_host:
+                    self._copy_backup(backup_host, target_host, backup_path)
+                    copied_to_host = target_host
 
-            self._start_restore(target_host, target_port, tablet_id, backup_path)
+                self._start_restore(target_host, tablet_id, backup_path)
 
-            restarted = False
-            while True:
-                time.sleep(2)
-                status = self._check_restore_status(
-                    target_host, target_port, tablet_id)
+                restarted = False
+                while True:
+                    time.sleep(2)
+                    status, message = self._check_restore_status(target_host, tablet_id)
 
-                if status == "success":
-                    return "success", None
-                elif status == "error":
-                    return "error", {
-                        "backup": backup_name,
-                        "host": target_host,
-                        "tablet_type": tablet_type,
-                        "tablet_id": tablet_id,
-                    }
-                elif status == "warning":
-                    return "warning", {
-                        "backup": backup_name,
-                        "host": target_host,
-                        "tablet_type": tablet_type,
-                        "tablet_id": tablet_id,
-                    }
-                elif status == "restarted":
-                    print(f"    Tablet restarted during restore, "
-                          f"retrying (attempt {attempt}/{max_retries})")
-                    restarted = True
+                    if status == "success":
+                        return "success", None
+                    elif status in ("error", "warning"):
+                        return status, {"backup": backup_name, "host": target_host, "reason": message}
+                    elif status == "restarted":
+                        restarted = True
+                        break
+                    # status == "in_progress" - keep polling
+
+                if not restarted:
                     break
-                # status == "in_progress" - keep polling
-
-            if not restarted:
-                break
-        return "error", {
-            "backup": backup_name,
-            "host": backup_host,
-            "tablet_type": tablet_type,
-            "tablet_id": tablet_id,
-            "reason": "max retries exceeded due to tablet restarts",
-        }
+            return "error", {
+                "backup": backup_name,
+                "host": backup_host,
+                "reason": "max retries exceeded due to tablet restarts",
+            }
+        finally:
+            if copied_to_host:
+                self._delete_copied_backup(copied_to_host, backup_path)
 
     def validate(self):
-        print("Starting backup validation...")
-
-        self.nodes = self._fetch_node_list()
-        self._enable_node_broker_recovery()
-        print("Enabled NodeBroker recovery mode")
-
         try:
+            print("Starting backup validation...")
+            self.nodes = self._fetch_node_list()
+
+            self._enable_node_broker_recovery()
+            print("Enabled NodeBroker recovery mode")
+
             backups = self._discover_backups()
             total = len(backups)
             print(f"Discovered {total} backup(s)")
 
             if not backups:
-                print("No backups found - nothing to validate")
-                return
+                raise RuntimeError("No backups found")
 
             stats = {"success": 0, "warning": 0, "error": 0}
             issues = []
@@ -381,8 +436,6 @@ class BackupValidator:
                     info = {
                         "backup": backup_info["backup_name"],
                         "host": backup_info["host"],
-                        "tablet_type": backup_info["tablet_type"],
-                        "tablet_id": backup_info["tablet_id"],
                         "reason": str(e),
                     }
 
@@ -402,11 +455,7 @@ class BackupValidator:
                 for status, info in issues:
                     reason = info.get("reason", "")
                     extra = f" - {reason}" if reason else ""
-                    print(
-                        f"  [{status.upper()}] {info['tablet_type']} "
-                        f"tablet {info['tablet_id']} "
-                        f"backup '{info['backup']}' "
-                        f"on host {info['host']}{extra}")
+                    print(f"  [{status.upper()}] backup '{info['backup']}' on host {info['host']}{extra}")
 
             if stats["error"] > 0:
                 raise RuntimeError(
@@ -453,5 +502,6 @@ class WorkloadRunner:
             w.join()
         print("Stopped")
 
-        validator = BackupValidator(self.endpoint, self.mon_endpoint, self.backup_path)
-        validator.validate()
+        if self.backup_path:
+            validator = BackupValidator(self.endpoint, self.mon_endpoint, self.backup_path)
+            validator.validate()

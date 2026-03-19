@@ -6,6 +6,8 @@ PY_SRCS(
 
 PEERDIR(
     contrib/python/PyYAML
+    contrib/python/requests
+    ydb/tests/library
     ydb/tests/library/clients
     ydb/tests/stress/common
     ydb/public/sdk/python

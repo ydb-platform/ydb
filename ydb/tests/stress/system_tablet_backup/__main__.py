@@ -13,7 +13,7 @@ if __name__ == "__main__":
     parser.add_argument("--mon-endpoint", default="localhost:8765", help="A monitoring endpoint to be used")
     parser.add_argument("--database", default="Root/test", help="A database to connect")
     parser.add_argument("--duration", default=10**9, type=lambda x: int(x), help="A duration of workload in seconds.")
-    parser.add_argument("--backup-path", help="Path to system tablet backup directory")
+    parser.add_argument("--backup-path", help="A path to system tablet backup directory to be used for validation")
     args = parser.parse_args()
 
     client = InstrumentedYdbClient(args.endpoint, args.database, True)

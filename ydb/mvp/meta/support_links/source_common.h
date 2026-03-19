@@ -14,16 +14,6 @@ namespace NMVP::NSupportLinks {
 
 inline constexpr TStringBuf SOURCE_META = "meta";
 
-struct TLinkResolveContext {
-    size_t Place = 0;
-    TString SourceName;
-    TSupportLinkEntryConfig LinkConfig;
-    THashMap<TString, TString> ClusterColumns;
-    NHttp::TUrlParameters UrlParameters = NHttp::TUrlParameters("");
-    NActors::TActorId Owner;
-    NActors::TActorId HttpProxyId;
-};
-
 inline bool IsAbsoluteUrl(TStringBuf url) {
     return url.StartsWith("http://") || url.StartsWith("https://");
 }

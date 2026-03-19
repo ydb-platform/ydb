@@ -2,11 +2,15 @@
 #include "rpc_deferrable.h"
 
 #include <ydb/core/actor_tracing/tracing_events.h>
+#include <ydb/core/actor_tracing/tree_broadcast.h>
 #include <ydb/public/api/protos/ydb_actor_tracing.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <util/datetime/base.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -18,6 +22,17 @@ using TEvTraceStopRequest = TGrpcRequestOperationCall<
     Ydb::ActorTracing::TraceStopRequest, Ydb::ActorTracing::TraceStopResponse>;
 using TEvTraceFetchRequest = TGrpcRequestOperationCall<
     Ydb::ActorTracing::TraceFetchRequest, Ydb::ActorTracing::TraceFetchResponse>;
+
+static constexpr TDuration FetchRpcTimeout = TDuration::Seconds(15);
+
+static TVector<ui32> CollectNodeIds(const TEvInterconnect::TEvNodesInfo& info) {
+    TVector<ui32> ids;
+    ids.reserve(info.Nodes.size());
+    for (const auto& node : info.Nodes) {
+        ids.push_back(node.NodeId);
+    }
+    return ids;
+}
 
 class TActorTracingStartRPC : public TRpcOperationRequestActor<TActorTracingStartRPC, TEvTraceStartRequest> {
     using TBase = TRpcOperationRequestActor<TActorTracingStartRPC, TEvTraceStartRequest>;
@@ -34,31 +49,23 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvInterconnect::TEvNodesInfo, HandleNodes);
-            HFunc(NActorTracing::TEvTracing::TEvTraceStartResult, HandleResult);
         }
     }
 
     void HandleNodes(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
-        for (const auto& node : ev->Get()->Nodes) {
-            ctx.Send(NActorTracing::MakeActorTracingServiceId(node.NodeId),
-                     new NActorTracing::TEvTracing::TEvTraceStart());
-            PendingNodes++;
-        }
-        if (PendingNodes == 0) {
-            Ydb::ActorTracing::TraceStartResult result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
-        }
-    }
+        auto nodeIds = CollectNodeIds(*ev->Get());
 
-    void HandleResult(NActorTracing::TEvTracing::TEvTraceStartResult::TPtr&, const TActorContext& ctx) {
-        if (++DoneNodes >= PendingNodes) {
-            Ydb::ActorTracing::TraceStartResult result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        for (auto& [nodeId, subtree] : NActorTracing::GetDirectChildren(nodeIds)) {
+            auto msg = MakeHolder<NActorTracing::TEvTracing::TEvTraceStart>();
+            for (ui32 id : subtree) {
+                msg->Record.AddSubtreeNodeIds(id);
+            }
+            ctx.Send(NActorTracing::MakeActorTracingServiceId(nodeId), msg.Release());
         }
-    }
 
-    ui32 PendingNodes = 0;
-    ui32 DoneNodes = 0;
+        Ydb::ActorTracing::TraceStartResult result;
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+    }
 };
 
 class TActorTracingStopRPC : public TRpcOperationRequestActor<TActorTracingStopRPC, TEvTraceStopRequest> {
@@ -76,31 +83,23 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvInterconnect::TEvNodesInfo, HandleNodes);
-            HFunc(NActorTracing::TEvTracing::TEvTraceStopResult, HandleResult);
         }
     }
 
     void HandleNodes(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
-        for (const auto& node : ev->Get()->Nodes) {
-            ctx.Send(NActorTracing::MakeActorTracingServiceId(node.NodeId),
-                     new NActorTracing::TEvTracing::TEvTraceStop());
-            PendingNodes++;
-        }
-        if (PendingNodes == 0) {
-            Ydb::ActorTracing::TraceStopResult result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
-        }
-    }
+        auto nodeIds = CollectNodeIds(*ev->Get());
 
-    void HandleResult(NActorTracing::TEvTracing::TEvTraceStopResult::TPtr&, const TActorContext& ctx) {
-        if (++DoneNodes >= PendingNodes) {
-            Ydb::ActorTracing::TraceStopResult result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        for (auto& [nodeId, subtree] : NActorTracing::GetDirectChildren(nodeIds)) {
+            auto msg = MakeHolder<NActorTracing::TEvTracing::TEvTraceStop>();
+            for (ui32 id : subtree) {
+                msg->Record.AddSubtreeNodeIds(id);
+            }
+            ctx.Send(NActorTracing::MakeActorTracingServiceId(nodeId), msg.Release());
         }
-    }
 
-    ui32 PendingNodes = 0;
-    ui32 DoneNodes = 0;
+        Ydb::ActorTracing::TraceStopResult result;
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+    }
 };
 
 class TActorTracingFetchRPC : public TRpcOperationRequestActor<TActorTracingFetchRPC, TEvTraceFetchRequest> {
@@ -119,46 +118,61 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvInterconnect::TEvNodesInfo, HandleNodes);
             HFunc(NActorTracing::TEvTracing::TEvTraceFetchResult, HandleResult);
+            HFunc(TEvents::TEvUndelivered, HandleUndelivered);
+            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
     void HandleNodes(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
-        for (const auto& node : ev->Get()->Nodes) {
-            ctx.Send(NActorTracing::MakeActorTracingServiceId(node.NodeId),
-                     new NActorTracing::TEvTracing::TEvTraceFetch());
-            PendingNodes++;
+        auto nodeIds = CollectNodeIds(*ev->Get());
+        auto rootChildren = NActorTracing::GetDirectChildren(nodeIds);
+
+        PendingCount = rootChildren.size();
+        if (PendingCount == 0) {
+            ReplyAndDie(ctx);
+            return;
         }
-        if (PendingNodes == 0) {
-            Ydb::ActorTracing::TraceFetchResult result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+
+        for (auto& [nodeId, subtree] : rootChildren) {
+            auto msg = MakeHolder<NActorTracing::TEvTracing::TEvTraceFetch>();
+            for (ui32 id : subtree) {
+                msg->Record.AddSubtreeNodeIds(id);
+            }
+            ctx.Send(NActorTracing::MakeActorTracingServiceId(nodeId), msg.Release(), IEventHandle::FlagTrackDelivery);
         }
+
+        ctx.Schedule(FetchRpcTimeout, new TEvents::TEvWakeup());
     }
 
     void HandleResult(NActorTracing::TEvTracing::TEvTraceFetchResult::TPtr& ev, const TActorContext& ctx) {
         auto& rec = ev->Get()->Record;
-        if (rec.GetSuccess() && !rec.GetTraceData().empty()) {
-            CollectedTraces.push_back(rec.GetTraceData());
+        if (rec.GetSuccess() && rec.GetTraceData().size() > BestTrace.size()) {
+            BestTrace = rec.GetTraceData();
         }
-        if (++DoneNodes >= PendingNodes) {
-            Ydb::ActorTracing::TraceFetchResult result;
-            if (CollectedTraces.size() == 1) {
-                result.set_trace_data(CollectedTraces[0]);
-            } else if (CollectedTraces.size() > 1) {
-                size_t maxIdx = 0;
-                for (size_t i = 1; i < CollectedTraces.size(); ++i) {
-                    if (CollectedTraces[i].size() > CollectedTraces[maxIdx].size()) {
-                        maxIdx = i;
-                    }
-                }
-                result.set_trace_data(CollectedTraces[maxIdx]);
-            }
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        if (++DoneCount >= PendingCount) {
+            ReplyAndDie(ctx);
         }
     }
 
-    ui32 PendingNodes = 0;
-    ui32 DoneNodes = 0;
-    TVector<TString> CollectedTraces;
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx) {
+        if (++DoneCount >= PendingCount) {
+            ReplyAndDie(ctx);
+        }
+    }
+
+    void HandleTimeout(const TActorContext& ctx) {
+        ReplyAndDie(ctx);
+    }
+
+    void ReplyAndDie(const TActorContext& ctx) {
+        Ydb::ActorTracing::TraceFetchResult result;
+        result.set_trace_data(BestTrace);
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+    }
+
+    ui32 PendingCount = 0;
+    ui32 DoneCount = 0;
+    TString BestTrace;
 };
 
 void DoActorTracingStart(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {

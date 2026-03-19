@@ -29,7 +29,7 @@ void TActorTracingGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #define SETUP_ACTOR_TRACING_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, actor_tracing, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, actor_tracing, auditMode, EEmptyDatabaseMode::EmptyDatabaseAllowed)
 
     SETUP_ACTOR_TRACING_METHOD(TraceStart, DoActorTracingStart, RLMODE(Rps), ACTOR_TRACING_START, TAuditMode::NonModifying());
     SETUP_ACTOR_TRACING_METHOD(TraceStop, DoActorTracingStop, RLMODE(Rps), ACTOR_TRACING_STOP, TAuditMode::NonModifying());

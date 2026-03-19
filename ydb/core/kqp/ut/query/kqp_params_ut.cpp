@@ -1567,7 +1567,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             .Build();
 
         auto result = session.ExecuteDataQuery(Q1_(R"(
-            DECLARE $items AS List<Struct<x:Int32,y:Uint32,z:Struct<a:Int32,b:Int32?>>>;
+            DECLARE $items AS List<Struct<x:Int32,y:Uint32?,z:Struct<a:Int32,b:Int32?>>>;
             SELECT * FROM AS_TABLE($items);
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
 
@@ -1598,17 +1598,18 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                                     .EndStruct()
                             .EndStruct()
                     .EndStruct()
+                .EndList()
                 .Build()
             .Build();
 
         auto result = session.ExecuteDataQuery(Q1_(R"(
-            DECLARE $items AS Struct<x:Int32,y:Uint32,z:Struct<a:Int32,b:Int32?,c:Struct<q:Int32,p:Int32>>>;
+            DECLARE $items AS Struct<x:Int32,y:Uint32?,z:Struct<a:Int32,b:Int32?,c:Struct<q:Int32,p:Int32>>>;
             SELECT * FROM AS_TABLE($items);
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-            "Parameter $items type mismatch: first incompatibility at root.z.c: expected Int32, actual Uint32");
+            "Parameter $items type mismatch: first incompatibility at root.z.c.p: expected Int32, actual Uint32");
     }
 
     Y_UNIT_TEST(ListStructParameterMissingMember) {
@@ -1649,7 +1650,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                     .AddListItem()
                         .BeginStruct()
                             .AddMember("x").Int32(1)
-                            .AddMember("y")
+                            .AddMember("y").Uint32(2)
+                            .AddMember("z")
                                 .BeginStruct()
                                     .AddMember("a").Int32(1)
                                     .AddMember("b").Int32(2)
@@ -1666,7 +1668,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-            "Parameter $items type mismatch: first incompatibility at root.<list>.y: missing member 'c' in actual Struct");
+            "Parameter $items type mismatch: first incompatibility at root.<list>.z: missing member 'c' in actual Struct");
     }
 
     Y_UNIT_TEST(ListStructParameterExtraMember) {

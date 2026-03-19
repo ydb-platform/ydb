@@ -4,6 +4,7 @@
 #include "actorid.h"
 
 #include <util/datetime/base.h>
+#include <util/system/thread.h>
 
 #include <atomic>
 #include <cstring>
@@ -32,18 +33,31 @@ namespace NActors::NTracing {
             }
         }
 
-        TThreadBuffer* AcquireBuffer() {
+        TThreadBuffer* AcquireBuffer(ui32& outIdx) {
             ui32 idx = NextBufferIdx.fetch_add(1, std::memory_order_relaxed);
             if (idx >= MaxThreads) {
                 return nullptr;
             }
+            outIdx = idx;
             return Buffers[idx].get();
         }
 
-        void AddEvent(TThreadBuffer* buf, TTraceEvent event) {
+        void UpdateThreadPoolName(ui32 idx) {
+            TString threadName = TThread::CurrentThreadName();
+            if (threadName) {
+                TGuard<TAdaptiveLock> guard(ThreadPoolDictLock);
+                ThreadPoolNames[idx] = threadName;
+            }
+        }
+
+        void AddEvent(TThreadBuffer* buf, TTraceEvent event, ui8 threadIdx) {
             event.Timestamp = TInstant::Now().MicroSeconds();
+            event.Flags = threadIdx;
             ui64 pos = buf->WritePos.fetch_add(1, std::memory_order_release);
             buf->Events[pos % BufferSize] = event;
+            if (pos == 0) {
+                UpdateThreadPoolName(threadIdx);
+            }
         }
 
         void RegisterEventTypeName(ui32 typeIndex, const TString& typeName) {
@@ -76,9 +90,18 @@ namespace NActors::NTracing {
                 eventNames = EventNamesDict;
             }
 
+            TThreadPoolDict threadPoolDict;
+            {
+                TGuard<TAdaptiveLock> guard(ThreadPoolDictLock);
+                for (const auto& [idx, name] : ThreadPoolNames) {
+                    threadPoolDict.emplace_back(idx, name);
+                }
+            }
+
             return {
                 .ActivityDict = BuildActivityDict(),
                 .EventNamesDict = std::move(eventNames),
+                .ThreadPoolDict = std::move(threadPoolDict),
                 .Events = std::move(events),
             };
         }
@@ -112,6 +135,9 @@ namespace NActors::NTracing {
 
         TAdaptiveLock EventNamesDictLock;
         TEventNamesDict EventNamesDict;
+
+        TAdaptiveLock ThreadPoolDictLock;
+        THashMap<ui32, TString> ThreadPoolNames;
     };
 
     class TActorTracer : public IActorTracer {
@@ -129,38 +155,40 @@ namespace NActors::NTracing {
             if (State.load(std::memory_order_acquire) != ETracerState::Recording) {
                 return;
             }
-            auto* buf = GetThreadBuffer();
-            if (!buf) return;
+            auto& ts = GetThreadState();
+            if (!ts.Buffer) return;
             TTraceEvent ev{};
             ev.Type = static_cast<ui8>(ETraceEventType::New);
             ev.Actor1 = actor.SelfId().LocalId();
-            TracerImpl.AddEvent(buf, ev);
+            ev.Extra = static_cast<ui16>(actor.GetActivityType().GetIndex());
+            TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
         }
 
         void HandleDie(IActor& actor) override {
             if (State.load(std::memory_order_acquire) != ETracerState::Recording) {
                 return;
             }
-            auto* buf = GetThreadBuffer();
-            if (!buf) return;
+            auto& ts = GetThreadState();
+            if (!ts.Buffer) return;
             TTraceEvent ev{};
             ev.Type = static_cast<ui8>(ETraceEventType::Die);
             ev.Actor1 = actor.SelfId().LocalId();
-            TracerImpl.AddEvent(buf, ev);
+            TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
         }
 
         void HandleSend(IEventHandle& event) override {
             if (State.load(std::memory_order_acquire) != ETracerState::Recording) {
                 return;
             }
-            auto* buf = GetThreadBuffer();
-            if (!buf) return;
+            auto& ts = GetThreadState();
+            if (!ts.Buffer) return;
             TTraceEvent ev{};
             ev.Type = static_cast<ui8>(ETraceEventType::SendLocal);
             ev.Actor1 = event.Sender.LocalId();
             ev.Actor2 = event.GetRecipientRewrite().LocalId();
             ev.Aux = event.GetTypeRewrite();
-            TracerImpl.AddEvent(buf, ev);
+            ev.Extra = ts.CurrentActivityIndex;
+            TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
             TracerImpl.RegisterEventTypeName(event.GetTypeRewrite(), event.GetTypeName());
         }
 
@@ -168,15 +196,17 @@ namespace NActors::NTracing {
             if (State.load(std::memory_order_acquire) != ETracerState::Recording) {
                 return;
             }
-            auto* buf = GetThreadBuffer();
-            if (!buf) return;
+            auto& ts = GetThreadState();
+            if (!ts.Buffer) return;
+            const ui16 activityIndex = static_cast<ui16>(recipient.GetActivityType().GetIndex());
+            ts.CurrentActivityIndex = activityIndex;
             TTraceEvent ev{};
             ev.Type = static_cast<ui8>(ETraceEventType::ReceiveLocal);
             ev.Actor1 = event.Sender.LocalId();
             ev.Actor2 = event.GetRecipientRewrite().LocalId();
             ev.Aux = event.GetTypeRewrite();
-            ev.Extra = static_cast<ui16>(recipient.GetActivityType().GetIndex());
-            TracerImpl.AddEvent(buf, ev);
+            ev.Extra = activityIndex;
+            TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
             TracerImpl.RegisterEventTypeName(event.GetTypeRewrite(), event.GetTypeName());
         }
 
@@ -212,12 +242,20 @@ namespace NActors::NTracing {
         }
 
     private:
-        TThreadBuffer* GetThreadBuffer() {
-            thread_local TThreadBuffer* cachedBuffer = nullptr;
-            if (!cachedBuffer) {
-                cachedBuffer = TracerImpl.AcquireBuffer();
+        struct TThreadState {
+            TThreadBuffer* Buffer = nullptr;
+            ui8 Idx = 0;
+            ui16 CurrentActivityIndex = 0;
+        };
+
+        TThreadState& GetThreadState() {
+            thread_local TThreadState state;
+            if (!state.Buffer) {
+                ui32 idx = 0;
+                state.Buffer = TracerImpl.AcquireBuffer(idx);
+                state.Idx = static_cast<ui8>(idx);
             }
-            return cachedBuffer;
+            return state;
         }
 
         bool AutoStart = false;

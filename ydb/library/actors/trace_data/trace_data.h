@@ -15,13 +15,13 @@ namespace NActors::NTracing {
     };
 
     struct TTraceEvent {
-        ui64 Timestamp;    // microseconds
+        ui64 Timestamp;    // microseconds since Unix epoch
         ui64 Actor1;       // Sender LocalId (Send/Receive), ActorId (New/Die)
         ui64 Actor2;       // Recipient LocalId (Send/Receive), 0 (New/Die)
         ui32 Aux;          // MessageType index (Send/Receive), 0 (New/Die)
-        ui16 Extra;        // ActivityIndex (Receive), 0 (others)
+        ui16 Extra;        // ActivityIndex (Send/Receive), 0 (New/Die)
         ui8  Type;         // ETraceEventType
-        ui8  Flags;        // reserved
+        ui8  Flags;        // Thread buffer index (0-127)
     };
 
     static_assert(sizeof(TTraceEvent) == 32);
@@ -33,7 +33,7 @@ namespace NActors::NTracing {
         ui32 Magic = TraceFileMagic;
         ui32 Version = TraceFileVersion;
         ui32 NodeId = 0;
-        ui32 HeaderSize = 0;   // byte size of the dictionaries section that follows
+        ui32 HeaderSize = 0;
         ui64 EventCount = 0;
     };
 
@@ -41,10 +41,12 @@ namespace NActors::NTracing {
 
     using TActivityDict = TVector<std::pair<ui32, TString>>;
     using TEventNamesDict = THashMap<ui32, TString>;
+    using TThreadPoolDict = TVector<std::pair<ui32, TString>>;
 
     struct TTraceChunk {
         TActivityDict ActivityDict;
         TEventNamesDict EventNamesDict;
+        TThreadPoolDict ThreadPoolDict;
         TVector<TTraceEvent> Events;
     };
 

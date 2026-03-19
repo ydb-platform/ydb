@@ -10,6 +10,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/event.h>
+#include <util/generic/hash_set.h>
 
 using namespace NActors;
 using namespace NActors::NTracing;
@@ -226,6 +227,22 @@ Y_UNIT_TEST_SUITE(TracerTest) {
             "Expected at least 2 New events (ping + pong actors), got " << newCount);
         UNIT_ASSERT_C(!chunk.EventNamesDict.empty(),
             "EventNamesDict should not be empty");
+
+        THashSet<ui8> threadIdxSet;
+        for (const auto& ev : chunk.Events) {
+            threadIdxSet.insert(ev.Flags);
+        }
+        UNIT_ASSERT_C(threadIdxSet.size() >= 2,
+            "Expected events from at least 2 threads, got " << threadIdxSet.size());
+
+        size_t sendsWithActivityType = 0;
+        for (const auto& ev : chunk.Events) {
+            if (static_cast<ETraceEventType>(ev.Type) == ETraceEventType::SendLocal && ev.Extra != 0) {
+                sendsWithActivityType++;
+            }
+        }
+        UNIT_ASSERT_C(sendsWithActivityType > 0,
+            "Expected at least some Send events with non-zero Extra (sender ActivityType)");
 
         auto buf = SerializeTrace(chunk, 1);
         TTraceChunk restored;

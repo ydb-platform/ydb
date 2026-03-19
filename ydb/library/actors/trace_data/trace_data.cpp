@@ -34,7 +34,10 @@ namespace NActors::NTracing {
             return true;
         }
 
-        void SerializeDicts(TBuffer& buf, const TActivityDict& activityDict, const TEventNamesDict& eventNamesDict) {
+        void SerializeDicts(TBuffer& buf,
+                            const TActivityDict& activityDict,
+                            const TEventNamesDict& eventNamesDict,
+                            const TThreadPoolDict& threadPoolDict) {
             WriteU32(buf, static_cast<ui32>(activityDict.size()));
             for (const auto& [index, name] : activityDict) {
                 WriteU32(buf, index);
@@ -46,9 +49,18 @@ namespace NActors::NTracing {
                 WriteU32(buf, typeId);
                 WriteString(buf, name);
             }
+
+            WriteU32(buf, static_cast<ui32>(threadPoolDict.size()));
+            for (const auto& [threadIdx, name] : threadPoolDict) {
+                WriteU32(buf, threadIdx);
+                WriteString(buf, name);
+            }
         }
 
-        bool DeserializeDicts(const char*& ptr, const char* end, TActivityDict& activityDict, TEventNamesDict& eventNamesDict) {
+        bool DeserializeDicts(const char*& ptr, const char* end,
+                              TActivityDict& activityDict,
+                              TEventNamesDict& eventNamesDict,
+                              TThreadPoolDict& threadPoolDict) {
             ui32 activityCount = 0;
             if (!ReadU32(ptr, end, activityCount)) return false;
             activityDict.reserve(activityCount);
@@ -70,6 +82,19 @@ namespace NActors::NTracing {
                 eventNamesDict[typeId] = std::move(name);
             }
 
+            if (ptr < end) {
+                ui32 threadPoolCount = 0;
+                if (!ReadU32(ptr, end, threadPoolCount)) return false;
+                threadPoolDict.reserve(threadPoolCount);
+                for (ui32 i = 0; i < threadPoolCount; ++i) {
+                    ui32 threadIdx = 0;
+                    TString name;
+                    if (!ReadU32(ptr, end, threadIdx)) return false;
+                    if (!ReadString(ptr, end, name)) return false;
+                    threadPoolDict.emplace_back(threadIdx, std::move(name));
+                }
+            }
+
             return true;
         }
 
@@ -77,7 +102,7 @@ namespace NActors::NTracing {
 
     TBuffer SerializeTrace(const TTraceChunk& chunk, ui32 nodeId) {
         TBuffer dictBuf;
-        SerializeDicts(dictBuf, chunk.ActivityDict, chunk.EventNamesDict);
+        SerializeDicts(dictBuf, chunk.ActivityDict, chunk.EventNamesDict, chunk.ThreadPoolDict);
 
         TTraceFileHeader header;
         header.NodeId = nodeId;
@@ -109,7 +134,7 @@ namespace NActors::NTracing {
         std::memcpy(&header, ptr, sizeof(header));
         ptr += sizeof(header);
 
-        if (header.Magic != TraceFileMagic || header.Version != TraceFileVersion) {
+        if (header.Magic != TraceFileMagic) {
             return false;
         }
 
@@ -120,7 +145,7 @@ namespace NActors::NTracing {
             return false;
         }
 
-        if (!DeserializeDicts(ptr, dictEnd, chunk.ActivityDict, chunk.EventNamesDict)) {
+        if (!DeserializeDicts(ptr, dictEnd, chunk.ActivityDict, chunk.EventNamesDict, chunk.ThreadPoolDict)) {
             return false;
         }
         ptr = dictEnd;

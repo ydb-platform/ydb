@@ -18,12 +18,18 @@
 
 При работе с [внешними файловыми источниками данных](../../../../concepts/datamodel/external_data_source.md) можно дополнительно указывать ряд параметров:
 
-* `FORMAT` - формат хранимых данных в файловых хранилищах в [федеративных запросах](../../../../concepts/query_execution/federated_query/s3/formats.md). Допустимые значения: `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row`, `json_as_string`, `parquet`, `raw`.
-* `COMPRESSION` - формат сжатия файлов в файловых хранилищах в [федеративных запросах](../../../../concepts/query_execution/federated_query/s3/partition_projection). Допустимые значения: [gzip](https://ru.wikipedia.org/wiki/Gzip), [zstd](https://ru.wikipedia.org/wiki/Zstandard), [lz4](https://ru.wikipedia.org/wiki/LZ4), [brotli](https://ru.wikipedia.org/wiki/Brotli), [bzip2](https://ru.wikipedia.org/wiki/Bzip2), [xz](https://ru.wikipedia.org/wiki/XZ).
-* `PARTITIONED_BY` - список [колонок партиционирования](../../../../concepts/query_execution/federated_query/s3/partitioning.md) данных в файловых хранилищах в федеративных запросах. Содержит список колонок в порядке их размещения в файловом хранилище.
-* `projection.enabled` - флаг включения [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `true`, `false`.
-* `projection.<field_name>.type` - тип поля [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `integer`, `enum`, `date`.
-* `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md).
+* `FORMAT` - формат хранимых данных в файловых хранилищах в [федеративных запросах](../../../../concepts/federated_query/s3/formats.md). Допустимые значения: `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row`, `json_as_string`, `parquet`, `raw`.
+* `COMPRESSION` - формат сжатия файлов в файловых хранилищах в [федеративных запросах](../../../../concepts/federated_query/s3/partition_projection). Допустимые значения: [gzip](https://ru.wikipedia.org/wiki/Gzip), [zstd](https://ru.wikipedia.org/wiki/Zstandard), [lz4](https://ru.wikipedia.org/wiki/LZ4), [brotli](https://ru.wikipedia.org/wiki/Brotli), [bzip2](https://ru.wikipedia.org/wiki/Bzip2), [xz](https://ru.wikipedia.org/wiki/XZ).
+* `PARTITIONED_BY` - список [колонок партиционирования](../../../../concepts/federated_query/s3/partitioning.md) данных в файловых хранилищах в федеративных запросах. Содержит список колонок в порядке их размещения в файловом хранилище.
+* `projection.enabled` - флаг включения [расширенного партиционирования данных](../../../../concepts/federated_query/s3/partition_projection.md). Допустимые значения: `true`, `false`.
+* `projection.<field_name>.type` - тип поля [расширенного партиционирования данных](../../../../concepts/federated_query/s3/partition_projection.md). Допустимые значения: `integer`, `enum`, `date`.
+* `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../../concepts/federated_query/s3/partition_projection.md).
+* `WATERMARK` - выражение для вычисления [водяного знака](../../../../concepts/streaming_query/watermarks.md). Сейчас поддерживается только время записи в [топик](../../../../concepts/datamodel/topic.md) с константной задержкой. Это временное ограничение текущей реализации
+* `WATERMARK LATE EVENTS POLICY` - политика, определяющая реакцию на событие с временем меньшим, чем [водяной знак](../../../../concepts/streaming_query/watermarks.md). Имеет смысл только для [потоковых запросов](../../../../concepts/streaming_query/index.md). Значение по умолчанию - `WATERMARK_ADJUST_LATE_EVENTS`. Выбрать что-то одно:
+    * `WATERMARK_ADJUST_LATE_EVENTS` - если у события время меньше, чем [водяной знак](../../../../concepts/streaming_query/watermarks.md), то время этого события исправляется на значение [водяного знака](../../../../concepts/streaming_query/watermarks.md);
+    * `WATERMARK_DROP_LATE_EVENTS` - отбросить событие с временем меньшим, чем [водяной знак](../../../../concepts/streaming_query/watermarks.md);
+* `WATERMARK_GRANULARITY` - периодичность генерации водяных знаков. Чем она меньше, тем больше потребление CPU запросом и тем меньше задержка ответа, и наоборот. Имеет смысл только для [потоковых запросов](../../../../concepts/streaming_query/index.md). Значение по умолчанию - 1 секунда;
+* `WATERMARK_IDLE_TIMEOUT` - период, после которого партиция без данных будет исключена из вычисления объединенного водяного знака. Имеет смысл только для [потоковых запросов](../../../../concepts/streaming_query/index.md). Значение по умолчанию - 5 секунд.
 
 {% endif %}
 
@@ -60,3 +66,26 @@ SELECT key, value FROM my_table WITH COLUMNS Struct<value:Int32?>;
 ```yql
 SELECT key, value FROM EACH($my_tables) WITH SCHEMA Struct<key:String, value:List<Int32>>;
 ```
+
+```yql
+SELECT
+    *
+FROM
+    my_topic
+WITH (
+    FORMAT = json_each_row,
+    SCHEMA = (
+        ts String
+    ),
+    WATERMARK = SystemMetadata("write_time") - Interval("PT5S"),
+    WATERMARK_ADJUST_LATE_EVENTS,
+    WATERMARK_GRANULARITY = "PT1S",
+    WATERMARK_IDLE_TIMEOUT = "PT5S"
+);
+```
+
+В примере:
+* `SystemMetadata("write_time")` возвращает системное время записи сообщения в топик;
+* `Interval("PT5S")` создаёт интервал длительностью 5 секунд (формат [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601), подробнее см. [литералы простых типов](../../builtins/basic.md#data-type-literals));
+* `WATERMARK_GRANULARITY = "PT1S"` задаёт генерацию водяных знаков каждую секунду;
+* `WATERMARK_IDLE_TIMEOUT = "PT5S"` исключает партиции без данных из расчёта через 5 секунд.

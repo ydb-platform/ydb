@@ -157,8 +157,7 @@ message ImportFromFsSettings {
             // The FS path can be provided explicitly (relative to base_path)
             string source_path = 1;
 
-            // Or, if the export contains the database objects list, you may specify the database object name,
-            // and the FS path will be looked up in the database objects list by the import procedure
+            // Or, if the export contains the database objects list, you may specify the database object name, and the FS path will be looked up in the database objects list by the import procedure
             string source_path_db = 3;
         }
 

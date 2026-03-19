@@ -87,6 +87,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // Filling
         UniqIndexValidation = 100,
         PrepareValidation = 101,
+        UniqConsistentValidation = 102,
 
         // Fulltext
         FulltextIndexStats = 200,
@@ -748,7 +749,7 @@ public:
     }
 
     bool IsValidatingUniqueIndex() const {
-        return SubState == ESubState::UniqIndexValidation;
+        return SubState == ESubState::UniqIndexValidation || SubState == ESubState::UniqConsistentValidation;
     }
 
     bool IsFlatRelevanceFulltext() const {

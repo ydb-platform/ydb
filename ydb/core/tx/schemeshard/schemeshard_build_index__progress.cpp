@@ -1064,7 +1064,8 @@ private:
         };
 
         // Check snapshot and pass it to Validate if it's present
-        if (Self->TablesWithSnapshots.contains(path->PathId)) {
+        if (buildInfo.SubState == TIndexBuildInfo::ESubState::UniqConsistentValidation) {
+            // TablesWithSnapshots.at() is already checked in ValidateSecondaryUniqueIndex()
             auto snapId = Self->TablesWithSnapshots.at(path->PathId);
             record.MutableSnapshot()->SetTxId(ui64(snapId));
             record.MutableSnapshot()->SetStep(ui64(Self->SnapshotsStepIds.at(snapId)));
@@ -1371,11 +1372,19 @@ private:
         return done;
     }
 
-    bool ValidateSecondaryUniqueIndex(TIndexBuildInfo& buildInfo) {
+    bool ValidateSecondaryUniqueIndex(TIndexBuildInfo& buildInfo, TString& errorDesc) {
         LOG_D("ValidateSecondaryUniqueIndex Start");
 
         if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
+        }
+
+        if (buildInfo.SubState == TIndexBuildInfo::ESubState::UniqConsistentValidation) {
+            auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+            if (!Self->TablesWithSnapshots.contains(path->PathId)) {
+                errorDesc = "Consistent validation requested, but index table snapshot is not found";
+                return true;
+            }
         }
 
         auto done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendValidateUniqueIndexRequest(shardIdx, buildInfo); }) &&
@@ -1409,26 +1418,30 @@ private:
         }
         case TIndexBuildInfo::ESubState::PrepareValidation: {
             // LockBuild from above finishes here at Filling again
-            // Switch to PrepareValidation + UniqIndexValidation, it will also finish at Filling
+            // Switch to PrepareValidation + UniqConsistentValidation, it will also finish at Filling
             NIceDb::TNiceDb db{txc.DB};
-            buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
+            if (buildInfo.SubState == TIndexBuildInfo::ESubState::PrepareValidation) {
+                buildInfo.SubState = TIndexBuildInfo::ESubState::UniqConsistentValidation;
+            } else {
+                buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
+            }
             Self->PersistBuildIndexState(db, buildInfo);
             Self->PersistBuildIndexShardStatusReset(db, buildInfo);
             ChangeState(BuildId, TIndexBuildInfo::EState::PrepareValidation);
             Progress(BuildId);
             return false;
         }
-        case TIndexBuildInfo::ESubState::UniqIndexValidation: {
-            const bool done = ValidateSecondaryUniqueIndex(buildInfo);
-            if (done) {
-                TString errorDesc;
-                if (!PerformCrossShardUniqIndexValidation(buildInfo, errorDesc)) {
-                    NIceDb::TNiceDb db(txc.DB);
-                    Self->PersistBuildIndexAddIssue(db, buildInfo, errorDesc);
-                    ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
-                    Progress(BuildId);
-                    return false;
-                }
+        case TIndexBuildInfo::ESubState::UniqIndexValidation:
+        case TIndexBuildInfo::ESubState::UniqConsistentValidation: {
+            TString errorDesc;
+            const bool done = ValidateSecondaryUniqueIndex(buildInfo, errorDesc);
+            if (done &&
+                (errorDesc != "" || !PerformCrossShardUniqIndexValidation(buildInfo, errorDesc))) {
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexAddIssue(db, buildInfo, errorDesc);
+                ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
+                Progress(BuildId);
+                return false;
             }
             return done;
         }
@@ -2147,6 +2160,7 @@ public:
             Y_ENSURE(buildInfo.IsBuildVectorIndex() && (buildInfo.KMeans.Level > 1 ||
                 buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Filter) ||
                 buildInfo.SubState == TIndexBuildInfo::ESubState::UniqIndexValidation ||
+                buildInfo.SubState == TIndexBuildInfo::ESubState::UniqConsistentValidation ||
                 buildInfo.SubState == TIndexBuildInfo::ESubState::PrepareValidation ||
                 buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextIndexDictionary);
             if (buildInfo.ApplyTxId == InvalidTxId) {
@@ -2156,6 +2170,7 @@ public:
                 if (buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextIndexDictionary) {
                     tableName = NTableIndex::ImplTable;
                 } else if (buildInfo.SubState == TIndexBuildInfo::ESubState::UniqIndexValidation ||
+                    buildInfo.SubState == TIndexBuildInfo::ESubState::UniqConsistentValidation ||
                     buildInfo.SubState == TIndexBuildInfo::ESubState::PrepareValidation) {
                     tableName = NTableIndex::ImplTable;
                 } else {

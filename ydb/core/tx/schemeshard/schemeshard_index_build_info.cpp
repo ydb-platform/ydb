@@ -340,6 +340,7 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
         case ESubState::None:
         case ESubState::PrepareValidation:
         case ESubState::UniqIndexValidation:
+        case ESubState::UniqConsistentValidation:
         case ESubState::FulltextIndexStats:
         case ESubState::FulltextIndexDictionary:
         case ESubState::FulltextIndexBorders:

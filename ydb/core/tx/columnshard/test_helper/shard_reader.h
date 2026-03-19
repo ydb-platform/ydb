@@ -1,11 +1,13 @@
 #pragma once
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -126,6 +128,19 @@ public:
         Runtime.Send(*ScanActorId, *ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(8 * 1024 * 1024, 0, 1));
         ++IterationsCount;
     }
+
+    // Send TEvAbortExecution to the scan actor, simulating a client-side abort.
+    // After calling this the scan actor will call Finish(ExternalAbort) and
+    // PassAway WITHOUT sending TEvScanError to the compute actor (edge actor).
+    // Therefore the caller must NOT call Receive() after Abort() – it will block
+    // forever.  Use MarkAborted() to record the aborted state after dispatching
+    // events.
+    void Abort(const TString &reason = "test abort");
+
+    // Mark the reader as aborted without waiting for an event from the scan
+    // actor.  Call this after Abort() + DispatchEvents() to record the aborted
+    // state so that IsFinished() / IsError() return the correct values.
+    void MarkAborted();
 
     bool Receive() {
         AFL_VERIFY(!Finished);

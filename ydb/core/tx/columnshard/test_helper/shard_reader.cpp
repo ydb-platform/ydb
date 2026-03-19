@@ -72,4 +72,17 @@ NKikimr::NTxUT::TShardReader& TShardReader::SetReplyColumnIds(const std::vector<
     return *this;
 }
 
+void TShardReader::Abort(const TString &reason) {
+  AFL_VERIFY(!Finished);
+  AFL_VERIFY(ScanActorId);
+  Runtime.Send(*ScanActorId, *ScanActorId,
+               new NKqp::TEvKqp::TEvAbortExecution(
+                   NYql::NDqProto::StatusIds::CANCELLED, reason));
 }
+
+void TShardReader::MarkAborted() {
+  AFL_VERIFY(!Finished);
+  Finished = -1;
+}
+
+} // namespace NKikimr::NTxUT

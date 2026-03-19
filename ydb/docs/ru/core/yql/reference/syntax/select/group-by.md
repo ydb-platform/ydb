@@ -342,7 +342,7 @@ GROUP BY
 
 ## GROUP BY HoppingWindow {#hopping_window}
 
-Упрощённая версия [GROUP BY HOP](#hop), рекомендуемая для новых [потоковых запросов](../../../../concepts/streaming_query/index.md). Отличается от `HOP` отсутствием параметра `delay`: в потоковых запросах окна закрываются по [водяному знаку](../../../../concepts/streaming_query/watermarks.md), а не по фиксированной задержке.
+Версия [GROUP BY HOP](#hop), рекомендуемая для новых [потоковых запросов](../../../../concepts/streaming_query/index.md). Отличается от `HOP` отсутствием параметра `delay`: в потоковых запросах окна закрываются по [водяному знаку](../../../../concepts/streaming_query/watermarks.md), а не по фиксированной задержке.
 
 ```yql
 HoppingWindow(time_extractor, hop, interval)

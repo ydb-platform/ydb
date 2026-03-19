@@ -15,6 +15,7 @@ class TSocketDescriptor : public NActors::TSharedDescriptor, public TNetworkConf
     std::unique_ptr<TNetworkConfig::TSocketType> Socket;
     std::shared_ptr<TEndpointInfo> Endpoint;
     TSpinLock Lock;
+    TSslHelpers::TSslHolder<X509> SecureConnectionClientCert;
 
 public:
     TSocketDescriptor(TSocketType&& s, std::shared_ptr<TEndpointInfo> endpoint)
@@ -54,17 +55,19 @@ public:
         Socket->RequestPoller(pollerToken);
     }
 
-    int UpgradeToSecure() {
-        std::unique_ptr<TNetworkConfig::TSecureSocketType> socket = std::make_unique<TNetworkConfig::TSecureSocketType>(std::move(*Socket));
+    int UpgradeToSecure(NKikimrServices::EServiceKikimr service,
+                        const std::optional<std::shared_ptr<TInet64SecureStreamSocket::TServerMtlsCreds>>& serverCreds = std::nullopt) {
+        std::unique_ptr<TNetworkConfig::TSecureSocketType> socket = std::make_unique<TNetworkConfig::TSecureSocketType>(std::move(*Socket), service, serverCreds);
         int res = socket->SecureAccept(Endpoint->SecureContext.get());
         TGuard lock(Lock);
         Socket.reset(socket.release());
         return res;
     }
 
-    int TryUpgradeToSecure() {
+    int TryUpgradeToSecure(NKikimrServices::EServiceKikimr service,
+                          const std::optional<std::shared_ptr<TInet64SecureStreamSocket::TServerMtlsCreds>>& serverCreds = std::nullopt) {
         for (;;) {
-            int res = UpgradeToSecure();
+            int res = UpgradeToSecure(service, serverCreds);
             if (res >= 0) {
                 return 0;
             } else if (-res == EINTR) {
@@ -85,6 +88,21 @@ public:
     SOCKET GetRawSocket() const {
         TGuard lock(Lock);
         return *Socket;
+    }
+
+    TSslHelpers::TSslHolder<X509> GetSslClientCert() {
+        auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
+        return socket->GetSslClientCert();
+    }
+
+    int GetSslHandshakeResult() {
+        auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
+        return socket->GetSslHandshakeResult();
+    }
+
+    TString GetStringClientCert(X509* cert) {
+        auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
+        return socket->ConvertX509ToPEMString(cert);
     }
 
     int GetDescriptor() override {
@@ -190,7 +208,7 @@ private:
 
     ssize_t Send(const char* data, size_t length) {
         ssize_t res = Socket->Send(data, length);
-        
+
         return res;
     }
 
@@ -203,4 +221,3 @@ private:
 };
 
 } // namespace NKikimr::NRawSocket
-

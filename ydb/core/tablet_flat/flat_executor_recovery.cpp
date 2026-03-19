@@ -154,7 +154,8 @@ NTable::ERowOp FindOpFromJson(const NJson::TJsonValue& json) {
 }
 
 void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo* table,
-                std::optional<NTable::ERowOp> op, TMemoryPool& pool, TTransactionContext &txc)
+                std::optional<NTable::ERowOp> op, TMemoryPool& pool, TTransactionContext &txc,
+                bool dryRun)
 {
     if (table == nullptr) {
         table = FindTableFromJson(json, txc);
@@ -195,7 +196,9 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
     }
 
     try {
-        txc.DB.Update(table->Id, *op, key, ops);
+        if (!dryRun) {
+            txc.DB.Update(table->Id, *op, key, ops);
+        }
     } catch (const std::exception& e) {
         throw yexception() << "Failed to update table " << table->Name << " with value " << json << ": " << e.what();
     }
@@ -801,7 +804,7 @@ public:
             try {
                 NJson::TJsonValue json;
                 NJson::ReadJsonTree(line, &json, true);
-                UploadData(json, &table, NTable::ERowOp::Upsert, Pool, txc);
+                UploadData(json, &table, NTable::ERowOp::Upsert, Pool, txc, Self->DryRun);
 
                 processedBytes += line.size() + 1; // +1 for newline
                 ++i;
@@ -920,7 +923,7 @@ public:
                 const auto& changesArray = changesJson.GetArray();
                 try {
                     for (const auto& change : changesArray) {
-                        UploadData(change, nullptr, std::nullopt, Pool, txc);
+                        UploadData(change, nullptr, std::nullopt, Pool, txc, Self->DryRun);
                     }
                 } catch (const std::exception& e) {
                     Result.Error(TStringBuilder() << "Failed to upload changelog data: " << e.what() << ", line: " << line);

@@ -56,7 +56,7 @@ auto status1 = client.RetryQuerySync([userId](NYdb::NQuery::TSession session) ->
 
     auto result1 = future1.GetValueSync();
 
-    return result2;
+    return result1;
 });
 
 // thread 2

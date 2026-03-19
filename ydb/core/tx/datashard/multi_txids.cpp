@@ -62,6 +62,7 @@ void TMultiTxIdEnumerator::Add(const TMultiTxId* entry, const TMultiTxId::TEdge*
 TMultiTxIdManager::TMultiTxIdManager(TDataShard& self)
     : Self(self)
 {
+    // This private field is not used yet, but will be needed later
     Y_UNUSED(Self);
 }
 

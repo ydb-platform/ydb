@@ -119,7 +119,7 @@ public:
                 NYdb::NTable::TTxSettings::OnlineRO(
                     NYdb::NTable::TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
             params)
-            .Subscribe([actorId, actorSystem, session = Session](const NYdb::NTable::TAsyncDataQueryResult& result) {
+            .Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncDataQueryResult& result) {
                 SendDataQueryResult(actorId, actorSystem, result);
             });
     }

@@ -11,6 +11,9 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:4)
+ENDIF()
 
 SRCS(
     flat_cxx_database_ut.cpp

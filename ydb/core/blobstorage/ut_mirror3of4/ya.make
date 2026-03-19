@@ -5,11 +5,7 @@ SRCS(
 )
 
 SIZE(MEDIUM)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:1)
-ELSE()
-    REQUIREMENTS(cpu:2)
-ENDIF()
+REQUIREMENTS(cpu:2)
 
 PEERDIR(
     ydb/apps/version

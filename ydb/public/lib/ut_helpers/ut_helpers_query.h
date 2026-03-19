@@ -15,6 +15,6 @@ void CheckAttach(const NYdbGrpc::TGRpcClientConfig& clientConfig, const TString&
 void CheckDelete(const NYdbGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
 void EnsureSessionClosed(NYdbGrpc::IStreamRequestCtrl::TPtr p, int expected, bool& allDone);
 void EnsureSessionClosedWithHint(NYdbGrpc::IStreamRequestCtrl::TPtr p, Ydb::StatusIds::StatusCode expectedStatus,
-    Ydb::Query::SessionState::SessionHintCase expectedHint, bool& allDone);
+    Ydb::NodeHint::HintCase expectedHint, bool& allDone);
 
 }

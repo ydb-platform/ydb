@@ -27,3 +27,22 @@ message VirtualTimestamp {
     uint64 plan_step = 1;
     uint64 tx_id = 2;
 }
+
+// Hint that the session is being shut down gracefully.
+// The client should recreate the session on a different node.
+message SessionShutdownHint {
+}
+
+// Hint that the node is being shut down.
+// The client should recreate the session on a different node.
+message NodeShutdownHint {
+}
+
+// Server-side hint about node/session state, used to signal the client
+// that it should move to another node. Applicable to any streaming service.
+message NodeHint {
+    oneof hint {
+        SessionShutdownHint session_shutdown = 1;
+        NodeShutdownHint node_shutdown = 2;
+    }
+}

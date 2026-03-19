@@ -111,7 +111,7 @@ void EnsureSessionClosed(NYdbGrpc::IStreamRequestCtrl::TPtr p, int expected, boo
 }
 
 void EnsureSessionClosedWithHint(NYdbGrpc::IStreamRequestCtrl::TPtr p, Ydb::StatusIds::StatusCode expectedStatus,
-    Ydb::Query::SessionState::SessionHintCase expectedHint, bool& allDoneOk)
+    Ydb::NodeHint::HintCase expectedHint, bool& allDoneOk)
 {
     auto* processor = dynamic_cast<NYdbGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>*>(p.Get());
     UNIT_ASSERT(processor);
@@ -121,7 +121,7 @@ void EnsureSessionClosedWithHint(NYdbGrpc::IStreamRequestCtrl::TPtr p, Ydb::Stat
     processor->Read(resp.get(), [&allDoneOk, resp, promise, expectedStatus, expectedHint](TGrpcStatus grpcStatus) mutable {
         UNIT_ASSERT(grpcStatus.GRpcStatusCode == grpc::StatusCode::OK);
         allDoneOk &= (resp->status() == expectedStatus);
-        allDoneOk &= (resp->session_hint_case() == expectedHint);
+        allDoneOk &= (resp->node_hint().hint_case() == expectedHint);
         if (!allDoneOk) {
             Cerr << "Expected status: " << static_cast<int>(expectedStatus)
                  << ", hint case: " << static_cast<int>(expectedHint)

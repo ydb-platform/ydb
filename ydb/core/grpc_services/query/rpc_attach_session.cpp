@@ -99,10 +99,10 @@ private:
 
         switch (response.StateHint_case()) {
             case NKikimrKqp::TCloseSessionResponse::kSessionShutdown:
-                *resp.mutable_session_shutdown() = {};
+                *resp.mutable_node_hint()->mutable_session_shutdown() = {};
                 break;
             case NKikimrKqp::TCloseSessionResponse::kNodeShutdown:
-                *resp.mutable_node_shutdown() = {};
+                *resp.mutable_node_hint()->mutable_node_shutdown() = {};
                 break;
             case NKikimrKqp::TCloseSessionResponse::STATEHINT_NOT_SET:
                 return;

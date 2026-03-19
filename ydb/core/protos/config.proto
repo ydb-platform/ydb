@@ -2582,6 +2582,7 @@ message TSystemTabletBackupConfig {
     }
     repeated fixed64 ExcludeTabletIds = 2;
     optional uint64 NewBackupChangelogMinBytes = 3 [default = 524288000]; // 500 MB
+    optional uint64 MaxBackupsLimit = 4 [default = 3];
 }
 
 message TAppConfig {

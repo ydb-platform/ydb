@@ -127,7 +127,7 @@ namespace NActors {
 
         ReceiveContext->Terminated = true; // prevent further message generation by receiving actor
         for (const auto& kv : Subscribers) {
-            Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second);
+            Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second.Cookie);
         }
         Proxy->Metrics->SubSubscribersCount(Subscribers.size());
         Subscribers.clear();
@@ -228,6 +228,25 @@ namespace NActors {
             Subscribe(ev);
         }
 
+        EnqueueForward(std::move(ev));
+    }
+
+    void TInterconnectSessionTCP::ForwardWithSubscribe(STATEFN_SIG) {
+        Proxy->ValidateEvent(ev, "ForwardWithSubscribe");
+
+        auto msg = ev->Release<TEvForwardSubscribeSession>();
+        Y_ABORT_UNLESS(msg->Event);
+
+        LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", msg->Event->Sender.ToString().data());
+        UpdateSubscriber(msg->Event->Sender, msg->Event->Cookie, std::move(msg->Activity), std::move(msg->EventTypeName));
+        Send(msg->Event->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, msg->Event->Cookie);
+
+        EnqueueForward(TAutoPtr<IEventHandle>(msg->Event.Release()));
+    }
+
+    void TInterconnectSessionTCP::EnqueueForward(TAutoPtr<IEventHandle> ev) {
+        Y_ABORT_UNLESS(ev);
+
         if (Y_UNLIKELY(Proxy->Common->Settings.EventDelay)) {
             auto& d = DelayedEvents.emplace_back();
             d.Event = std::move(ev);
@@ -252,18 +271,28 @@ namespace NActors {
 
     void TInterconnectSessionTCP::Subscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", ev->Sender.ToString().data());
-        const auto [it, inserted] = Subscribers.emplace(ev->Sender, ev->Cookie);
-        if (inserted) {
-            Proxy->Metrics->IncSubscribersCount();
-        } else {
-            it->second = ev->Cookie;
-        }
+        UpdateSubscriber(ev->Sender, ev->Cookie);
         Send(ev->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, ev->Cookie);
     }
 
     void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS05", "unsubscribe for session state for %s", ev->Sender.ToString().data());
         Proxy->Metrics->SubSubscribersCount(Subscribers.erase(ev->Sender));
+    }
+
+    void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, TString activity, TString eventTypeName) {
+        const auto [it, inserted] = Subscribers.emplace(actorId, TSubscriberInfo{cookie, std::move(activity), std::move(eventTypeName)});
+        if (inserted) {
+            Proxy->Metrics->IncSubscribersCount();
+        } else {
+            it->second.Cookie = cookie;
+            if (!activity.empty()) {
+                it->second.Activity = std::move(activity);
+            }
+            if (!eventTypeName.empty()) {
+                it->second.EventTypeName = std::move(eventTypeName);
+            }
+        }
     }
 
     THolder<TEvHandshakeAck> TInterconnectSessionTCP::ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) {
@@ -1549,6 +1578,36 @@ namespace NActors {
                                 TABLED() { str << "ZeroCopy send bytes (total)"; }
                                 TABLED() {
                                     str << ZcProcessor.GetSendAsZcBytes();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!Subscribers.empty()) {
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        str << "Subscribers";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-sortable") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { str << "ActorId"; }
+                                    TABLEH() { str << "Cookie"; }
+                                    TABLEH() { str << "Activity"; }
+                                    TABLEH() { str << "EventTypeName"; }
+                                }
+                            }
+                            TABLEBODY() {
+                                for (const auto& [actorId, info] : Subscribers) {
+                                    TABLER() {
+                                        TABLED() { str << actorId; }
+                                        TABLED() { str << info.Cookie; }
+                                        TABLED() { str << (info.Activity.empty() ? TStringBuf("manual") : TStringBuf(info.Activity)); }
+                                        TABLED() { str << (info.EventTypeName.empty() ? TStringBuf("manual") : TStringBuf(info.EventTypeName)); }
+                                    }
                                 }
                             }
                         }

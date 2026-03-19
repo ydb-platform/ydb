@@ -16,6 +16,7 @@
 #include "thread_context.h"
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/actors/interconnect/events_local.h>
 #include <util/generic/hash.h>
 #include <util/system/rwlock.h>
 #include <util/random/random.h>
@@ -25,6 +26,30 @@
 namespace NActors {
 
     LWTRACE_USING(ACTORLIB_PROVIDER);
+
+    namespace {
+        TString ExtractCurrentSenderActivity() {
+            if (!TlsActivationContext) {
+                return {};
+            }
+
+            const TActorContext& ctx = TActivationContext::AsActorContext();
+            if (IActor* actor = ctx.Mailbox.FindActor(ctx.SelfID.LocalId())) {
+                return TString(actor->GetActivityType().GetName());
+            }
+            if (IActor* actor = ctx.Mailbox.FindAlias(ctx.SelfID.LocalId())) {
+                return TString(actor->GetActivityType().GetName());
+            }
+            return {};
+        }
+
+        TString ExtractForwardedEventTypeName(const IEventHandle& ev) {
+            if (ev.HasEvent()) {
+                return ev.GetTypeName();
+            }
+            return Sprintf("0x%08" PRIx32, ev.Type);
+        }
+    } // namespace
 
     TActorSetupCmd::TActorSetupCmd()
         : MailboxType(TMailboxType::HTSwap)
@@ -250,7 +275,17 @@ namespace NActors {
             Y_ENSURE(ev->Recipient == recipient,
                 "Event rewrite from " << ev->Recipient << " to " << recipient << " would be lost via interconnect");
             recipient = InterconnectProxy(recpNodeId);
-            ev->Rewrite(TEvInterconnect::EvForward, recipient);
+            if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
+                const TActorId sender = ev->Sender;
+                const ui64 cookie = ev->Cookie;
+                const TString eventTypeName = ExtractForwardedEventTypeName(*ev);
+                auto wrapped = std::make_unique<IEventHandle>(recipient, sender,
+                    new TEvForwardSubscribeSession(ev.release(), ExtractCurrentSenderActivity(), eventTypeName),
+                    0, cookie);
+                ev = std::move(wrapped);
+            } else {
+                ev->Rewrite(TEvInterconnect::EvForward, recipient);
+            }
         }
         if (recipient.IsService()) {
             TActorId target = ServiceMap->LookupLocal(recipient);

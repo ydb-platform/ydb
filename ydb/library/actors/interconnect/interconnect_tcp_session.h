@@ -455,6 +455,12 @@ namespace NActors {
             return EActivityType::INTERCONNECT_SESSION_TCP;
         }
 
+        struct TSubscriberInfo {
+            ui64 Cookie = 0;
+            TString Activity;
+            TString EventTypeName;
+        };
+
         TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
         ~TInterconnectSessionTCP();
 
@@ -486,9 +492,12 @@ namespace NActors {
 
         void Enqueue(STATEFN_SIG);
         void Forward(STATEFN_SIG);
+        void ForwardWithSubscribe(STATEFN_SIG);
         void ForwardDelayed();
         void Subscribe(STATEFN_SIG);
         void Unsubscribe(STATEFN_SIG);
+        void EnqueueForward(TAutoPtr<IEventHandle> ev);
+        void UpdateSubscriber(const TActorId& actorId, ui64 cookie, TString activity = {}, TString eventTypeName = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         std::optional<TTimeLimit> TimeLimit;
@@ -497,6 +506,7 @@ namespace NActors {
             TimeLimit.emplace(GetMaxCyclesPerEvent());
             STRICT_STFUNC_BODY(
                 fFunc(TEvInterconnect::EvForward, Forward)
+                fFunc(TEvForwardSubscribeSession::EventType, ForwardWithSubscribe)
                 cFunc(TEvInterconnect::EvForwardDelayed, ForwardDelayed)
                 cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
                 fFunc(TEvInterconnect::TEvConnectNode::EventType, Subscribe)
@@ -661,7 +671,7 @@ namespace NActors {
         ui64 InflightDataAmount = 0;
         ui64 RdmaInflightDataAmount = 0;
 
-        std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;
+        std::unordered_map<TActorId, TSubscriberInfo, TActorId::THash> Subscribers;
 
         struct TDelayedEvent {
             TAutoPtr<IEventHandle> Event;

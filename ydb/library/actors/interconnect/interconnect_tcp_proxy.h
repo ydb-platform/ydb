@@ -90,6 +90,7 @@ namespace NActors {
 
 #define SESSION_EVENTS(HANDLER)                                \
     fFunc(TEvInterconnect::EvForward, HANDLER)                 \
+    fFunc(TEvForwardSubscribeSession::EventType, HANDLER)      \
     fFunc(TEvInterconnect::TEvConnectNode::EventType, HANDLER) \
     fFunc(TEvents::TEvSubscribe::EventType, HANDLER)           \
     fFunc(TEvents::TEvUnsubscribe::EventType, HANDLER)

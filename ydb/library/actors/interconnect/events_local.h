@@ -359,6 +359,22 @@ namespace NActors {
         {}
     };
 
+    struct TEvForwardSubscribeSession : TEventLocal<TEvForwardSubscribeSession, (ui32)ENetwork::EvForwardSubscribeSession> {
+        TAutoPtr<IEventHandle> Event;
+        TString Activity;
+        TString EventTypeName;
+
+        TEvForwardSubscribeSession(TAutoPtr<IEventHandle> event, TString activity, TString eventTypeName)
+            : Event(std::move(event))
+            , Activity(std::move(activity))
+            , EventTypeName(std::move(eventTypeName))
+        {}
+
+        ui32 CalculateSerializedSize() const override {
+            return Event ? Event->GetSize() : 0;
+        }
+    };
+
     struct TEvSubscribeForConnection : TEventLocal<TEvSubscribeForConnection, (ui32)ENetwork::EvSubscribeForConnection> {
         TString HandshakeId;
         bool Subscribe;

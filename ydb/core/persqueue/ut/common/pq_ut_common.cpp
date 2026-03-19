@@ -58,6 +58,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 tabletConfig->SetYdbDatabaseId(parameters.databaseId);
                 tabletConfig->SetYdbDatabasePath(parameters.databasePath);
                 tabletConfig->SetFederationAccount(parameters.account);
+                tabletConfig->SetLocalDC(parameters.localDC);
             } else {
                 const TString account = parameters.account;
                 const TString dbRoot = runtime.GetAppData().PQConfig.GetRoot().empty()
@@ -71,10 +72,10 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 tabletConfig->SetTopicPath(dbPath + "/topic");
                 tabletConfig->SetFederationAccount(account);
                 tabletConfig->SetYdbDatabasePath(dbPath);
+                tabletConfig->SetLocalDC(true);
             }
             tabletConfig->SetTopic("topic");
             tabletConfig->SetVersion(version);
-            tabletConfig->SetLocalDC(parameters.localDC);
             if (parameters.AddDefaultConsumer) {
                 auto* consumer = tabletConfig->AddConsumers();
                 consumer->SetName("user");

@@ -108,12 +108,7 @@ protected:
         TRequest(const TActorId& workerActorId, const TString& sessionId, const TString& requestText = "")
             : WorkerActorId(workerActorId)
             , SessionId(sessionId)
-<<<<<<< HEAD
-            , SplittedRequestText(GetChunks(requestText))
-=======
             , RequestText(requestText)
-            , WmSessionUpdater(wmSessionUpdater)
->>>>>>> a4f08ffce6f (wm: moved log into kqp (#33150) (#36008))
         {}
 
         const TActorId WorkerActorId;
@@ -214,14 +209,6 @@ private:
 
         TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId, requestText)}).first->second;
         Counters.LocalDelayedRequests->Inc();
-
-<<<<<<< HEAD
-        LOG_REQ_PENDING(PoolId, request);
-=======
-        if (wmSessionUpdater) {
-            wmSessionUpdater->SetPoolId(PoolId);
-        }
->>>>>>> a4f08ffce6f (wm: moved log into kqp (#33150) (#36008))
 
         UpdatePoolConfig(ev->Get()->PoolConfig);
         UpdateSchemeboardSubscription(ev->Get()->PathId);
@@ -806,19 +793,7 @@ private:
         FifoCounters.GlobalDelayedRequests->Inc();
 
         const TString& sessionId = ev->Get()->SessionId;
-        TRequest* request = GetRequestSafe(sessionId);
-        if (request) {
-<<<<<<< HEAD
-            LOG_REQ_QUEUED(PoolId, request, GlobalState.DelayedRequests);
-=======
-            // Notify proxy that request moved to Delayed state via shared interface
-            if (request->WmSessionUpdater) {
-                request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::DELAYED, TActivationContext::Now());
-            }
->>>>>>> a4f08ffce6f (wm: moved log into kqp (#33150) (#36008))
-        } else {
-            LOG_D("successfully delayed request, session id: " << sessionId);
-        }
+        LOG_D("successfully delayed request, session id: " << sessionId);
 
         DoStartDelayedRequest(GetLoadCpuThreshold());
         RefreshState();

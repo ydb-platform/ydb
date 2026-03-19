@@ -1,6 +1,6 @@
 #pragma once
 
-#include "s3_backup_test_base.h"
+#include "backup_test_base.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -12,7 +12,7 @@
 
 using namespace NYdb;
 
-class TFsBackupTestFixture : public TYdbTestBaseFixture {
+class TFsBackupTestFixture : public TBackupTestBaseFixture {
 public:
     const TTempDir& GetTempDir() {
         return TempDir;

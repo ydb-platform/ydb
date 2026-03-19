@@ -14,6 +14,11 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
+<<<<<<< HEAD
+=======
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <unordered_set>
+>>>>>>> ee17fbaeb88 (Add all thread consumption metrics (#36170))
 
 #include <util/string/split.h>
 #include <util/system/getpid.h>
@@ -28,6 +33,7 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
     struct TEvPrivate {
         enum EEv {
             EvUpdateRuntimeStats = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvUpdateThreadPoolCounters,
             EvCleanupDeadTablets,
             EvSendListNodes,
             EvEnd
@@ -36,6 +42,7 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expected EvEnd < EventSpaceEnd");
 
         struct TEvUpdateRuntimeStats : TEventLocal<TEvUpdateRuntimeStats, EvUpdateRuntimeStats> {};
+        struct TEvUpdateThreadPoolCounters : TEventLocal<TEvUpdateThreadPoolCounters, EvUpdateThreadPoolCounters> {};
         struct TEvCleanupDeadTablets : TEventLocal<TEvCleanupDeadTablets, EvCleanupDeadTablets> {};
         struct TEvSendListNodes : TEventLocal<TEvSendListNodes, EvSendListNodes> {};
     };
@@ -71,6 +78,7 @@ public:
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
         SystemStateInfo.SetPID(GetPID());
+<<<<<<< HEAD
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
 
         auto utils = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils");
@@ -79,6 +87,16 @@ public:
         MinorPageFaults = utils->GetCounter("Process/MinorPageFaults", true);
         MajorPageFaults = utils->GetCounter("Process/MajorPageFaults", true);
         NumThreads = utils->GetCounter("Process/NumThreads", false);
+=======
+        Send(SelfId(), new TEvPrivate::TEvUpdateThreadPoolCounters());
+        Send(SelfId(), new TEvPrivate::TEvUpdateRuntimeStats());
+
+        auto utils = NKikimr::GetServiceCounters(AppData()->Counters, "utils");
+        ThreadPoolsGroup = utils->GetSubgroup("subsystem", "thread_pools");
+        auto grpc = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "grpc");
+        GrpcRequestBytes = grpc->GetSubgroup("subsystem", "serverStats")->GetCounter("requestBytes", true);
+        GrpcResponseBytes = grpc->GetSubgroup("subsystem", "serverStats")->GetCounter("responseBytes", true);
+>>>>>>> ee17fbaeb88 (Add all thread consumption metrics (#36170))
         auto group = utils->GetSubgroup("subsystem", "whiteboard");
         MaxClockSkewWithPeerUsCounter = group->GetCounter("MaxClockSkewWithPeerUs");
         MaxClockSkewPeerIdCounter = group->GetCounter("MaxClockSkewPeerId");
@@ -119,6 +137,19 @@ protected:
     NMonitoring::TDynamicCounters::TCounterPtr NumThreads;
 
     TSystemThreadsMonitor ThreadsMonitor;
+
+    struct TThreadPoolCounters {
+        NMonitoring::TDynamicCounters::TCounterPtr Threads;
+        NMonitoring::TDynamicCounters::TCounterPtr SystemCorePercents;
+        NMonitoring::TDynamicCounters::TCounterPtr UserCorePercents;
+        NMonitoring::TDynamicCounters::TCounterPtr TotalCorePercents;
+        NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults;
+        NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults;
+    };
+
+    TIntrusivePtr<NMonitoring::TDynamicCounters> ThreadPoolsGroup;
+    std::unordered_map<TString, TThreadPoolCounters> ThreadPoolCounters;
+    std::vector<TSystemThreadsMonitor::TSystemThreadPoolInfo> LatestThreadPools;
 
     template <typename PropertyType>
     static ui64 GetDifference(PropertyType a, PropertyType b) {
@@ -176,6 +207,10 @@ protected:
 
     static ui64 GetDifference(bool a, bool b) {
         return static_cast<ui64>(std::abs(static_cast<int>(b) - static_cast<int>(a)));
+    }
+
+    static i64 ToCorePercents(double usage, ui32 threads) {
+        return static_cast<i64>(usage * threads * 100 + 0.5);
     }
 
     template <typename PropertyType>
@@ -544,6 +579,7 @@ protected:
         SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
     }
 
+<<<<<<< HEAD
     STRICT_STFUNC(StateFunc,
         HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
@@ -580,6 +616,43 @@ protected:
         HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
         HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
     )
+=======
+    STATEFN(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvNodeStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvPDiskStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskDropDonors, Handle);
+            hFunc(TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvBSGroupStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvBSGroupStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvMemoryStatsUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateAddEndpoint, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateAddRole, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateSetTenant, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateRemoveTenant, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateRequest, Handle);
+            hFunc(TEvWhiteboard::TEvIntrospectionData, Handle);
+            hFunc(TEvWhiteboard::TEvTabletLookupRequest, Handle);
+            hFunc(TEvWhiteboard::TEvTraceLookupRequest, Handle);
+            hFunc(TEvWhiteboard::TEvTraceRequest, Handle);
+            hFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
+            hFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
+            hFunc(TEvPrivate::TEvUpdateThreadPoolCounters, Handle);
+            hFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
+        }
+    }
+>>>>>>> ee17fbaeb88 (Add all thread consumption metrics (#36170))
 
     void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
         auto tabletId(std::make_pair(ev->Get()->Record.GetTabletId(), ev->Get()->Record.GetFollowerId()));
@@ -1187,7 +1260,74 @@ protected:
         return loadAvg;
     }
 
+<<<<<<< HEAD
     void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr &, const TActorContext &ctx) {
+=======
+    TThreadPoolCounters& GetOrCreateThreadPoolCounters(const TString& name) {
+        auto& counters = ThreadPoolCounters[name];
+        if (!counters.Threads) {
+            auto group = ThreadPoolsGroup->GetSubgroup("pool", name);
+            counters.Threads = group->GetCounter("Threads");
+            counters.SystemCorePercents = group->GetCounter("SystemCorePercents", true);
+            counters.UserCorePercents = group->GetCounter("UserCorePercents", true);
+            counters.TotalCorePercents = group->GetCounter("TotalCorePercents", true);
+            counters.MajorPageFaults = group->GetCounter("MajorPageFaults", true);
+            counters.MinorPageFaults = group->GetCounter("MinorPageFaults", true);
+        }
+        return counters;
+    }
+
+    void UpdateThreadPoolCounters() {
+        std::unordered_set<TString> seenThreadPools;
+        seenThreadPools.reserve(LatestThreadPools.size());
+
+        for (const auto& threadPool : LatestThreadPools) {
+            auto& counters = GetOrCreateThreadPoolCounters(threadPool.Name);
+            seenThreadPools.insert(threadPool.Name);
+
+            counters.Threads->Set(threadPool.Threads);
+            *counters.SystemCorePercents += ToCorePercents(threadPool.SystemUsage, threadPool.Threads);
+            *counters.UserCorePercents += ToCorePercents(threadPool.UserUsage, threadPool.Threads);
+            *counters.TotalCorePercents += ToCorePercents(threadPool.SystemUsage + threadPool.UserUsage, threadPool.Threads);
+            *counters.MajorPageFaults += threadPool.MajorPageFaults;
+            *counters.MinorPageFaults += threadPool.MinorPageFaults;
+        }
+
+        for (auto& [name, counters] : ThreadPoolCounters) {
+            if (seenThreadPools.contains(name)) {
+                continue;
+            }
+            counters.Threads->Set(0);
+        }
+    }
+
+    void UpdateSystemStateThreads() {
+        SystemStateInfo.ClearThreads();
+        for (const auto& threadPool : LatestThreadPools) {
+            auto* threadInfo = SystemStateInfo.AddThreads();
+            threadInfo->SetName(threadPool.Name);
+            threadInfo->SetThreads(threadPool.Threads);
+            threadInfo->SetSystemUsage(threadPool.SystemUsage);
+            threadInfo->SetUserUsage(threadPool.UserUsage);
+            threadInfo->SetMajorPageFaults(threadPool.MajorPageFaults);
+            threadInfo->SetMinorPageFaults(threadPool.MinorPageFaults);
+            for (const auto& state : threadPool.States) {
+                threadInfo->MutableStates()->emplace(state.first, state.second);
+            }
+        }
+    }
+
+    void Handle(TEvPrivate::TEvUpdateThreadPoolCounters::TPtr&) {
+        static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(1);
+
+        LatestThreadPools = ThreadsMonitor.GetThreadPools(TActivationContext::Now());
+        UpdateThreadPoolCounters();
+
+        Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateThreadPoolCounters());
+    }
+
+    void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr&) {
+>>>>>>> ee17fbaeb88 (Add all thread consumption metrics (#36170))
         static constexpr int UPDATE_PERIOD_SECONDS = 15;
         static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(UPDATE_PERIOD_SECONDS);
         auto now = TActivationContext::Now();
@@ -1216,6 +1356,7 @@ protected:
             SystemStateInfo.SetNetworkWriteThroughput(SumNetworkWriteThroughput / UPDATE_PERIOD_SECONDS);
             SumNetworkWriteThroughput = 0;
         }
+<<<<<<< HEAD
         auto threadPools = ThreadsMonitor.GetThreadPools(now);
         SystemStateInfo.ClearThreads();
         for (const auto& threadPool : threadPools) {
@@ -1229,6 +1370,18 @@ protected:
             for (const auto& state : threadPool.States) {
                 threadInfo->MutableStates()->emplace(state.first, state.second);
             }
+=======
+        UpdateSystemStateThreads();
+        {
+            if (SavedGrpcRequestBytes || SavedGrpcResponseBytes) {
+                auto requestBytes = GrpcRequestBytes->Val() - SavedGrpcRequestBytes;
+                auto responseBytes = GrpcResponseBytes->Val() - SavedGrpcResponseBytes;
+                SystemStateInfo.SetGrpcRequestBytes(requestBytes / UPDATE_PERIOD_SECONDS);
+                SystemStateInfo.SetGrpcResponseBytes(responseBytes / UPDATE_PERIOD_SECONDS);
+            }
+            SavedGrpcRequestBytes = GrpcRequestBytes->Val();
+            SavedGrpcResponseBytes = GrpcResponseBytes->Val();
+>>>>>>> ee17fbaeb88 (Add all thread consumption metrics (#36170))
         }
         UpdateSystemState();
         ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());

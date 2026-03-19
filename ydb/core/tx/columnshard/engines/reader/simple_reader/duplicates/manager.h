@@ -3,6 +3,7 @@
 #include "common.h"
 #include "context.h"
 #include "events.h"
+#include "filters.h"
 #include "private_events.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
@@ -23,128 +24,11 @@ class TColumnFetchingContext;
 }   // namespace NKikimr::NOlap::NReader::NSimple
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
-    
-    
-class TFiltersBuilder {
-private:
-    THashMap<ui64, TPortionColumnFilter> Filters;
-    THashMap<ui64, std::shared_ptr<TFilterAccumulator>> WaitingPortions;
-    YDB_READONLY(ui64, RowsAdded, 0);
-    YDB_READONLY(ui64, RowsSkipped, 0);
-
-    void AddImpl(const ui64 portionId, const bool value) {
-        auto* findFilter = Filters.FindPtr(portionId);
-        if (!findFilter) {
-            return;
-        }
-        AFL_VERIFY(findFilter);
-        findFilter->Filter.Add(value);
-        if (findFilter->Offset == findFilter->Filter.GetRecordsCount().value_or(0)) {
-            auto it = WaitingPortions.find(portionId);
-            if (it != WaitingPortions.end()) {
-                it->second->SetIntervalsCount(1);
-                findFilter->Offset = 0;
-                it->second->AddFilter(0, *findFilter);
-                WaitingPortions.erase(it);
-                Filters.erase(portionId);
-            }
-        }
-    }
-
-public:
-    TFiltersBuilder() {
-    }
-
-    void AddRecord(const NArrow::NMerger::TBatchIterator& cursor) {
-        AddImpl(cursor.GetSourceId(), true);
-        ++RowsAdded;
-    }
-
-    void SkipRecord(const NArrow::NMerger::TBatchIterator& cursor) {
-        AddImpl(cursor.GetSourceId(), false);
-        ++RowsSkipped;
-    }
-
-    void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const {
-    }
-
-    bool IsBufferExhausted() const {
-        return false;
-    }
-
-    bool IsReadyFilter(const ui64 portionId) const {
-         auto* findFilter = Filters.FindPtr(portionId);
-         if (!findFilter) {
-            return false;
-         }
-         return findFilter->Offset == findFilter->Filter.GetRecordsCount().value_or(0);
-    }
-    
-    void NotifyFilterReady(const ui64 portionId) {
-        auto* findFilter = Filters.FindPtr(portionId);
-        AFL_VERIFY(findFilter);
-        findFilter->Offset = 0;
-        auto it = WaitingPortions.find(portionId);
-        AFL_VERIFY(it != WaitingPortions.end());
-        it->second->SetIntervalsCount(1);
-        it->second->AddFilter(0, *findFilter);
-        WaitingPortions.erase(it);
-        Filters.erase(portionId);
-    }
-    
-    NArrow::TColumnFilter&& ExtractFilter(const ui64 portionId) && {
-        auto findFilterIt = Filters.find(portionId);
-        AFL_VERIFY(findFilterIt != Filters.end());
-        auto&& filter = std::move(findFilterIt->second.Filter);
-        Filters.erase(findFilterIt);
-        return std::move(filter);
-    }
-
-    void AddSource(const ui64 portionId, ui64 rowsCount) {
-        AFL_VERIFY(Filters.emplace(portionId, TPortionColumnFilter{rowsCount, NArrow::TColumnFilter::BuildAllowFilter()}).second);
-    }
-    
-    void AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor) {
-        WaitingPortions.emplace(portionId, constructor);
-    }
-};
 
 class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
     friend class TMergeableInterval;
 
 private:
-    class TFilterSizeProvider {
-    public:
-        size_t operator()(const TPortionColumnFilter& filter) {
-            return filter.Filter.GetDataSize() + sizeof(filter.Offset);
-        }
-    };
-
-    class TIntervalFilterCallback {
-    private:
-        ui32 IntervalIdx;
-        std::shared_ptr<TFilterAccumulator> Constructor;
-
-    public:
-        TIntervalFilterCallback(const ui32 intervalIdx, const std::shared_ptr<TFilterAccumulator>& constructor)
-            : IntervalIdx(intervalIdx)
-            , Constructor(constructor)
-        {
-        }
-
-        void OnFilterReady(const TPortionColumnFilter& filter) {
-            Constructor->AddFilter(IntervalIdx, filter);
-        }
-
-        void OnError(const TString& error) {
-            Constructor->Abort(error);
-        }
-    };
-
-private:
-    inline static const ui64 FILTER_CACHE_SIZE = 10000000;  // 10 MiB
-    inline static const ui64 BORDER_CACHE_SIZE_COUNT = 10000;
-
     const std::shared_ptr<ISnapshotSchema> LastSchema;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
     const std::shared_ptr<arrow::Schema> PKSchema;
@@ -220,13 +104,11 @@ private:
 
     std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const {
         std::map<ui32, std::shared_ptr<arrow::Field>> fieldsByColumn;
-        {
-            for (const auto& columnId : PKColumns->GetColumnIds()) {
-                fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
-            }
-            for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
-                fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
-            }
+        for (const auto& columnId : PKColumns->GetColumnIds()) {
+            fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
+        }
+        for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
+            fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
         }
         return fieldsByColumn;
     }

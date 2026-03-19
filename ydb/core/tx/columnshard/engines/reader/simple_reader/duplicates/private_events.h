@@ -1,6 +1,7 @@
 #pragma once
 
 #include "context.h"
+#include "filters.h"
 
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>

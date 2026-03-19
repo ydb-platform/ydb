@@ -76,12 +76,11 @@ bool TDuplicateManager::IsExclusiveInterval(const ui64 portionId) const {
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     TPortionInfo::TConstPtr mainPortion = Portions->GetPortionVerified(ev->Get()->GetPortionId());
-    auto constructor = std::make_shared<TFilterAccumulator>(ev, mainPortion->GetRecordsCount(), Counters);
+    auto constructor = std::make_shared<TFilterAccumulator>(ev, Counters);
     if (IsExclusiveInterval(mainPortion->GetPortionId())) {
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, mainPortion->GetRecordsCount());
-        constructor->SetIntervalsCount(1);
-        constructor->AddFilter(0, std::move(TPortionColumnFilter{0, std::move(filter)}));
+        constructor->AddFilter(std::move(std::move(filter)));
         AFL_VERIFY(constructor->IsDone());
         Counters->OnRowsMerged(0, 0, mainPortion->GetRecordsCount());
         return;
@@ -99,16 +98,14 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev) {
     std::shared_ptr<TFilterAccumulator> constructor = ev->Get()->GetRequest();
+    if (FiltersBuilder.NotifyReadyFilter(constructor)) {
+        return;
+    }
+    
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> memoryGuard = ev->Get()->ExtractAllocationGuard();
     auto requestGuard = ev->Get()->ExtractRequestGuard();
 
     FiltersBuilder.AddWaitingPortion(constructor->GetRequest()->Get()->GetPortionId(), constructor);
-
-    if (FiltersBuilder.IsReadyFilter(constructor->GetRequest()->Get()->GetPortionId())) {
-        Counters->OnRequestCacheHit();
-        FiltersBuilder.NotifyFilterReady(constructor->GetRequest()->Get()->GetPortionId());
-        return;
-    }
 
     const std::shared_ptr<const TPortionInfo>& mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetPortionId());
     auto border = mainPortion->IndexKeyEnd();

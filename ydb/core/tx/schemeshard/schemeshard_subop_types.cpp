@@ -89,7 +89,7 @@ bool IsCreate(ETxType t) {
         case TxIncrementalRestoreFinalize:
             return false; // IsCreate
         case TxInitializeBuildIndex: //this is more like alter
-        case TxPublishShadowData:
+        case TxPrepareIndexValidation:
         case TxCreateCdcStreamAtTable:
         case TxCreateCdcStreamAtTableWithInitialScan:
             return false; // IsCreate
@@ -247,7 +247,7 @@ bool IsDrop(ETxType t) {
         case TxCreateTransfer:
         case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
-        case TxPublishShadowData:
+        case TxPrepareIndexValidation:
         case TxCreateLock:
         case TxDropLock:
         case TxFinalizeBuildIndex:
@@ -386,7 +386,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateTransfer:
         case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
-        case TxPublishShadowData:
+        case TxPrepareIndexValidation:
         case TxCreateLock:
         case TxDropLock:
         case TxDropTableIndexAtMainTable:
@@ -584,7 +584,7 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery: return TxAlterStreamingQuery;
         case NKikimrSchemeOp::ESchemeOpDropStreamingQuery: return TxDropStreamingQuery;
         case NKikimrSchemeOp::ESchemeOpTruncateTable: return TxTruncateTable;
-        case NKikimrSchemeOp::ESchemeOpPublishShadowData: return TxPublishShadowData;
+        case NKikimrSchemeOp::ESchemeOpPrepareIndexValidation: return TxPrepareIndexValidation;
 
         // no matching tx-type
         case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:

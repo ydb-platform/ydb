@@ -813,7 +813,7 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxFinalizeBuildIndex) {
         commonShardOp = TTxState::ConfigureParts;
-    } else if (txState.TxType == TTxState::TxPublishShadowData) {
+    } else if (txState.TxType == TTxState::TxPrepareIndexValidation) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
         commonShardOp = TTxState::ConfigureParts;

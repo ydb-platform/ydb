@@ -428,7 +428,7 @@ message TCreatePersistentSnapshot {
     optional uint64 OwnerId = 1;
     optional uint64 PathId = 2;
     optional string Name = 3;
-    optional bool PublishShadow = 4;
+    optional bool PrepareValidation = 4;
     optional uint64 TableSchemaVersion = 5;
 }
 
@@ -448,7 +448,7 @@ message TInitiateBuildIndex {
 }
 
 message TPrepareIndexValidation {
-    optional NKikimrDataEvents.TPathId IndexId = 1;
+    optional NKikimrProto.TPathID IndexId = 1;
     optional string SnapshotName = 2;
     optional uint64 TableSchemaVersion = 3;
 }

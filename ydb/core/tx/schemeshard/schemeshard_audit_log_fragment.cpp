@@ -131,7 +131,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "BUILD INDEX";
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
         return "ALTER TABLE BUILD INDEX INIT";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpPublishShadowData:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
         return "ALTER TABLE BUILD INDEX PUBLISH SHADOW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
         return "ALTER TABLE BUILD INDEX APPLY";
@@ -435,8 +435,8 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetInitiateBuildIndexMainTable().GetTableName()}));
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpPublishShadowData:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetPublishShadowData().GetTableName()}));
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetPrepareIndexValidation().GetTableName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetLockConfig().GetName()}));

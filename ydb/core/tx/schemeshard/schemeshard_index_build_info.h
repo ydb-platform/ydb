@@ -66,7 +66,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Applying = 50,
         Unlocking = 60,
         AlterSequence = 61,
-        PublishShadow = 62,
+        PrepareValidation = 62,
         Done = 200,
 
         Cancellation_Applying = 350,
@@ -86,7 +86,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         // Filling
         UniqIndexValidation = 100,
-        PublishShadow = 101,
+        PrepareValidation = 101,
 
         // Fulltext
         FulltextIndexStats = 200,

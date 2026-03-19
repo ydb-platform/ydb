@@ -1310,7 +1310,7 @@ message TFinalizeBuildIndexMainTable {
     optional TBuildIndexOutcome Outcome = 4;
 }
 
-message TPublishShadowData {
+message TPrepareIndexValidation {
     optional string TableName = 1;
 }
 
@@ -1955,7 +1955,7 @@ message TModifyScheme {
     // for example, by resetting all sequences.
     optional TTruncateTable TruncateTable = 92;
 
-    optional TPublishShadowData PublishShadowData = 93;
+    optional TPrepareIndexValidation PrepareIndexValidation = 93;
 
     // Some entries are grouped by semantics, so are out of order
 }

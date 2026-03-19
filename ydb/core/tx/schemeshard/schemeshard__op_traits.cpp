@@ -124,7 +124,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
-        case NKikimrSchemeOp::EOperationType::ESchemeOpPublishShadowData:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
         case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:

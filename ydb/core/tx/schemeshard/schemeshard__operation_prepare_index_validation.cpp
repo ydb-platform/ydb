@@ -20,7 +20,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TPublishShadowData TConfigureParts"
+            << "TPrepareIndexValidation TConfigureParts"
             << " operationId# " << OperationId;
     }
 
@@ -52,7 +52,7 @@ public:
                                << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxPublishShadowData);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxPrepareIndexValidation);
 
         TPathId pathId = txState->TargetPathId;
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
@@ -97,7 +97,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TPublishShadowData TPropose"
+            << "TPrepareIndexValidation TPropose"
             << " operationId# " << OperationId;
     }
 
@@ -134,7 +134,7 @@ public:
                                << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxPublishShadowData);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxPrepareIndexValidation);
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
@@ -171,7 +171,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxPublishShadowData);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxPrepareIndexValidation);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -191,7 +191,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TPublishShadowData TCreateTxShards"
+            << "TPrepareIndexValidation TCreateTxShards"
             << " operationId: " << OperationId;
     }
 
@@ -229,7 +229,7 @@ public:
     }
 };
 
-class TPublishShadowData: public TSubOperation {
+class TPrepareIndexValidation: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -274,13 +274,13 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        auto& publish = Transaction.GetPublishShadowData();
+        auto& publish = Transaction.GetPrepareIndexValidation();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& tableName = publish.GetTableName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TPublishShadowData Propose"
+                     "TPrepareIndexValidation Propose"
                          << ", path: " << parentPathStr << "/" << tableName
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
@@ -290,7 +290,7 @@ public:
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(tableName);
 
         if (!Transaction.GetInternal()) {
-            result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "PublishShadowData is an internal operation");
+            result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "PrepareIndexValidation is an internal operation");
             return result;
         }
 
@@ -366,7 +366,7 @@ public:
         pathEl->LastTxId = OperationId.GetTxId();
         pathEl->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
 
-        context.SS->CreateTx(OperationId, TTxState::TxPublishShadowData, tablePathId);
+        context.SS->CreateTx(OperationId, TTxState::TxPrepareIndexValidation, tablePathId);
 
         context.SS->PersistTxState(db, OperationId);
 
@@ -386,12 +386,12 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TPublishShadowData");
+        Y_ABORT("no AbortPropose for TPrepareIndexValidation");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TPublishShadowData AbortUnsafe"
+                     "TPrepareIndexValidation AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
                          << ", at schemeshard: " << context.SS->TabletID());
@@ -404,13 +404,13 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreatePublishShadowData(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TPublishShadowData>(id, tx);
+ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TPrepareIndexValidation>(id, tx);
 }
 
-ISubOperation::TPtr CreatePublishShadowData(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TPublishShadowData>(id, state);
+    return MakeSubOperation<TPrepareIndexValidation>(id, state);
 }
 
 }

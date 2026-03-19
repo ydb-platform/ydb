@@ -610,8 +610,8 @@ ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTxStat
 ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
 ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreatePublishShadowData(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreatePublishShadowData(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);

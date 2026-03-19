@@ -100,11 +100,11 @@ protected:
 
     struct TThreadPoolCounters {
         NMonitoring::TDynamicCounters::TCounterPtr Threads;
-        NMonitoring::TDynamicCounters::TCounterPtr SystemCorePercents;
-        NMonitoring::TDynamicCounters::TCounterPtr UserCorePercents;
-        NMonitoring::TDynamicCounters::TCounterPtr TotalCorePercents;
-        NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaultsPerSecond;
-        NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaultsPerSecond;
+        NMonitoring::TDynamicCounters::TCounterPtr SystemCoresConsumed;
+        NMonitoring::TDynamicCounters::TCounterPtr UserCoresConsumed;
+        NMonitoring::TDynamicCounters::TCounterPtr TotalCoresConsumed;
+        NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults;
+        NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults;
     };
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> ThreadPoolsGroup;
@@ -169,8 +169,8 @@ protected:
         return static_cast<ui64>(std::abs(static_cast<int>(b) - static_cast<int>(a)));
     }
 
-    static i64 ToCorePercents(double usage, ui32 threads) {
-        return static_cast<i64>(usage * threads * 100);
+    static i64 ToConsumedCores(double usage, ui32 threads) {
+        return static_cast<i64>(usage * threads + 0.5);
     }
 
     template <typename PropertyType>
@@ -1127,11 +1127,11 @@ protected:
         if (!counters.Threads) {
             auto group = ThreadPoolsGroup->GetSubgroup("pool", name);
             counters.Threads = group->GetCounter("Threads");
-            counters.SystemCorePercents = group->GetCounter("SystemCorePercents");
-            counters.UserCorePercents = group->GetCounter("UserCorePercents");
-            counters.TotalCorePercents = group->GetCounter("TotalCorePercents");
-            counters.MajorPageFaultsPerSecond = group->GetCounter("MajorPageFaultsPerSecond");
-            counters.MinorPageFaultsPerSecond = group->GetCounter("MinorPageFaultsPerSecond");
+            counters.SystemCoresConsumed = group->GetCounter("SystemCoresConsumed", true);
+            counters.UserCoresConsumed = group->GetCounter("UserCoresConsumed", true);
+            counters.TotalCoresConsumed = group->GetCounter("TotalCoresConsumed", true);
+            counters.MajorPageFaults = group->GetCounter("MajorPageFaults", true);
+            counters.MinorPageFaults = group->GetCounter("MinorPageFaults", true);
         }
         return counters;
     }
@@ -1144,13 +1144,12 @@ protected:
             auto& counters = GetOrCreateThreadPoolCounters(threadPool.Name);
             seenThreadPools.insert(threadPool.Name);
 
-            // Export pool load as "core percents": 1 fully loaded core == 100.
             counters.Threads->Set(threadPool.Threads);
-            counters.SystemCorePercents->Set(ToCorePercents(threadPool.SystemUsage, threadPool.Threads));
-            counters.UserCorePercents->Set(ToCorePercents(threadPool.UserUsage, threadPool.Threads));
-            counters.TotalCorePercents->Set(ToCorePercents(threadPool.SystemUsage + threadPool.UserUsage, threadPool.Threads));
-            counters.MajorPageFaultsPerSecond->Set(threadPool.MajorPageFaults);
-            counters.MinorPageFaultsPerSecond->Set(threadPool.MinorPageFaults);
+            *counters.SystemCoresConsumed += ToConsumedCores(threadPool.SystemUsage, threadPool.Threads);
+            *counters.UserCoresConsumed += ToConsumedCores(threadPool.UserUsage, threadPool.Threads);
+            *counters.TotalCoresConsumed += ToConsumedCores(threadPool.SystemUsage + threadPool.UserUsage, threadPool.Threads);
+            *counters.MajorPageFaults += threadPool.MajorPageFaults;
+            *counters.MinorPageFaults += threadPool.MinorPageFaults;
         }
 
         for (auto& [name, counters] : ThreadPoolCounters) {
@@ -1158,11 +1157,6 @@ protected:
                 continue;
             }
             counters.Threads->Set(0);
-            counters.SystemCorePercents->Set(0);
-            counters.UserCorePercents->Set(0);
-            counters.TotalCorePercents->Set(0);
-            counters.MajorPageFaultsPerSecond->Set(0);
-            counters.MinorPageFaultsPerSecond->Set(0);
         }
     }
 

@@ -40,12 +40,17 @@ public:
     void Bootstrap() {
         STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK07, VDISKP(Ctx.LogCtx->VCtx, "Bootstrap TChunkKeeperActor"),
                 (CommittedData, PrintCommittedData()),
-                (IsActive, IsActive));
+                (IsActive, IsActive),
+                (ReadOnly, ReadOnly));
         if (IsActive) {
             Become(&TThis::StateAccepting);
         } else {
             if (!ReadOnly) {
-                DropAllChunks();
+                if (!Committed->Chunks.empty()) {
+                    DropAllChunks();
+                } else {
+                    Send(Ctx.LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, Max<ui64>()));
+                }
             }
             Become(&TThis::StateError);
         }

@@ -142,7 +142,8 @@ auto driverConfig = NYdb::TDriverConfig(connectionString)
   {% cut "Хороший пример" %}
   ```cpp
 // Хороший пример кода
-// TODO: Добавьте пример хорошего кода здесь
+auto driverConfig = NYdb::TDriverConfig(connectionString);
+NYdb::TDriver driver(driverConfig);
   ```
   {% endcut %}
 

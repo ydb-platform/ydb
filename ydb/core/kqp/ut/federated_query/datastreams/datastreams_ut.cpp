@@ -7,11 +7,8 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/testlib/test_pq_client.h>
->>>>>>> f91a476e0a1 (YQ-5128 added retry for streaming query cancelled status (#36174))
 #include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>

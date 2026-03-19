@@ -192,10 +192,14 @@ TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
     }
     ui64 columnRawBytes = 0;
     ui64 columnBlobBytes = 0;
-    if (Columns.GetColumnsCount() && source->GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
-        !source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations()) {
+
+    const auto& program = source->GetContext()->GetReadMetadata()->GetProgram();
+    // hasAggregations is false if there's no graph (GetGraphOptional returns nullptr)
+    const bool hasAggregations = program.GetGraphOptional() && program.GetChainVerified()->HasAggregations();
+    if (Columns.GetColumnsCount() && !hasAggregations) {
         columnRawBytes = source->GetColumnRawBytes(Columns.GetColumnIds());
         columnBlobBytes = source->GetColumnBlobBytes(Columns.GetColumnIds());
+
         source->SetSourceInMemory(
             columnRawBytes < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {

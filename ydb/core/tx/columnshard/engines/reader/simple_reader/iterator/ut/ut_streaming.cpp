@@ -626,12 +626,17 @@ void TestMemoryLimitSingleRecordPages() {
     // Configure extremely low memory limit to force single-record pages
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
     streamingConfig->SetMinRecordsForPaging(1);  // Trigger streaming for any data
-    streamingConfig->SetMaxPagesInFlight(4);
     streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-    csControllerGuard->SetConfiguredLimit(4);
+    // Set extremely low memory limit so every chunk becomes its own page.
+    // BuildReadPages splits at chunk boundaries, so we need many chunks to get many pages.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
+    // Use MinRecordsCount=1 to ensure each record becomes its own chunk.
+    // With 100 records this gives ~100 chunks => ~100 pages with memoryLimit=1.
+    csControllerGuard->SetOverrideBlobSplitSettings(
+        NOlap::NSplitter::TSplitSettings().SetMinRecordsCount(1));
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -647,13 +652,19 @@ void TestMemoryLimitSingleRecordPages() {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write a small dataset that will be split into single-record pages
+    // Write a dataset that will be split into many single-record chunks.
+    // Each batch has exactly 1 record so each becomes its own portion/chunk,
+    // giving 100 portions => 100 pages (satisfies UNIT_ASSERT_GT(totalCreated, 50u)).
     const ui32 numRecords = 100;
-    std::pair<ui64, ui64> portion = {0, numRecords};
+    const ui32 recordsPerBatch = 1;
+    const ui32 numBatches = numRecords / recordsPerBatch;
 
     std::vector<ui64> writeIds;
-    TString data = MakeTestBlob(portion, table.Schema);
-    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+    for (ui32 batch = 0; batch < numBatches; ++batch) {
+        std::pair<ui64, ui64> portion = {batch * recordsPerBatch, (batch + 1) * recordsPerBatch};
+        TString data = MakeTestBlob(portion, table.Schema);
+        UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+    }
 
     planStep = ProposeCommit(runtime, sender, txId, writeIds);
     PlanCommit(runtime, sender, planStep, txId);
@@ -673,7 +684,7 @@ void TestMemoryLimitSingleRecordPages() {
     Cerr << "MemoryLimitSingleRecordPages: total pages created=" << totalCreated
          << ", iterations=" << iterationsCount << Endl;
 
-    // With single-record pages, we should have many pages created
+    // With single-record pages (many chunks due to tiny blob size), we should have many pages
     UNIT_ASSERT_GT(totalCreated, 50u);
     // Multiple iterations confirm the Ack/page protocol ran
     UNIT_ASSERT_GT(iterationsCount, 50u);

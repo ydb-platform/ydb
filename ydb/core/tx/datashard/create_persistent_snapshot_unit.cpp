@@ -41,6 +41,7 @@ public:
             Y_ENSURE(oldInfo);
             NKikimrSchemeOp::TTableDescription description;
             oldInfo->GetSchema(description);
+            Y_ENSURE(description.GetTableSchemaVersion() == params.GetTableSchemaVersion()-1);
             description.SetTableSchemaVersion(params.GetTableSchemaVersion());
             Y_ENSURE(description.MutablePartitionConfig()->GetShadowData());
             description.MutablePartitionConfig()->SetShadowData(false);

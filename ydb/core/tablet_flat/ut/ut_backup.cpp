@@ -2374,6 +2374,104 @@ Y_UNIT_TEST_SUITE(Backup) {
         env.RestoreLastBackup(TestTabletFlags);
         assertState();
     }
+
+    Y_UNIT_TEST(DeleteIncompleteBackups) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        auto incompleteDir1 = tabletIdDir.Child("backup_20200101000000Z_g0_s0");
+        incompleteDir1.MkDirs();
+        auto snapshotTmp = incompleteDir1.Child("snapshot.tmp");
+        snapshotTmp.MkDirs();
+        TFile(snapshotTmp.Child("some_file"), EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
+
+        auto incompleteDir2 = tabletIdDir.Child("backup_20200101000001Z_g0_s10");
+        incompleteDir2.MkDirs();
+        TFile(incompleteDir2.Child("changelog.json"), EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        UNIT_ASSERT_C(!incompleteDir1.Exists(), "Incomplete backup dir must be deleted after restart");
+        UNIT_ASSERT_C(!incompleteDir2.Exists(), "Incomplete backup dir must be deleted after restart");
+    }
+
+    Y_UNIT_TEST(DeleteSuccessfulBackups) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        for (int i = 0; i < 10; ++i) {
+            Cerr << "...restarting tablet (iteration " << i << ")" << Endl;
+            env.RestartTablet(TestTabletFlags);
+            env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        }
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        UNIT_ASSERT_VALUES_EQUAL(genDirs.size(), 3);
+    }
+
+    Y_UNIT_TEST(DeleteBackupsRace) {
+        TEnv env;
+        env->GetAppData().SystemTabletBackupConfig.SetMaxBackupsLimit(1);
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        // next generation already making backup
+        auto nextGenDir = tabletIdDir.Child("backup_20200101000000Z_g10_s0");
+        nextGenDir.MkDirs();
+        auto snapshotTmp = nextGenDir.Child("snapshot.tmp");
+        snapshotTmp.MkDirs();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        UNIT_ASSERT_C(nextGenDir.Exists(), "Next generation backup dir must not be deleted after restart");
+
+        snapshotTmp.RenameTo(nextGenDir.Child("snapshot"));
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        UNIT_ASSERT_VALUES_EQUAL(genDirs.size(), 1);
+        UNIT_ASSERT_C(nextGenDir.Exists(), "Next generation backup dir must not be deleted after restart");
+    }
 }
 
 } // namespace NKikimr::NTabletFlatExecutor::NBackup

@@ -98,24 +98,15 @@ TPQDoneWithCloudEvents::TPQDoneWithCloudEvents(const TOperationId& id, const TTx
 
 bool TPQDoneWithCloudEvents::ProgressState(TOperationContext& context)
 {
-    context.OnComplete.Barrier(OperationId, "DoneBarrier");
-
-    return false;
-}
-
-bool TPQDoneWithCloudEvents::HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context)
-{
-    if (!TDone::Process(context)) {
-        return false;
-    }
-
     ScheduleSendTopicCloudEvent(
         Transaction,
         context,
         NKikimrScheme::StatusSuccess,
         TString());
 
-    return true;
+    TDone::ProgressState(context);
+
+    return false;
 }
 
 } // NKikimr::NSchemeShard

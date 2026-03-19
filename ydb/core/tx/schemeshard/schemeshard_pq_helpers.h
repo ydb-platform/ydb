@@ -39,8 +39,6 @@ public:
 
     bool ProgressState(TOperationContext&) override;
 
-    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override;
-
 private:
     const TTxTransaction Transaction;
 };

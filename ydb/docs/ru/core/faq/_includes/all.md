@@ -23,3 +23,7 @@
 ## Аналитика {#analytics}
 
 {% include notitle [analytics.md](../analytics.md) %}
+
+## Практические советы {#practical-tips}
+
+{% include notitle [practical-tips.md](../practical-tips.md) %}

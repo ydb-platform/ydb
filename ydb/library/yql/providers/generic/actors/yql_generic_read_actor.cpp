@@ -63,14 +63,6 @@ namespace NYql::NDq {
             IngressStats_.Level = statsLevel;
 
             LogPrefix = TStringBuilder() << "ComputeActorId=" << ComputeActorId_ << " TaskId=" << taskId << " ";
-            const auto& dsi = Source_.select().data_source_instance();
-            GENERIC_LOG_I("Creating read actor with params:"
-                    << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
-                    << ", endpoint=" << dsi.endpoint().ShortDebugString()
-                    << ", database=" << dsi.database()
-                    << ", use_tls=" << ToString(dsi.use_tls())
-                    << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
-                    << ", partitions_count=" << Partitions_.size());
         }
 
         ~TGenericReadActor() {
@@ -81,16 +73,24 @@ namespace NYql::NDq {
         }
 
         void Bootstrap() {
+            LogPrefix += TStringBuilder() << "ActorId=" << SelfId() << " ";
+            const auto& dsi = Source_.select().data_source_instance();
+            GENERIC_LOG_I("Creating read actor with params:"
+                    << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
+                    << ", endpoint=" << dsi.endpoint().ShortDebugString()
+                    << ", database=" << dsi.database()
+                    << ", use_tls=" << ToString(dsi.use_tls())
+                    << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
+                    << ", partitions_count=" << Partitions_.size());
             Become(&TGenericReadActor::StateFunc);
             auto issue = InitSplitsReading();
             if (issue) {
-                return NotifyComputeActorWithIssue(
+                NotifyComputeActorWithIssue(
                     TActivationContext::ActorSystem(),
                     ComputeActorId_,
                     InputIndex_,
                     std::move(*issue));
             };
-            LogPrefix += TStringBuilder() << " ActorId=" << SelfId();
         }
 
         static constexpr char ActorName[] = "GENERIC_READ_ACTOR";

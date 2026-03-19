@@ -2,7 +2,7 @@
 
 Секция `tli_config` содержит параметры диагностики [инвалидации блокировок транзакций](../../concepts/glossary.md#tli) (Transaction Lock Invalidation, TLI).
 
-TLI — это механизм, при котором одна транзакция (нарушитель) ломает оптимистичные блокировки другой транзакции (жертвы), вынуждая жертву откатиться и повторить выполнение. Подробнее о диагностике TLI см. в разделе [{#T}](../../troubleshooting/performance/queries/transaction-lock-invalidation.md).
+TLI — это механизм, при котором одна транзакция (нарушитель) ломает [оптимистичные блокировки](../../concepts/glossary.md#optimistic-locking) другой транзакции (жертвы), вынуждая жертву откатиться и повторить выполнение. Подробнее о диагностике TLI см. в разделе [{#T}](../../troubleshooting/performance/queries/transaction-lock-invalidation.md).
 
 ## Параметры конфигурации
 
@@ -41,3 +41,4 @@ tli_config:
 
 - [{#T}](../../troubleshooting/performance/queries/transaction-lock-invalidation.md)
 - [{#T}](log_config.md)
+- [{#T}](../../devops/observability/logging.md)

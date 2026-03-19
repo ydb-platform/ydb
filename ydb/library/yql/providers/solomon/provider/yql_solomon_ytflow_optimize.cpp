@@ -31,7 +31,7 @@ public:
             return write;
         }
 
-        auto* listType = maybeWriteToShard.Cast().Input().Ref().GetTypeAnn();
+        auto listType = maybeWriteToShard.Cast().Input().Ref().GetTypeAnn();
         auto* itemType = listType->Cast<TListExprType>()->GetItemType();
 
         return Build<TSoWriteToShard>(ctx, write->Pos())

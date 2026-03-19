@@ -11,8 +11,6 @@ using namespace NYdb;
 
 using TBackupPathTestFixture = TS3BackupTestFixture;
 using TBackupPathTestFixtureFs = TFsBackupTestFixture;
-// class TBackupPathTestFixture : public TS3BackupTestFixture {};
-// class TBackupPathTestFixtureFs : public TFsBackupTestFixture {};
 
 namespace {
 
@@ -988,11 +986,6 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     Y_UNIT_TEST_TWIN(ImportFilterByYdbObjectPath, IsOlap) {
         ImportFilterByYdbObjectPathImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
-
-    // Y_UNIT_TEST_TWIN(ImportFilterByYdbObjectPathFs, IsOlap) {
-    //     // TFsBackupTestFixture f;
-    //     ImportFilterByYdbObjectPathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, IsOlap);
-    // }
 
     Y_UNIT_TEST_TWIN(EncryptedImportWithoutCommonPrefix, IsOlap) {
         // Encrypted export with common source path, import without common path and SchemaMapping (error, encrypted export must be with SchemaMapping)

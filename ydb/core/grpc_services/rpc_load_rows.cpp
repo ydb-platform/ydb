@@ -153,6 +153,29 @@ bool CheckAccess(const TString& table, const TString& token, const NSchemeCache:
     return true;
 }
 
+bool ValidateNotNullColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+                            const std::set<std::string>& notNullColumns,
+                            TString& errorMessage) {
+    if (!batch || notNullColumns.empty()) {
+        return true;
+    }
+
+    for (const auto& columnName : notNullColumns) {
+        auto column = batch->GetColumnByName(columnName);
+        if (!column) {
+            errorMessage = "Missing key columns: " + TString(columnName);
+            return false;
+        }
+
+        if (column->null_count() > 0) {
+            errorMessage = "Received NULL value for not null column: " + TString(columnName);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 }
 
 using TEvBulkUpsertRequest = TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest,
@@ -332,7 +355,7 @@ class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
-        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(), 
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(),
             GetUserSID(request),
             GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
@@ -527,6 +550,10 @@ private:
 
                 break;
             }
+        }
+
+        if (!ValidateNotNullColumns(Batch, NotNullColumns, errorMessage)) {
+            return false;
         }
 
         return true;

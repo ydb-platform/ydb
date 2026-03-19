@@ -60,7 +60,7 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
     ReadOptions.block_size = DEFAULT_BLOCK_SIZE;
     ReadOptions.use_threads = false;
     ReadOptions.autogenerate_column_names = false;
-    auto SetOptionsForColumns = [&](const auto& col) -> decltype(auto) {
+    auto SetOptionsForColumns = [&](const TColumnInfo& col) {
         if (col.Precision > 0) {
             ConvertOptions.column_types[col.Name] = arrow::decimal128(static_cast<int32_t>(col.Precision), static_cast<int32_t>(col.Scale));
         } else if (col.IsBool) {
@@ -69,7 +69,7 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
             ConvertOptions.column_types[col.Name] = col.CsvArrowType;
         }
     };
-    
+
     if (header) {
         // !autogenerate + column_names.empty() => read from CSV
         ResultColumns.reserve(columns.size());

@@ -7,7 +7,7 @@
         "args":
           [
             {
-              "op_name":"LeftJoin (Grace)",
+              "op_name":"LeftJoin (BlockHash)",
               "args":
                 [
                   {

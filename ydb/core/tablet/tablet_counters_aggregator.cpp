@@ -14,6 +14,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -22,10 +23,13 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/util/wildcard.h>
+#include <ydb/library/actors/interconnect/subscription_manager.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
+
+#include <optional>
 
 #include <util/generic/xrange.h>
 #include <util/string/vector.h>
@@ -1633,18 +1637,25 @@ void PreProcessResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse* res
     }
 }
 
-
 class TClusterLabeledCountersAggregatorActorV1 : public TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1> {
 private:
+    enum class EBrowseMode {
+        None,
+        NameService,
+        Hive,
+    };
+
     using TBase = TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1>;
     TActorId Initiator;
     TTabletTypes::EType TabletType;
     ui32 NodesRequested;
     ui32 NodesReceived;
-    TVector<ui32> Nodes;
     THashMap<ui32, TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersResponse>> PerNodeResponse;
     ui32 NumWorkers;
     ui32 WorkerId;
+    EBrowseMode BrowseMode = EBrowseMode::None;
+    TActorId HivePipe;
+    std::optional<NActors::NInterconnect::TSubscriptionManager> SessionSubscriptions;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1667,23 +1678,55 @@ public:
         TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersRequest> request(new TEvTabletCounters::TEvTabletLabeledCountersRequest());
         request->Record.SetTabletType(TabletType);
         request->Record.SetVersion(1);
-        ctx.Send(aggregatorServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        Nodes.emplace_back(nodeId);
+        ui32 flags = IEventHandle::FlagTrackDelivery;
+        if (nodeId != ctx.SelfID.NodeId()) {
+            SessionSubscriptions->Arm(nodeId, TActivationContext::InterconnectProxy(nodeId));
+            flags |= IEventHandle::FlagSubscribeOnSession;
+        }
+        ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor request to node " << nodeId << " " << ctx.SelfID);
         ++NodesRequested;
     }
 
     void Die(const TActorContext& ctx) override {
-        for (const ui32 node : Nodes) {
-            ctx.Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe());
+        if (HivePipe) {
+            NTabletPipe::CloseClient(ctx, HivePipe);
+            HivePipe = {};
         }
         TBase::Die(ctx);
     }
 
+    bool BrowseNodesViaHive(const TActorContext& ctx) {
+        const auto* domain = AppData(ctx)->DomainsInfo->GetDomain();
+        const ui64 hiveId = AppData(ctx)->DomainsInfo->GetHive();
+        const TSubDomainKey domainKey = domain ? TSubDomainKey(domain->SchemeRoot, 1) : TSubDomainKey();
+        if (hiveId == TDomainsInfo::BadTabletId || !domainKey) {
+            return false;
+        }
+
+        HivePipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, hiveId));
+
+        auto request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
+        request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(domainKey);
+        NTabletPipe::SendData(ctx, HivePipe, request.Release());
+
+        BrowseMode = EBrowseMode::Hive;
+        return true;
+    }
+
+    void BrowseNodesViaNameservice(const TActorContext& ctx) {
+        const TActorId nameserviceId = GetNameserviceActorId();
+        ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+        BrowseMode = EBrowseMode::NameService;
+    }
+
     void Bootstrap(const TActorContext& ctx) {
+        SessionSubscriptions.emplace();
+        SessionSubscriptions->SetSelfId(TActorIdentity(ctx.SelfID));
         if (NumWorkers > 0) {
-            const TActorId nameserviceId = GetNameserviceActorId();
-            ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+            if (!BrowseNodesViaHive(ctx)) {
+                BrowseNodesViaNameservice(ctx);
+            }
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
             LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V1 Initiator " << Initiator << " self " << ctx.SelfID << " worker " << WorkerId);
@@ -1700,6 +1743,9 @@ public:
     STFUNC(StateRequestedBrowse) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvInterconnect::TEvNodesInfo, HandleBrowse);
+            HFunc(TEvHive::TEvResponseHiveNodeStats, HandleBrowse);
+            HFunc(TEvTabletPipe::TEvClientConnected, HandleHiveConnected);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, HandleHiveDestroyed);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -1708,19 +1754,20 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletCounters::TEvTabletLabeledCountersResponse, HandleResponse);
             HFunc(TEvents::TEvUndelivered, Undelivered);
+            HFunc(TEvInterconnect::TEvNodeConnected, Connected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
+        if (BrowseMode != EBrowseMode::NameService) {
+            return;
+        }
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
-        Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
-        Nodes.reserve(nodesInfo->Nodes.size());
         ui32 i = 0;
         for (const auto& ni : nodesInfo->Nodes) {
-            ++i;
-            if (i % NumWorkers == WorkerId) {
+            if ((i++ % NumWorkers) == WorkerId) {
                 SendRequest(ni.NodeId, ctx);
             }
         }
@@ -1731,17 +1778,87 @@ public:
         }
     }
 
+    void HandleBrowse(TEvHive::TEvResponseHiveNodeStats::TPtr &ev, const TActorContext &ctx) {
+        if (BrowseMode != EBrowseMode::Hive) {
+            return;
+        }
+
+        if (HivePipe) {
+            NTabletPipe::CloseClient(ctx, HivePipe);
+            HivePipe = {};
+        }
+        BrowseMode = EBrowseMode::None;
+
+        TVector<ui32> nodeIds;
+        nodeIds.reserve(ev->Get()->Record.NodeStatsSize());
+        for (const auto& nodeStats : ev->Get()->Record.GetNodeStats()) {
+            if (nodeStats.HasNodeId()) {
+                nodeIds.push_back(nodeStats.GetNodeId());
+            }
+        }
+        SortUnique(nodeIds);
+
+        ui32 i = 0;
+        for (ui32 nodeId : nodeIds) {
+            if ((i++ % NumWorkers) == WorkerId) {
+                SendRequest(nodeId, ctx);
+            }
+        }
+
+        if (NodesRequested > 0) {
+            TBase::Become(&TThis::StateRequested);
+        } else {
+            ReplyAndDie(ctx);
+        }
+    }
+
+    void HandleHiveConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        if (BrowseMode != EBrowseMode::Hive || ev->Get()->ClientId != HivePipe) {
+            return;
+        }
+
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            LOG_WARN_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
+                "aggregator actor failed to connect to hive " << ev->Get()->TabletId
+                << " status " << ev->Get()->Status << ", fallback to nameservice");
+            NTabletPipe::CloseClient(ctx, HivePipe);
+            HivePipe = {};
+            BrowseNodesViaNameservice(ctx);
+        }
+    }
+
+    void HandleHiveDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->ClientId != HivePipe) {
+            return;
+        }
+
+        HivePipe = {};
+        if (BrowseMode == EBrowseMode::Hive) {
+            LOG_WARN_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
+                "aggregator actor hive pipe destroyed before node list response, fallback to nameservice");
+            BrowseNodesViaNameservice(ctx);
+        }
+    }
+
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor undelivered node " << nodeId << " " << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
     }
 
+    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &ev, const TActorContext&) {
+        SessionSubscriptions->Handle(ev);
+    }
+
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor disconnected node " << nodeId << " " << ctx.SelfID);
+        SessionSubscriptions->Handle(ev);
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
@@ -1750,6 +1867,9 @@ public:
     void HandleResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx) {
         ui64 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         PreProcessResponse(ev->Get());
         PerNodeResponse[nodeId] = ev->Release();
         NodeResponseReceived(ctx);
@@ -1906,6 +2026,12 @@ public:
 
 class TClusterLabeledCountersAggregatorActorV2 : public TActorBootstrapped<TClusterLabeledCountersAggregatorActorV2> {
 protected:
+    enum class EBrowseMode {
+        None,
+        NameService,
+        Hive,
+    };
+
     using TBase = TActorBootstrapped<TClusterLabeledCountersAggregatorActorV2>;
     THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse> Response;
     TTabletLabeledCountersResponseContext ResponseContext;
@@ -1913,11 +2039,13 @@ protected:
     TTabletTypes::EType TabletType;
     ui32 NodesRequested;
     ui32 NodesReceived;
-    TVector<ui32> Nodes;
     THashMap<ui32, THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>> PerNodeResponse;
     TString Group;
     ui32 NumWorkers;
     ui32 WorkerId;
+    EBrowseMode BrowseMode = EBrowseMode::None;
+    TActorId HivePipe;
+    std::optional<NActors::NInterconnect::TSubscriptionManager> SessionSubscriptions;
 
     TMerger Merger;
 
@@ -1949,23 +2077,55 @@ public:
             request->Record.SetGroup(Group);
         }
         // TODO: what if it's empty
-        ctx.Send(aggregatorServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        Nodes.emplace_back(nodeId);
+        ui32 flags = IEventHandle::FlagTrackDelivery;
+        if (nodeId != ctx.SelfID.NodeId()) {
+            SessionSubscriptions->Arm(nodeId, TActivationContext::InterconnectProxy(nodeId));
+            flags |= IEventHandle::FlagSubscribeOnSession;
+        }
+        ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor request to node " << nodeId << " " << ctx.SelfID);
         ++NodesRequested;
     }
 
     void Die(const TActorContext& ctx) override {
-        for (const ui32 node : Nodes) {
-            ctx.Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe());
+        if (HivePipe) {
+            NTabletPipe::CloseClient(ctx, HivePipe);
+            HivePipe = {};
         }
         TBase::Die(ctx);
     }
 
+    bool BrowseNodesViaHive(const TActorContext& ctx) {
+        const auto* domain = AppData(ctx)->DomainsInfo->GetDomain();
+        const ui64 hiveId = AppData(ctx)->DomainsInfo->GetHive();
+        const TSubDomainKey domainKey = domain ? TSubDomainKey(domain->SchemeRoot, 1) : TSubDomainKey();
+        if (hiveId == TDomainsInfo::BadTabletId || !domainKey) {
+            return false;
+        }
+
+        HivePipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, hiveId));
+
+        auto request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
+        request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(domainKey);
+        NTabletPipe::SendData(ctx, HivePipe, request.Release());
+
+        BrowseMode = EBrowseMode::Hive;
+        return true;
+    }
+
+    void BrowseNodesViaNameservice(const TActorContext& ctx) {
+        const TActorId nameserviceId = GetNameserviceActorId();
+        ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+        BrowseMode = EBrowseMode::NameService;
+    }
+
     void Bootstrap(const TActorContext& ctx) {
+        SessionSubscriptions.emplace();
+        SessionSubscriptions->SetSelfId(TActorIdentity(ctx.SelfID));
         if (NumWorkers > 0) {
-            const TActorId nameserviceId = GetNameserviceActorId();
-            ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+            if (!BrowseNodesViaHive(ctx)) {
+                BrowseNodesViaNameservice(ctx);
+            }
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
             LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V2 Initiator " << Initiator << " self " << ctx.SelfID << " worker " << WorkerId);
@@ -1982,6 +2142,9 @@ public:
     STFUNC(StateRequestedBrowse) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvInterconnect::TEvNodesInfo, HandleBrowse);
+            HFunc(TEvHive::TEvResponseHiveNodeStats, HandleBrowse);
+            HFunc(TEvTabletPipe::TEvClientConnected, HandleHiveConnected);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, HandleHiveDestroyed);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -1990,19 +2153,20 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletCounters::TEvTabletLabeledCountersResponse, HandleResponse);
             HFunc(TEvents::TEvUndelivered, Undelivered);
+            HFunc(TEvInterconnect::TEvNodeConnected, Connected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
+        if (BrowseMode != EBrowseMode::NameService) {
+            return;
+        }
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
-        Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
-        Nodes.reserve(nodesInfo->Nodes.size());
         ui32 i = 0;
         for (const auto& ni : nodesInfo->Nodes) {
-            ++i;
-            if (i % NumWorkers == WorkerId) {
+            if ((i++ % NumWorkers) == WorkerId) {
                 SendRequest(ni.NodeId, ctx);
             }
         }
@@ -2013,17 +2177,87 @@ public:
         }
     }
 
+    void HandleBrowse(TEvHive::TEvResponseHiveNodeStats::TPtr &ev, const TActorContext &ctx) {
+        if (BrowseMode != EBrowseMode::Hive) {
+            return;
+        }
+
+        if (HivePipe) {
+            NTabletPipe::CloseClient(ctx, HivePipe);
+            HivePipe = {};
+        }
+        BrowseMode = EBrowseMode::None;
+
+        TVector<ui32> nodeIds;
+        nodeIds.reserve(ev->Get()->Record.NodeStatsSize());
+        for (const auto& nodeStats : ev->Get()->Record.GetNodeStats()) {
+            if (nodeStats.HasNodeId()) {
+                nodeIds.push_back(nodeStats.GetNodeId());
+            }
+        }
+        SortUnique(nodeIds);
+
+        ui32 i = 0;
+        for (ui32 nodeId : nodeIds) {
+            if ((i++ % NumWorkers) == WorkerId) {
+                SendRequest(nodeId, ctx);
+            }
+        }
+
+        if (NodesRequested > 0) {
+            TBase::Become(&TThis::StateRequested);
+        } else {
+            ReplyAndDie(ctx);
+        }
+    }
+
+    void HandleHiveConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        if (BrowseMode != EBrowseMode::Hive || ev->Get()->ClientId != HivePipe) {
+            return;
+        }
+
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            LOG_WARN_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
+                "aggregator actor failed to connect to hive " << ev->Get()->TabletId
+                << " status " << ev->Get()->Status << ", fallback to nameservice");
+            NTabletPipe::CloseClient(ctx, HivePipe);
+            HivePipe = {};
+            BrowseNodesViaNameservice(ctx);
+        }
+    }
+
+    void HandleHiveDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->ClientId != HivePipe) {
+            return;
+        }
+
+        HivePipe = {};
+        if (BrowseMode == EBrowseMode::Hive) {
+            LOG_WARN_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
+                "aggregator actor hive pipe destroyed before node list response, fallback to nameservice");
+            BrowseNodesViaNameservice(ctx);
+        }
+    }
+
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor undelivered node " << nodeId << " "  << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
     }
 
+    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &ev, const TActorContext&) {
+        SessionSubscriptions->Handle(ev);
+    }
+
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor disconnected node " << nodeId << " " << ctx.SelfID);
+        SessionSubscriptions->Handle(ev);
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
@@ -2033,6 +2267,9 @@ public:
         ui64 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
                    "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         PreProcessResponse(ev->Get());
 
         auto [it, emplaced] = PerNodeResponse.emplace(nodeId, ev->Release().Release());

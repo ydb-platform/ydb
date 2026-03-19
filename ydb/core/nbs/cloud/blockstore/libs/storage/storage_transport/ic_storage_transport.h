@@ -39,7 +39,7 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan& span) override;
 
-    NThreading::TFuture<TEvSyncWithPersistentBufferResult> FlushFromPBuffer(
+    NThreading::TFuture<TEvSyncWithPersistentBufferResult> SyncWithPBuffer(
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,

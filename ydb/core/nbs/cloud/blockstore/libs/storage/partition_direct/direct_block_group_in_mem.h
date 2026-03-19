@@ -64,7 +64,7 @@ public:
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 
-    NThreading::TFuture<TDBGFlushResponse> FlushFromPBuffer(
+    NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
         ui8 pbufferHostIndex,
         ui8 ddiskHostIndex,

@@ -29,7 +29,7 @@ TEvTransportPrivate::TReadFromDDisk::~TReadFromDDisk()
     Y_ABORT_UNLESS(Promise.IsReady());
 }
 
-TEvTransportPrivate::TFlushFromPBuffer::~TFlushFromPBuffer()
+TEvTransportPrivate::TSyncWithPBuffer::~TSyncWithPBuffer()
 {
     Y_ABORT_UNLESS(Promise.IsReady());
 }

@@ -130,14 +130,14 @@ TICStorageTransport::ReadFromDDisk(
 }
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>
-TICStorageTransport::FlushFromPBuffer(
+TICStorageTransport::SyncWithPBuffer(
     const THostConnection& pbufferConnection,
     const THostConnection& ddiskConnection,
     TVector<NKikimr::NDDisk::TBlockSelector> selectors,
     TVector<ui64> lsns,
     NWilson::TSpan& span)
 {
-    auto request = std::make_unique<TEvTransportPrivate::TEvFlushFromPBuffer>(
+    auto request = std::make_unique<TEvTransportPrivate::TEvSyncWithPBuffer>(
         pbufferConnection.GetServiceId(),
         pbufferConnection.Credentials,
         std::move(selectors),

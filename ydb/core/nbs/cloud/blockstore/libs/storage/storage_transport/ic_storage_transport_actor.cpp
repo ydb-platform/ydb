@@ -326,7 +326,7 @@ void TICStorageTransportActor::HandleReadResult(
 }
 
 void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
-    const TEvTransportPrivate::TEvFlushFromPBuffer::TPtr& ev,
+    const TEvTransportPrivate::TEvSyncWithPBuffer::TPtr& ev,
     const TActorContext& ctx)
 {
     auto* msg = ev->Get();
@@ -340,7 +340,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvFlushFromPBuffer with requestId# %lu",
+        "Sent TEvSyncWithPBuffer with requestId# %lu",
         requestId);
 
     const auto& ddiskId = msg->DDiskId;
@@ -416,8 +416,6 @@ void TICStorageTransportActor::HandleListPersistentBufferResult(
     const NDDisk::TEvListPersistentBufferResult::TPtr& ev,
     const TActorContext& ctx)
 {
-    Y_UNUSED(ctx);
-
     auto requestId = ev->Cookie;
 
     LOG_DEBUG(
@@ -482,7 +480,7 @@ STFUNC(TICStorageTransportActor::StateWork)
         HFunc(NDDisk::TEvReadResult, HandleReadResult);
 
         HFunc(
-            TEvTransportPrivate::TEvFlushFromPBuffer,
+            TEvTransportPrivate::TEvSyncWithPBuffer,
             HandleSyncWithPersistentBuffer);
         HFunc(
             NKikimr::NDDisk::TEvSyncWithPersistentBufferResult,

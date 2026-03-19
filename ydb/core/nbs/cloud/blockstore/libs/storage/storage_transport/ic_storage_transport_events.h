@@ -165,7 +165,7 @@ struct TEvTransportPrivate
         ~TReadFromDDisk();
     };
 
-    struct TFlushFromPBuffer: TDisableCopyMove
+    struct TSyncWithPBuffer: TDisableCopyMove
     {
         using TResult =
             NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
@@ -180,7 +180,7 @@ struct TEvTransportPrivate
         NThreading::TPromise<TResult> Promise =
             NThreading::NewPromise<TResult>();
 
-        TFlushFromPBuffer(
+        TSyncWithPBuffer(
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials& credentials,
             TVector<NKikimr::NDDisk::TBlockSelector> selectors,
@@ -197,7 +197,7 @@ struct TEvTransportPrivate
             , TraceId(std::move(traceId))
         {}
 
-        ~TFlushFromPBuffer();
+        ~TSyncWithPBuffer();
     };
 
     struct TListPBufferEntries: TDisableCopyMove
@@ -227,7 +227,7 @@ struct TEvTransportPrivate
         EvEraseFromPBuffer,
         EvReadFromPBuffer,
         EvReadFromDDisk,
-        EvFlushFromPBuffer,
+        EvSyncWithPBuffer,
         EvListPBufferEntries,
     };
 
@@ -242,8 +242,8 @@ struct TEvTransportPrivate
     using TEvWriteToPBuffer =
         TRequestEvent<TWriteToPBuffer, EEvents::EvWriteToPBuffer>;
 
-    using TEvFlushFromPBuffer =
-        TRequestEvent<TFlushFromPBuffer, EEvents::EvFlushFromPBuffer>;
+    using TEvSyncWithPBuffer =
+        TRequestEvent<TSyncWithPBuffer, EEvents::EvSyncWithPBuffer>;
 
     using TEvEraseFromPBuffer =
         TRequestEvent<TEraseFromPBuffer, EEvents::EvEraseFromPBuffer>;

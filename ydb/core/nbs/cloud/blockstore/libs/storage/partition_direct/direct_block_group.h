@@ -113,7 +113,7 @@ public:
     // the source and destination hosts are different. In this case, the
     // operation is performed in pull mode, when the destination host downloads
     // entries from PBuffer and write it to DDisk to self.
-    virtual NThreading::TFuture<TDBGFlushResponse> FlushFromPBuffer(
+    virtual NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
         ui8 pbufferHostIndex,   // source host
         ui8 ddiskHostIndex,     // destination host
@@ -127,7 +127,7 @@ public:
         const TVector<TPBufferSegment>& segments,
         NWilson::TTraceId traceId) = 0;
 
-    // Get a list of all entries in PBuffers belonging to a given vChunkIdex.
+    // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
     virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) = 0;
 
@@ -186,7 +186,7 @@ public:
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 
-    NThreading::TFuture<TDBGFlushResponse> FlushFromPBuffer(
+    NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
         ui8 pbufferHostIndex,
         ui8 ddiskHostIndex,

@@ -178,7 +178,7 @@ TInMemoryDirectBlockGroup::WriteBlocksToPBuffer(
 }
 
 NThreading::TFuture<TDBGFlushResponse>
-TInMemoryDirectBlockGroup::FlushFromPBuffer(
+TInMemoryDirectBlockGroup::SyncWithPBuffer(
     ui32 vChunkIndex,
     ui8 pbufferHostIndex,
     ui8 ddiskHostIndex,

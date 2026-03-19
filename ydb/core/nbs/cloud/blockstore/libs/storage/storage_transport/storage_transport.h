@@ -68,7 +68,7 @@ public:
         NWilson::TSpan& span) = 0;
 
     virtual NThreading::TFuture<TEvSyncWithPersistentBufferResult>
-    FlushFromPBuffer(
+    SyncWithPBuffer(
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,

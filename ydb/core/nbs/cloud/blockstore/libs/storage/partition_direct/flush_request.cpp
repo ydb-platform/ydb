@@ -36,7 +36,7 @@ TFlushRequestExecutor::~TFlushRequestExecutor()
 
 void TFlushRequestExecutor::Run()
 {
-    auto future = DirectBlockGroup->FlushFromPBuffer(
+    auto future = DirectBlockGroup->SyncWithPBuffer(
         VChunkConfig.VChunkIndex,
         VChunkConfig.GetHostIndex(Location),   // TODO
         VChunkConfig.GetHostIndex(Location),

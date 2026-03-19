@@ -26,7 +26,7 @@ private:
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvWriteToPBuffer>>
         WriteToPBufferRequests;
 
-    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvFlushFromPBuffer>>
+    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvSyncWithPBuffer>>
         FlushFromPBufferRequests;
 
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvEraseFromPBuffer>>
@@ -84,7 +84,7 @@ private:
         const NActors::TActorContext& ctx);
 
     void HandleSyncWithPersistentBuffer(
-        const TEvTransportPrivate::TEvFlushFromPBuffer::TPtr& ev,
+        const TEvTransportPrivate::TEvSyncWithPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleSyncWithPersistentBufferResult(

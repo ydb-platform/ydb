@@ -1,6 +1,4 @@
 items:
-- name: Советы и анти-паттерны
-  href: index.md
 - name: Балансировка
   href: balancer/index.md
   include:

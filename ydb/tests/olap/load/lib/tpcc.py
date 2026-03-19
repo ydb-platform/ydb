@@ -17,7 +17,7 @@ class TpccSuiteBase(LoadSuiteBase):
 
     @classmethod
     def get_tpcc_path(cls) -> str:
-        return get_external_param(f'table-path-{cls.suite()}', f'tpcc/w{cls.warehouses}')
+        return get_external_param(f'table-path-{cls.suite()}', f'tpcc/common')
 
     @classmethod
     def do_setup_class(cls):

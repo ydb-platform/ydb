@@ -2,7 +2,6 @@
 
 #include "grpc_log.h"
 
-#include <ydb/mvp/security/simple/security.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/library/actors/http/http.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>

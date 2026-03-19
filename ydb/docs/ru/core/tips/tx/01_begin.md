@@ -77,13 +77,15 @@ except Exception as e:
 
   {% cut "Хороший пример" %}
   ```python
-# Хороший пример: открытие транзакции с первым запросом
-result = session.execute(
+# Хороший пример: открытие транзакции с первым запросом (без явного begin())
+tx = session.transaction()
+result = tx.execute(
     "SELECT * FROM users WHERE id = $id",
     {"$id": 123},
-    commit_tx=True  # Транзакция открывается автоматически
+    commit_tx=False  # Транзакция открывается автоматически, без явного begin()
 )
 # ... обработка результата
+tx.commit()
   ```
   {% endcut %}
 

@@ -88,7 +88,7 @@ COVER (order_date, amount, status)
 
 Для анализа структуры запроса используйте {{ ydb-short-name }} CLI - команды `ydb sql --explain` и `ydb sql --explain-analyze` (или аналогичные вызовы в {{ ydb-short-name }} UI)
 
-- ✅ операторы `TableRangeScan`, `TableLookup`, а твкже `LookupJoin` используют эффективный поиск по индексу
+- ✅ операторы `TableRangeScan`, `TableLookup`, а также `LookupJoin` используют эффективный поиск по индексу
 - ❌ оператор `TableFullScan` и другие виды `Join` не используют индексы
 
 ### 6. Практические рекомендации

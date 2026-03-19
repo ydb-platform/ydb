@@ -246,7 +246,7 @@ void CreateTopicWithAutoPartitioning(TTopicClient& client) {
 }
 
 void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count,
-    TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10, ui64 shuffleRatio = 1, TDuration shuffleDelay = TDuration::Seconds(10))
+    TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10, ui64 shuffleRatio = 1, TDuration shuffleDelay = TDuration::MilliSeconds(10))
 {
     auto client = setup.MakeClient();
     auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
@@ -265,7 +265,7 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
     auto WaitTasks = [&](auto f, size_t c) {
         const auto hardTimeout = TInstant::Now() + TDuration::Seconds(60);
         const auto shuffleTimeout = TInstant::Now() + shuffleDelay;
-        while (f() < c) {
+        while (true) {
             const auto fVal = f();
             if (fVal >= c * shuffleRatio) {
                 return;
@@ -294,7 +294,6 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
         e->StartRandomFunc();
         WaitExecutedTasks(e, completed + 1);
     };
-    Y_UNUSED(RunTask);
 
     auto PlanTaskAndRestart = [&](auto e) {
         WaitPlannedTasks(e, 1);
@@ -306,8 +305,6 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
         e->StartRandomFunc();
         WaitExecutedTasks(e, completed + 1);
     };
-    Y_UNUSED(PlanTaskAndRestart);
-
 
     NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
     TAtomic lastOffset = 0u;

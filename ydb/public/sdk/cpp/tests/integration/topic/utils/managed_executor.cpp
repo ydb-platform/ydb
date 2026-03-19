@@ -1,5 +1,6 @@
 #include "managed_executor.h"
 
+#include <util/random/random.h>
 
 namespace NYdb::inline Dev::NTopic::NTests {
 

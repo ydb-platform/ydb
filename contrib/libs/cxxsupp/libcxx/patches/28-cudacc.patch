@@ -100,20 +100,28 @@ index e9baec0..4825fba 100644
  } // namespace complex_literals
  } // namespace literals
  #  endif
+diff --git a/include/stdlib.h b/include/stdlib.h
+index 8dfdfa4..2b9a877 100644
+--- a/include/stdlib.h
++++ b/include/stdlib.h
+@@ -106,8 +106,12 @@ extern "C++" {
+ #        undef llabs
+ #      endif
+ 
++#ifndef __CUDACC__
+ #      include <__math/abs.h>
+ using std::__math::abs;
++#else
++#      include <__math/abs_cuda.h>
++#endif
+ 
+ // div
+ 
 diff --git a/include/tuple b/include/tuple
-index 8dd62ae..a29619e 100644
+index 6e7a430..9f8e5de 100644
 --- a/include/tuple
 +++ b/include/tuple
-@@ -310,7 +310,7 @@ class __tuple_leaf {
- 
-   template <class _Tp>
-   static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
--#    if __has_keyword(__reference_binds_to_temporary)
-+#    if __has_keyword(__reference_binds_to_temporary) && !defined(__CUDACC__)
-     return !__reference_binds_to_temporary(_Hp, _Tp);
- #    else
-     return true;
-@@ -619,8 +619,16 @@ public:
+@@ -611,8 +611,16 @@ public:
                is_constructible<_Tp, _Up>... > {};
  
    template <class... _Up,

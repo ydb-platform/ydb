@@ -21,12 +21,13 @@ private:
     TInstant StartTime;
 
 public:
+    TFilterAccumulator(const TEvRequestFilter::TPtr& request, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters);
+    ~TFilterAccumulator();
+
     void AddFilter(NArrow::TColumnFilter&& filter);
     bool IsDone() const;
     void Abort(const TString& error);
     const TEvRequestFilter::TPtr& GetRequest() const;
-    TFilterAccumulator(const TEvRequestFilter::TPtr& request, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters);
-    ~TFilterAccumulator();
     TString DebugString() const;
 };
 
@@ -46,6 +47,7 @@ private:
 
 public:
     TFiltersBuilder() = default;
+
     void AddRecord(const NArrow::NMerger::TBatchIterator& cursor);
     void SkipRecord(const NArrow::NMerger::TBatchIterator& cursor);
     void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const;

@@ -40,8 +40,8 @@ message TQueryCredentials {
 
 message TBlockSelector {
     uint64 VChunkIndex = 1;
-    uint32 OffsetInBytes = 2;
-    uint32 Size = 3;
+    uint32 OffsetInBytes = 2;  // 4 KiB alignment
+    uint32 Size = 3;           // 4 KiB alignment
 }
 
 // DDisk write instruction contains information about data being written. It can contain information about rope passing

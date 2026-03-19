@@ -58,7 +58,10 @@ struct TInflightInfo
         PBufferErased,
     };
 
+    TInflightInfo() = default;
     TInflightInfo(TLocationMask writeRequested, TLocationMask writeConfirmed);
+
+    static TInflightInfo MakeRestored(ELocation location);
 
     TLocationMask WriteRequested;
     TLocationMask WriteConfirmed;
@@ -93,6 +96,9 @@ public:
         ELocation location,
         const TVector<ui64>& eraseOk,
         const TVector<ui64>& eraseFailed);
+
+    void RestorePBuffer(ui64 lsn, TBlockRange64 range, ELocation location);
+    void PrepareReadyItems();
 
 private:
     using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;

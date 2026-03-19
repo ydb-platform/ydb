@@ -6,7 +6,7 @@
 
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
-#include <yql/essentials/core/yql_statistics.h>
+#include "kqp_statistics.h"
 #include <yql/essentials/core/yql_cost_function.h>
 
 #include <unordered_map>
@@ -22,9 +22,8 @@ namespace NYql { struct TExprContext; }
 
 namespace NKikimr::NKqp {
 
-// Types from yql/essentials/core (non-cbo) used in the optimizer interface.
-using TOptimizerStatistics             = NYql::TOptimizerStatistics;
-using TShufflingOrderingsByJoinLabels  = NYql::TShufflingOrderingsByJoinLabels;
+// TShufflingOrderingsByJoinLabels — stays as alias (FSM independence is next step)
+// (already imported from kqp_statistics.h)
 // TJoinColumn / EJoinAlgoType / AllJoinAlgos already imported via cbo_interesting_orderings.h
 
 enum EOptimizerNodeKind: ui32 {

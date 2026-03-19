@@ -14,8 +14,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NYql;
 using namespace NYql::NDq;
-
-TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NYql::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
+TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NKikimr::NKqp::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
     if (!keyColumns) {
         return {};
     }

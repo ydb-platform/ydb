@@ -72,9 +72,9 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
-                   [](const TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
-                   [](const TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
 
     if (futures.empty()) {
         return IGraphTransformer::TStatus::Ok;
@@ -122,7 +122,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TE
 
     for (auto&& [tableName, columnStatistics]:  ColumnStatisticsResponse->ColumnStatisticsByTableName) {
         TypesCtx.ColumnStatisticsByTableName.insert(
-            {std::move(tableName), new TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))}
+            {std::move(tableName), new NYql::TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))}
         );
     }
 

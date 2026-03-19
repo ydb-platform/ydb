@@ -33,14 +33,15 @@ NYdb::NQuery::TQueryClient client(driver);
 
 auto status = client.RetryQuerySync([userId](NYdb::NQuery::TSession session) -> NYdb::TStatus {
     // thread 1
-    auto future1 = session.ExecuteQuery(...).GetValueSync();
-    auto result1 = future1.GetValueSync(); // SESSION_BUSY!!!
+    auto future1 = session.ExecuteQuery(...); // async, возвращает TFuture
 
     // thread 2
-    auto future2 = session.ExecuteQuery(...).GetValueSync();
-    auto result2 = future2.GetValueSync(); // SESSION_BUSY!!!
+    auto future2 = session.ExecuteQuery(...); // SESSION_BUSY!!!
 
-    // ...
+    auto result1 = future1.GetValueSync();
+    auto result2 = future2.GetValueSync();
+
+    return result2;
 });
   ```
   {% endcut %}
@@ -52,19 +53,13 @@ NYdb::NQuery::TQueryClient client(driver);
 
 // thread 1
 auto status1 = client.RetryQuerySync([userId](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-    auto future1 = session.ExecuteQuery(...).GetValueSync();
-
-    auto result1 = future1.GetValueSync();
-
+    auto result1 = session.ExecuteQuery(...).GetValueSync();
     return result1;
 });
 
 // thread 2
 auto status2 = client.RetryQuerySync([userId](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-    auto future2 = session.ExecuteQuery(...).GetValueSync();
-
-    auto result2 = future2.GetValueSync();
-
+    auto result2 = session.ExecuteQuery(...).GetValueSync();
     return result2;
 });
   ```

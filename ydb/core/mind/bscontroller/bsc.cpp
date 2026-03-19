@@ -754,6 +754,12 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
                 expectedStorageYamlConfigVersion.emplace(record.GetExpectedStorageConfigVersion());
             }
 
+            // in dry run mode, skip the actual commit and return success
+            if (record.GetDryRun()) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::OK);
+                break;
+            }
+
             // commit it
             Execute(CreateTxCommitConfig(std::move(yamlConfig), std::make_optional(std::move(storageYaml)), std::nullopt,
                 expectedStorageYamlConfigVersion, std::exchange(h, {}), std::nullopt,

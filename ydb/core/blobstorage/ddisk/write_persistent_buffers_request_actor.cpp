@@ -8,9 +8,12 @@ namespace NKikimr::NDDisk {
         : TActor(&TThis::StateFunc)
         {}
 
-    void TWritePersistentBuffersRequestActor::Reply() {
+    void TWritePersistentBuffersRequestActor::Reply(ui64 cookie) {
+        auto itInflight = Inflights.find(cookie);
+        Y_ABORT_UNLESS(itInflight != Inflights.end());
+        auto& i = itInflight->second;
         auto msg = std::make_unique<TEvWritePersistentBuffersResult>();
-        for (auto& inflight : Inflights) {
+        for (auto& [_, inflight] : i.Inflights) {
             if (!inflight.Replied && inflight.Received) {
                 inflight.Replied = true;
                 auto* res = msg->Record.AddResult();
@@ -22,61 +25,89 @@ namespace NKikimr::NDDisk {
                 res2->SetStatus(inflight.Status);
                 res2->SetErrorReason(inflight.ErrorReason);
                 res2->SetFreeSpace(inflight.FreeSpace);
+                res2->SetPDiskNormalizedOccupancy(inflight.PDiskNormalizedOccupancy);
             }
         }
 
-        Send(Sender, msg.release(), 0, Cookie);
+        Send(i.Sender, msg.release(), 0, i.Cookie);
     }
 
-    void TWritePersistentBuffersRequestActor::ReplyAndDie() {
-        Reply();
-        PassAway();
+    void TWritePersistentBuffersRequestActor::ReplyAndFinish(ui64 cookie) {
+        Reply(cookie);
+        auto cnt = Inflights.erase(cookie);
+        Y_ABORT_UNLESS(cnt == 1);
     }
 
-    void TWritePersistentBuffersRequestActor::Timeout() {
-        if (Received == Inflights.size()) {
-            ReplyAndDie();
+    void TWritePersistentBuffersRequestActor::Timeout(TEvents::TEvWakeup::TPtr &ev) {
+        ui64 cookie = ev->Get()->Tag;
+        auto itInflight = Inflights.find(cookie);
+        Y_ABORT_UNLESS(itInflight != Inflights.end());
+        auto& inflight = itInflight->second;
+
+        if (inflight.Received == inflight.Inflights.size()) {
+            ReplyAndFinish(cookie);
         } else {
-            Reply();
+            Reply(cookie);
         }
     }
 
     void TWritePersistentBuffersRequestActor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
         const ui32 node = ev->Get()->NodeId;
-        for (auto& inflight : Inflights) {
-            if (!inflight.Received && inflight.NodeId == node) {
-                inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-                inflight.ErrorReason = TStringBuilder() << "Node " << node << " disconnected";
-                inflight.Received = true;
-                Received++;
+        for (auto it = Inflights.begin(); it != Inflights.end(); ) {
+            auto current = it++;
+            for (auto& [partCookie, inflight] : current->second.Inflights) {
+                if (!inflight.Received && inflight.NodeId == node) {
+                    inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+                    inflight.ErrorReason = TStringBuilder() << "Node " << node << " disconnected";
+                    inflight.Received = true;
+                    current->second.Received++;
+                    auto cnt = InflightParts.erase(partCookie);
+                    Y_ABORT_UNLESS(cnt == 1);
+                }
             }
+            CheckReply(current->first);
         }
-        CheckReply();
     }
 
-    void TWritePersistentBuffersRequestActor::CheckReply() {
-        if (Received == Inflights.size()) {
-            ReplyAndDie();
+    void TWritePersistentBuffersRequestActor::CheckReply(ui64 cookie) {
+        auto itInflight = Inflights.find(cookie);
+        Y_ABORT_UNLESS(itInflight != Inflights.end());
+        auto& inflight = itInflight->second;
+        if (inflight.Received == inflight.Inflights.size()) {
+            ReplyAndFinish(cookie);
         }
     }
 
     void TWritePersistentBuffersRequestActor::Handle(TEvWritePersistentBufferResult::TPtr ev) {
-        auto cookie = ev->Cookie;
-        Y_ABORT_UNLESS(cookie < Inflights.size());
-        auto& inflight = Inflights[cookie];
+        auto partCookie = ev->Cookie;
+        auto itCookie = InflightParts.find(partCookie);
+        Y_ABORT_UNLESS(itCookie != InflightParts.end());
+        auto cookie = itCookie->second;
+        InflightParts.erase(partCookie);
+        auto itInflight = Inflights.find(cookie);
+        Y_ABORT_UNLESS(itInflight != Inflights.end());
+        auto& i = itInflight->second;
+        auto itInflight2 = i.Inflights.find(partCookie);
+        Y_ABORT_UNLESS(itInflight2 != i.Inflights.end());
+        auto& inflight = itInflight2->second;
         inflight.Status = ev->Get()->Record.GetStatus();
         inflight.ErrorReason = ev->Get()->Record.GetErrorReason();
         inflight.FreeSpace = ev->Get()->Record.GetFreeSpace();
+        inflight.PDiskNormalizedOccupancy = ev->Get()->Record.GetPDiskNormalizedOccupancy();
         if (!inflight.Received) {
             inflight.Received = true;
-            Received++;
+            i.Received++;
         }
-        CheckReply();
+        CheckReply(cookie);
     }
 
     void TWritePersistentBuffersRequestActor::Handle(TEvWritePersistentBuffers::TPtr ev) {
-        Sender = ev->Sender;
-        Cookie = ev->Cookie;
+        auto cookie = NextCookie++;
+        auto [it, inserted] = Inflights.try_emplace(cookie, TInflight{
+            .Sender = ev->Sender,
+            .Cookie = ev->Cookie,
+        });
+        Y_ABORT_UNLESS(inserted);
         const auto& record = ev->Get()->Record;
         TQueryCredentials creds;
         auto recordCreds = record.GetCredentials();
@@ -92,12 +123,16 @@ namespace NKikimr::NDDisk {
         }
 
         for (auto& pbId : record.GetPersistentBufferIds()) {
+            auto partCookie = NextCookie++;
             auto msg = std::make_unique<TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
             msg->AddPayload(TRope(payload));
             auto pbServiceId = MakeBlobStorageDDiskId(pbId.GetNodeId(), pbId.GetPDiskId(), pbId.GetDDiskSlotId());
-            auto h = std::make_unique<IEventHandle>(pbServiceId, SelfId(), msg.release(), IEventHandle::FlagSubscribeOnSession, Inflights.size());
+            auto h = std::make_unique<IEventHandle>(pbServiceId, SelfId(), msg.release(), IEventHandle::FlagSubscribeOnSession, partCookie);
             TActivationContext::Send(h.release());
-            Inflights.emplace_back(TPersistentBufferInflight{
+            auto [_, inserted2] = InflightParts.try_emplace(partCookie, cookie);
+            Y_ABORT_UNLESS(inserted2);
+
+            auto [__, inserted3] = it->second.Inflights.try_emplace(partCookie, TInflight::TPersistentBufferInflight{
                 pbId.GetNodeId(),
                 pbId.GetPDiskId(),
                 pbId.GetDDiskSlotId(),
@@ -106,15 +141,19 @@ namespace NKikimr::NDDisk {
                 NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
                 "",
                 -1,
+                -1,
             });
+            Y_ABORT_UNLESS(inserted3);
         }
-        Schedule(TDuration::MicroSeconds(record.GetReplyTimeoutMicroseconds()), new TEvents::TEvWakeup());
+        Schedule(TDuration::MicroSeconds(record.GetReplyTimeoutMicroseconds()), new TEvents::TEvWakeup(cookie));
     }
 
     void TWritePersistentBuffersRequestActor::PassAway() {
-        for (auto& inflight : Inflights) {
-            if (inflight.NodeId != SelfId().NodeId()) {
-                Send(TActivationContext::InterconnectProxy(inflight.NodeId), new TEvents::TEvUnsubscribe());
+        for (auto& [_, i] : Inflights) {
+            for (auto& [__, inflight] : i.Inflights) {
+                if (inflight.NodeId != SelfId().NodeId()) {
+                    Send(TActivationContext::InterconnectProxy(inflight.NodeId), new TEvents::TEvUnsubscribe());
+                }
             }
         }
         TActor::PassAway();
@@ -124,8 +163,8 @@ namespace NKikimr::NDDisk {
         STRICT_STFUNC_BODY(
             hFunc(TEvWritePersistentBufferResult, Handle)
             hFunc(TEvWritePersistentBuffers, Handle)
-            cFunc(TEvents::TSystem::Wakeup, Timeout);
-            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+            hFunc(TEvents::TEvWakeup, Timeout)
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle)
 
             cFunc(TEvents::TSystem::Poison, PassAway)
         )

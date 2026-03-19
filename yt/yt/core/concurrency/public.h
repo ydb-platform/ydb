@@ -71,8 +71,6 @@ DEFINE_ENUM(EExecutionStackKind,
 
 constexpr auto DefaultExecutionStackKind = EExecutionStackKind::Small;
 
-class TExecutionStack;
-
 template <class TSignature>
 class TCoroutine;
 

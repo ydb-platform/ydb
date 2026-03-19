@@ -1,4 +1,3 @@
-IF (NOT WITH_VALGRIND)
 
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
@@ -26,5 +25,3 @@ PEERDIR(
 )
 
 END()
-
-ENDIF()

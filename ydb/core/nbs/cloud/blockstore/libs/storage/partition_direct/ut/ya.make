@@ -4,13 +4,12 @@ FORK_SUBTESTS()
 
 REQUIREMENTS(ram:32 cpu:2)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
-
 
 SRCS(
     partition_direct_ut.cpp

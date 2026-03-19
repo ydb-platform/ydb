@@ -1874,14 +1874,14 @@ private:
     }
 
     static std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> CreateDefaultRetryMapping() {
-        // Retried all statuses except of SUCCESS, CANCELLED
+        // Retried all statuses except SUCCESS (user cancel clears retry policy in finalize).
 
         NKikimrKqp::TScriptExecutionRetryState::TMapping mapping;
 
         const auto* statusDescriptor = Ydb::StatusIds::StatusCode_descriptor();
         for (int i = 0; i < statusDescriptor->value_count(); ++i) {
             const auto status = static_cast<Ydb::StatusIds::StatusCode>(statusDescriptor->value(i)->number());
-            if (!IsIn({Ydb::StatusIds::SUCCESS, Ydb::StatusIds::CANCELLED}, status)) {
+            if (status != Ydb::StatusIds::SUCCESS) {
                 mapping.AddStatusCode(status);
             }
         }

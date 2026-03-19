@@ -753,6 +753,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay");
     WorkloadManagerGroup = KqpGroup->GetSubgroup("subsystem", "workload_manager");
     ChannelGroup = KqpGroup->GetSubgroup("subsystem", "compute_channels");
+    TxProxyMon = MakeIntrusive<NTxProxy::TTxProxyMon>(counters);
 
     Init();
 

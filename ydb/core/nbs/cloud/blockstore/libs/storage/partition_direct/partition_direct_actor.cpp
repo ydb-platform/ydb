@@ -248,6 +248,7 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 {
     Y_ASSERT(ids.size() == NumDirectBlockGroups);
     TVector<IDirectBlockGroupPtr> directBlockGroups;
+    auto executors = ExecutorPool.GetExecutors(NumDirectBlockGroups);
 
     for (size_t i = 0; i < NumDirectBlockGroups; i++) {
         auto ddiskIds = std::move(ids[i].DdiskIds);
@@ -256,6 +257,7 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 
         directBlockGroups.emplace_back(std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
+            executors[i],
             TabletID(),
             1,   // generation
             std::move(ddiskIds),
@@ -388,9 +390,10 @@ void TPartitionActor::Start(
     TVector<IDirectBlockGroupPtr> directBlockGroups =
         CreateDirectBlockGroups(std::move(ids));
     auto region = std::make_shared<TRegion>(
+        TActorContext::ActorSystem(),
         std::move(directBlockGroups),
-        3   // syncRequestsBatchSize
-    );
+        3,   // syncRequestsBatchSize
+        TDuration::MilliSeconds(StorageConfig.GetTraceSamplePeriod()));
 
     auto fastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),

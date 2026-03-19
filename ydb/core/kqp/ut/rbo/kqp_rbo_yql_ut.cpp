@@ -836,9 +836,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         return buffer.str();
     }
 
-    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& schemaPath, bool useColumnStore) {
-        std::string query = GetFullPath("../join/data/", schemaPath);
-
+    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& pathPrefix, const TString& schemaPath, bool useColumnStore) {
+        std::string query = GetFullPath(pathPrefix, schemaPath);
         if (useColumnStore) {
             std::regex pattern(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
             query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
@@ -847,6 +846,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto res = session.ExecuteSchemeQuery(TString(query)).GetValueSync();
         res.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(res.IsSuccess());
+    }
+
+    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& schemaPath, bool useColumnStore) {
+        CreateTablesFromPath(session, "../join/data/", schemaPath, useColumnStore);
     }
 
     void RunTPCHBenchmark(bool columnStore, std::vector<ui32> queries, bool newRbo) {
@@ -900,9 +903,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     enum EBenchType { TPCH = 0, TPCDS };
-    static constexpr std::array<const char*, 2> BenchmarkSchemePath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)"};
+    static constexpr std::array<const char*, 2> BenchmarkSchemaPathPrefix{R"(data/)", R"(../join/data/)"};
+    static constexpr std::array<const char*, 2> BenchmarkSchemaPath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)"};
     static constexpr std::array<const char*, 2> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)"};
-    static constexpr std::array<ui32, 2> BenchmarkQueryCount{1, 99};
+    static constexpr std::array<ui32, 2> BenchmarkQueryCount{22, 99};
 
     void RunTPC_YqlBenchmark(const EBenchType type, const bool columnStore, std::set<ui32>&& queriesStatus, std::set<ui32>&& skipList, const bool newRbo,
                              const bool printStatus = false, const bool compareResults = false) {
@@ -916,7 +920,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateTablesFromPath(session, BenchmarkSchemePath[type], columnStore);
+        CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
 
         std::vector<bool> queriesCurrentStatus;
         std::vector<bool> queriesExpectedStatus;
@@ -930,6 +934,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             }
             queriesExpectedStatus.emplace_back(queriesStatus.empty() ? true : queriesStatus.contains(qId));
             TString q = GetFullPath(BenchmarkQueryPath[type], ToString(qId) + ".yql");
+            const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+            const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+
+            q = toDecimal + "\n" + toDecimalMax + "\n" + q;
 
             auto queryClient = kikimr.GetQueryClient();
             auto session = queryClient.GetSession().GetValueSync().GetSession();
@@ -945,6 +953,34 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         if (compareResults) {
             UNIT_ASSERT_VALUES_EQUAL(queriesExpectedStatus, queriesCurrentStatus);
+        }
+    }
+
+    void RunTPC_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
+
+        {
+            TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+            const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+            const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+
+            q = toDecimal + "\n" + toDecimalMax + "\n" + q;
+
+            auto queryClient = kikimr.GetQueryClient();
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                                .ExtractValueSync();
+            Y_ENSURE(result.IsSuccess());
         }
     }
 
@@ -1290,12 +1326,17 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 SELECT t1.a, t2.a, t3.a, t4.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a left join `/Root/t3` as t3 on t2.a = t3.a
                                                                     left join `/Root/t4` as t4 on t3.a = t4.a and t4.c = t2.c and t1.c = t4.c order by t1.a, t2.a, t3.a, t4.a;
             )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, count(t2.a) FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a group by t1.a order by t1.a;
+            )",
         };
 
         std::vector<std::string> results = {
             R"([[0;[0]];[1;[1]];[2;[2]];[3;[3]];[4;[4]];[5;[5]];[6;[6]];[7;[7]];[8;#];[9;#]])",
             R"([[0;[0];[0]];[1;[1];[1]];[2;[2];[2]];[3;[3];[3]];[4;[4];[4]];[5;[5];[5]];[6;[6];#];[7;[7];#];[8;#;#];[9;#;#]])",
-            R"([[0;[0];[0];[0]];[1;[1];[1];[1]];[2;[2];[2];[2]];[3;[3];[3];[3]];[4;[4];[4];#];[5;[5];[5];#];[6;[6];#;#];[7;[7];#;#];[8;#;#;#];[9;#;#;#]])"
+            R"([[0;[0];[0];[0]];[1;[1];[1];[1]];[2;[2];[2];[2]];[3;[3];[3];[3]];[4;[4];[4];#];[5;[5];[5];#];[6;[6];#;#];[7;[7];#;#];[8;#;#;#];[9;#;#;#]])",
+            R"([[0;1u];[1;1u];[2;1u];[3;1u];[4;1u];[5;1u];[6;1u];[7;1u];[8;0u];[9;0u]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

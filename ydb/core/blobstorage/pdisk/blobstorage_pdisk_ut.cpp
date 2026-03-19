@@ -1360,6 +1360,44 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
     }
 
+    Y_UNIT_TEST(SpaceColorDcbOverride) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TActorTestContext testCtx{{ .EnablePDiskSpaceColorOverride = true }};
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        auto& appData = testCtx.GetRuntime()->GetAppData();
+        const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
+        const TString controlName = Sprintf("PDisk_%u_ForcedPDiskSpaceColor", pdiskId);
+
+        auto setColor = [&](i64 color) {
+            TAtomic prev = 0;
+            appData.Dcb->SetValue(controlName, color, prev);
+        };
+
+        auto checkColor = [&](TColor::E expected) {
+            auto space = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+                NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(space->StatusFlags), expected);
+        };
+
+        checkColor(TColor::GREEN);
+
+        setColor(TColor::YELLOW);
+        checkColor(TColor::YELLOW);
+
+        setColor(TColor::RED);
+        checkColor(TColor::RED);
+
+        setColor(TColor::GREEN);
+        checkColor(TColor::GREEN);
+
+        setColor(0);
+        checkColor(TColor::GREEN);
+    }
+
     Y_UNIT_TEST(DeviceHaltTooLong) {
         TActorTestContext testCtx{{}};
         testCtx.TestCtx.SectorMap->ImitateRandomWait = {TDuration::Seconds(1), TDuration::Seconds(2)};

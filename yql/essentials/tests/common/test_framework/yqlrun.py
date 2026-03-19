@@ -217,6 +217,7 @@ class YQLRun(object):
         cmd += '--mounts=' + yql_utils.get_mount_config_file() + ' '
         cmd += '--validate-result-format '
         cmd += '--fuzz-untyped-lambda '
+        # cmd += '--fuzz-universal '
 
         if files:
             for f in files:
@@ -346,6 +347,15 @@ class YQLRun(object):
 
             with open(stderr_file, 'r') as f:
                 stderr_file_text = f.read()
+
+            def truncated(s, limit=8):
+                lines = s.split('\n')
+                if limit < len(lines):
+                    lines = ['..[snippet truncated]..'] + lines[-limit:]
+                return '\n'.join(lines)
+
+            err_file_text = truncated(err_file_text)
+            stderr_file_text = truncated(stderr_file_text)
 
             assert False, (
                 'binary %(binary)s exited with code %(code)d\n'

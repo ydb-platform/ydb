@@ -158,6 +158,14 @@ namespace NKikimr::NDDisk {
         }
     };
 
+struct TPersistentBufferFormat {
+    ui32 MaxChunks = 256;
+    ui32 InitChunks = 4;
+    ui32 MaxInMemoryCache = 128_MB;
+    ui32 MaxChunkRestoreInflight = 8;
+    ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
+};
+
 #define DECLARE_DDISK_EVENT(NAME) \
     struct TEv##NAME : TEventPB<TEv##NAME, NKikimrBlobStorage::NDDisk::TEv##NAME, TEv::Ev##NAME>
 
@@ -297,12 +305,13 @@ namespace NKikimr::NDDisk {
         TEvWritePersistentBufferResult() = default;
 
         TEvWritePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1) {
+                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1, double normalizedOccupancy = -1) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
             Record.SetFreeSpace(freeSpace);
+            Record.SetPDiskNormalizedOccupancy(normalizedOccupancy);
         }
     };
 
@@ -338,11 +347,12 @@ namespace NKikimr::NDDisk {
 
         TEvReadPersistentBuffer() = default;
 
-        TEvReadPersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
-                const TReadInstruction& instruction) {
+        TEvReadPersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector,
+                ui64 lsn, ui32 generation, const TReadInstruction& instruction) {
             creds.Serialize(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
+            Record.SetGeneration(generation);
             instruction.Serialize(Record.MutableInstruction());
         }
     };
@@ -368,10 +378,11 @@ namespace NKikimr::NDDisk {
 
         TEvErasePersistentBuffer() = default;
 
-        TEvErasePersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn) {
+        TEvErasePersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn, ui32 generation) {
             creds.Serialize(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
+            Record.SetGeneration(generation);
         }
     };
 
@@ -384,19 +395,21 @@ namespace NKikimr::NDDisk {
             creds.Serialize(Record.MutableCredentials());
         }
 
-        TEvBatchErasePersistentBuffer(const TQueryCredentials& creds, const std::vector<std::tuple<TBlockSelector, ui64>>& erases) {
+        TEvBatchErasePersistentBuffer(const TQueryCredentials& creds, const std::vector<std::tuple<TBlockSelector, ui64, ui32>>& erases) {
             creds.Serialize(Record.MutableCredentials());
-            for (auto& [selector, lsn] : erases) {
+            for (auto& [selector, lsn, generation] : erases) {
                 auto* erase = Record.AddErases();
                 selector.Serialize(erase->MutableSelector());
                 erase->SetLsn(lsn);
+                erase->SetGeneration(generation);
             }
         }
 
-        void AddErase(const TBlockSelector& selector, ui64 lsn) {
+        void AddErase(const TBlockSelector& selector, ui64 lsn, ui32 generation) {
             auto *erase = Record.AddErases();
             selector.Serialize(erase->MutableSelector());
             erase->SetLsn(lsn);
+            erase->SetGeneration(generation);
         }
     };
 
@@ -404,12 +417,14 @@ namespace NKikimr::NDDisk {
         TEvErasePersistentBufferResult() = default;
 
         TEvErasePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1) {
+                const std::optional<TString>& errorReason = std::nullopt, double freeSpace = -1,
+                double normalizedOccupancy = -1) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
             Record.SetFreeSpace(freeSpace);
+            Record.SetPDiskNormalizedOccupancy(normalizedOccupancy);
         }
     };
 
@@ -455,10 +470,11 @@ namespace NKikimr::NDDisk {
             }
         }
 
-        void AddSegment(const TBlockSelector& selector, ui64 lsn) {
+        void AddSegment(const TBlockSelector& selector, ui64 lsn, ui32 generation) {
             auto *segment = Record.AddSegments();
             selector.Serialize(segment->MutableSelector());
             segment->SetLsn(lsn);
+            segment->SetGeneration(generation);
         }
     };
 
@@ -529,6 +545,6 @@ namespace NKikimr::NDDisk {
     };
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+        TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
 } // NKikimr::NDDisk

@@ -5,14 +5,24 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 TRegion::TRegion(
+    NActors::TActorSystem* actorSystem,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    ui32 syncRequestsBatchSize)
+    ui32 syncRequestsBatchSize,
+    TDuration traceSamplePeriod)
+    : ActorSystem(actorSystem)
 {
+    for (const auto& directBlockGroup: directBlockGroups) {
+        // TODO EstablishConnections once
+        directBlockGroup->EstablishConnections();
+    }
+
     for (size_t i = 0; i < directBlockGroups.size(); i++) {
         auto vChunk = std::make_shared<TVChunk>(
-            i,
+            ActorSystem,
+            TVChunkConfig::Make(i),
             std::move(directBlockGroups[i]),
-            syncRequestsBatchSize);
+            syncRequestsBatchSize,
+            traceSamplePeriod);
         vChunk->Start();
         VChunks.push_back(std::move(vChunk));
     }

@@ -127,3 +127,6 @@
 /ydb/tests/functional/tenants/test_system_views.py @ydb-platform/Security
 
 /ydb/tests/library @ydb-platform/Engineering
+
+/ydb/core/nbs @ydb-platform/nbs_yandex
+/ydb/tests/functional/nbs @ydb-platform/nbs_yandex

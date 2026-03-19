@@ -392,7 +392,7 @@ message TTableServiceConfig {
 
     optional bool EnableFoldUdfs = 82 [ default = true , (InvalidateCompileCache) = true];
 
-    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true, (InvalidateCompileCache) = true];
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableNewRBO = 84 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true, (InvalidateCompileCache) = true];
@@ -492,4 +492,6 @@ message TTableServiceConfig {
     optional TCompileCacheWarmupConfig CompileCacheWarmupConfig = 122 [(InvalidateCompileCache) = false];
 
     optional bool EnableKqpSysViewSourceRead = 123 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool UseBlockHashJoin = 124 [default = false, (InvalidateCompileCache) = true];
 };

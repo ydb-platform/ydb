@@ -79,6 +79,8 @@ public:                                                                         
                 COUNTER_INIT(LsmCompactionWriteRequests, true);
                 COUNTER_INIT(LsmHugeBytesWritten, true);
                 COUNTER_INIT(LsmLogBytesWritten, true);
+                COUNTER_INIT(LsmCompactionWaitingTimeSeconds, false);
+                COUNTER_INIT(LsmCompactionWorkingTimeSeconds, false);
             }
 
             COUNTER_DEF(LsmCompactionBytesRead)
@@ -87,6 +89,8 @@ public:                                                                         
             COUNTER_DEF(LsmCompactionWriteRequests)
             COUNTER_DEF(LsmHugeBytesWritten)
             COUNTER_DEF(LsmLogBytesWritten)
+            COUNTER_DEF(LsmCompactionWaitingTimeSeconds)
+            COUNTER_DEF(LsmCompactionWorkingTimeSeconds)
         };
 
 
@@ -864,6 +868,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(DefragDiskCost, true);
                 COUNTER_INIT_IF_EXTENDED(InternalDiskCost, true);
                 COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableCtr, false);
+                COUNTER_INIT_IF_EXTENDED(DiskTimeFairShareNs, false);
             }
 
             COUNTER_DEF(UserDiskCost);
@@ -872,6 +877,7 @@ public:                                                                         
             COUNTER_DEF(DefragDiskCost);
             COUNTER_DEF(InternalDiskCost);
             COUNTER_DEF(DiskTimeAvailableCtr);
+            COUNTER_DEF(DiskTimeFairShareNs);
         };
 
         class TScrubGroup : public TBase {

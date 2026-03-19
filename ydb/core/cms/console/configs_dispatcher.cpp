@@ -70,6 +70,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::HealthCheckConfigItem,
     (ui32)NKikimrConsole::TConfigItem::WorkloadManagerConfigItem,
     (ui32)NKikimrConsole::TConfigItem::BlockstoreConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::StatisticsConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TliConfigItem,
 });
 

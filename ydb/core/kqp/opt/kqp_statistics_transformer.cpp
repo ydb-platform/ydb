@@ -14,10 +14,10 @@
 
 #include <charconv>
 
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
-using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
 /**
@@ -1310,7 +1310,9 @@ bool TKqpStatisticsTransformer::AfterLambdasSpecific(const TExprNode::TPtr& inpu
     return matched;
 }
 
-TAutoPtr<IGraphTransformer> NKikimr::NKqp::CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
+TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx) {
     return THolder<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config, pctx));
 }
+
+} // namespace NKikimr::NKqp

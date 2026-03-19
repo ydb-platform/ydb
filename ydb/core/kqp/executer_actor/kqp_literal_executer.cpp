@@ -292,7 +292,7 @@ public:
 private:
     TString TraceId() const {
         if (LiteralExecuterSpan) {
-            return LiteralExecuterSpan.GetTraceId().GetHexTraceId();
+            return LiteralExecuterSpan.GetTraceId().GetHexTraceIdLowerCase();
         }
         return TString();
     }

@@ -159,7 +159,7 @@ private:
             (requester, requester),
             (tasks_count, msg.GetTasks().size()),
             (task_ids, TasksIdsStr(msg.GetTasks())),
-            (trace_id, ev->TraceId.GetHexTraceId()));
+            (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
 
         const auto& poolId = msg.GetPoolId().empty() ? NResourcePool::DEFAULT_POOL_ID : msg.GetPoolId();
         const auto& databaseId = msg.GetDatabaseId();
@@ -296,7 +296,7 @@ private:
                     (tx_id, txId),
                     (task_id, taskCtx.TaskId),
                     (compute_actor_id, taskCtx.ComputeActorId),
-                    (trace_id, ev->TraceId.GetHexTraceId()));
+                    (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
 
             auto* startedTask = reply->Record.AddStartedTasks();
             startedTask->SetTaskId(taskCtx.TaskId);

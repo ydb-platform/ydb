@@ -94,7 +94,7 @@ namespace NKikimr::NDataShard {
         };
 
         const ui64 MultiTxId;
-        ui64 LockedRows = 0;
+        ui64 LockedRowsCount = 0;
         ui64 Flags = 0;
         TIntrusiveListWithAutoDelete<TEdge, TDelete> Edges;
         TIntrusiveList<TEdge, TMultiTxIdReferenceTag> References;
@@ -133,6 +133,12 @@ namespace NKikimr::NDataShard {
         }
     };
 
+    /**
+     * Allows enumerating (LockId, LockMode) pairs contained in the given
+     * MultiTxId, in the reverse order (from newer to older). When filter is
+     * not ELockMode::None, attempts to efficiently enumerate only locks which
+     * conflict the given LockMode.
+     */
     class TMultiTxIdEnumerator {
     public:
         TMultiTxIdEnumerator(TMultiTxIdManager& self, const TMultiTxId* entry, NTable::ELockMode filter = NTable::ELockMode::None);
@@ -146,7 +152,14 @@ namespace NKikimr::NDataShard {
             }
         };
 
+        /**
+         * Restarts enumeration with the given MultiTxId and filter.
+         */
         void Reset(const TMultiTxId* entry, NTable::ELockMode filter = NTable::ELockMode::None);
+
+        /**
+         * Returns the next (LockId, LockMode) pair contained in the enumerated MultiTxId.
+         */
         TResult Next();
 
     private:
@@ -175,7 +188,7 @@ namespace NKikimr::NDataShard {
             return MultiTxIds.FindPtr(multiTxId);
         }
 
-        void DecrementLockedRows(NIceDb::TNiceDb& db, ui64 multiTxId);
+        void DecrementLockedRowsCount(NIceDb::TNiceDb& db, ui64 multiTxId);
         ui64 CombineRowLocks(NIceDb::TNiceDb& db, ui64 currentTxId, NTable::ELockMode currentLockMode, ui64 lockTxId, NTable::ELockMode lockMode, ui64& globalTxId);
 
     private:

@@ -62,6 +62,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/library/actors/async/async.h>
+#include <ydb/library/actors/async/continuation.h>
 #include <ydb/library/actors/async/event.h>
 #include <ydb/library/actors/async/low_priority.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -1107,11 +1108,11 @@ class TDataShard
 
         struct MultiTxIds : Table<37> {
             struct MultiTxId : Column<1, NScheme::NTypeIds::Uint64> {};
-            struct LockedRows : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct LockedRowsCount : Column<2, NScheme::NTypeIds::Uint64> {};
             struct Flags : Column<3, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<MultiTxId>;
-            using TColumns = TableColumns<MultiTxId, LockedRows, Flags>;
+            using TColumns = TableColumns<MultiTxId, LockedRowsCount, Flags>;
         };
 
         struct MultiTxIdGraph : Table<38> {
@@ -3160,8 +3161,11 @@ private:
 
     TAsyncLowPriorityQueue LowPriorityQueue;
 
+    struct TGlobalTxIdAwaiter : public TIntrusiveListItem<TGlobalTxIdAwaiter> {
+        TAsyncContinuation<ui64> Continuation;
+    };
+    TIntrusiveList<TGlobalTxIdAwaiter> GlobalTxIdAwaiters;
     TVector<ui64> GlobalTxIdCache;
-    TAsyncEvent GlobalTxIdCacheAdded;
 
 public:
     struct TBreakerInfo {

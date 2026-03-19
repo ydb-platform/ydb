@@ -2158,7 +2158,7 @@
             },
             {
                 "ColumnId": 2,
-                "ColumnName": "LockedRows",
+                "ColumnName": "LockedRowsCount",
                 "ColumnType": "Uint64"
             },
             {

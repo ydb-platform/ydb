@@ -245,7 +245,7 @@ TLockInfo::TPtr TDataShard::FindValidLockOwner(ui64 lockId) {
  * Returns the strongest combined lock mode when the same transaction tries to
  * lock the same row in multiple lock modes.
  */
-NTable::ELockMode CombinedRowLockMode(NTable::ELockMode currentMode, NTable::ELockMode lockMode) {
+static NTable::ELockMode CombinedRowLockMode(NTable::ELockMode currentMode, NTable::ELockMode lockMode) {
     // Lock modes are ordered: KeyShared, Shared, NoKeyExclusive, Exclusive
     // We can use the maximum even when lock modes don't overlap. For example,
     // rows may be locked in KeyShared mode and the same transaction tries to
@@ -259,8 +259,8 @@ NTable::ELockMode CombinedRowLockMode(NTable::ELockMode currentMode, NTable::ELo
     return Max(currentMode, lockMode);
 }
 
-bool IsCompatibleRowLockMode(NTable::ELockMode currentMode, NTable::ELockMode lockMode) {
-    // Note: caller must Multi mode by checking all contained lock modes
+static bool IsCompatibleRowLockMode(NTable::ELockMode currentMode, NTable::ELockMode lockMode) {
+    // Note: caller must process Multi mode by checking all contained lock modes
     Y_ENSURE(currentMode != NTable::ELockMode::Multi);
     Y_ENSURE(lockMode != NTable::ELockMode::Multi);
     switch (currentMode) {
@@ -567,6 +567,14 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
             TabletID(), requestId.RequestId, NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS);
 
     ui64 globalTxId = 0;
+    Y_DEFER {
+        if (globalTxId) {
+            // We may allocate some globalTxId, but find out later we no longer
+            // need it, because someone else created the same MultiTxId chain.
+            // Avoid wasting this resource and give it to someone else.
+            RecycleGlobalTxId(globalTxId);
+        }
+    };
 
     while (!state.Result) {
         bool reschedule = false;
@@ -767,7 +775,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                             // We can use fast path upgrade when current lock is the only owner
                             if (currentLockMode != NTable::ELockMode::None && !haveOtherLocks) {
                                 NTable::ELockMode combinedLockMode = CombinedRowLockMode(currentLockMode, lockMode);
-                                MultiTxIdManager.DecrementLockedRows(db, row.LockTxId);
+                                MultiTxIdManager.DecrementLockedRowsCount(db, row.LockTxId);
                                 setLockMode(combinedLockMode, lockId);
                                 finishLocked();
                                 continue;
@@ -837,7 +845,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                         return ETxLockRows::CommitAsync;
                     }
 
-                    MultiTxIdManager.DecrementLockedRows(db, row.LockTxId);
+                    MultiTxIdManager.DecrementLockedRowsCount(db, row.LockTxId);
                     setLockMode(NTable::ELockMode::Multi, newMultiTxId);
                     finishLocked();
                     continue;
@@ -845,7 +853,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
 
                 if (multiLock) {
                     // We are going to overwrite this row lock below
-                    MultiTxIdManager.DecrementLockedRows(db, row.LockTxId);
+                    MultiTxIdManager.DecrementLockedRowsCount(db, row.LockTxId);
                 }
 
                 if (currentOwner) {
@@ -1080,9 +1088,7 @@ void TMultiTxIdManager::Clear() {
 bool TMultiTxIdManager::Load(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 
-    Y_ENSURE(
-        MultiTxIds.empty(),
-        "Unexpected Load into non-empty MultiTxId manager");
+    Clear();
 
     // Tables may not exist in some inactive shards, which cannot have transactions
     if (db.HaveTable<Schema::MultiTxIds>() &&
@@ -1109,7 +1115,7 @@ bool TMultiTxIdManager::LoadMultiTxIds(NIceDb::TNiceDb& db) {
 
     while (!rowset.EndOfSet()) {
         ui64 multiTxId = rowset.GetValue<Schema::MultiTxIds::MultiTxId>();
-        ui64 lockedRows = rowset.GetValue<Schema::MultiTxIds::LockedRows>();
+        ui64 lockedRowsCount = rowset.GetValue<Schema::MultiTxIds::LockedRowsCount>();
         ui64 flags = rowset.GetValue<Schema::MultiTxIds::Flags>();
 
         auto res = MultiTxIds.emplace(
@@ -1118,7 +1124,7 @@ bool TMultiTxIdManager::LoadMultiTxIds(NIceDb::TNiceDb& db) {
             std::forward_as_tuple(multiTxId));
         Y_ENSURE(res.second, "Unexpected duplicate MultiTxId " << multiTxId);
         auto& entry = res.first->second;
-        entry.LockedRows = lockedRows;
+        entry.LockedRowsCount = lockedRowsCount;
         entry.Flags = flags;
 
         if (!rowset.Next()) {
@@ -1177,16 +1183,16 @@ void TMultiTxIdManager::Start(const TActorContext& ctx) {
     Y_UNUSED(ctx);
 }
 
-void TMultiTxIdManager::DecrementLockedRows(NIceDb::TNiceDb& db, ui64 multiTxId) {
+void TMultiTxIdManager::DecrementLockedRowsCount(NIceDb::TNiceDb& db, ui64 multiTxId) {
     using Schema = TDataShard::Schema;
 
     auto it = MultiTxIds.find(multiTxId);
     Y_ENSURE(it != MultiTxIds.end());
     TMultiTxId& entry = it->second;
-    Y_ENSURE(entry.LockedRows > 0);
-    entry.LockedRows--;
+    Y_ENSURE(entry.LockedRowsCount > 0);
+    entry.LockedRowsCount--;
     db.Table<Schema::MultiTxIds>().Key(entry.MultiTxId).Update(
-        NIceDb::TUpdate<Schema::MultiTxIds::LockedRows>(entry.LockedRows));
+        NIceDb::TUpdate<Schema::MultiTxIds::LockedRowsCount>(entry.LockedRowsCount));
 }
 
 ui64 TMultiTxIdManager::CombineRowLocks(
@@ -1221,9 +1227,9 @@ ui64 TMultiTxIdManager::CombineRowLocks(
         }
         // Return existing MultiTxId only when we have 2 exact matching edges
         if (matches == 2) {
-            entry.LockedRows++;
+            entry.LockedRowsCount++;
             db.Table<Schema::MultiTxIds>().Key(entry.MultiTxId).Update(
-                NIceDb::TUpdate<Schema::MultiTxIds::LockedRows>(entry.LockedRows));
+                NIceDb::TUpdate<Schema::MultiTxIds::LockedRowsCount>(entry.LockedRowsCount));
             return entry.MultiTxId;
         }
     }
@@ -1242,10 +1248,10 @@ ui64 TMultiTxIdManager::CombineRowLocks(
     TMultiTxId& entry = res.first->second;
     entry.Edges.PushBack(new TMultiTxId::TEdge(NextEdgeId++, entry.MultiTxId, currentTxId, currentLockMode));
     entry.Edges.PushBack(new TMultiTxId::TEdge(NextEdgeId++, entry.MultiTxId, lockTxId, lockMode));
-    entry.LockedRows++;
+    entry.LockedRowsCount++;
 
     db.Table<Schema::MultiTxIds>().Key(entry.MultiTxId).Update(
-        NIceDb::TUpdate<Schema::MultiTxIds::LockedRows>(entry.LockedRows),
+        NIceDb::TUpdate<Schema::MultiTxIds::LockedRowsCount>(entry.LockedRowsCount),
         NIceDb::TUpdate<Schema::MultiTxIds::Flags>(entry.Flags));
     for (const auto& edge : entry.Edges) {
         db.Table<Schema::MultiTxIdGraph>().Key(edge.EdgeId).Update(

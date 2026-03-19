@@ -659,7 +659,6 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     }
 
     if (Self->State != TShardState::Offline) {
-        Self->MultiTxIdManager.Clear();
         if (!Self->MultiTxIdManager.Load(db)) {
             return false;
         }

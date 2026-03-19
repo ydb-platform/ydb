@@ -1,29 +1,27 @@
+ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Block42
+ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/mind/hive/ut unittest.[*/*] chunk
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.OrderOfChildrenPartitions_Topic
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySessions_NoCommits_AutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
+ydb/core/tablet/ut BootstrapperControlsTest.DcbDisableSpecificTablet
 ydb/core/transfer/ut/functional unittest.sole chunk
-ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead
-ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
-ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
+ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_base_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelOnSingleShardTableWithChangefeed[TabletRebootsBucket0]
-ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.ShouldSucceedOnManyTables[PipeResets]
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_extsubdomain_reboots TSchemeShardTestExtSubdomainReboots.CreateExtSubdomainNoHive-AlterDatabaseCreateHiveFirst-false
-ydb/core/tx/schemeshard/ut_extsubdomain_reboots TSchemeShardTestExtSubdomainReboots.CreateExtSubdomainNoHive-AlterDatabaseCreateHiveFirst-true
-ydb/core/tx/schemeshard/ut_extsubdomain_reboots TSchemeShardTestExtSubdomainReboots.DropExtSubdomain
-ydb/core/tx/schemeshard/ut_extsubdomain_reboots TSchemeShardTestExtSubdomainReboots.SchemeLimits
 ydb/core/tx/schemeshard/ut_extsubdomain_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index TAsyncIndexTests.MergeBothWithReboots[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_index unittest.[*/*] chunk
@@ -39,8 +37,6 @@ ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_system_names unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase[TabletRebootsBucket0]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[PipeResetsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket2]
@@ -49,11 +45,10 @@ ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_base_tenant TModifyUserTest.ModifyUser
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo_db
+ydb/library/actors/http/ut HttpProxy.StreamingCompressedFatRandomResponse1
 ydb/library/actors/interconnect/rdma/ut TRdmaLow/TCqMode.ReadInOneProcessWithQpInterruption/EVENT
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
-ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/ydb/backup_ut BackupPathTest.CancelWhileProcessing+IsOlap
-ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_WithConnectionStringFakeTopicPath
 ydb/services/ydb/ut TGRpcLdapAuthentication.CanAuthWithValidCredentialsUseSaslExternal
 ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedCert
 ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedPrivatekey
@@ -90,7 +85,6 @@ ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersio
 ydb/tests/compatibility test_node_broker_delta_protocol.py.TestNodeBrokerDeltaProtocolRestartToAnotherVersion.test[restart_stable-26-1-1_to_stable-25-4-1]
 ydb/tests/compatibility test_node_broker_delta_protocol.py.TestNodeBrokerDeltaProtocolRollingUpdate.test[rolling_stable-25-4-1_to_stable-26-1-1]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-4-1_to_stable-26-1-1-column]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-4-1_to_stable-26-1-1-row]
 ydb/tests/compatibility test_show_create_table.py.TestShowCreateTable.test_show_create_table_after_version_change[restart_stable-26-1-1_to_stable-25-4-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-1-1_to_stable-25-4-1]
 ydb/tests/compatibility test_statistics.py.TestAnalyzeRollingUpdate.test[rolling_stable-25-4-1_to_stable-26-1-1]
@@ -177,8 +171,6 @@ ydb/tests/fq/s3 test_bindings_0.py.TestBindings.test_modify_connection_with_a_lo
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_insert_to_topic[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_restart_query[True-partition_balancing]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_restart_query_by_rescaling[False]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
@@ -190,8 +182,6 @@ ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenari
 ydb/tests/functional/api test_discovery.py.TestDiscoveryFaultInjectionSlotStop.test_scenario
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
-ydb/tests/functional/nbs py3test.sole chunk
-ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_4gb_disk_read_write
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation_name_with_symbols
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_multiple_disks_creation
@@ -201,19 +191,18 @@ ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_a
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
 ydb/tests/functional/replication Replication.TopicAutopartitioning
 ydb/tests/functional/serverless py3test.[test_serverless.py */*] chunk
-ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v0-std]
-ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v1-fifo]
-ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor[tables_format_v0]
-ydb/tests/functional/statistics test_restarts.py.test_basic
 ydb/tests/functional/tenants py3test.[*/*] chunk
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[1]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[4]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[59]
+ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py] chunk
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[21]
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
+ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board
@@ -221,5 +210,4 @@ ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkl
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestRead
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestReadWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite

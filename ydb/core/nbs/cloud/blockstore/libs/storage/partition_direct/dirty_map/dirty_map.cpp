@@ -15,6 +15,15 @@ TInflightInfo::TInflightInfo(
     Y_ABORT_UNLESS(WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
 }
 
+// static
+TInflightInfo TInflightInfo::MakeRestored(ELocation location)
+{
+    TInflightInfo result;
+    result.WriteRequested.Set(location);
+    result.WriteConfirmed.Set(location);
+    return result;
+}
+
 TInflightInfo::EState TInflightInfo::GetState() const
 {
     if (!EraseRequested.Empty()) {
@@ -195,6 +204,43 @@ void TBlocksDirtyMap::EraseFinished(
         inflight.EraseRequested.Reset(location);
         ReadyToErase.insert(lsn);
     }
+}
+
+void TBlocksDirtyMap::RestorePBuffer(
+    ui64 lsn,
+    TBlockRange64 range,
+    ELocation location)
+{
+    if (auto item = Inflight.GetValue(lsn)) {
+        Y_ABORT_UNLESS(item->Range == range);
+
+        auto& inflight = item->Value;
+        inflight.WriteConfirmed.Set(location);
+        inflight.WriteRequested.Set(location);
+    } else {
+        Inflight.AddRange(lsn, range, TInflightInfo::MakeRestored(location));
+    }
+}
+
+void TBlocksDirtyMap::PrepareReadyItems()
+{
+    Inflight.Enumerate(
+        [&]   //
+        (TInflightMap::TFindItem & item)
+        {
+            switch (item.Value.GetState()) {
+                case TInflightInfo::EState::PBufferWritten:
+                    ReadyToFlush.insert(item.Key);
+                    break;
+                case TInflightInfo::EState::PBufferFlushing:
+                case TInflightInfo::EState::PBufferFlushed:
+                case TInflightInfo::EState::PBufferErasing:
+                case TInflightInfo::EState::PBufferErased:
+                    break;
+            }
+
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

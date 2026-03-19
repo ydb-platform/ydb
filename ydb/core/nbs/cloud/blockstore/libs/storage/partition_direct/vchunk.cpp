@@ -141,27 +141,36 @@ NWilson::TTraceId TVChunk::SpanTrace()
     );
 }
 
-void TVChunk::UpdateDirtyMap(TDBGRestoreResponse response)
+void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    Y_UNUSED(response);
-
+    auto pbuffersMap = VChunkConfig.GetPBuffersMap();
+    for (const auto& meta: response.Meta) {
+        BlocksDirtyMap.RestorePBuffer(
+            meta.Lsn,
+            meta.Range,
+            pbuffersMap[meta.HostIndex]);
+    }
+    BlocksDirtyMap.PrepareReadyItems();
     DirtyMapRestored = true;
+
+    DoFlush();
+    DoErase();
 }
 
 void TVChunk::DoStart()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto future = DirectBlockGroup->RestoreFromPersistentBuffers(
-        VChunkConfig.VChunkIndex);
+    auto future =
+        DirectBlockGroup->RestoreDBGPBuffers(VChunkConfig.VChunkIndex);
     future.Subscribe(
         [weakSelf = weak_from_this()]   //
         (const TFuture<TDBGRestoreResponse>& f) mutable
         {
             if (auto self = weakSelf.lock()) {
-                self->UpdateDirtyMap(UnsafeExtractValue(f));
+                self->UpdateDirtyMap(f.GetValue());
             }
         });
 }
@@ -192,10 +201,12 @@ void TVChunk::DoReadBlocksLocal(
 
     auto future = requestExecutor->GetFuture();
     future.Subscribe(
-        [promise = std::move(promise)]   //
+        [promise = std::move(promise),
+         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
         (const NThreading::TFuture<TReadRequestExecutor::TResponse>& f) mutable
         {
-            // Executor thread
+            Y_ABORT_UNLESS(threadChecker.Check());
+
             auto value = UnsafeExtractValue(f);
             promise.SetValue(
                 TReadBlocksLocalResponse{.Error = std::move(value.Error)});

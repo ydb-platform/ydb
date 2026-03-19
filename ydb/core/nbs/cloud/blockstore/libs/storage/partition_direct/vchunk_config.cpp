@@ -3,6 +3,8 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <util/generic/hash.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -48,7 +50,20 @@ ui8 TVChunkConfig::GetHostIndex(ELocation location) const
             return HandOffHost0;
         case ELocation::HODDisk1:
             return HandOffHost1;
+        case ELocation::Unknown:
+            return InvalidHostIndex;
     }
+}
+
+THashMap<ui8, ELocation> TVChunkConfig::GetPBuffersMap() const
+{
+    THashMap<ui8, ELocation> result;
+    result[PrimaryHost0] = ELocation::PBuffer0;
+    result[PrimaryHost1] = ELocation::PBuffer1;
+    result[PrimaryHost2] = ELocation::PBuffer2;
+    result[HandOffHost0] = ELocation::HOPBuffer0;
+    result[HandOffHost1] = ELocation::HOPBuffer1;
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

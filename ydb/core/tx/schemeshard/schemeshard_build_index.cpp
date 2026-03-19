@@ -322,6 +322,7 @@ void TSchemeShard::PersistBuildIndexShardRange(NIceDb::TNiceDb& db, TIndexBuildI
 
 void TSchemeShard::PersistBuildIndexShardStatusFulltext(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildShardStatus& shardStatus) {
     db.Table<Schema::IndexBuildShardStatus>().Key(buildId, shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update(
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastKeyAck>(shardStatus.LastKeyAck),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::DocCount>(shardStatus.DocCount),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::TotalDocLength>(shardStatus.TotalDocLength),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::FirstToken>(shardStatus.FirstToken),

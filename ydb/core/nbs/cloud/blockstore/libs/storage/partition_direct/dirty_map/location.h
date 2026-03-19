@@ -23,6 +23,8 @@ enum class ELocation: ui16
     DDisk2 = 1U << 7U,
     HODDisk0 = 1U << 8U,
     HODDisk1 = 1U << 9U,
+
+    Unknown = 0U,
 };
 
 constexpr ui16 PrimaryPBuffers = static_cast<ui16>(ELocation::PBuffer0) |

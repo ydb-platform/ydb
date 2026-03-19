@@ -1344,7 +1344,7 @@ protected:
 protected:
     TString TraceId() const {
         if (ExecuterSpan) {
-            return ExecuterSpan.GetTraceId().GetHexTraceId();
+            return ExecuterSpan.GetTraceId().GetHexTraceIdLowerCase();
         }
         return TString();
     }

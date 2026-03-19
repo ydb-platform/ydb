@@ -75,9 +75,6 @@ public:
         ui8 hostIndex,
         const TVector<TPBufferSegment>& segments,
         NWilson::TTraceId traceId) override;
-
-    NThreading::TFuture<TDBGRestoreResponse> RestoreFromPersistentBuffers(
-        ui32 vChunkIndex) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

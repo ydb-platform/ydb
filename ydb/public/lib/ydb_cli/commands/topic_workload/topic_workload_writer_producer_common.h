@@ -29,6 +29,9 @@ public:
     virtual void WaitForContinuationToken(const TDuration&) {
     }
 
+    virtual void HandleReadyToAcceptEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent&) {
+    }
+
     virtual bool ContinuationTokenDefined() const {
         return true;
     }

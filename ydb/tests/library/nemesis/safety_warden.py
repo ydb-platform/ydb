@@ -247,7 +247,7 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
     # Lines of context after each VERIFY failed match
     LINES_AFTER_MATCH = 25
 
-    def __init__(self, hours_back = 24):
+    def __init__(self, hours_back=24):
         """
         Args:
             hours_back: How many hours back to search (default 24)

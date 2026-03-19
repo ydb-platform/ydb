@@ -7,6 +7,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <unordered_set>
+
 namespace NKikimr {
 
 using namespace NColumnShard;
@@ -614,6 +616,81 @@ void TestStrategyNever() {
     UNIT_ASSERT_VALUES_EQUAL(totalCreated, 0u);
 }
 
+// Test for reverse scan with streaming enabled
+void TestReverseStreamingScan() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    // Enable SimpleReader with streaming
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write a large portion that should trigger streaming
+    const ui32 numRecords = 100000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString largeData = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, largeData, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    // Read with streaming enabled and reverse order.
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+    reader.SetReverse(true);  // Enable reverse scan
+
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    // Verify that streaming actually worked by checking iteration count
+    const ui32 iterationsCount = reader.GetIterationsCount();
+    Cerr << "Reverse streaming iterations count: " << iterationsCount << Endl;
+
+    // If streaming works, we should have more than 1 iteration
+    UNIT_ASSERT_GT(iterationsCount, 1);
+
+    // Verify that all expected timestamp values [0, numRecords) are present in
+    // the result.  The reverse scan guarantees that pages are returned in
+    // descending primary-key order, but rows within a single page are stored in
+    // the order they were written (interleaved by MakeTestBlob) and are NOT
+    // individually sorted.  Therefore we only check completeness here, not
+    // strict row-by-row descending order.
+    auto timestampCol = rb->GetColumnByName("timestamp");
+    UNIT_ASSERT(timestampCol);
+    auto timestampArray = std::static_pointer_cast<arrow::UInt64Array>(timestampCol);
+    UNIT_ASSERT(timestampArray);
+
+    std::unordered_set<ui64> seenTimestamps;
+    seenTimestamps.reserve(numRecords);
+    for (int i = 0; i < timestampArray->length(); ++i) {
+        seenTimestamps.insert(timestampArray->Value(i));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(seenTimestamps.size(), (size_t)numRecords);
+    for (ui64 ts = 0; ts < numRecords; ++ts) {
+        UNIT_ASSERT_C(seenTimestamps.count(ts), "Missing timestamp: " << ts);
+    }
+}
+
 } // namespace
 
 // Test for extremely low memory limits that force single-record pages
@@ -1188,6 +1265,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(BlobReadErrorDuringStreaming) {
         TestBlobReadErrorDuringStreaming();
+    }
+
+    Y_UNIT_TEST(ReverseStreamingScan) {
+        TestReverseStreamingScan();
     }
 }
 

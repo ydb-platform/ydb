@@ -106,6 +106,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         context.UrlParameters = MakeUrlParameters("cluster=ydb-global&database=root_test");
         auto result = context.Resolve();
 
+        UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(result.Links[0].Title, "CPU");
         AssertSingleResolvedLink(
             result,

@@ -40,14 +40,12 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
     const ui64 startIndex = msg->Record.GetStartIndex();
     const auto& blocks = msg->Record.GetBlocks();
 
-    size_t totalSize = 0;
+    ui32 totalSize = 0;
     for (const auto& buffer: blocks.GetBuffers()) {
         totalSize += buffer.size();
     }
 
-    // Round up
-    // Move to separate function
-    totalSize = (totalSize + DefaultBlockSize - 1) / DefaultBlockSize * DefaultBlockSize;
+    totalSize = AlignUp(totalSize, DefaultBlockSize);
 
     Y_ABORT_UNLESS(totalSize == 4096);
 

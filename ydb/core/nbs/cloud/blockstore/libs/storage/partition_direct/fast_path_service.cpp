@@ -70,12 +70,12 @@ NWilson::TTraceId TFastPathService::SpanTrace()
     );
 }
 
-size_t TFastPathService::GetRegionIndex(ui64 blockIndex) const
+size_t TFastPathService::GetRegionIndex(ui64 blockIndex)
 {
     return blockIndex / BlocksPerRegion;
 }
 
-size_t TFastPathService::GetRegionOffset(ui64 blockIndex) const
+size_t TFastPathService::GetRegionOffset(ui64 blockIndex)
 {
     return blockIndex % BlocksPerRegion;
 }

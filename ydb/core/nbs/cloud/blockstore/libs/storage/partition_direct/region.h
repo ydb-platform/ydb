@@ -15,6 +15,7 @@ class TRegion
 public:
     TRegion(
         NActors::TActorSystem* actorSystem,
+        ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
         TDuration traceSamplePeriod);

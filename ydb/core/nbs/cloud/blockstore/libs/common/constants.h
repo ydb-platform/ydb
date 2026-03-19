@@ -35,6 +35,9 @@ constexpr ui64 BlocksPerRegion = RegionSize / DefaultBlockSize;
 // Size of VChunk.
 constexpr ui64 VChunkSize = 128_MB;
 
+// VChunks per Region count.
+constexpr ui32 VChunksPerRegionCount = RegionSize / VChunkSize;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore

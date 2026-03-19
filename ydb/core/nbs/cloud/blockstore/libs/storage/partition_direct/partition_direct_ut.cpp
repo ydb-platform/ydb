@@ -1,10 +1,10 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/protos/config.pb.h>
@@ -23,7 +23,7 @@ const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
 const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
 
-void SetupStorage(TEnvironmentSetup& env)
+void SetupStorage(TEnvironmentSetup& env, ui32 syncRequestsBatchSize = 3)
 {
     env.CreateBoxAndPool();
     env.Sim(TDuration::Seconds(30));
@@ -54,7 +54,7 @@ void SetupStorage(TEnvironmentSetup& env)
     storageConfig->SetDDiskPoolName(DDiskPoolName);
     storageConfig->SetPersistentBufferDDiskPoolName(
         PersistentBufferDDiskPoolName);
-    storageConfig->SetSyncRequestsBatchSize(3);
+    storageConfig->SetSyncRequestsBatchSize(syncRequestsBatchSize);
     CreateNbsService(nbsConfig);
     StartNbsService();
 }
@@ -321,9 +321,12 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        SetupStorage(env);
+        SetupStorage(
+            env,
+            1   // syncRequestsBatchSize
+        );
 
-        const ui64 blockCount = 4 * BlocksPerRegion;
+        const ui64 blockCount = 3 * BlocksPerRegion;
         auto partition = CreatePartitionTablet(env, blockCount);
 
         const TActorId& edge = runtime->AllocateEdgeActor(
@@ -334,12 +337,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto loadActorAdapter =
             GetLoadActorAdapterActorId(env, partition, edge);
 
-        // Write one block at the start of each of 4 regions
+        // Write one block at the start of each of 3 regions
         const ui64 regionBlockIndices[] = {
             0,
             BlocksPerRegion,
             2 * BlocksPerRegion,
-            3 * BlocksPerRegion,
         };
         TString expectedData[4] = {
             TString(1024, 'A') + TString(1024, 'B') + TString(1024, 'C') +
@@ -348,11 +350,9 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 TString(1024, 'H'),
             TString(1024, 'I') + TString(1024, 'J') + TString(1024, 'K') +
                 TString(1024, 'L'),
-            TString(1024, 'M') + TString(1024, 'N') + TString(1024, 'O') +
-                TString(1024, 'P'),
         };
 
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 3; ++i) {
             auto request =
                 std::make_unique<TEvService::TEvWriteBlocksRequest>();
             request->Record.SetStartIndex(regionBlockIndices[i]);
@@ -369,8 +369,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
         }
 
+        // Wait for sync and erase
+        env.Sim(TDuration::Seconds(10));
+
         // Read back each block and verify
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 3; ++i) {
             auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(regionBlockIndices[i]);
             request->Record.SetBlocksCount(1);

@@ -1,11 +1,14 @@
 #include "region.h"
 
+#include "ydb/core/nbs/cloud/blockstore/libs/common/constants.h"
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TRegion::TRegion(
     NActors::TActorSystem* actorSystem,
+    ui32 regionIndex,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     ui32 syncRequestsBatchSize,
     TDuration traceSamplePeriod)
@@ -16,9 +19,11 @@ TRegion::TRegion(
     }
 
     for (size_t i = 0; i < directBlockGroups.size(); i++) {
+        const ui32 vChunkIndex =
+            (regionIndex * VChunksPerRegionCount) + static_cast<ui32>(i);
         auto vChunk = std::make_shared<TVChunk>(
             ActorSystem,
-            TVChunkConfig::Make(i),
+            TVChunkConfig::Make(vChunkIndex),
             std::move(directBlockGroups[i]),
             syncRequestsBatchSize,
             traceSamplePeriod);

@@ -53,8 +53,8 @@ public:
 private:
     NWilson::TTraceId SpanTrace();
 
-    size_t GetRegionIndex(ui64 blockIndex) const;
-    size_t GetRegionOffset(ui64 blockIndex) const;
+    static size_t GetRegionIndex(ui64 blockIndex);
+    static size_t GetRegionOffset(ui64 blockIndex);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

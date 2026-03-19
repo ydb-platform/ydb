@@ -2421,45 +2421,55 @@ public:
                             TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
                             for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());
-                                const auto& name = indexSetting.Name();
+                                const auto& name = to_lower(indexSetting.Name().StringValue());
                                 const auto& value = indexSetting.Value().Cast<TCoAtom>();
 
                                 TString error;
-                                switch (add_index->type_case()) {
-                                    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
-                                        NKikimr::NKMeans::FillSetting(
-                                            *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
+
+                                if (name == "parallel") {
+                                    ui32 result = 0;
+                                    if (TryFromString(value.StringValue(), result) && result > 0) {
+                                        add_index->set_parallel(result);
+                                    } else {
+                                        error = TStringBuilder() << "Invalid " << name << ": " << value.StringValue();
                                     }
-                                    case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
-                                        NKikimr::NFulltext::FillSetting(
-                                            *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
+                                } else {
+                                    switch (add_index->type_case()) {
+                                        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+                                            NKikimr::NKMeans::FillSetting(
+                                                *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
+                                            NKikimr::NFulltext::FillSetting(
+                                                *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+                                            NKikimr::NFulltext::FillSetting(
+                                                *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                                            FillLocalBloomFilterSetting(
+                                                localBloomFilterDesc,
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                                            FillLocalBloomNgramFilterSetting(
+                                                localBloomNgramFilterDesc,
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        default:
+                                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                                << "Unknown index setting: " << name));
+                                            return SyncError();
                                     }
-                                    case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
-                                        NKikimr::NFulltext::FillSetting(
-                                            *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
-                                    }
-                                    case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
-                                        FillLocalBloomFilterSetting(
-                                            localBloomFilterDesc,
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
-                                    }
-                                    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
-                                        FillLocalBloomNgramFilterSetting(
-                                            localBloomNgramFilterDesc,
-                                            name.StringValue(), value.StringValue(), error);
-                                        break;
-                                    }
-                                    default:
-                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                            << "Unknown index setting: " << name.StringValue()));
-                                        return SyncError();
                                 }
 
                                 if (error) {

@@ -442,6 +442,7 @@ public:
     const std::vector<std::string>& GetDataColumns() const;
     const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& GetIndexSettings() const;
     uint64_t GetSizeBytes() const;
+    void SetParallel(uint32_t parallel);
 
     static TIndexDescription CreateGlobalIndex(
         const std::string& name,
@@ -521,6 +522,7 @@ private:
     std::vector<TGlobalIndexSettings> GlobalIndexSettings_;
     std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings> SpecializedIndexSettings_;
     uint64_t SizeBytes_ = 0;
+    uint32_t Parallel_ = 0;
 };
 
 struct TRenameIndex {

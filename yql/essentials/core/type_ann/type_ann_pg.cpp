@@ -1099,8 +1099,14 @@ IGraphTransformer::TStatus PgQualifiedStarWrapper(const TExprNode::TPtr& input, 
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(input->Head(), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(input->Head(), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
@@ -1542,8 +1548,14 @@ IGraphTransformer::TStatus PgTypeWrapper(const TExprNode::TPtr& input, TExprNode
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     auto type = TString(input->Child(0)->Content());

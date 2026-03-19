@@ -2002,8 +2002,14 @@ IGraphTransformer::TStatus SqlColumnRefWrapper(const TExprNode::TPtr& input, TEx
     }
 
     for (const auto& child : input->Children()) {
-        if (!EnsureAtom(*child, ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(*child, ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
     }
 

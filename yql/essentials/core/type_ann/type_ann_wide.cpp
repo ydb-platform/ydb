@@ -532,6 +532,11 @@ IGraphTransformer::TStatus WideChopperWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureFlowType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }

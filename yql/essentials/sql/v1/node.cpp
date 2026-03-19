@@ -3505,7 +3505,7 @@ TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TStri
     }
 
     if (auto literal = node->GetLiteral("String")) {
-        TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(node->GetPos(), *literal), {view});
+        TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(node->GetPos(), *literal), {.ViewName = view});
         TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
         table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
         return BuildTableSource(node->GetPos(), table);
@@ -3519,7 +3519,7 @@ TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TStri
     auto wrappedNode = new TAstListNodeImpl(pos, {new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
                                                   node});
 
-    TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(wrappedNode, ctx), {view});
+    TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(wrappedNode, ctx), {.ViewName = view});
     TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
     table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
     return BuildTableSource(node->GetPos(), table);

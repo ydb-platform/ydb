@@ -2337,7 +2337,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     for (const auto& x : data.Children()) {
                         auto alias = x->Head().Content();
                         auto type = x->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-                        joinInputs.push_back(TInput{ TString(alias), type, Nothing(), TInput::External, {} });
+                        joinInputs.push_back(TInput{ .Alias=TString(alias), .Type=type, .Order=Nothing(), .Priority=TInput::External, .UsedExternalColumns={} });
                         if (!alias.empty()) {
                             possibleAliases.insert(TString(alias));
                         }
@@ -2940,10 +2940,10 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 return IGraphTransformer::TStatus::Error;
                             }
 
-                            inputs.push_back(TInput{ alias, newStructType, newOrder, TInput::Current, {} });
+                            inputs.push_back(TInput{ .Alias=alias, .Type=newStructType, .Order=newOrder, .Priority=TInput::Current, .UsedExternalColumns={} });
                         }
                         else {
-                            inputs.push_back(TInput{ alias, inputStructType, columnOrder, TInput::Current, {} });
+                            inputs.push_back(TInput{ .Alias=alias, .Type=inputStructType, .Order=columnOrder, .Priority=TInput::Current, .UsedExternalColumns={} });
                         }
                     }
                 }
@@ -3611,7 +3611,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     bool isUniversal;
                     TExprNode::TListType newGroups;
                     TInputs projectionInputs;
-                    projectionInputs.push_back(TInput{ "", outputRowType, Nothing(), TInput::Projection, {} });
+                    projectionInputs.push_back(TInput{ .Alias="", .Type=outputRowType, .Order=Nothing(), .Priority=TInput::Projection, .UsedExternalColumns={} });
                     if (!ValidateGroups(projectionInputs, {}, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "DISTINCT ON", &projectionOrders, GetSetting(options, "result"), nullptr, isYql, repeatedColumnsInUsing, isUniversal)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3650,7 +3650,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     TInputs projectionInputs = joinInputs;
                     // all row columns are visible too, but projection's columns have more priority
                     if (!scanColumnsOnly) {
-                        projectionInputs.push_back(TInput{ "", outputRowType, Nothing(), TInput::Projection, {} });
+                        projectionInputs.push_back(TInput{ .Alias="", .Type=outputRowType, .Order=Nothing(), .Priority=TInput::Projection, .UsedExternalColumns={} });
                     }
 
                     bool hasNewSort = false;
@@ -4302,7 +4302,7 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
         YQL_ENSURE(option);
         const auto& data = option->Tail();
         TInputs projectionInputs;
-        projectionInputs.push_back(TInput{ TString(), resultStructType, resultColumnOrder, TInput::Projection, {} });
+        projectionInputs.push_back(TInput{ .Alias=TString(), .Type=resultStructType, .Order=resultColumnOrder, .Priority=TInput::Projection, .UsedExternalColumns={} });
         TExprNode::TListType newSortTupleItems;
 
         // no effective types yet, scan lambda bodies

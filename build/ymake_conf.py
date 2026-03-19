@@ -111,6 +111,8 @@ class Platform(object):
         self.is_armv6hf = self.arch in ('armv6hf',)
         self.is_armv7hf = self.arch in ('armv7ahf', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv5te = self.arch in ('armv5te_arm968e_s',)
+        self.is_arm_aml403 = self.arch == 'arm_aml403'
+        self.is_arm64_aml403 = self.arch == 'arm64_aml403'
 
         self.is_rv32imc = self.arch in ('riscv32_imc', 'riscv32_esp')
         self.is_rv32imc_zicsr = self.arch in ('riscv32_imc_zicsr',)
@@ -156,10 +158,10 @@ class Platform(object):
 
         self.is_32_bit = (
             self.is_x86 or
-            self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or
+            self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or self.is_arm_aml403 or
             self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32
         )
-        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64 or self.is_riscv64
+        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64 or self.is_riscv64 or self.is_arm64_aml403
 
         assert self.is_32_bit or self.is_64_bit
         assert not (self.is_32_bit and self.is_64_bit)
@@ -241,6 +243,8 @@ class Platform(object):
             (self.is_armv7em, 'ARCH_ARM7EM'),
             (self.is_armv5te, 'ARCH_ARM5TE'),
             (self.is_arm, 'ARCH_ARM'),
+            (self.is_arm_aml403, 'ARCH_ARM_AML403'),
+            (self.is_arm64_aml403, 'ARCH_ARM64_AML403'),
             (self.is_linux_armv8 or self.is_macos_arm64, 'ARCH_AARCH64'),
             (self.is_powerpc, 'ARCH_PPC64LE'),
             (self.is_power8le, 'ARCH_POWER8LE'),
@@ -1301,6 +1305,14 @@ class GnuToolchain(Toolchain):
             # to reduce code size
             self.c_flags_platform.append('-mthumb')
 
+        if target.is_arm_aml403:
+            self.c_flags_platform.append('-march=armv8-a -marm')
+            self.setup_amlogic_rtos_sdk()
+
+        if target.is_arm64_aml403:
+            self.c_flags_platform.append('-march=armv8-a -mcpu=cortex-a35')
+            self.setup_amlogic64_rtos_sdk()
+
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
 
@@ -1361,6 +1373,12 @@ class GnuToolchain(Toolchain):
         self.platform_projects.append(project)
         self.c_flags_platform.append('--sysroot')
         self.c_flags_platform.append(var)
+
+    def setup_amlogic_rtos_sdk(self):
+        self.platform_projects.insert(0, 'build/internal/platform/amlogic_rtos')
+
+    def setup_amlogic64_rtos_sdk(self):
+        self.platform_projects.insert(0, 'build/internal/platform/amlogic64_rtos')
 
     def setup_allwinner_rtos_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/allwinner_rtos')
@@ -1611,7 +1629,7 @@ class GnuCompiler(Compiler):
                 '-Wno-undefined-var-template',
             ]
 
-        elif self.tc.is_gcc and self.host.is_riscv64_aw is None:
+        elif self.tc.is_gcc and self.host.is_riscv64_aw is None and self.host.is_arm_aml403 is None:
             self.c_foptions.append('-fno-delete-null-pointer-checks')
             self.c_foptions.append('-fabi-version=8')
 

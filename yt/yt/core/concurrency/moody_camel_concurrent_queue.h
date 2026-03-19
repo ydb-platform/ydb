@@ -7,7 +7,7 @@ namespace moodycamel {
 
 #if defined(_tsan_enabled_)
 template <typename T, typename Traits = ConcurrentQueueDefaultTraits>
-using ConcurrentQueue = NonBlockingConcurrentQueue<T, Traits>;
+using ConcurrentQueue = BlockingConcurrentQueue<T, Traits>;
 #else
 template <typename T, typename Traits = ConcurrentQueueDefaultTraits>
 using ConcurrentQueue = NonBlockingConcurrentQueue<T, Traits>;

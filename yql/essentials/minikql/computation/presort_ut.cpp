@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(TPresortCodecTest) {
 Y_UNIT_TEST(SimpleTypes) {
     TPresortTest test;
 
-    TSimpleTypes values = {false, 1u, 2u, 3u, 4u, 5, 6, 7, 8, 9.f, 10.0};
+    TSimpleTypes values = {.Bool = false, .Uint8 = 1u, .Uint16 = 2u, .Uint32 = 3u, .Uint64 = 4u, .Int8 = 5, .Int16 = 6, .Int32 = 7, .Int64 = 8, .Float = 9.f, .Double = 10.0};
 
     auto validateSimpleTypes = [&](bool isOptional, bool isDesc) {
         TPresortEncoder encoder;

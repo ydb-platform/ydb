@@ -1,5 +1,5 @@
 {
-  "op_name":"InnerJoin (Grace)",
+  "op_name":"InnerJoin (BlockHash)",
   "args":
     [
       {
@@ -11,7 +11,7 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (Grace)",
+                    "op_name":"InnerJoin (BlockHash)",
                     "args":
                       [
                         {
@@ -23,7 +23,7 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (Grace)",
+                                      "op_name":"InnerJoin (BlockHash)",
                                       "args":
                                         [
                                           {
@@ -51,7 +51,7 @@
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Grace)",
+                                "op_name":"InnerJoin (BlockHash)",
                                 "args":
                                   [
                                     {
@@ -59,7 +59,17 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (Grace)",
+                                            "op_name":"TableFullScan",
+                                            "table":"customer_address"
+                                          }
+                                        ]
+                                    },
+                                    {
+                                      "op_name":"HashShuffle",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"InnerJoin (BlockHash)",
                                             "args":
                                               [
                                                 {
@@ -67,7 +77,17 @@
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (Map)",
+                                                        "op_name":"TableFullScan",
+                                                        "table":"customer_demographics"
+                                                      }
+                                                    ]
+                                                },
+                                                {
+                                                  "op_name":"HashShuffle",
+                                                  "args":
+                                                    [
+                                                      {
+                                                        "op_name":"InnerJoin (BlockHash)",
                                                         "args":
                                                           [
                                                             {
@@ -115,7 +135,7 @@
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"InnerJoin (Map)",
+                                                                                                  "op_name":"InnerJoin (BlockHash)",
                                                                                                   "args":
                                                                                                     [
                                                                                                       {
@@ -123,7 +143,7 @@
                                                                                                         "args":
                                                                                                           [
                                                                                                             {
-                                                                                                              "op_name":"HashShuffle",
+                                                                                                              "op_name":"InnerJoin (BlockHash)",
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
@@ -135,7 +155,7 @@
                                                                                                                           "table":"customer"
                                                                                                                         },
                                                                                                                         {
-                                                                                                                          "op_name":"HashShuffle",
+                                                                                                                          "op_name":"InnerJoin (BlockHash)",
                                                                                                                           "args":
                                                                                                                             [
                                                                                                                               {
@@ -143,7 +163,7 @@
                                                                                                                                 "args":
                                                                                                                                   [
                                                                                                                                     {
-                                                                                                                                      "op_name":"InnerJoin (Grace)",
+                                                                                                                                      "op_name":"InnerJoin (BlockHash)",
                                                                                                                                       "args":
                                                                                                                                         [
                                                                                                                                           {
@@ -151,7 +171,17 @@
                                                                                                                                             "args":
                                                                                                                                               [
                                                                                                                                                 {
-                                                                                                                                                  "op_name":"InnerJoin (Grace)",
+                                                                                                                                                  "op_name":"TableFullScan",
+                                                                                                                                                  "table":"customer_address"
+                                                                                                                                                }
+                                                                                                                                              ]
+                                                                                                                                          },
+                                                                                                                                          {
+                                                                                                                                            "op_name":"HashShuffle",
+                                                                                                                                            "args":
+                                                                                                                                              [
+                                                                                                                                                {
+                                                                                                                                                  "op_name":"InnerJoin (BlockHash)",
                                                                                                                                                   "args":
                                                                                                                                                     [
                                                                                                                                                       {
@@ -315,7 +345,7 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (Grace)",
+                    "op_name":"InnerJoin (BlockHash)",
                     "args":
                       [
                         {
@@ -327,7 +357,7 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (Grace)",
+                                      "op_name":"InnerJoin (BlockHash)",
                                       "args":
                                         [
                                           {
@@ -355,7 +385,7 @@
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Grace)",
+                                "op_name":"InnerJoin (BlockHash)",
                                 "args":
                                   [
                                     {
@@ -363,7 +393,17 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (Grace)",
+                                            "op_name":"TableFullScan",
+                                            "table":"customer_address"
+                                          }
+                                        ]
+                                    },
+                                    {
+                                      "op_name":"HashShuffle",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"InnerJoin (BlockHash)",
                                             "args":
                                               [
                                                 {
@@ -371,7 +411,17 @@
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (Map)",
+                                                        "op_name":"TableFullScan",
+                                                        "table":"customer_demographics"
+                                                      }
+                                                    ]
+                                                },
+                                                {
+                                                  "op_name":"HashShuffle",
+                                                  "args":
+                                                    [
+                                                      {
+                                                        "op_name":"InnerJoin (BlockHash)",
                                                         "args":
                                                           [
                                                             {
@@ -419,7 +469,7 @@
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"InnerJoin (Map)",
+                                                                                                  "op_name":"InnerJoin (BlockHash)",
                                                                                                   "args":
                                                                                                     [
                                                                                                       {
@@ -427,7 +477,7 @@
                                                                                                         "args":
                                                                                                           [
                                                                                                             {
-                                                                                                              "op_name":"HashShuffle",
+                                                                                                              "op_name":"InnerJoin (BlockHash)",
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
@@ -439,7 +489,7 @@
                                                                                                                           "table":"customer"
                                                                                                                         },
                                                                                                                         {
-                                                                                                                          "op_name":"HashShuffle",
+                                                                                                                          "op_name":"InnerJoin (BlockHash)",
                                                                                                                           "args":
                                                                                                                             [
                                                                                                                               {
@@ -447,7 +497,7 @@
                                                                                                                                 "args":
                                                                                                                                   [
                                                                                                                                     {
-                                                                                                                                      "op_name":"InnerJoin (Grace)",
+                                                                                                                                      "op_name":"InnerJoin (BlockHash)",
                                                                                                                                       "args":
                                                                                                                                         [
                                                                                                                                           {
@@ -455,7 +505,17 @@
                                                                                                                                             "args":
                                                                                                                                               [
                                                                                                                                                 {
-                                                                                                                                                  "op_name":"InnerJoin (Grace)",
+                                                                                                                                                  "op_name":"TableFullScan",
+                                                                                                                                                  "table":"customer_address"
+                                                                                                                                                }
+                                                                                                                                              ]
+                                                                                                                                          },
+                                                                                                                                          {
+                                                                                                                                            "op_name":"HashShuffle",
+                                                                                                                                            "args":
+                                                                                                                                              [
+                                                                                                                                                {
+                                                                                                                                                  "op_name":"InnerJoin (BlockHash)",
                                                                                                                                                   "args":
                                                                                                                                                     [
                                                                                                                                                       {

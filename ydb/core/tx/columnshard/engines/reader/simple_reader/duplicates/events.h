@@ -39,25 +39,4 @@ public:
     }
 };
 
-class TEvFilterConstructionResult
-    : public NActors::TEventLocal<TEvFilterConstructionResult, NColumnShard::TEvPrivate::EvFilterConstructionResult> {
-private:
-    using TFilters = THashMap<TDuplicateMapInfo, TPortionColumnFilter>;
-    TConclusion<TFilters> Result;
-
-public:
-    TEvFilterConstructionResult(TConclusion<TFilters>&& result)
-        : Result(std::move(result))
-    {
-    }
-
-    const TConclusion<TFilters>& GetConclusion() const {
-        return Result;
-    }
-
-    TFilters&& ExtractResult() {
-        return Result.DetachResult();
-    }
-};
-
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

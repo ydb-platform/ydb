@@ -2,11 +2,14 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-TFilterAccumulator::TFilterAccumulator(const TEvRequestFilter::TPtr& request, ui64 recordsCount)
+TFilterAccumulator::TFilterAccumulator(const TEvRequestFilter::TPtr& request, ui64 recordsCount, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters)
     : OriginalRequest(request)
     , RecordsCount(recordsCount)
+    , Counters(counters)
+    , StartTime(TInstant::Now())
 {
     AFL_VERIFY(!!OriginalRequest);
+    Counters->OnRequestStart();
 }
 
 TFilterBuildingGuard::TFilterBuildingGuard()

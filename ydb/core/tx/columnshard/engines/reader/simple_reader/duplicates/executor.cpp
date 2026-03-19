@@ -1,5 +1,4 @@
 #include "executor.h"
-#include "merge.h"
 #include "private_events.h"
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
@@ -19,15 +18,18 @@ private:
         ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TColumnDataCachePolicy>&& errorAddresses) override {
         if (errorAddresses.HasErrors()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-                new NPrivate::TEvFilterConstructionResult(
+                new TEvIntervalConstructionResult(std::move(Request),
                     TConclusionStatus::Fail(errorAddresses.GetErrorMessage()), Request.GetGlobalContext().MakeResultInFlightGuard()));
             return;
         }
 
-        AFL_VERIFY(AllocationGuard);
-        const std::shared_ptr<TBuildDuplicateFilters> task =
-            std::make_shared<TBuildDuplicateFilters>(std::move(Request), std::move(objectAddresses), std::move(AllocationGuard));
-        NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
+        TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+            new TEvIntervalConstructionResult(std::move(Request), std::move(objectAddresses), std::move(AllocationGuard)));
+
+        // AFL_VERIFY(AllocationGuard);
+        // const std::shared_ptr<TBuildDuplicateFilters> task =
+        //     std::make_shared<TBuildDuplicateFilters>(std::move(Request), std::move(objectAddresses), std::move(AllocationGuard));
+        // NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
     }
 
     virtual bool DoIsAborted() const override {
@@ -45,7 +47,7 @@ public:
     void OnError(const TString& errorMessage) {
         AFL_VERIFY(Request.GetGlobalContext().GetOwner());
         TActorContext::AsActorContext().Send(
-            Request.GetGlobalContext().GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorMessage),
+            Request.GetGlobalContext().GetOwner(), new TEvIntervalConstructionResult(std::move(Request), TConclusionStatus::Fail(errorMessage),
                                                        Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
 };
@@ -57,7 +59,7 @@ private:
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-            new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
+            new TEvIntervalConstructionResult(std::move(Request), TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
                 Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
@@ -90,7 +92,7 @@ private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         if (result.HasErrors()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-                new NPrivate::TEvFilterConstructionResult(
+                new TEvIntervalConstructionResult(std::move(Request),
                     TConclusionStatus::Fail(result.GetErrorMessage()), Request.GetGlobalContext().MakeResultInFlightGuard()));
             return;
         }
@@ -140,7 +142,7 @@ private:
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-            new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
+            new TEvIntervalConstructionResult(std::move(Request), TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
                 Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,

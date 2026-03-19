@@ -16,9 +16,9 @@ private:
 
     static std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> GetStageFeatures() {
         static const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> StageFeatures = {
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("INTERSECTIONS", 10000000),   // 10 MiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("FILTERS", 2000000000),   // 2 GiB
             NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 10000000000),   // 10 GiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 1000000000),   // 1 GiB
         };
         return StageFeatures;
     }
@@ -40,7 +40,7 @@ public:
 class TFilterAccumulator: TMoveOnly {
 public:
     enum class EFetchingStage {
-        INTERSECTIONS = 0,
+        FILTERS = 0,
         ACCESSORS = 1,
         COLUMN_DATA = 2,
     };
@@ -52,6 +52,8 @@ private:
     std::vector<std::optional<TPortionColumnFilter>> Filters;
     ui64 FiltersAccumulated = 0;
     ui64 RecordsCount = 0;
+    std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
+    TInstant StartTime;
 
 private:
     bool IsReady() const {
@@ -122,10 +124,11 @@ public:
         return OriginalRequest;
     }
 
-    TFilterAccumulator(const TEvRequestFilter::TPtr& request, ui64 recordsCount);
+    TFilterAccumulator(const TEvRequestFilter::TPtr& request, ui64 recordsCount, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters);
 
     ~TFilterAccumulator() {
         AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped())("state", DebugString());
+        Counters->OnRequestFinish((TInstant::Now() - StartTime).MilliSeconds());
     }
 
     TString DebugString() const {
@@ -261,10 +264,6 @@ public:
         return sb;
     }
 
-    static ui64 GetApproximateDataSize(const ui64 intersectionCount) {
-        return intersectionCount *
-               (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(TIntervalInfo) + sizeof(std::optional<TPortionColumnFilter>));
-    }
     ui64 GetDataSize() const {
         return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr));
     }

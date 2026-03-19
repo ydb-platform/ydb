@@ -685,6 +685,12 @@ namespace NKikimr::NDDisk {
             erases.emplace_back(e.GetLsn(), e.GetGeneration());
         }
 
+        if (erases.empty()) {
+            SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace(), NormalizedOccupancy));
+            return;
+        }
+
         ErasePersistentBuffer(*ev, creds, erases);
     }
 
@@ -715,6 +721,12 @@ namespace NKikimr::NDDisk {
         while (recordIt != it->second.Records.end() && recordIt->first <= lsn) {
             erases.emplace_back(recordIt->first, generation);
             recordIt++;
+        }
+
+        if (erases.empty()) {
+            SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace(), NormalizedOccupancy));
+            return;
         }
 
         ErasePersistentBuffer(*ev, creds, erases);

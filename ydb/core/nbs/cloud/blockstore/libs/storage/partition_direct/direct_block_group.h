@@ -89,14 +89,15 @@ public:
         ui32 vChunkIndex,
         ui8 hostIndex,
         TBlockRange64 range,
-        TGuardedSgList guardedSglist,
+        const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) = 0;
+
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
         ui64 lsn,
         TBlockRange64 range,
-        TGuardedSgList guardedSglist,
+        const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) = 0;
 
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
@@ -104,21 +105,29 @@ public:
         ui8 hostIndex,
         ui64 lsn,
         TBlockRange64 range,
-        TGuardedSgList guardedSglist,
+        const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) = 0;
 
-    virtual NThreading::TFuture<TDBGFlushResponse> FlushFromPBuffer(
+    // Batch operation to flush a list of PBuffer entries. It can be executed in
+    // two modes - when the source and destination are the same host, and when
+    // the source and destination hosts are different. In this case, the
+    // operation is performed in pull mode, when the destination host downloads
+    // entries from PBuffer and write it to DDisk to self.
+    virtual NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        ui8 pbufferHostIndex,   // source host
+        ui8 ddiskHostIndex,     // destination host
         const TVector<TPBufferSegment>& segments,
         NWilson::TTraceId traceId) = 0;
 
+    // Batch operation to erase a list of PBuffer entries.
     virtual NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
         const TVector<TPBufferSegment>& segments,
         NWilson::TTraceId traceId) = 0;
 
+    // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
     virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) = 0;
 
@@ -158,7 +167,7 @@ public:
         ui32 vChunkIndex,
         ui8 hostIndex,
         TBlockRange64 range,
-        TGuardedSgList guardedSglist,
+        const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
@@ -166,7 +175,7 @@ public:
         ui8 hostIndex,
         ui64 lsn,
         TBlockRange64 range,
-        TGuardedSgList guardedSglist,
+        const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
@@ -174,12 +183,13 @@ public:
         ui8 hostIndex,
         ui64 lsn,
         TBlockRange64 range,
-        TGuardedSgList guardedSglist,
+        const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 
-    NThreading::TFuture<TDBGFlushResponse> FlushFromPBuffer(
+    NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        ui8 pbufferHostIndex,
+        ui8 ddiskHostIndex,
         const TVector<TPBufferSegment>& segments,
         NWilson::TTraceId traceId) override;
 
@@ -204,16 +214,14 @@ private:
 
     struct TDDiskConnection
     {
-        NKikimr::NBsController::TDDiskId DDiskId;
-        NKikimr::NDDisk::TQueryCredentials Credentials;
-        NThreading::TPromise<NProto::TError> ConnectPromise =
-            NThreading::NewPromise<NProto::TError>();
-        NThreading::TFuture<NProto::TError> ConnectFuture{
-            ConnectPromise.GetFuture()};
+        using TPromise = NThreading::TPromise<NProto::TError>;
+        using TFuture = NThreading::TFuture<NProto::TError>;
 
-        [[nodiscard]] NActors::TActorId GetServiceId() const;
-        [[nodiscard]] const NThreading::TFuture<NProto::TError>&
-        GetFuture() const;
+        NTransport::THostConnection HostConnection;
+        TPromise ConnectPromise = NThreading::NewPromise<NProto::TError>();
+        TFuture ConnectFuture{ConnectPromise.GetFuture()};
+
+        [[nodiscard]] const TFuture& GetFuture() const;
     };
 
     void DoEstablishConnections();

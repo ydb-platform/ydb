@@ -170,6 +170,8 @@ namespace NKikimr::NSqsTopic::V1 {
                 topicRequest.mutable_retention_period()->set_seconds(ConsumerConfig.MessageRetentionPeriod.GetOrElse(DEFAULT_MESSAGE_RETENTION_PERIOD).Seconds());
                 topicRequest.set_partition_write_speed_bytes_per_second(1_MB);
                 topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
+                
+                
 
                 auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
                 pqDescr->MutablePQTabletConfig()->AddConsumers()->CopyFrom(ConsumerConfig.Consumer);

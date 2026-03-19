@@ -16,10 +16,12 @@ namespace NKikimr::NSqsTopic::V1 {
     struct TConsumerAttributes {
         NKikimrPQ::TPQTabletConfig::TConsumer Consumer;
         TMaybe<TDuration> MessageRetentionPeriod;
+        TMaybe<TDuration> ReceiveMessageDelay;
         TMaybe<ui32> MaximumMessageSize;
         TMaybe<TString> KmsMasterKeyId;
         TMaybe<TDuration> KmsDataKeyReusePeriodSeconds;
         TMaybe<bool> SqsManagedSseEnabled;
+        TMaybe<bool> ContentBasedDeduplication;
     };
 
     enum class EConsumerAttributeUsageTarget {

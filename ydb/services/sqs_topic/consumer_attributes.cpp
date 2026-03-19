@@ -39,7 +39,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 if (!delay) {
                     return std::unexpected(std::format("Invalid DelaySeconds"));
                 }
-                config.SetDefaultDelayMessageTimeMs(*delay * 1000);
+                result.ReceiveMessageDelay = TDuration::Seconds(*delay);
             } else if (key == "ReceiveMessageWaitTimeSeconds") {
                 TMaybe<ui32> waitTime = TryFromString<ui32>(value);
                 if (!waitTime) {
@@ -50,7 +50,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 fifoQueueByAttr = IsTrue(value);
             } else if (key == "ContentBasedDeduplication") {
                 bool dedup = IsTrue(value);
-                config.SetContentBasedDeduplication(dedup);
+                result.ContentBasedDeduplication = dedup;
             } else if (key == "RedrivePolicy") {
                 try {
                     NJson::TJsonValue json;
@@ -142,14 +142,16 @@ namespace NKikimr::NSqsTopic::V1 {
                 existingConsumer.GetDefaultProcessingTimeoutSeconds()
             ));
         }
-
-        if (newConsumer.HasDefaultDelayMessageTimeMs() &&
-            existingConsumer.GetDefaultDelayMessageTimeMs() != newConsumer.GetDefaultDelayMessageTimeMs()) {
-            return std::unexpected(std::format(
-                "DelaySeconds mismatch: new value is {} ms, existing value is {} ms",
-                newConsumer.GetDefaultDelayMessageTimeMs(),
-                existingConsumer.GetDefaultDelayMessageTimeMs()
-            ));
+        if (newConfig.ReceiveMessageDelay.Defined()) {
+            ui64 newSeconds = newConfig.ReceiveMessageDelay->Seconds();
+            ui64 existingSeconds = static_cast<ui64>(existingConfig.GetPartitionConfig().GetLifetimeSeconds());
+            if (existingSeconds != newSeconds) {
+                return std::unexpected(std::format(
+                    "ReceiveMessageDelay mismatch: new value is {} seconds, existing value is {} seconds",
+                    newSeconds,
+                    existingSeconds
+                ));
+            }
         }
 
         if (newConsumer.HasDefaultReceiveMessageWaitTimeMs() &&
@@ -170,13 +172,15 @@ namespace NKikimr::NSqsTopic::V1 {
             ));
         }
 
-        if (newConsumer.HasContentBasedDeduplication() &&
-            existingConsumer.GetContentBasedDeduplication() != newConsumer.GetContentBasedDeduplication()) {
-            return std::unexpected(std::format(
-                "ContentBasedDeduplication mismatch: new value is {}, existing value is {}",
-                newConsumer.GetContentBasedDeduplication(),
-                existingConsumer.GetContentBasedDeduplication()
-            ));
+        if (newConfig.ContentBasedDeduplication.Defined()) {
+            bool dedup = newConfig.ContentBasedDeduplication.GetOrElse(false);
+            if (dedup != existingConfig.GetContentBasedDeduplication()) {
+                return std::unexpected(std::format(
+                    "ContentBasedDeduplication mismatch: new value is {}, existing value is {}",
+                    dedup,
+                    existingConfig.GetContentBasedDeduplication()
+                ));
+            }
         }
 
         if (newConsumer.HasMaxProcessingAttempts() &&
@@ -240,10 +244,10 @@ namespace NKikimr::NSqsTopic::V1 {
             }
         }
 
-        if (consumer.HasDefaultDelayMessageTimeMs()) {
-            if (consumer.GetDefaultDelayMessageTimeMs() > NSQS::TLimits::MaxDelaySeconds * 1000) {
+        if (config.ReceiveMessageDelay.Defined()) {
+            if (config.ReceiveMessageDelay->Seconds() > NSQS::TLimits::MaxDelaySeconds) {
                 return std::unexpected(std::format(
-                    "DelaySeconds exceeds maximum of {} seconds",
+                    "ReceiveMessageDelay exceeds maximum of {} seconds",
                     NSQS::TLimits::MaxDelaySeconds
                 ));
             }

@@ -94,7 +94,7 @@ private:
 
         if (result.HasRemovedData()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-                new NPrivate::TEvFilterConstructionResult(
+                new TEvFilterConstructionResult(
                     TConclusionStatus::Fail(TStringBuilder{} << "Has removed accessors data, count " << result.GetRemovedData().size()), Request.GetGlobalContext().MakeResultInFlightGuard()));
             return;
         }

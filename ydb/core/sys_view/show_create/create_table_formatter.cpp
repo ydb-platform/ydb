@@ -1414,6 +1414,17 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
     }
 
+    Cerr << "!!! VLAD " << olapColumnDesc.DebugString() << Endl;
+
+    if (olapColumnDesc.HasDataAccessorConstructor()) {
+        const auto& dataAccessorConstructor = olapColumnDesc.GetDataAccessorConstructor();
+        if (dataAccessorConstructor.GetClassName() == "DICTIONARY") {
+            Stream << " ENCODING (DICT)";
+        } else if (dataAccessorConstructor.GetClassName() == "PLAIN") {
+            Stream << " ENCODING (OFF)";
+        }
+    }
+
     if (olapColumnDesc.HasSerializer()) {
         Stream << " COMPRESSION (";
         auto compression = olapColumnDesc.GetSerializer();
@@ -1437,12 +1448,6 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
             }
         }
         Stream << ')';
-    }
-
-    if (olapColumnDesc.HasDictionaryEncoding()
-        && olapColumnDesc.GetDictionaryEncoding().HasEnabled()
-        && olapColumnDesc.GetDictionaryEncoding().GetEnabled()) {
-        Stream << " ENCODING(dict)";
     }
 }
 
@@ -1634,7 +1639,8 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
     if (columnDesc.HasDataAccessorConstructor()) {
         const auto& dataAccessorConstructor = columnDesc.GetDataAccessorConstructor();
         if (columnDesc.GetDataAccessorConstructor().HasClassName()
-                && !columnDesc.GetDataAccessorConstructor().GetClassName().empty()) {
+                && !columnDesc.GetDataAccessorConstructor().GetClassName().empty()
+                && columnDesc.GetDataAccessorConstructor().GetClassName() == "SUB_COLUMNS") {
             paramsStr << del;
             EscapeName("DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME", paramsStr);
             paramsStr << "=";

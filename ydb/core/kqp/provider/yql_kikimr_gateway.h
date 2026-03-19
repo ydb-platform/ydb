@@ -456,6 +456,10 @@ struct TColumnCompression {
     TMaybe<i64> Level;
 };
 
+struct TColumnEncoding {
+    TString Name;
+};
+
 struct TKikimrColumnMetadata {
 
     TString Name;
@@ -471,7 +475,7 @@ struct TKikimrColumnMetadata {
     TKikimrPathId DefaultFromSequencePathId;
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
-    bool DictionaryEncoding = false;
+    TMaybe<TVector<TColumnEncoding>> Encoding;
 
     TKikimrColumnMetadata() = default;
 
@@ -519,8 +523,11 @@ struct TKikimrColumnMetadata {
             }
         }
 
-        if (message->HasDictionaryEncoding() && message->GetDictionaryEncoding()) {
-            DictionaryEncoding = true;
+        for (const auto& encoding : message->GetEncoding()) {
+            switch (encoding.GetImplementationCase()) {
+                case 1:
+
+            }
         }
     }
 

@@ -54,6 +54,8 @@ public:
         if (formatQuery) {
             TString normalizedFormatQuery = NormalizeWhitespaceInQuery(UnescapeC(formatQuery));
             TString normalizedShowCreateTableQuery = NormalizeWhitespaceInQuery(UnescapeC(showCreateTableQuery));
+            Cerr << "normalizedFormatQuery: " << normalizedFormatQuery << Endl;
+            Cerr << "normalizedShowCreateTableQuery: " << normalizedShowCreateTableQuery << Endl;
             UNIT_ASSERT_STRINGS_EQUAL(normalizedFormatQuery, normalizedShowCreateTableQuery);
         }
 
@@ -79,6 +81,8 @@ public:
 
         DropTable(session, tableName);
 
+        Cerr << "ORIG: " << describeResultOrig << Endl;
+        Cerr << "NEW: " << describeResultNew << Endl;
         CompareDescriptions(describeResultOrig, describeResultNew, showCreateTableQuery);
     }
 
@@ -876,6 +880,9 @@ Y_UNIT_TEST(TableColumn) {
                 Value1 Utf8 COMPRESSION (algorithm = lz4),
                 Value2 Int16 COMPRESSION (algorithm = zstd),
                 Value3 String COMPRESSION (algorithm = zstd, level = 10),
+                EncodingValue1 Utf8 ENCODING (),
+                EncodingValue2 Int16 ENCODING (OFF),
+                EncodingValue3 String ENCODING (DICT),
                 PRIMARY KEY (Key1, Key2, Key3),
             )
             PARTITION BY HASH(`Key1`, `Key2`)
@@ -896,6 +903,9 @@ Y_UNIT_TEST(TableColumn) {
                 `Value1` Utf8 COMPRESSION (algorithm = lz4),
                 `Value2` Int16 COMPRESSION (algorithm = zstd, level = 1),
                 `Value3` String COMPRESSION (algorithm = zstd, level = 10),
+                `EncodingValue1` Utf8,
+                `EncodingValue2` Int16 ENCODING (OFF),
+                `EncodingValue3` String ENCODING (DICT),
                 PRIMARY KEY (`Key1`, `Key2`, `Key3`)
             )
             PARTITION BY HASH (`Key1`, `Key2`)
@@ -1928,7 +1938,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
 }
 
 Y_UNIT_TEST(TableColumnAlterColumn) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableCsDictionaryEncoding = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -1941,8 +1951,10 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
         R"(
             CREATE TABLE `/Root/test_show_create` (
                 Col1 Uint64 NOT NULL,
-                Col2 JsonDocument ENCODING(DICT),
+                Col2 JsonDocument,
                 Col3 Uint32,
+                Col4 Uint32 ENCODING(DICT) COMPRESSION(algorithm=zstd, level=4),
+                Col5 Uint32,
                 PRIMARY KEY (Col1)
             )
             PARTITION BY HASH(Col1)
@@ -1950,12 +1962,18 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col3 SET ENCODING (DICT);
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET ENCODING ();
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET COMPRESSION ();
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col5 SET ENCODING (OFF);
         )", "test_show_create",
         R"(
             CREATE TABLE `test_show_create` (
                 `Col1` Uint64 NOT NULL,
-                `Col2` JsonDocument ENCODING(DICT) COMPRESSION (algorithm = zstd, level = 4),
-                `Col3` Uint32,
+                `Col2` JsonDocument COMPRESSION (algorithm = zstd, level = 4),
+                `Col3` Uint32 ENCODING (DICT),
+                `Col4` Uint32,
+                `Col5` Uint32 ENCODING (OFF),
                 PRIMARY KEY (`Col1`)
             )
             PARTITION BY HASH (`Col1`)
@@ -2082,7 +2100,7 @@ Y_UNIT_TEST(TableColumnAlterObject) {
             CREATE TABLE `/Root/test_show_create` (
                 Col1 Uint64 NOT NULL,
                 Col2 Uint32 NOT NULL,
-                Col3 JsonDocument ENCODING(DICT),
+                Col3 JsonDocument,
                 PRIMARY KEY (Col1)
             )
             PARTITION BY HASH(Col1)

@@ -9,6 +9,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
@@ -458,6 +459,39 @@ bool FillSerializer(
     return true;
 }
 
+bool FillAccessor(
+    const TMaybe<TVector<TColumnEncoding>>& from, const std::string& name,
+    NKikimrSchemeOp::TOlapColumnDescription& to,
+    TString& error, Ydb::StatusIds::StatusCode& code) {
+
+    if (!from) {
+        return true;
+    }
+
+    if (from->size() != 1) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = TStringBuilder() << "Column `" << name << "`: several encodings are not yet supported";
+        return false;
+    }
+
+    const auto& encodingName = (*from)[0].Name;
+    if (encodingName == "DICTIONARY") {
+        to.MutableDataAccessorConstructor()->MutableDictionary();
+        to.MutableDataAccessorConstructor()->SetClassName(encodingName);
+    } else if (encodingName == "PLAIN") {
+        to.MutableDataAccessorConstructor()->MutablePlain();
+        to.MutableDataAccessorConstructor()->SetClassName(encodingName);
+    } else if (encodingName.empty()) {
+        to.MutableDataAccessorConstructor()->SetClassName("__UNDEFINED");
+    } else {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = TStringBuilder() << "Column `" << name << "` encoding " << encodingName << " is not supported";
+        return false;
+    }
+
+    return true;
+}
+
 template <typename T>
 bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata, Ydb::StatusIds::StatusCode& code, TString& error) {
     Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
@@ -491,16 +525,16 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         columnDesc.SetType(columnIt->second.Type);
         columnDesc.SetNotNull(columnIt->second.NotNull);
 
-        if (columnIt->second.DictionaryEncoding) {
-            columnDesc.MutableDictionaryEncoding()->SetEnabled(true);
-        }
-
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnIt->second.TypeInfo, columnIt->second.TypeMod);
         if (columnType.TypeInfo) {
             *columnDesc.MutableTypeInfo() = *columnType.TypeInfo;
         }
 
         if (!FillSerializer(columnIt->second.Compression, name, columnDesc, error, code)) {
+            return false;
+        }
+
+        if (!FillAccessor(columnIt->second.Encoding, name, columnDesc, error, code)) {
             return false;
         }
     }

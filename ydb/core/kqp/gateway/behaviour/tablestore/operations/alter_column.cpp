@@ -46,7 +46,6 @@ void TAlterColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTable
         if (!!AccessorConstructor) {
             *column->MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
         }
-        *column->MutableDictionaryEncoding() = DictionaryEncodingDiff.SerializeToProto();
         if (DefaultValue) {
             column->SetDefaultValue(*DefaultValue);
         }

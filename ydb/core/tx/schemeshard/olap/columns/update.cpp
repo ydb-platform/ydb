@@ -52,6 +52,7 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
     if (columnSchema.HasColumnFamilyName()) {
         ColumnFamilyName = columnSchema.GetColumnFamilyName();
     }
+
     if (columnSchema.HasSerializer()) {
         Serializer = NArrow::NSerialization::TSerializerContainer();
         if (columnSchema.GetSerializer().HasClassName()) {
@@ -61,12 +62,7 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
             }
         }
     }
-    if (columnSchema.HasDictionaryEncoding()) {
-        if (!DictionaryEncoding.DeserializeFromProto(columnSchema.GetDictionaryEncoding())) {
-            errors.AddError("cannot parse dictionary encoding diff from proto");
-            return false;
-        }
-    }
+
     return true;
 }
 
@@ -103,40 +99,7 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         }
     }
 
-    if (columnSchema.HasDictionaryEncoding()) {
-        auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
-        if (!settings) {
-            errors.AddError("Cannot parse dictionary compression info: " + settings.GetErrorMessage());
-            return false;
-        }
-        DictionaryEncoding = *settings;
-
-        if (columnSchema.GetDictionaryEncoding().GetEnabled()) {
-            if (columnSchema.HasDataAccessorConstructor() && columnSchema.GetDataAccessorConstructor().GetClassName() != "DICTIONARY") {
-                errors.AddError("Dictionary is set to column where accessor class has different type: " + columnSchema.GetDataAccessorConstructor().GetClassName());
-                return false;
-            }
-
-            NKikimrArrowAccessorProto::TConstructor dictConstructor;
-            dictConstructor.SetClassName("DICTIONARY");
-            NArrow::NAccessor::TConstructorContainer container;
-            AFL_VERIFY(container.DeserializeFromProto(dictConstructor));
-            AccessorConstructor = container;
-        } else {
-            if (columnSchema.HasDataAccessorConstructor()) {
-                if (columnSchema.GetDataAccessorConstructor().GetClassName() != "DICTIONARY") {
-                    errors.AddError("Dictionary is set to column where accessor class has different type: " + columnSchema.GetDataAccessorConstructor().GetClassName());
-                    return false;
-                }
-            } else {
-                NKikimrArrowAccessorProto::TConstructor plainConstructor;
-                plainConstructor.SetClassName("PLAIN");
-                NArrow::NAccessor::TConstructorContainer container;
-                AFL_VERIFY(container.DeserializeFromProto(plainConstructor));
-                AccessorConstructor = container;
-            }
-        }
-    } else if (columnSchema.HasDataAccessorConstructor()) {
+    if (columnSchema.HasDataAccessorConstructor()) {
         if (!AccessorConstructor.DeserializeFromProto(columnSchema.GetDataAccessorConstructor())) {
             errors.AddError("cannot parse accessor constructor from proto");
             return false;
@@ -225,33 +188,6 @@ void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescrip
         AFL_VERIFY(container.DeserializeFromProto(columnSchema.GetDataAccessorConstructor()));
         AccessorConstructor = container;
     }
-    if (columnSchema.HasDictionaryEncoding()) {
-        auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
-        Y_ABORT_UNLESS(settings.IsSuccess());
-        DictionaryEncoding = *settings;
-
-        if (columnSchema.GetDictionaryEncoding().GetEnabled()) {
-            AFL_VERIFY(!columnSchema.HasDataAccessorConstructor() || columnSchema.GetDataAccessorConstructor().GetClassName() == "DICTIONARY")
-                ("constr", columnSchema.GetDataAccessorConstructor().DebugString());
-
-            NKikimrArrowAccessorProto::TConstructor dictConstructor;
-            dictConstructor.SetClassName("DICTIONARY");
-            NArrow::NAccessor::TConstructorContainer container;
-            AFL_VERIFY(container.DeserializeFromProto(dictConstructor));
-            AccessorConstructor = container;
-        } else {
-            if (columnSchema.HasDataAccessorConstructor()) {
-                AFL_VERIFY(columnSchema.GetDataAccessorConstructor().GetClassName() != "DICTIONARY")
-                        ("constr", columnSchema.GetDataAccessorConstructor().DebugString());
-            } else {
-                NKikimrArrowAccessorProto::TConstructor plainConstructor;
-                plainConstructor.SetClassName("PLAIN");
-                NArrow::NAccessor::TConstructorContainer container;
-                AFL_VERIFY(container.DeserializeFromProto(plainConstructor));
-                AccessorConstructor = container;
-            }
-        }
-    }
     if (columnSchema.HasNotNull()) {
         NotNullFlag = columnSchema.GetNotNull();
     } else {
@@ -272,9 +208,6 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
     if (AccessorConstructor) {
         *columnSchema.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
     }
-    if (DictionaryEncoding) {
-        *columnSchema.MutableDictionaryEncoding() = DictionaryEncoding->SerializeToProto();
-    }
 
     auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(Type, "");
     columnSchema.SetTypeId(columnType.TypeId);
@@ -294,25 +227,12 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
     }
     if (!!diffColumn.GetAccessorConstructor()) {
         const auto& accessorContainer = diffColumn.GetAccessorConstructor();
-        if (accessorContainer.GetObjectPtr() && accessorContainer.GetObjectPtr()->GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
-            if (!IsAllowedDictionaryType(Type.GetTypeId())) {
-                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
-                    << "DICTIONARY accessor is not supported for column '" << GetName() << "' of type " << GetTypeName()
-                    << "; use comparable types (e.g. String, Utf8, numeric, Date, Datetime, Timestamp)");
-                return false;
-            }
-        }
         auto conclusion = accessorContainer.GetObjectPtr()->BuildConstructor();
         if (conclusion.IsFail()) {
             errors.AddError(conclusion.GetErrorMessage());
             return false;
         }
         AccessorConstructor = conclusion.DetachResult();
-        // TODO: fix VERIFY with dict encoding
-        // AFL_VERIFY((AccessorConstructor->GetClassName() == "DICTIONARY" && diffColumn.GetDictionaryEncoding().GetEnabled().value_or(false)) ||
-        //            (AccessorConstructor->GetClassName() != "DICTIONARY" && !diffColumn.GetDictionaryEncoding().GetEnabled().value_or(false)))
-        //            ("AccessorConstructor->GetClassName()", AccessorConstructor->GetClassName())
-        //            ("diffColumn.GetDictionaryEncoding().GetEnabled()", diffColumn.GetDictionaryEncoding().GetEnabled());
     }
     if (diffColumn.GetStorageId()) {
         StorageId = *diffColumn.GetStorageId();
@@ -330,28 +250,6 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         }
     }
 
-    {
-        auto result = diffColumn.GetDictionaryEncoding().Apply(DictionaryEncoding);
-        if (!result) {
-            errors.AddError("Cannot merge dictionary encoding info: " + result.GetErrorMessage());
-            return false;
-        }
-        if (diffColumn.GetDictionaryEncoding().GetEnabled().has_value()) {
-            if (diffColumn.GetDictionaryEncoding().GetEnabled().value()) {
-                NKikimrArrowAccessorProto::TConstructor dictConstructor;
-                dictConstructor.SetClassName("DICTIONARY");
-                NArrow::NAccessor::TConstructorContainer container;
-                AFL_VERIFY(container.DeserializeFromProto(dictConstructor));
-                AccessorConstructor = container;
-            } else {
-                NKikimrArrowAccessorProto::TConstructor plainConstructor;
-                plainConstructor.SetClassName("PLAIN");
-                NArrow::NAccessor::TConstructorContainer container;
-                AFL_VERIFY(container.DeserializeFromProto(plainConstructor));
-                AccessorConstructor = container;
-            }
-        }
-    }
     return true;
 }
 

@@ -2027,6 +2027,10 @@ public:
                                             add_column->add_encoding()->mutable_dictionary();
                                         } else if (name == "off") {
                                             add_column->add_encoding()->mutable_off();
+                                        } else {
+                                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                                "Unsupported encoding type"));
+                                            return SyncError();
                                         }
                                     }
                                 }

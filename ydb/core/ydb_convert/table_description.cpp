@@ -16,6 +16,7 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -636,11 +637,19 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
             newColumn->set_family(column.GetColumnFamilyName());
         }
 
-        if (column.HasDictionaryEncoding() && column.GetDictionaryEncoding().HasEnabled()) {
-            if (column.GetDictionaryEncoding().GetEnabled()) {
-                newColumn->add_encoding()->mutable_dictionary();
-            } else {
-                newColumn->add_encoding()->mutable_off();
+        if (column.HasDataAccessorConstructor()) {
+            switch (column.GetDataAccessorConstructor().Implementation_case()) {
+                case NKikimrArrowAccessorProto::TConstructor::ImplementationCase::kDictionary:
+                    newColumn->add_encoding()->mutable_dictionary();
+                    break;
+                case NKikimrArrowAccessorProto::TConstructor::ImplementationCase::kPlain:
+                    newColumn->add_encoding()->mutable_off();
+                    break;
+                case NKikimrArrowAccessorProto::TConstructor::ImplementationCase::IMPLEMENTATION_NOT_SET:
+                    newColumn->add_encoding();
+                    break;
+                default:
+                    break;
             }
         }
     }
@@ -894,15 +903,30 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
         }
 
         if (column.encoding_size() > 0) {
-            bool hasDictionary = false;
-            for (int i = 0; i < column.encoding_size(); ++i) {
-                const auto& e = column.encoding(i);
-                if (e.has_dictionary()) {
-                    hasDictionary = true;
-                }
+            if (column.encoding_size() != 1) {
+                status = Ydb::StatusIds::UNSUPPORTED;
+                error = "Several encodings are not yet supported";
+                return false;
             }
-            // OFF → PLAIN (Enabled false), Dictionary → Enabled true
-            columnDesc->MutableDictionaryEncoding()->SetEnabled(hasDictionary);
+
+            switch (column.encoding(0).encoding_settings_case()) {
+                case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kOff:
+                    columnDesc->MutableDataAccessorConstructor()->SetClassName("PLAIN");
+                    columnDesc->MutableDataAccessorConstructor()->MutablePlain();
+                    break;
+                case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kDictionary:
+                    columnDesc->MutableDataAccessorConstructor()->SetClassName("DICTIONARY");
+                    columnDesc->MutableDataAccessorConstructor()->MutableDictionary();
+                    break;
+                case Ydb::Table::ColumnEncoding::EncodingSettingsCase::ENCODING_SETTINGS_NOT_SET:
+                    columnDesc->MutableDataAccessorConstructor()->SetClassName("__UNDEFINED");
+                    break;
+                default:
+                    status = Ydb::StatusIds::UNSUPPORTED;
+                    error = "Unsupported encoding";
+                    return false;
+
+            }
         }
     }
 
@@ -1013,13 +1037,30 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             }
 
             if (alter.encoding_size() > 0) {
-                bool hasDictionary = false;
-                for (int i = 0; i < alter.encoding_size(); ++i) {
-                    if (alter.encoding(i).has_dictionary()) {
-                        hasDictionary = true;
-                    }
+                if (alter.encoding_size() != 1) {
+                    status = Ydb::StatusIds::UNSUPPORTED;
+                    error = "Several encodings are not yet supported";
+                    return false;
                 }
-                alterColumn->MutableDictionaryEncoding()->SetEnabled(hasDictionary);
+
+                switch (alter.encoding(0).encoding_settings_case()) {
+                    case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kOff:
+                        alterColumn->MutableDataAccessorConstructor()->SetClassName("PLAIN");
+                        alterColumn->MutableDataAccessorConstructor()->MutablePlain();
+                        break;
+                    case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kDictionary:
+                        alterColumn->MutableDataAccessorConstructor()->SetClassName("DICTIONARY");
+                        alterColumn->MutableDataAccessorConstructor()->MutableDictionary();
+                        break;
+                    case Ydb::Table::ColumnEncoding::EncodingSettingsCase::ENCODING_SETTINGS_NOT_SET:
+                        alterColumn->MutableDataAccessorConstructor()->SetClassName("__UNDEFINED");
+                        break;
+                    default:
+                        status = Ydb::StatusIds::UNSUPPORTED;
+                        error = "Unsupported encoding";
+                        return false;
+
+                }
             }
         }
 

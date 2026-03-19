@@ -22,7 +22,58 @@
 #include <util/system/env.h>
 #include <util/system/sanitizers.h>
 
-class TS3BackupTestFixture : public NUnitTest::TBaseFixture {
+// class TYdbTestBaseFixture : public NUnitTest::TBaseFixture {
+// protected:
+//     YDB_SDK_CLIENT(NYdb::NQuery::TQueryClient, YdbQueryClient);
+//     YDB_SDK_CLIENT(NYdb::NScheme::TSchemeClient, YdbSchemeClient);
+
+//     TString YdbConnectionString() {
+//         return TStringBuilder() << "localhost:" << Server().GetPort() << "/?database=/Root";
+//     }
+
+//     NYdb::TDriverConfig& YdbDriverConfig() {
+//         if (!DriverConfig) {
+//             DriverConfig.ConstructInPlace(YdbConnectionString());
+//         }
+//         return *DriverConfig;
+//     }
+
+//     NYdb::TDriver& YdbDriver() {
+//         if (!Driver) {
+//             Driver.ConstructInPlace(YdbDriverConfig());
+//         }
+//         return *Driver;
+//     }
+
+//     NKikimrConfig::TAppConfig& AppConfig() {
+//         return AppConfig_;
+//     }
+
+
+//     NYdb::TKikimrWithGrpcAndRootSchema& Server() {
+//         if (!Server_) {
+//             Server_.ConstructInPlace(AppConfig());
+
+//             auto& runtime = *Server_->GetRuntime();
+//             runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_TRACE);
+//             runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_TRACE);
+//             runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_TRACE);
+//             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_TRACE);
+//             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+//             runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+//             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
+//         }
+//         return *Server_;
+//     }
+// private:
+//     TDataShardExportFactory DataShardExportFactory;
+//     NKikimrConfig::TAppConfig AppConfig_;
+//     TMaybe<NYdb::TKikimrWithGrpcAndRootSchema> Server_;
+//     TMaybe<NYdb::TDriverConfig> DriverConfig;
+//     TMaybe<NYdb::TDriver> Driver;
+// };
+
+class TS3BackupTestFixture : public TYdbTestBaseFixture {
 public:
     static constexpr TDuration DEFAULT_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(TDuration::Seconds(60), TDuration::Seconds(300));
     static constexpr TDuration START_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(TDuration::MilliSeconds(100), TDuration::Seconds(1));
@@ -220,7 +271,7 @@ protected:
             UNIT_ASSERT_C(res.GetEntry().Type == item.Type, "Path " << item.Path << " has wrong type. Expected: " << item.Type << ", actual: " << res.GetEntry().Type);
         }
     }
-    
+
     void ValidateHasYdbTables(const std::vector<TString>& paths) {
         for (const TString& path : paths) {
             auto res = YdbSchemeClient().DescribePath(path).GetValueSync();

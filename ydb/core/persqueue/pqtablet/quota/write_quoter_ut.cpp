@@ -69,7 +69,8 @@ Y_UNIT_TEST(WaitDeduplicationIdQuota) {
     RequestQuota(runtime, quoterId, edgeActorId);
     UNIT_ASSERT(WaitForQuotaApproved(runtime));
 
-    auto iteration= [&]() {
+    for (size_t i = 0; i < 3; ++i) {
+        Cerr << ">>>>> Start iteration " << i << Endl;
         TInstant start = TInstant::Now();
 
         ConsumeQuota(runtime, quoterId, edgeActorId, 1_KB, 1);
@@ -81,12 +82,7 @@ Y_UNIT_TEST(WaitDeduplicationIdQuota) {
 
         auto duration = TInstant::Now() - start;
         UNIT_ASSERT_GT_C(duration, TDuration::MilliSeconds(950), "duration: " << duration);
-    };
-
-    Cerr << ">>>>> Start iteration 1" << Endl;
-    iteration();
-    Cerr << ">>>>> Start iteration 2" << Endl;
-    iteration();
+    }
 }
 
 }

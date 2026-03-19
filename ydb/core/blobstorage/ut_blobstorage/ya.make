@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 
 REQUIREMENTS(ram:32 cpu:2)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -50,7 +50,6 @@ SRCS(
     space_check.cpp
     sync.cpp
     validation.cpp
-    vdisk_internals.cpp
     vdisk_malfunction.cpp
     group_size_in_units.cpp
     pdisk_status_flags.cpp
@@ -90,4 +89,5 @@ RECURSE_FOR_TESTS(
     ut_stop_pdisk
     ut_cluster_balancing
     ut_move_pdisk
+    ut_vdisk_internals
 )

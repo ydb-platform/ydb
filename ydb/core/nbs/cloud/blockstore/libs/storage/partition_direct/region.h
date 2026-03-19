@@ -14,8 +14,10 @@ class TRegion
 {
 public:
     TRegion(
+        NActors::TActorSystem* actorSystem,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
-        ui32 syncRequestsBatchSize);
+        ui32 syncRequestsBatchSize,
+        TDuration traceSamplePeriod);
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -28,6 +30,7 @@ public:
         NWilson::TTraceId traceId);
 
 private:
+    NActors::TActorSystem* const ActorSystem;
     TVector<std::shared_ptr<TVChunk>> VChunks;
 
     // Striping

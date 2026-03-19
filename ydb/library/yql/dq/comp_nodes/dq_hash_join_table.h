@@ -1,6 +1,5 @@
 #pragma once
 #include "type_utils.h"
-#include <util/string/printf.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/block_layout_converter.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/neumann_hash_table.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
@@ -31,7 +30,7 @@ class TStdJoinTable {
     void Add(TSizedTuple tuple) {
         MKQL_ENSURE(BuiltTable.empty(), "JoinTable is built already");
         MKQL_ENSURE(std::ssize(tuple) == TupleSize,
-                    Sprintf("tuple size promise(%i) vs actual(%i) mismatch", TupleSize, std::ssize(tuple)));
+                    TStringBuilder() << "tuple size promise(" << TupleSize << ") vs actual(" << std::ssize(tuple) << ") mismatch");
         for (int idx = 0; idx < TupleSize; ++idx) {
             Tuples.push_back(tuple[idx]);
         }
@@ -97,7 +96,14 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
 
     void BuildWith(IBlockLayoutConverter::TPackResult data) {
         BuildData_ = std::move(data);
-        Table_.Build(BuildData_.PackedTuples.data(), BuildData_.Overflow.data(), BuildData_.NTuples);
+        MKQL_ENSURE(BuildData_.NTuples >= 0 && BuildData_.NTuples <= std::numeric_limits<int>::max(),
+                    TStringBuilder() << "NTuples (" << BuildData_.NTuples << ") exceeds int range");
+        MKQL_ENSURE(
+            BuildData_.PackedTuples.size() >= static_cast<size_t>(BuildData_.NTuples) * RowWidth_,
+            TStringBuilder() << "NTuples (" << BuildData_.NTuples << ") exceeds PackedTuples capacity ("
+                             << BuildData_.PackedTuples.size() << " bytes, row width " << RowWidth_ << ")");
+        Table_.Build(BuildData_.PackedTuples.data(), BuildData_.Overflow.data(),
+                     BuildData_.NTuples);
         if (TrackUsed_ && BuildData_.NTuples > 0) {
             Used_.resize(BuildData_.NTuples, 0);
         }
@@ -108,7 +114,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.Empty();
     }
 
-    i64 RequiredMemoryForBuild(i64 nTuples) const {
+    ui64 RequiredMemoryForBuild(int nTuples) const {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
 

@@ -6,13 +6,7 @@ SPLIT_FACTOR(5)
 
 REQUIREMENTS(cpu:4)
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(ram:32)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 SRCS(
     ydb_index_ut.cpp

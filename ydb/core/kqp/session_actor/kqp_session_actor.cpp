@@ -1,3 +1,4 @@
+#include "kqp_log_query.h"
 #include "kqp_session_actor.h"
 #include "kqp_worker_common.h"
 #include "kqp_query_state.h"
@@ -542,6 +543,8 @@ public:
             (database_id, QueryState->UserRequestContext->DatabaseId),
             (pool_id, QueryState->UserRequestContext->PoolId),
             (trace_id, TraceId()));
+
+        KQP_REQ_LOG(TLogQuery::Started(*QueryState));
 
         switch (action) {
             case NKikimrKqp::QUERY_ACTION_EXPLAIN:
@@ -3096,6 +3099,8 @@ public:
             QueryResponse,
             TlsActivationContext->AsActorContext()
         );
+
+        KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record));
 
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         STLOG_D("Sent query response back to proxy",

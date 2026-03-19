@@ -52,6 +52,7 @@ struct TClientContext {
             bool secure)
     {
         TDriverConfig params;
+        params.SetDatabase("/Root");
         params.SetEndpoint(endpoint);
         if (token) {
             params.SetAuthToken(token);

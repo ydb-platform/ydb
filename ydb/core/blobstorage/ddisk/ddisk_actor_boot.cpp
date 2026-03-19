@@ -146,7 +146,6 @@ namespace NKikimr::NDDisk {
                 "TDDiskActor::StartHandlingQueries started io_uring with config",
                 (DDiskId, DDiskId),
                 (Config, UringRouter->GetConfig()));
-
         } else {
             *Counters.DirectIO.RegularUringCount = 0;
             *Counters.DirectIO.FallbackUringCount = 0;

@@ -62,7 +62,7 @@ namespace NKikimr::NDDisk {
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         TSyncIt syncIt = SyncsInFlight.end();
-        counters.Request();
+        counters.Request(0);
 
         auto cleanupSyncState = [&] {
             if (syncIt == SyncsInFlight.end()) {

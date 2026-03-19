@@ -19,7 +19,7 @@ db.Query().Do(ctx, func(ctx context.Context, s query.Session) error { ... })
 ```go
 err := db.Query().Do(ctx, func(ctx context.Context, s query.Session) error {
   return db.Query().Do(ctx, func(ctx context.Context, s query.Session) error {
-    // do with sesssion
+    // do with session
     return nil
   })
 })
@@ -40,7 +40,7 @@ err := db.Query().Do(ctx, 
 {% cut "Хороший пример" %}
 ```go
 db.Query().Do(ctx, func(ctx context.Context, s query.Session) error {
-  // do with sesssion
+  // do with session
   return nil
 })
 err := db.Query().Do(ctx, 

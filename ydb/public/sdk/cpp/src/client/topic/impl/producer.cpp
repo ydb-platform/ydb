@@ -1939,23 +1939,25 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         }
 
         std::uint32_t chosenPartition;
-        if (message.Partition_.has_value()) {
-            if (!Partitions[message.Partition_.value()].Children_.empty()) {
+        std::string key;
+        if (message.GetPartition().has_value()) {
+            if (!Partitions[message.GetPartition().value()].Children_.empty()) {
                 return TWriteResult{
                     .Status = EWriteStatus::Error,
                     .ErrorMessage = "Partition was split",
                 };
             }
 
-            chosenPartition = message.Partition_.value();
-        } else if (!message.Key_.has_value()) {
-            message.Key(Settings.ProducerIdPrefix_);
+            chosenPartition = message.GetPartition().value();
+        } else if (!message.GetKey().has_value()) {
+            key = Settings.ProducerIdPrefix_;
             chosenPartition = PartitionChooser->ChoosePartition(Settings.ProducerIdPrefix_);
         } else {
-            chosenPartition = PartitionChooser->ChoosePartition(*message.Key_);
+            chosenPartition = PartitionChooser->ChoosePartition(*message.GetKey());
+            key = *message.GetKey();
         }
 
-        MessagesWorker->AddMessage(message.Key_.value_or(""), std::move(message), chosenPartition);
+        MessagesWorker->AddMessage(key, std::move(message), chosenPartition);
         eventsPromise = EventsWorker->HandleNewMessage();
         RunUserEventLoop();
     }

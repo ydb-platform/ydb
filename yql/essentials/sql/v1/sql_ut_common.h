@@ -12658,7 +12658,7 @@ Y_UNIT_TEST(ImplicitCrossJoinColumnName) {
 
     TWordCountHive stat = {"YqlResultItem", "YqlColumnRef"};
     VerifyProgram(res, stat, [](const TString&, const TString& line) {
-        UNIT_ASSERT_STRING_CONTAINS(line, R"(YqlResultItem 'a)");
+        UNIT_ASSERT_STRING_CONTAINS(line, R"(YqlResultItem '"a")");
         UNIT_ASSERT_STRING_CONTAINS(line, R"(YqlColumnRef '"a")");
     });
 }
@@ -12677,8 +12677,8 @@ Y_UNIT_TEST(ImplicitCrossJoinColumnNameRename) {
 
     TWordCountHive stat = {"YqlResultItem", "YqlColumnRef"};
     VerifyProgram(res, stat, [](const TString&, const TString& line) {
-        UNIT_ASSERT_STRING_CONTAINS(line, R"(YqlResultItem 'b)");
-        UNIT_ASSERT_STRING_CONTAINS(line, R"(YqlColumnRef 'x '"a")");
+        UNIT_ASSERT_STRING_CONTAINS(line, R"(YqlResultItem '"b")");
+        UNIT_ASSERT_STRING_CONTAINS(line, R"(YqlColumnRef '"x" '"a")");
     });
 }
 
@@ -12961,6 +12961,23 @@ Y_UNIT_TEST(GroupByDistinctArgument) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"], 0);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 1 + 1);
+}
+
+Y_UNIT_TEST(AutoGroupByCompactHint) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        SELECT k, Avg(v) FROM plato.x GROUP /*+ COMPACT() */ BY k;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Aggregate", "compact"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["compact"], 1);
 }
 
 Y_UNIT_TEST(DiagnosticMandatoryAsColumn) {
@@ -13334,6 +13351,27 @@ Y_UNIT_TEST(TopLevelHintStrangeOnUnionSecondInParensIgnored) {
     TWordCountHive stat = {"YqlSelect"};
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+}
+
+Y_UNIT_TEST(QuotedAtoms) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT 1 AS `a b`;
+        SELECT * FROM `c d`;
+        SELECT * FROM x AS `e f`;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('"a b")");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('"c d")");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('"e f")");
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)

@@ -242,6 +242,15 @@ void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction a
     WarningPolicy.AddRule(rule);
 }
 
+bool TContext::IsAnyUnusedHintForToken(NYql::TPosition tokenPos, std::function<bool(NSQLTranslation::TSQLHint)> pred) {
+    const auto* hints = SqlHints_.FindPtr(tokenPos);
+    if (!hints) {
+        return false;
+    }
+
+    return AnyOf(*hints, pred);
+}
+
 TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(NYql::TPosition tokenPos) {
     return PullHintForToken(tokenPos, [](const auto&) { return true; });
 }

@@ -12,7 +12,7 @@
 
 using namespace NYdb;
 
-class TFsBackupTestFixture : public NUnitTest::TBaseFixture {
+class TFsBackupTestFixture : public TYdbTestBaseFixture {
 public:
     const TTempDir& GetTempDir() {
         return TempDir;

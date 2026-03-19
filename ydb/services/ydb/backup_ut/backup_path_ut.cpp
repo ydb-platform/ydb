@@ -5,100 +5,57 @@
 #include <util/folder/path.h>
 #include <util/folder/tempdir.h>
 
-#include <contrib/libs/fmt/include/fmt/format.h>
 #include <ydb/library/testlib/helpers.h>
 
 using namespace NYdb;
 
-class TBackupPathTestFixture : public TS3BackupTestFixture {
-    void SetUp(NUnitTest::TTestContext& /* context */) override {
-        using namespace fmt::literals;
-        const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
+// class TBackupPathTestBaseFixture : public TYdbTestBaseFixture {
+//     void SetUp(NUnitTest::TTestContext& /* context */) override {
+//         using namespace fmt::literals;
+//         const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
 
-        auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
-            CREATE TABLE `/Root/RecursiveFolderProcessing/Table0` (
-                key Uint32 NOT NULL,
-                value String,
-                PRIMARY KEY (key)
-            ) WITH (
-                STORE = {store}
-                {partition_count}
-            );
+//         auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
+//             CREATE TABLE `/Root/RecursiveFolderProcessing/Table0` (
+//                 key Uint32 NOT NULL,
+//                 value String,
+//                 PRIMARY KEY (key)
+//             ) WITH (
+//                 STORE = {store}
+//                 {partition_count}
+//             );
 
-            CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/Table1` (
-                key Uint32 NOT NULL,
-                value String,
-                PRIMARY KEY (key)
-            ) WITH (
-                STORE = {store}
-                {partition_count}
-            );
+//             CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/Table1` (
+//                 key Uint32 NOT NULL,
+//                 value String,
+//                 PRIMARY KEY (key)
+//             ) WITH (
+//                 STORE = {store}
+//                 {partition_count}
+//             );
 
-            CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/dir2/Table2` (
-                key Uint32 NOT NULL,
-                value String,
-                PRIMARY KEY (key)
-            ) WITH (
-                STORE = {store}
-                {partition_count}
-            );
-        )sql", "store"_a = isOlap ? "COLUMN" : "ROW",
-        "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NQuery::TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+//             CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/dir2/Table2` (
+//                 key Uint32 NOT NULL,
+//                 value String,
+//                 PRIMARY KEY (key)
+//             ) WITH (
+//                 STORE = {store}
+//                 {partition_count}
+//             );
+//         )sql", "store"_a = isOlap ? "COLUMN" : "ROW",
+//         "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NQuery::TTxControl::NoTx()).GetValueSync();
+//         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
-        // Empty dir
-        auto mkdir = YdbSchemeClient().MakeDirectory("/Root/RecursiveFolderProcessing/dir1/dir2/dir3").GetValueSync();
-        UNIT_ASSERT_C(mkdir.IsSuccess(), mkdir.GetIssues().ToString());
-    }
+//         // Empty dir
+//         auto mkdir = YdbSchemeClient().MakeDirectory("/Root/RecursiveFolderProcessing/dir1/dir2/dir3").GetValueSync();
+//         UNIT_ASSERT_C(mkdir.IsSuccess(), mkdir.GetIssues().ToString());
+//     }
 
-    void TearDown(NUnitTest::TTestContext& /* context */) override {
-    }
-};
+//     void TearDown(NUnitTest::TTestContext& /* context */) override {
+//     }
+// };
 
-class TBackupPathTestFixtureFs : public TFsBackupTestFixture {
-    void SetUp(NUnitTest::TTestContext& /* context */) override {
-        using namespace fmt::literals;
-        const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
-
-        auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
-            CREATE TABLE `/Root/RecursiveFolderProcessing/Table0` (
-                key Uint32 NOT NULL,
-                value String,
-                PRIMARY KEY (key)
-            ) WITH (
-                STORE = {store}
-                {partition_count}
-            );
-
-            CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/Table1` (
-                key Uint32 NOT NULL,
-                value String,
-                PRIMARY KEY (key)
-            ) WITH (
-                STORE = {store}
-                {partition_count}
-            );
-
-            CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/dir2/Table2` (
-                key Uint32 NOT NULL,
-                value String,
-                PRIMARY KEY (key)
-            ) WITH (
-                STORE = {store}
-                {partition_count}
-            );
-        )sql", "store"_a = isOlap ? "COLUMN" : "ROW",
-        "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NQuery::TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-
-        // Empty dir
-        auto mkdir = YdbSchemeClient().MakeDirectory("/Root/RecursiveFolderProcessing/dir1/dir2/dir3").GetValueSync();
-        UNIT_ASSERT_C(mkdir.IsSuccess(), mkdir.GetIssues().ToString());
-    }
-
-    void TearDown(NUnitTest::TTestContext& /* context */) override {
-    }
-};
+class TBackupPathTestFixture : public TS3BackupTestFixture {};
+class TBackupPathTestFixtureFs : public TFsBackupTestFixture {};
 
 namespace {
 

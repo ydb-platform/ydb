@@ -22,65 +22,75 @@
 #include <util/system/env.h>
 #include <util/system/sanitizers.h>
 
-// class TYdbTestBaseFixture : public NUnitTest::TBaseFixture {
-// protected:
-//     YDB_SDK_CLIENT(NYdb::NQuery::TQueryClient, YdbQueryClient);
-//     YDB_SDK_CLIENT(NYdb::NScheme::TSchemeClient, YdbSchemeClient);
+#include <contrib/libs/fmt/include/fmt/format.h>
 
-//     TString YdbConnectionString() {
-//         return TStringBuilder() << "localhost:" << Server().GetPort() << "/?database=/Root";
-//     }
+class TYdbTestBaseFixture : public NUnitTest::TBaseFixture {
+    void SetUp(NUnitTest::TTestContext& /* context */) override {
+        using namespace fmt::literals;
+        const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
 
-//     NYdb::TDriverConfig& YdbDriverConfig() {
-//         if (!DriverConfig) {
-//             DriverConfig.ConstructInPlace(YdbConnectionString());
-//         }
-//         return *DriverConfig;
-//     }
+        auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
+            CREATE TABLE `/Root/RecursiveFolderProcessing/Table0` (
+                key Uint32 NOT NULL,
+                value String,
+                PRIMARY KEY (key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
+            );
 
-//     NYdb::TDriver& YdbDriver() {
-//         if (!Driver) {
-//             Driver.ConstructInPlace(YdbDriverConfig());
-//         }
-//         return *Driver;
-//     }
+            CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/Table1` (
+                key Uint32 NOT NULL,
+                value String,
+                PRIMARY KEY (key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
+            );
 
-//     NKikimrConfig::TAppConfig& AppConfig() {
-//         return AppConfig_;
-//     }
+            CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/dir2/Table2` (
+                key Uint32 NOT NULL,
+                value String,
+                PRIMARY KEY (key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
+            );
+        )sql", "store"_a = isOlap ? "COLUMN" : "ROW",
+        "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
+        // Empty dir
+        auto mkdir = YdbSchemeClient().MakeDirectory("/Root/RecursiveFolderProcessing/dir1/dir2/dir3").GetValueSync();
+        UNIT_ASSERT_C(mkdir.IsSuccess(), mkdir.GetIssues().ToString());
+    }
 
-//     NYdb::TKikimrWithGrpcAndRootSchema& Server() {
-//         if (!Server_) {
-//             Server_.ConstructInPlace(AppConfig());
-
-//             auto& runtime = *Server_->GetRuntime();
-//             runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_TRACE);
-//             runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_TRACE);
-//             runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_TRACE);
-//             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_TRACE);
-//             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
-//             runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
-//             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
-//         }
-//         return *Server_;
-//     }
-// private:
-//     TDataShardExportFactory DataShardExportFactory;
-//     NKikimrConfig::TAppConfig AppConfig_;
-//     TMaybe<NYdb::TKikimrWithGrpcAndRootSchema> Server_;
-//     TMaybe<NYdb::TDriverConfig> DriverConfig;
-//     TMaybe<NYdb::TDriver> Driver;
-// };
-
-class TS3BackupTestFixture : public TYdbTestBaseFixture {
+    void TearDown(NUnitTest::TTestContext& /* context */) override {
+    }
 public:
     static constexpr TDuration DEFAULT_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(TDuration::Seconds(60), TDuration::Seconds(300));
     static constexpr TDuration START_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(TDuration::MilliSeconds(100), TDuration::Seconds(1));
     static constexpr TDuration MAX_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(TDuration::Seconds(2), TDuration::Seconds(30));
 
+    template <class TResponseType>
+    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, const std::vector<NYdb::EStatus>& status, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
+        if (res.Ready()) {
+            UNIT_ASSERT_C(IsIn(status, res.Status().GetStatus()), comments << ". Status: " << res.Status().GetStatus() << ". Issues: " << res.Status().GetIssues().ToString());
+            return res;
+        } else {
+            TMaybe<NYdb::TOperation> op = res;
+            WaitOp<TResponseType>(op, timeout);
+            UNIT_ASSERT_C(IsIn(status, op->Status().GetStatus()), comments << ". Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
+            return op;
+        }
+    }
+
 protected:
-    TS3BackupTestFixture() = default;
+    YDB_SDK_CLIENT(NYdb::NExport::TExportClient, YdbExportClient);
+    YDB_SDK_CLIENT(NYdb::NImport::TImportClient, YdbImportClient);
+    YDB_SDK_CLIENT(NYdb::NQuery::TQueryClient, YdbQueryClient);
+    YDB_SDK_CLIENT(NYdb::NScheme::TSchemeClient, YdbSchemeClient);
+    YDB_SDK_CLIENT(NYdb::NOperation::TOperationClient, YdbOperationClient);
 
     TString YdbConnectionString() {
         return TStringBuilder() << "localhost:" << Server().GetPort() << "/?database=/Root";
@@ -98,30 +108,6 @@ protected:
             Driver.ConstructInPlace(YdbDriverConfig());
         }
         return *Driver;
-    }
-
-    YDB_SDK_CLIENT(NYdb::NTable::TTableClient, YdbTableClient);
-    YDB_SDK_CLIENT(NYdb::NExport::TExportClient, YdbExportClient);
-    YDB_SDK_CLIENT(NYdb::NImport::TImportClient, YdbImportClient);
-    YDB_SDK_CLIENT(NYdb::NQuery::TQueryClient, YdbQueryClient);
-    YDB_SDK_CLIENT(NYdb::NScheme::TSchemeClient, YdbSchemeClient);
-    YDB_SDK_CLIENT(NYdb::NOperation::TOperationClient, YdbOperationClient);
-    YDB_SDK_CLIENT(NYdb::NTopic::TTopicClient, YdbTopicClient);
-    YDB_SDK_CLIENT(NYdb::NCoordination::TClient, YdbCoordinationClient);
-    YDB_SDK_CLIENT(NYdb::NRateLimiter::TRateLimiterClient, YdbRateLimiterClient);
-
-    NKikimr::NWrappers::NTestHelpers::TS3Mock& S3Mock() {
-        if (!S3Mock_) {
-            S3Port_ = Server().GetPortManager().GetPort();
-            S3Mock_.ConstructInPlace(NKikimr::NWrappers::NTestHelpers::TS3Mock::TSettings(S3Port_));
-            UNIT_ASSERT_C(S3Mock_->Start(), S3Mock_->GetError());
-        }
-        return *S3Mock_;
-    }
-
-    ui16 S3Port() {
-        S3Mock();
-        return S3Port_;
     }
 
     NKikimrConfig::TAppConfig& AppConfig() {
@@ -144,6 +130,11 @@ protected:
         return *Server_;
     }
 
+    template <class TResponseType>
+    TMaybe<NYdb::TOperation> WaitOpSuccess(const TResponseType& res, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
+        return WaitOpStatus<TResponseType>(res, NYdb::EStatus::SUCCESS, comments, timeout);
+    }
+
     template<typename TOp>
     void WaitOp(TMaybe<NYdb::TOperation>& op, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
         const TInstant start = TInstant::Now();
@@ -163,28 +154,79 @@ protected:
     }
 
     template <class TResponseType>
-    TMaybe<NYdb::TOperation> WaitOpSuccess(const TResponseType& res, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
-        return WaitOpStatus<TResponseType>(res, NYdb::EStatus::SUCCESS, comments, timeout);
-    }
-
-    template <class TResponseType>
-    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, const std::vector<NYdb::EStatus>& status, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
-        if (res.Ready()) {
-            UNIT_ASSERT_C(IsIn(status, res.Status().GetStatus()), comments << ". Status: " << res.Status().GetStatus() << ". Issues: " << res.Status().GetIssues().ToString());
-            return res;
-        } else {
-            TMaybe<NYdb::TOperation> op = res;
-            WaitOp<TResponseType>(op, timeout);
-            UNIT_ASSERT_C(IsIn(status, op->Status().GetStatus()), comments << ". Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
-            return op;
-        }
-    }
-
-    template <class TResponseType>
     TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, NYdb::EStatus status, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
         std::vector<NYdb::EStatus> statuses(1, status);
         return WaitOpStatus(res, statuses, comments, timeout);
     }
+
+    struct TEntryPath {
+        TString Path;
+        NYdb::NScheme::ESchemeEntryType Type;
+
+        TEntryPath(const TString& path, NYdb::NScheme::ESchemeEntryType type)
+            : Path(path)
+            , Type(type)
+        {}
+
+        static TEntryPath TablePath(const TString& path, bool isColumnTable) {
+            return TEntryPath(path, isColumnTable ? NYdb::NScheme::ESchemeEntryType::ColumnTable : NYdb::NScheme::ESchemeEntryType::Table);
+        }
+    };
+
+    void ValidateHasYdbPaths(const std::vector<TEntryPath>& paths) {
+        for (const auto& item : paths) {
+            auto res = YdbSchemeClient().DescribePath(item.Path).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), "Describe path \"" << item.Path << "\" failed: " << res.GetIssues().ToString());
+            UNIT_ASSERT_C(res.GetEntry().Type == item.Type, "Path " << item.Path << " has wrong type. Expected: " << item.Type << ", actual: " << res.GetEntry().Type);
+        }
+    }
+
+    void ValidateHasYdbTables(const std::vector<TString>& paths) {
+        for (const TString& path : paths) {
+            auto res = YdbSchemeClient().DescribePath(path).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), "Describe path \"" << path << "\" failed: " << res.GetIssues().ToString());
+            UNIT_ASSERT_C(res.GetEntry().Type == NYdb::NScheme::ESchemeEntryType::Table, "Path " << path << " is not a table. Path type: " << static_cast<int>(res.GetEntry().Type));
+        }
+    }
+
+    void ValidateDoesNotHaveYdbTables(const std::vector<TString>& paths) {
+        for (const TString& path : paths) {
+            auto res = YdbSchemeClient().DescribePath(path).GetValueSync();
+            UNIT_ASSERT_C(!res.IsSuccess(), "Describe path \"" << path << "\" succeeded, but test expects that there is no such path");
+            UNIT_ASSERT_C(res.GetStatus() == NYdb::EStatus::SCHEME_ERROR, "Wrong status for describe path \"" << path << "\": " << res.GetStatus());
+        }
+    }
+private:
+    TDataShardExportFactory DataShardExportFactory;
+    NKikimrConfig::TAppConfig AppConfig_;
+    TMaybe<NYdb::TKikimrWithGrpcAndRootSchema> Server_;
+    TMaybe<NYdb::TDriverConfig> DriverConfig;
+    TMaybe<NYdb::TDriver> Driver;
+};
+
+class TS3BackupTestFixture : public TYdbTestBaseFixture {
+protected:
+    TS3BackupTestFixture() = default;
+
+    YDB_SDK_CLIENT(NYdb::NTable::TTableClient, YdbTableClient);
+    YDB_SDK_CLIENT(NYdb::NTopic::TTopicClient, YdbTopicClient);
+    YDB_SDK_CLIENT(NYdb::NCoordination::TClient, YdbCoordinationClient);
+    YDB_SDK_CLIENT(NYdb::NRateLimiter::TRateLimiterClient, YdbRateLimiterClient);
+
+    NKikimr::NWrappers::NTestHelpers::TS3Mock& S3Mock() {
+        if (!S3Mock_) {
+            S3Port_ = Server().GetPortManager().GetPort();
+            S3Mock_.ConstructInPlace(NKikimr::NWrappers::NTestHelpers::TS3Mock::TSettings(S3Port_));
+            UNIT_ASSERT_C(S3Mock_->Start(), S3Mock_->GetError());
+        }
+        return *S3Mock_;
+    }
+
+    ui16 S3Port() {
+        S3Mock();
+        return S3Port_;
+    }
+
 
     template <class TResponseType>
     void ForgetOp(const TResponseType& res) {
@@ -248,44 +290,6 @@ protected:
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(keys, paths);
-    }
-
-    struct TEntryPath {
-        TString Path;
-        NYdb::NScheme::ESchemeEntryType Type;
-
-        TEntryPath(const TString& path, NYdb::NScheme::ESchemeEntryType type)
-            : Path(path)
-            , Type(type)
-        {}
-
-        static TEntryPath TablePath(const TString& path, bool isColumnTable) {
-            return TEntryPath(path, isColumnTable ? NYdb::NScheme::ESchemeEntryType::ColumnTable : NYdb::NScheme::ESchemeEntryType::Table);
-        }
-    };
-
-    void ValidateHasYdbPaths(const std::vector<TEntryPath>& paths) {
-        for (const auto& item : paths) {
-            auto res = YdbSchemeClient().DescribePath(item.Path).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), "Describe path \"" << item.Path << "\" failed: " << res.GetIssues().ToString());
-            UNIT_ASSERT_C(res.GetEntry().Type == item.Type, "Path " << item.Path << " has wrong type. Expected: " << item.Type << ", actual: " << res.GetEntry().Type);
-        }
-    }
-
-    void ValidateHasYdbTables(const std::vector<TString>& paths) {
-        for (const TString& path : paths) {
-            auto res = YdbSchemeClient().DescribePath(path).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), "Describe path \"" << path << "\" failed: " << res.GetIssues().ToString());
-            UNIT_ASSERT_C(res.GetEntry().Type == NYdb::NScheme::ESchemeEntryType::Table, "Path " << path << " is not a table. Path type: " << static_cast<int>(res.GetEntry().Type));
-        }
-    }
-
-    void ValidateDoesNotHaveYdbTables(const std::vector<TString>& paths) {
-        for (const TString& path : paths) {
-            auto res = YdbSchemeClient().DescribePath(path).GetValueSync();
-            UNIT_ASSERT_C(!res.IsSuccess(), "Describe path \"" << path << "\" succeeded, but test expects that there is no such path");
-            UNIT_ASSERT_C(res.GetStatus() == NYdb::EStatus::SCHEME_ERROR, "Wrong status for describe path \"" << path << "\": " << res.GetStatus());
-        }
     }
 
     void ValidateListObjectInS3Export(const TSet<std::pair<TString /*prefix*/, TString /*path*/>>& paths, const NYdb::NImport::TListObjectsInS3ExportSettings& listSettings) {
@@ -425,12 +429,7 @@ protected:
     }
 
 private:
-    TDataShardExportFactory DataShardExportFactory;
-    NKikimrConfig::TAppConfig AppConfig_;
-    TMaybe<NYdb::TKikimrWithGrpcAndRootSchema> Server_;
     ui16 S3Port_ = 0;
     TMaybe<NKikimr::NWrappers::NTestHelpers::TS3Mock> S3Mock_;
-    TMaybe<NYdb::TDriverConfig> DriverConfig;
-    TMaybe<NYdb::TDriver> Driver;
     size_t RestoreAttempt = 0;
 };

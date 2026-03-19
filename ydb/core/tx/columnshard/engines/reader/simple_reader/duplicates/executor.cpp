@@ -25,11 +25,6 @@ private:
 
         TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
             new TEvIntervalConstructionResult(std::move(Request), std::move(objectAddresses), std::move(AllocationGuard)));
-
-        // AFL_VERIFY(AllocationGuard);
-        // const std::shared_ptr<TBuildDuplicateFilters> task =
-        //     std::make_shared<TBuildDuplicateFilters>(std::move(Request), std::move(objectAddresses), std::move(AllocationGuard));
-        // NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
     }
 
     virtual bool DoIsAborted() const override {

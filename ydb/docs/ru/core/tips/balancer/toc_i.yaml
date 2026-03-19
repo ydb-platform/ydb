@@ -1,0 +1,13 @@
+items:
+- name: "Обзор"
+  href: index.md
+- name: "`PreferLocalDC`"
+  href: 01_prefer-local-dc.md
+- name: "Серверная балансировка сессий {{ ydb-short-name }} и обработка ошибок `BAD_SESSION`"
+  href: 02_server-side-balancing.md
+- name: "Как клиентским приложениям переживать rolling restart {{ ydb-short-name }}"
+  href: 03_rolling-restart.md
+- name: "Учения по закрытию датацентров"
+  href: 04_drill-closing-dc.md
+- name: "Ошибка `transport: Error while dialing: dial tcp: lookup [ipv6-address]` при запуске {{ ydb-short-name }} в Docker"
+  href: 05_docker-hostname-ipv6-error.md

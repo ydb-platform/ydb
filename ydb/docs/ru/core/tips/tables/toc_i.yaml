@@ -1,0 +1,21 @@
+items:
+- name: "Обзор"
+  href: index.md
+- name: "Монотонно возрастающий `PRIMARY KEY`"
+  href: 01_avtoinkrement-primary-key.md
+- name: "Настройки партицирования таблиц по умолчанию"
+  href: 02_defaults.md
+- name: "Автоматическое партицирование таблиц по нагрузке"
+  href: 03_auto_partitioning_by_load.md
+- name: "Оптимальный размер партиций для равномерной нагрузки"
+  href: 04_large_partitions.md
+- name: "Ускорение запросов с помощью вторичных индексов"
+  href: 05_no_indexes.md
+- name: "Настройка верхней границы для индексов при автопартицировании"
+  href: 06_index_split_upper_bound.md
+- name: "Настройка компакшена для эффективного удаления данных"
+  href: 07_compaction_on_delete.md
+- name: "Денормализация данных: баланс между скоростью и структурой"
+  href: 08_denormalizatsiya.md
+- name: "Сжатие данных в {{ ydb-short-name }}: эффективная экономия места без потери производительности"
+  href: 09_compression.md

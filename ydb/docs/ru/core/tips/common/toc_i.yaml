@@ -1,0 +1,9 @@
+items:
+- name: "Обзор"
+  href: index.md
+- name: "Оптимальные настройки gRPC keep-alive для {{ ydb-short-name }}"
+  href: 01_grpc-keep-alive.md
+- name: "Закрепление ожиданий в интеграционных тестах"
+  href: 02_test-expectations.md
+- name: "Нашел баг? Подготовь репро!"
+  href: 03_repro.md

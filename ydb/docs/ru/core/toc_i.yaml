@@ -43,6 +43,11 @@ items:
   include:
     mode: link
     path: recipes/toc_p.yaml
+- name: Советы и анти-паттерны
+  href: tips/index.md
+  include:
+    mode: link
+    path: tips/toc_p.yaml
 - name: Диагностика проблем
   href: troubleshooting/index.md
   include:

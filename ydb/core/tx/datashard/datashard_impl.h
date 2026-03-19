@@ -23,6 +23,7 @@
 #include "incr_restore_scan.h"
 #include "datashard_integrity_trails.h"
 #include "datashard_tli.h"
+#include "multi_txids.h"
 #include "progress_queue.h"
 #include "read_iterator.h"
 #include "reject_reason.h"

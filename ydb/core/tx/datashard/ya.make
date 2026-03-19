@@ -180,6 +180,8 @@ SRCS(
     memory_state_migration.cpp
     move_index_unit.cpp
     move_table_unit.cpp
+    multi_txids.cpp
+    multi_txids.h
     operation.cpp
     operation.h
     plan_queue_unit.cpp

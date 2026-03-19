@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_writer.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
+#include <ydb/core/tx/columnshard/blob_cache.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -983,6 +984,147 @@ void TestStreamingWithFilterSkip() {
     UNIT_ASSERT_GT(iterationsCount, 1);
 }
 
+// Verifies that a task processing error during streaming causes the scan to
+// terminate with a proper error status (TEvScanError) and does not crash or hang.
+//
+// The test:
+//   1. Writes enough data to produce many streaming pages.
+//   2. Starts the scan and receives the first batch successfully.
+//   3. Installs a runtime observer that intercepts the next TEvTaskProcessedResult
+//      sent to the scan actor, drops it, and sends a new failure result instead.
+//   4. Sends Ack to trigger the next processing task, which will fail.
+//   5. Calls Receive() and expects TEvScanError (Finished = -1).
+//   6. Asserts that the scan finished with an error and that at least one
+//      batch was received before the error.
+void TestBlobReadErrorDuringStreaming() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    // Enable SimpleReader with streaming
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    // Use small pages so many are in-flight when the error fires
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetMinRecordsForPaging(500);
+    streamingConfig->SetMaxPagesInFlight(4);
+    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write enough data to produce many streaming pages (~200 pages with 500-record pages)
+    const ui32 numRecords = 100000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    // Initialize the scanner
+    UNIT_ASSERT(reader.InitializeScanner());
+
+    // Send first Ack to start receiving data
+    reader.Ack();
+
+    // Receive the first batch successfully to confirm streaming is active
+    ui32 batchesBeforeError = 0;
+    {
+        bool hasMore = reader.Receive();
+        batchesBeforeError++;
+        if (!hasMore) {
+            // Scan finished before we could inject an error – still valid
+            Cerr << "BlobReadError: scan finished before error injection" << Endl;
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            return;
+        }
+    }
+
+    Cerr << "BlobReadErrorDuringStreaming: batches received before error=" << batchesBeforeError << Endl;
+
+    // Install an observer that intercepts the FIRST TEvTaskProcessedResult sent
+    // to the scan actor after this point, drops it, and sends a new failure
+    // result instead.  This simulates a blob read error regardless of whether
+    // the data was served from cache or from disk.
+    std::atomic<ui32> errorInjected{0};
+    auto dummyCounter = std::make_shared<TAtomicCounter>();
+    runtime.SetObserverFunc([&runtime, &errorInjected, dummyCounter](TAutoPtr<IEventHandle>& ev) -> TTestActorRuntime::EEventAction {
+        if (ev->GetTypeRewrite() == NColumnShard::TEvPrivate::TEvTaskProcessedResult::EventType) {
+            if (errorInjected.fetch_add(1) == 0) {
+                // Drop the original event and send a failure result to the same recipient.
+                // Use runtime.Send() (not TActivationContext::Send) because the observer
+                // runs in the test thread, not inside an actor context.
+                Cerr << "BlobReadErrorDuringStreaming: injecting failure into TEvTaskProcessedResult" << Endl;
+                const NActors::TActorId recipient = ev->Recipient;
+                runtime.Send(recipient, recipient,
+                    new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
+                        TConclusionStatus::Fail("injected test blob read error"),
+                        NColumnShard::TCounterGuard(dummyCounter)));
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
+    // Send Ack to trigger the next processing task, which will be intercepted
+    reader.Ack();
+
+    // The scan actor will receive TEvTaskProcessedResult(Fail(...)) and call
+    // SendScanError() → TEvScanError → edge actor.
+    // Receive() will see TEvScanError and set Finished = -1.
+    // We allow a few iterations in case some in-flight data batches arrive first.
+    for (ui32 i = 0; i < 20 && !reader.IsFinished(); ++i) {
+        reader.Receive();
+        if (!reader.IsFinished()) {
+            reader.Ack();
+        }
+    }
+
+    // Remove the observer
+    runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+
+    const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();
+
+    Cerr << "BlobReadErrorDuringStreaming: total pages created=" << totalCreated
+         << ", finished=" << reader.IsFinished()
+         << ", isError=" << reader.IsError()
+         << ", isCorrectlyFinished=" << reader.IsCorrectlyFinished()
+         << ", errorInjected=" << errorInjected.load() << Endl;
+
+    // The scan must have terminated with an error
+    UNIT_ASSERT(reader.IsFinished());
+    UNIT_ASSERT(reader.IsError());
+    UNIT_ASSERT(!reader.IsCorrectlyFinished());
+
+    // The error must have been injected
+    UNIT_ASSERT_GT(errorInjected.load(), 0u);
+
+    // Streaming must have produced at least some pages before the error
+    UNIT_ASSERT_GT(totalCreated, 0u);
+
+    // We must have received at least the batch before the error
+    UNIT_ASSERT_GT(batchesBeforeError, 0u);
+}
+
 Y_UNIT_TEST_SUITE(StreamingRead) {
     Y_UNIT_TEST(StreamingWithLargePortion) {
         TestStreamingReadWithLargePortion();
@@ -1042,6 +1184,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(AbortDuringStreaming) {
         TestAbortDuringStreaming();
+    }
+
+    Y_UNIT_TEST(BlobReadErrorDuringStreaming) {
+        TestBlobReadErrorDuringStreaming();
     }
 }
 

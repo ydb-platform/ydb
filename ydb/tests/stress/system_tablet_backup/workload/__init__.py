@@ -158,6 +158,7 @@ class BackupValidator:
             full_config = yaml.safe_load(config_yaml)
             full_config["metadata"]["version"] += 1
             versioned_yaml = yaml.dump(full_config)
+
             def do_replace():
                 request = config_api.ReplaceConfigRequest()
                 request.replace = versioned_yaml
@@ -171,11 +172,12 @@ class BackupValidator:
         self._retry(lambda: self.dynconfig_client.replace_config(config_yaml), "ReplaceConfig")
 
     def _make_bootstrap_selector(self, erasure_name):
-        channel = lambda i: {
-            "channel": i,
-            "history": [{"from_generation": 0, "group_id": 0}],
-            "channel_erasure_name": erasure_name,
-        }
+        def channel(i):
+            return {
+                "channel": i,
+                "history": [{"from_generation": 0, "group_id": 0}],
+                "channel_erasure_name": erasure_name,
+            }
         tablets = []
         for tablet_type, tablet_ids in self.SYSTEM_TABLETS.items():
             for tablet_id in tablet_ids:

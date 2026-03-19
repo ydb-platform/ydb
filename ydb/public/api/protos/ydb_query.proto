@@ -54,8 +54,9 @@ message NodeShutdownHint {
 message SessionState {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
-
-    oneof session_hint {
+    
+    // The reason the session is ending, for SDK-side handling
+     oneof session_hint {
         SessionShutdownHint session_shutdown = 3;
         NodeShutdownHint node_shutdown = 4;
     }

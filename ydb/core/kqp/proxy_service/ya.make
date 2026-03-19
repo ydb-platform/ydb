@@ -3,11 +3,7 @@ LIBRARY()
 SRCS(
     kqp_proxy_databases_cache.cpp
     kqp_proxy_peer_stats_calculator.cpp
-<<<<<<< HEAD
-=======
     kqp_proxy_service.cpp
-    kqp_query_text_cache_service.cpp
->>>>>>> a4f08ffce6f (wm: moved log into kqp (#33150) (#36008))
     kqp_script_executions.cpp
     kqp_session_info.cpp
 )

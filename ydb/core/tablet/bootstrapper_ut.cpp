@@ -874,7 +874,6 @@ Y_UNIT_TEST_SUITE(BootstrapperControlsTest) {
         SetupTabletServices(runtime);
         runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
         bool gotDestroyed0 = false;
-        bool gotReconnect0 = false;
 
         // both tablets are local to node 0
         NKikimrConfig::TBootstrap bootstrapConfig;
@@ -890,20 +889,13 @@ Y_UNIT_TEST_SUITE(BootstrapperControlsTest) {
         });
         Y_UNUSED(clientDestroyedObserver);
 
-        auto clientConnectedObserver = runtime.AddObserver<TEvTabletPipe::TEvClientConnected>([&](TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-            if (ev->Get()->TabletId == BootstrapperTestTabletId0 && ev->Get()->Status == NKikimrProto::OK) {
-                gotReconnect0 = true;
-            }
-        });
-        Y_UNUSED(clientConnectedObserver);
-
         runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
-        auto observer1 = runtime.AllocateEdgeActor(0);
-        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, observer1, 0);
+        auto observer0 = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, observer0, 0);
 
-        auto observer2 = runtime.AllocateEdgeActor(0);
-        ConnectAndExpectOk(runtime, BootstrapperTestTabletId1, observer2, 0);
+        auto observer1 = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId1, observer1, 0);
 
         // disable only tablet 0 via dcb
         auto& dcb = runtime.GetAppData(0).Dcb;
@@ -915,24 +907,16 @@ Y_UNIT_TEST_SUITE(BootstrapperControlsTest) {
             return gotDestroyed0;
         }, TDuration::Seconds(BootstrapperControlsWaitTimeoutSeconds));
 
-        auto destroyedEvent1 = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(observer1);
-        Y_UNUSED(destroyedEvent1);
+        auto destroyedEvent0 = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(observer0);
+        Y_UNUSED(destroyedEvent0);
 
-        auto observer2Check = runtime.AllocateEdgeActor(0);
-        ConnectAndExpectOk(runtime, BootstrapperTestTabletId1, observer2Check, 0);
+        auto observer1Check = runtime.AllocateEdgeActor(0);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId1, observer1Check, 0);
 
-        // re-enable tablet 0 and wait for reconnect
-        gotReconnect0 = false;
+        // re-enable tablet 0 and wait for reconnect via fresh pipe
         dcb->SetValue(controlName, static_cast<TAtomic>(0), prevValue);
 
-        auto pipe1New = runtime.ConnectToPipe(BootstrapperTestTabletId0, observer1, 0, NTabletPipe::TClientRetryPolicy::WithRetries());
-        Y_UNUSED(pipe1New);
-        runtime.WaitFor("tablet 0 reconnect after DCB enable", [&] {
-            return gotReconnect0;
-        }, TDuration::Seconds(BootstrapperControlsWaitTimeoutSeconds));
-
-        auto connectEvent1New = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(observer1);
-        UNIT_ASSERT_VALUES_EQUAL(connectEvent1New->Get()->Status, NKikimrProto::OK);
+        ConnectAndExpectOk(runtime, BootstrapperTestTabletId0, observer0, 0);
     }
 
     Y_UNIT_TEST(DcbControlPriority) {

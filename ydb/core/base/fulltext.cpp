@@ -420,40 +420,39 @@ bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString
     return true;
 }
 
-bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& name, const TString& value, TString& error) {
+bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nameLower, const TString& value, TString& error) {
     error = "";
 
     Ydb::Table::FulltextIndexSettings::Analyzers* analyzers = settings.columns().empty()
         ? settings.add_columns()->mutable_analyzers()
         : settings.mutable_columns()->rbegin()->mutable_analyzers();
 
-    const TString nameLower = to_lower(name);
     if (nameLower == "tokenizer") {
         analyzers->set_tokenizer(ParseTokenizer(value, error));
     } else if (nameLower == "language") {
         analyzers->set_language(value);
     } else if (nameLower == "use_filter_lowercase") {
-        analyzers->set_use_filter_lowercase(ParseBool(name, value, error));
+        analyzers->set_use_filter_lowercase(ParseBool(nameLower, value, error));
     } else if (nameLower == "use_filter_stopwords") {
-        analyzers->set_use_filter_stopwords(ParseBool(name, value, error));
+        analyzers->set_use_filter_stopwords(ParseBool(nameLower, value, error));
     } else if (nameLower == "use_filter_ngram") {
-        analyzers->set_use_filter_ngram(ParseBool(name, value, error));
+        analyzers->set_use_filter_ngram(ParseBool(nameLower, value, error));
     } else if (nameLower == "use_filter_edge_ngram") {
-        analyzers->set_use_filter_edge_ngram(ParseBool(name, value, error));
+        analyzers->set_use_filter_edge_ngram(ParseBool(nameLower, value, error));
     } else if (nameLower == "filter_ngram_min_length") {
-        analyzers->set_filter_ngram_min_length(ParseInt32(name, value, error));
+        analyzers->set_filter_ngram_min_length(ParseInt32(nameLower, value, error));
     } else if (nameLower == "filter_ngram_max_length") {
-        analyzers->set_filter_ngram_max_length(ParseInt32(name, value, error));
+        analyzers->set_filter_ngram_max_length(ParseInt32(nameLower, value, error));
     } else if (nameLower == "use_filter_length") {
-        analyzers->set_use_filter_length(ParseBool(name, value, error));
+        analyzers->set_use_filter_length(ParseBool(nameLower, value, error));
     } else if (nameLower == "filter_length_min") {
-        analyzers->set_filter_length_min(ParseInt32(name, value, error));
+        analyzers->set_filter_length_min(ParseInt32(nameLower, value, error));
     } else if (nameLower == "filter_length_max") {
-        analyzers->set_filter_length_max(ParseInt32(name, value, error));
+        analyzers->set_filter_length_max(ParseInt32(nameLower, value, error));
     } else if (nameLower == "use_filter_snowball") {
-        analyzers->set_use_filter_snowball(ParseBool(name, value, error));
+        analyzers->set_use_filter_snowball(ParseBool(nameLower, value, error));
     } else {
-        error = TStringBuilder() << "Unknown index setting: " << name;
+        error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;
     }
 

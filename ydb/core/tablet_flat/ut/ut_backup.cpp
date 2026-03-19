@@ -1691,15 +1691,14 @@ Y_UNIT_TEST_SUITE(Backup) {
             R"({"step":6,"data_changes":[{"table":"Data","op":"upsert","Key":3)",  // torn write
         };
 
-        TString prevHash;
+        NOpenSsl::NSha256::TCalcer calcer;
         for (size_t i = 0; i < 2; ++i) {
             NJson::TJsonValue json;
             NJson::ReadJsonTree(lines[i], &json, true);
-            if (prevHash) {
-                json["prev_sha256"] = prevHash;
-            }
+            json["prev_sha256"] = FormatChecksumDigest(calcer.Intermediate());
             lines[i] = NJson::WriteJson(json, false);
-            prevHash = ComputeChecksum(lines[i] + '\n');
+            calcer.Update(lines[i]);
+            calcer.Update("\n");
         }
 
         {
@@ -1709,8 +1708,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             changelogFile.Flush();
         }
 
-        env.RestoreBackup(genDirs.back(), TestTabletFlags);
-        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+        env.RestoreLastBackupExpectFail();
 
         env.RestoreBackupExpectWarning(genDirs.back(), TestTabletFlags, /*skipChecksumValidation=*/ true);
         UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
@@ -2502,7 +2500,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         assertState();
     }
 
-    Y_UNIT_TEST(CorruptedChangelogChecksum) {
+    Y_UNIT_TEST(CorruptedChangelogChecksumChain) {
         TEnv env;
 
         Cerr << "...starting tablet" << Endl;
@@ -2924,7 +2922,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
     }
 
-    Y_UNIT_TEST(CorruptedChangelogMeta) {
+    Y_UNIT_TEST(CorruptedChangelogChecksum) {
         TEnv env;
 
         Cerr << "...starting tablet" << Endl;
@@ -2940,12 +2938,12 @@ Y_UNIT_TEST_SUITE(Backup) {
         env.WaitChangelogFlush();
 
         auto backup = env.GetLastBackupPath();
-        WriteFileContent(backup.Child("changelog_meta.json"), "this is not valid json{{{");
+        WriteFileContent(backup.Child("changelog.json.sha256"), "0000000000000000000000000000000000000000000000000000000000000000");
 
         env.RestoreLastBackupExpectFail();
     }
 
-    Y_UNIT_TEST(MissingChangelogMeta) {
+    Y_UNIT_TEST(MissingChangelogChecksum) {
         TEnv env;
 
         Cerr << "...starting tablet" << Endl;
@@ -2961,44 +2959,9 @@ Y_UNIT_TEST_SUITE(Backup) {
         env.WaitChangelogFlush();
 
         auto backup = env.GetLastBackupPath();
-        backup.Child("changelog_meta.json").DeleteIfExists();
+        backup.Child("changelog.json.sha256").DeleteIfExists();
 
         env.RestoreLastBackupExpectFail();
-    }
-
-    Y_UNIT_TEST(CorruptedChangelogMetaChecksum) {
-        TEnv env;
-
-        Cerr << "...starting tablet" << Endl;
-        env.FireDummyTablet(TestTabletFlags);
-        env.WaitFor<NFake::TEvSnapshotBackedUp>();
-
-        Cerr << "...initing schema" << Endl;
-        env.InitSchema();
-
-        Cerr << "...restarting tablet" << Endl;
-        env.RestartTablet(TestTabletFlags);
-        env.WaitFor<NFake::TEvSnapshotBackedUp>();
-
-        Cerr << "...writing data" << Endl;
-        env.WriteValue(1, 10);
-
-        env.WaitChangelogFlush();
-
-        auto backup = env.GetLastBackupPath();
-        auto changelogMeta = backup.Child("changelog_meta.json");
-
-        NJson::TJsonValue json;
-        NJson::ReadJsonTree(TFileInput(changelogMeta).ReadAll(), &json, true);
-
-        json["last_sha256"] = "0000000000000000000000000000000000000000000000000000000000000000";
-
-        WriteFileContent(changelogMeta, NJson::WriteJson(json, false));
-
-        env.RestoreBackupExpectFail(backup);
-
-        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
-        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
     }
 
     Y_UNIT_TEST(BackupFromDifferentTablet) {
@@ -3022,37 +2985,6 @@ Y_UNIT_TEST_SUITE(Backup) {
         NJson::ReadJsonTree(TFileInput(manifestPath).ReadAll(), &manifest, true);
         manifest["tablet_id"] = 999;
         WriteFileContent(manifestPath, NJson::WriteJson(manifest, false));
-
-        auto metaPath = backup.Child("changelog_meta.json");
-        NJson::TJsonValue meta;
-        NJson::ReadJsonTree(TFileInput(metaPath).ReadAll(), &meta, true);
-        meta["tablet_id"] = 999;
-        WriteFileContent(metaPath, NJson::WriteJson(meta, false));
-
-        env.RestoreLastBackupExpectFail();
-    }
-
-    Y_UNIT_TEST(SnapshotChangelogMismatch) {
-        TEnv env;
-
-        Cerr << "...starting tablet" << Endl;
-        env.FireDummyTablet(TestTabletFlags);
-        env.WaitFor<NFake::TEvSnapshotBackedUp>();
-
-        Cerr << "...initing schema" << Endl;
-        env.InitSchema();
-
-        Cerr << "...writing data" << Endl;
-        env.WriteValue(1, 10);
-        env.WaitChangelogFlush();
-
-        auto backup = env.GetLastBackupPath();
-
-        auto metaPath = backup.Child("changelog_meta.json");
-        NJson::TJsonValue meta;
-        NJson::ReadJsonTree(TFileInput(metaPath).ReadAll(), &meta, true);
-        meta["generation"] = 999;
-        WriteFileContent(metaPath, NJson::WriteJson(meta, false));
 
         env.RestoreLastBackupExpectFail();
     }

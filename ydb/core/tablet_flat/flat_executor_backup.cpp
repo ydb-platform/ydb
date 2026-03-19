@@ -770,15 +770,12 @@ class TChangelogWriter : public TActorBootstrapped<TChangelogWriter>, public IAc
     };
 public:
     TChangelogWriter(TActorId owner, const TFsPath& path, const TScheme& schema,
-                     TIntrusiveConstPtr<TBackupExclusion> exclusion, ui64 tabletId, ui32 generation, ui32 step)
+                     TIntrusiveConstPtr<TBackupExclusion> exclusion)
         : Owner(owner)
         , ChangelogPath(path.Child("changelog.json"))
-        , ChangelogMetaPath(path.Child("changelog_meta.json"))
+        , ChangelogChecksumPath(path.Child("changelog.json.sha256"))
         , Schema(schema)
         , Exclusion(exclusion)
-        , TabletId(tabletId)
-        , Generation(generation)
-        , Step(step)
     {}
 
     void Bootstrap() {
@@ -792,9 +789,9 @@ public:
         }
 
         try {
-            WriteChangelogMeta();
+            WriteChangelogChecksum();
         } catch (const std::exception& e) {
-            return ReplyAndDie(TStringBuilder() << "Failed to write changelog meta " << ChangelogMetaPath << ": " << e.what());
+            return ReplyAndDie(TStringBuilder() << "Failed to write changelog meta " << ChangelogChecksumPath << ": " << e.what());
         }
 
         Become(&TThis::StateWork);
@@ -814,7 +811,7 @@ public:
     void Handle(TEvWriteChangelog::TPtr& ev) {
         LOG_D("Handle " << ev->ToString());
 
-        size_t commitStart = Buffer.Size();
+        size_t changesStart = Buffer.Size();
         TBufferOutput out(Buffer);
         NJsonWriter::TBuf b(NJsonWriter::HEM_RELAXED, &out);
 
@@ -908,16 +905,13 @@ public:
         }
 
         if (hasCommit) {
-            if (PreviousChecksum) {
-                b.WriteKey("prev_sha256");
-                b.WriteString(PreviousChecksum);
-            }
+            b.WriteKey("prev_sha256");
+            b.WriteString(FormatChecksumDigest(Checksum.Intermediate()));
             b.EndObject();
             out << '\n';
 
-            TStringBuf commit(Buffer.data() + commitStart, Buffer.Size() - commitStart);
-            PreviousChecksum = ComputeChecksum(commit);
-            Step = msg->Step;
+            size_t changesSize = Buffer.Size() - changesStart;
+            Checksum.Update(Buffer.data() + changesStart, changesSize);
         }
 
         if (Buffer.Size() >= 1_MB) {
@@ -959,9 +953,9 @@ public:
             Buffer.Clear();
 
             try {
-                WriteChangelogMeta();
+                WriteChangelogChecksum();
             } catch (const std::exception& e) {
-                return ReplyAndDie(TStringBuilder() << "Failed to write changelog meta " << ChangelogMetaPath << ": " << e.what());
+                return ReplyAndDie(TStringBuilder() << "Failed to write changelog checksum " << ChangelogChecksumPath << ": " << e.what());
             }
 
             if (Dying) {
@@ -990,24 +984,13 @@ public:
         PassAway();
     }
 
-    void WriteChangelogMeta() {
-        NJson::TJsonValue meta;
-        meta["tablet_id"] = TabletId;
-        meta["generation"] = Generation;
-        meta["step"] = Step;
-
-        if (PreviousChecksum) {
-            meta["last_sha256"] = PreviousChecksum;
-        }
-
-        TFsPath tmpPath(ChangelogMetaPath.GetPath() + ".tmp");
-        {
-            TFileOutput out(tmpPath);
-            NJson::WriteJson(&out, &meta, false);
-            out.Flush();
-        }
-        tmpPath.RenameTo(ChangelogMetaPath);
-        TFile(ChangelogMetaPath.Parent(), EOpenModeFlag::RdOnly).Flush();
+    void WriteChangelogChecksum() {
+        TFsPath tmpPath(ChangelogChecksumPath.GetPath() + ".tmp");
+        TFileOutput out(tmpPath);
+        out.Write(FormatChecksumDigest(Checksum.Intermediate()));
+        out.Flush();
+        tmpPath.RenameTo(ChangelogChecksumPath);
+        TFile(ChangelogChecksumPath.Parent(), EOpenModeFlag::RdOnly).Flush();
     }
 
     bool OnUnhandledException(const std::exception& exc) override {
@@ -1019,7 +1002,7 @@ private:
     TActorId Owner;
 
     TFsPath ChangelogPath;
-    TFsPath ChangelogMetaPath;
+    TFsPath ChangelogChecksumPath;
     TFile ChangelogFile;
 
     TScheme Schema;
@@ -1032,11 +1015,7 @@ private:
     ui64 WrittenBytes = 0;
     std::optional<ui64> SnapshotWrittenBytes;
 
-    TString PreviousChecksum;
-
-    const ui64 TabletId;
-    const ui32 Generation;
-    ui32 Step;
+    NOpenSsl::NSha256::TCalcer Checksum;
 };
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
@@ -1066,7 +1045,7 @@ IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTablet
     if (config.HasFilesystem()) {
         auto path = TFsPath(config.GetFilesystem().GetPath())
             .Child(CreateBackupPath(tabletType, tabletId, generation, step));
-        return new TChangelogWriter(owner, path, schema, exclusion, tabletId, generation, step);
+        return new TChangelogWriter(owner, path, schema, exclusion);
     } else {
         return nullptr;
     }

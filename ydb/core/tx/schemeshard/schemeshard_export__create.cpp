@@ -473,6 +473,8 @@ private:
     template <typename Func>
     auto DispatchByExportKind(Func&& func, TExportInfo& exportInfo) {
         switch (exportInfo.Kind) {
+        case TExportInfo::EKind::YT:
+            return func.template operator()<Ydb::Export::ExportToYtSettings>();
         case TExportInfo::EKind::S3:
             return func.template operator()<Ydb::Export::ExportToS3Settings>();
         case TExportInfo::EKind::FS:
@@ -504,15 +506,8 @@ private:
     void UploadScheme(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         auto& item = exportInfo.Items[itemIdx];
+        UploadScheme<Ydb::Export::ExportToYtSettings>(exportInfo, itemIdx, ctx); // Common code for all types of storage
 
-        item.SubState = ESubState::Proposed;
-
-        LOG_I("TExport::TTxProgress: UploadScheme"
-            << ": info# " << exportInfo.ToString()
-            << ", item# " << item.ToString(itemIdx)
-        );
-
-        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         if (IsPathTypeSchemeObject(item)) {
             TSettings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
@@ -535,6 +530,22 @@ private:
             ));
             Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
         }
+    }
+
+    template <>
+    void UploadScheme<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_UNUSED(ctx);
+        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+        auto& item = exportInfo.Items[itemIdx];
+
+        item.SubState = ESubState::Proposed;
+
+        LOG_I("TExport::TTxProgress: UploadScheme"
+            << ": info# " << exportInfo.ToString()
+            << ", item# " << item.ToString(itemIdx)
+        );
+
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
     }
 
     template <typename TSettings>
@@ -611,6 +622,13 @@ private:
         return true;
     }
 
+    template <>
+    bool FillExportMetadata<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, TString& issues) {
+        Y_UNUSED(exportInfo);
+        Y_UNUSED(issues);
+        return true;
+    }
+
     template <typename TSettings>
     bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) { // returns true if we need to change state to UploadExportMetadata
         TSettings exportSettings;
@@ -624,6 +642,13 @@ private:
             CreateExportMetadataUploader(Self->SelfId(), exportInfo.Id, exportSettings, exportInfo.ExportMetadata, exportInfo.EnableChecksums));
         Self->RunningExportSchemeUploaders.emplace(exportInfo.ExportMetadataUploader);
         return true;
+    }
+
+    template <>
+    bool UploadExportMetadata<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, const TActorContext& ctx) {
+        Y_UNUSED(exportInfo);
+        Y_UNUSED(ctx);
+        return false;
     }
 
     bool CancelTransferring(TExportInfo& exportInfo, ui32 itemIdx) {

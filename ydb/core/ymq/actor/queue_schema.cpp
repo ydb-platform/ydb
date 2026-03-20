@@ -484,7 +484,9 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
 
-    trans->SetWorkingDir(TStringBuilder() << workingDir << "/" << dirName);
+    auto topicDir = TString::Join(workingDir, '/', dirName);
+
+    trans->SetWorkingDir(topicDir);
     trans->SetOperationType(NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup);
 
     auto *pqgroup = trans->MutableCreatePersQueueGroup();
@@ -493,7 +495,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
 
     auto * config = pqgroup->MutablePQTabletConfig();
     config->SetTopicName("streamImpl");
-    config->SetTopicPath(TStringBuilder() << workingDir << "streamImpl");
+    config->SetTopicPath(TString::Join(topicDir, '/', "streamImpl"));
     config->MutablePartitionConfig()->SetLifetimeSeconds(*ValidatedAttributes_.MessageRetentionPeriod);
 
     auto* consumer = config->AddConsumers();

@@ -153,6 +153,12 @@ public:
         Status = TStatus::Success();
     }
 
+    void ClearParsedRow(ui16 rowId) {
+        if (ParsedRowsCount > 0 && ParsedRows[ParsedRowsCount - 1] == rowId) {
+            --ParsedRowsCount;
+        }
+    }
+
 private:
     TStatus ExtractDataSlot(const NKikimr::NMiniKQL::TType* type) {
         switch (type->GetKind()) {
@@ -578,8 +584,10 @@ private:
             const size_t columnId = it->second;
             auto& column = Columns[columnId];
             const ui64 offset = Buffer.Offsets[inputRowId];
-            bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), ParsedValues[columnId][state.OutputRowId]);
-            if (NonOptionalColumnsCount && !column.GetIsOptional()) {
+            auto& value = ParsedValues[columnId][state.OutputRowId];
+            bool valueWasSet = bool(value);
+            bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), value);
+            if (NonOptionalColumnsCount && !column.GetIsOptional() && !valueWasSet) {
                 ++parsedNonOptional;
             }
             if (!success) {
@@ -663,8 +671,10 @@ private:
 
                 const size_t columnId = it->second;
                 auto& column = Columns[columnId];
-                bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), ParsedValues[columnId][state.OutputRowId]);
-                if (NonOptionalColumnsCount && !column.GetIsOptional()) {
+                auto& value = ParsedValues[columnId][state.OutputRowId];
+                bool valueWasSet = bool(value);
+                bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), value);
+                if (NonOptionalColumnsCount && !column.GetIsOptional() && !valueWasSet) {
                     ++parsedNonOptional;
                 }
                 if (Config.SkipErrors && !success) {
@@ -697,6 +707,7 @@ private:
 
     void ClearRowBuffer(ui16 outputRowId) {
         for (size_t columnId = 0; columnId < Columns.size(); ++columnId) {
+            Columns[columnId].ClearParsedRow(outputRowId);
             ParsedValues[columnId][outputRowId].Clear();
         }
     }

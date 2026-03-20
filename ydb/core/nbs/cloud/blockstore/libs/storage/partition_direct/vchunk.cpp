@@ -189,12 +189,39 @@ void TVChunk::DoReadBlocksLocal(
         return;
     }
 
-    auto hints = BlocksDirtyMap.MakeReadHint(request->Range);
+    auto readHint = BlocksDirtyMap.MakeReadHint(request->Range);
+
+    if (readHint.RangeHints.empty()) {
+        // Will try to repeat the request when the data is ready.
+        Executor->ExecuteSimple(
+            [weakSelf = weak_from_this(),
+             executor = Executor,
+             waitReady = readHint.WaitReady,
+             promise = std::move(promise),
+             callContext = std::move(callContext),
+             request = std::move(request),
+             traceId = std::move(traceId)]() mutable
+            {
+                executor->WaitFor(waitReady);
+                if (auto self = weakSelf.lock()) {
+                    self->DoReadBlocksLocal(
+                        std::move(promise),
+                        std::move(callContext),
+                        std::move(request),
+                        std::move(traceId));
+                } else {
+                    promise.SetValue(TReadBlocksLocalResponse{
+                        .Error = MakeError(E_CANCELLED)});
+                }
+            });
+        return;
+    }
+
     auto requestExecutor = std::make_shared<TReadRequestExecutor>(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,
-        std::move(hints),
+        std::move(readHint),
         std::move(callContext),
         std::move(request),
         std::move(traceId));
@@ -261,13 +288,13 @@ void TVChunk::OnWriteBlocksResponse(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    promise.SetValue(TWriteBlocksLocalResponse{.Error = response.Error});
-
     BlocksDirtyMap.WriteFinished(
         response.Lsn,
         range,
         response.RequestedWrites,
         response.CompletedWrites);
+
+    promise.SetValue(TWriteBlocksLocalResponse{.Error = response.Error});
 
     DoFlush();
 }

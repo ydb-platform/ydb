@@ -58,9 +58,12 @@ bool IsPBuffer(ELocation location);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TLocationMask
+class TLocationMask
 {
-    ui16 Mask = 0;
+public:
+    TLocationMask() = default;
+
+    static TLocationMask MakeEmpty();
 
     static TLocationMask MakePBuffer(
         bool pBuffer0,
@@ -68,29 +71,39 @@ struct TLocationMask
         bool pBuffer2,
         bool handOff0,
         bool handOff1);
+
     static TLocationMask MakeDDisk(
         bool dDisk0,
         bool dDisk1,
         bool dDisk2,
         bool handOff0,
         bool handOff1);
+
+    static TLocationMask MakePrimaryDDisk();
+
     static TLocationMask MakePrimaryPBuffers();
 
     [[nodiscard]] bool Get(ELocation location) const;
 
     void Set(ELocation location);
     void Reset(ELocation location);
-    void And(ui16 mask);
 
     [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t Count() const;
     [[nodiscard]] bool HasDDisk() const;
+    [[nodiscard]] bool OnlyDDisk() const;
     [[nodiscard]] bool HasPBuffer() const;
+    [[nodiscard]] bool OnlyPBuffer() const;
     [[nodiscard]] std::optional<ELocation> GetLocation(size_t tryNumber) const;
 
     bool operator==(const TLocationMask& other) const;
 
     [[nodiscard]] TString Print() const;
+
+private:
+    explicit TLocationMask(ui16 mask);
+
+    ui16 Mask = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

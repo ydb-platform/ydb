@@ -37,6 +37,10 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    dirty_map
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

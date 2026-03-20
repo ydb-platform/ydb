@@ -180,6 +180,8 @@ message TEvLoadTestRequest {
 
         optional bool AlignSourceData = 13 [default = true];
 
+        reserved 14; // BackgroundReadRatio
+
         // When true, the load test performs reads instead of writes.
         optional bool IsReadLoad = 15 [default = false];
     }

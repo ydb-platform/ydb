@@ -569,10 +569,6 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();
     }
 
-    if (config.HasStoreSubscriptionHistory()) {
-        result.StoreSubscriptionHistory = config.GetStoreSubscriptionHistory();
-    }
-
     return result;
 }
 

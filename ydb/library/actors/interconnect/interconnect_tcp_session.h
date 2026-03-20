@@ -23,6 +23,7 @@
 
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>
+#include <util/digest/multi.h>
 #include <util/datetime/cputimer.h>
 
 #include "events_local.h"
@@ -36,6 +37,7 @@
 
 #include <unordered_set>
 #include <unordered_map>
+#include <tuple>
 
 namespace NInterconnect {
     class TInterconnectZcProcessor;
@@ -467,6 +469,17 @@ namespace NActors {
             TSubscriberInfo Info;
         };
 
+        using TSubscriberHistoryKey = std::tuple<TString, TString, TString>;
+
+        struct TSubscriberHistoryKeyHash {
+            size_t operator()(const TSubscriberHistoryKey& key) const noexcept {
+                return MultiHash(std::get<0>(key), std::get<1>(key), std::get<2>(key));
+            }
+        };
+
+        using TSubscriberHistory = std::unordered_map<TSubscriberHistoryKey, size_t, TSubscriberHistoryKeyHash>;
+        static constexpr size_t MaxSubscriberHistoryEntries = 1000;
+
         TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
         ~TInterconnectSessionTCP();
 
@@ -679,7 +692,8 @@ namespace NActors {
         ui64 RdmaInflightDataAmount = 0;
 
         std::unordered_map<TActorId, TSubscriberInfo, TActorId::THash> Subscribers;
-        std::unordered_map<TActorId, TSubscriberInfo, TActorId::THash> SubscriberHistory;
+        TSubscriberHistory SubscriberHistory;
+        bool SubscriberHistoryOverflow = false;
         std::optional<TLastSubscriberInfo> LastSubscriber;
 
         struct TDelayedEvent {

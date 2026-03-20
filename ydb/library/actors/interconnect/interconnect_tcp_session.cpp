@@ -11,7 +11,6 @@
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
-#include <map>
 #include <tuple>
 
 namespace NActors {
@@ -300,9 +299,13 @@ namespace NActors {
         }
         updateInfo(it->second);
 
-        if (Proxy->Common->Settings.StoreSubscriptionHistory) {
-            const auto [historyIt, _] = SubscriberHistory.emplace(actorId, TSubscriberInfo{});
-            updateInfo(historyIt->second);
+        const auto historyKey = TSubscriberHistoryKey(stackTrace, activity, eventTypeName);
+        if (const auto it = SubscriberHistory.find(historyKey); it != SubscriberHistory.end()) {
+            ++it->second;
+        } else if (SubscriberHistory.size() < MaxSubscriberHistoryEntries) {
+            SubscriberHistory.emplace(std::move(historyKey), 1);
+        } else {
+            SubscriberHistoryOverflow = true;
         }
 
         LastSubscriber.emplace(TLastSubscriberInfo{actorId, {}});
@@ -1572,9 +1575,7 @@ namespace NActors {
                             MON_VAR(GetTotalInflightAmountOfData())
                             MON_VAR(GetCloseOnIdleTimeout())
                             MON_VAR(Subscribers.size())
-                            if (Proxy->Common->Settings.StoreSubscriptionHistory) {
-                                MON_VAR(SubscriberHistory.size())
-                            }
+                            MON_VAR(SubscriberHistory.size())
                             TABLER() {
                                 TABLED() { str << "ZeroCopy state"; }
                                 TABLED() { str << ZcProcessor.GetCurrentStateName(); }
@@ -1603,15 +1604,19 @@ namespace NActors {
             }
 
             const bool collectSubscriptionStackTrace = Proxy->Common->Settings.CollectSubscriptionStackTrace;
-            auto renderSubscriberGroups = [&](TStringBuf title, const auto& subscribers) {
-                if (subscribers.empty()) {
-                    return;
-                }
-
-                std::map<std::tuple<TString, TString, TString>, size_t> subscriberGroups;
+            auto aggregateSubscribers = [&](const auto& subscribers) {
+                TSubscriberHistory subscriberGroups;
                 for (const auto& [actorId, info] : subscribers) {
                     Y_UNUSED(actorId);
-                    ++subscriberGroups[std::tuple(info.StackTrace, info.Activity, info.EventTypeName)];
+                    ++subscriberGroups[TSubscriberHistoryKey(info.StackTrace, info.Activity, info.EventTypeName)];
+                }
+                return subscriberGroups;
+            };
+
+            auto renderSubscriberGroups = [&](TStringBuf title, const TSubscriberHistory& subscriberGroups,
+                    bool showOverflowWarning = false) {
+                if (subscriberGroups.empty() && !showOverflowWarning) {
+                    return;
                 }
 
                 DIV_CLASS("panel panel-info") {
@@ -1619,6 +1624,12 @@ namespace NActors {
                         str << title;
                     }
                     DIV_CLASS("panel-body") {
+                        if (showOverflowWarning) {
+                            DIV_CLASS("alert alert-warning") {
+                                str << "Subscription history storage limit of " << MaxSubscriberHistoryEntries
+                                    << " aggregated entries has been reached; new history groups are no longer stored.";
+                            }
+                        }
                         TABLE_CLASS("table table-sortable") {
                             TABLEHEAD() {
                                 TABLER() {
@@ -1656,11 +1667,8 @@ namespace NActors {
                 }
             };
 
-            renderSubscriberGroups("Subscriptions", Subscribers);
-
-            if (Proxy->Common->Settings.StoreSubscriptionHistory) {
-                renderSubscriberGroups("Subscription history", SubscriberHistory);
-            }
+            renderSubscriberGroups("Subscriptions", aggregateSubscribers(Subscribers));
+            renderSubscriberGroups("Subscription history", SubscriberHistory, SubscriberHistoryOverflow);
 
             if (LastSubscriber) {
                 DIV_CLASS("panel panel-info") {

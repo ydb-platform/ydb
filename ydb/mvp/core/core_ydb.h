@@ -99,13 +99,19 @@ struct TRequest {
         , Parameters(request)
     {}
 
-    TString GetAuthToken(NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const;
-    TString GetAuthToken(const NHttp::THeaders& headers, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const;
-    static void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
-    void ForwardHeaders(NYdbGrpc::TCallMeta& meta, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const;
-    void ForwardHeader(const NHttp::THeaders& header, NYdbGrpc::TCallMeta& meta, TStringBuf name) const;
-    void ForwardHeader(const NHttp::THeaders& header, NHttp::THttpOutgoingRequestPtr& request, TStringBuf name) const;
-    void ForwardHeaders(NHttp::THttpOutgoingRequestPtr& request, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const;
+    static void SetHeader(
+        NYdbGrpc::TCallMeta& meta,
+        const TString& name,
+        const TString& value);
+
+    TString GetAuthToken(
+        const NKikimr::NSecurity::TAuthTokenFetcher& tokenFetcher) const;
+    void ForwardHeaders(
+        NYdbGrpc::TCallMeta& meta,
+        const NKikimr::NSecurity::TAuthTokenFetcher& tokenFetcher) const;
+    void ForwardHeaders(
+        NHttp::THttpOutgoingRequestPtr& request,
+        const NKikimr::NSecurity::TAuthTokenFetcher& tokenFetcher) const;
 };
 
 struct TYdbUnitResources {

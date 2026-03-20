@@ -2,30 +2,6 @@
 
 #include <ydb/library/actors/http/http.h>
 
-/*
-TString TRequest::GetAuthToken(const NHttp::THeaders& headers) const {
-    NHttp::TCookies cookies(headers["Cookie"]);
-    TStringBuf authorization = headers["Authorization"];
-    if (!authorization.empty()) {
-        TStringBuf scheme = authorization.NextTok(' ');
-        if (scheme == "OAuth" || scheme == "Bearer") {
-            return TString(authorization);
-        }
-    }
-    TStringBuf subjectToken = headers["x-yacloud-subjecttoken"];
-    if (!subjectToken.empty()) {
-        return TString(subjectToken);
-    }
-    TStringBuf sessionId = cookies["Session_id"];
-    if (!sessionId.empty()) {
-        // TODO: check later
-        // return BlackBoxTokenFromSessionId(sessionId);
-        return TString();
-    }
-    return TString();
-}
-*/
-
 namespace NKikimr::NSecurity {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -42,10 +18,11 @@ public:
 class TAuthTokenFetcherDefault : public TAuthTokenFetcher {
 public:
     TString GetAuthToken(const NHttp::THeaders& headers) const override {
-        NHttp::TCookies cookies(headers["Cookie"]);
+        const NHttp::TCookies cookies(headers["Cookie"]);
 
-        if (TStringBuf authorization = headers["Authorization"]; !authorization.empty()) {
-            TStringBuf scheme = authorization.NextTok(' ');
+        TStringBuf authorization = headers["Authorization"];
+        if (!authorization.empty()) {
+            const TStringBuf scheme = authorization.NextTok(' ');
             if (scheme == "OAuth" || scheme == "Bearer") {
                 return TString(authorization);
             }

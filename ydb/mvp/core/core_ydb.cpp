@@ -4,6 +4,32 @@
 
 #include <ydb/library/actors/http/http_cache.h>
 
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ForwardHeaderImpl(
+    NYdbGrpc::TCallMeta& meta,
+    const NHttp::THeaders& header,
+    TStringBuf name) {
+    if (const TStringBuf value(header[name]); !value.empty()) {
+        TRequest::SetHeader(meta, TString(name), TString(value));
+    }
+}
+
+void ForwardHeaderImpl(
+    NHttp::THttpOutgoingRequestPtr& request,
+    const NHttp::THeaders& header,
+    TStringBuf name) {
+    if (const TStringBuf value(header[name]); !value.empty()) {
+        request->Set(name, value);
+    }
+}
+
+}  // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 NJson::TJsonWriterConfig GetDefaultJsonWriterConfig() {
     NJson::TJsonWriterConfig result;
     result.WriteNanAsString = true;
@@ -292,16 +318,10 @@ void TParameters::ParamsToProto(google::protobuf::Message& proto, TJsonSettings:
     }
 }
 
-TString TRequest::GetAuthToken(NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const {
-    NHttp::THeaders headers(Request->Headers);
-    return GetAuthToken(headers, tokenFetcher);
-}
-
-TString TRequest::GetAuthToken(const NHttp::THeaders& headers, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const {
-    return tokenFetcher->GetAuthToken(headers);
-}
-
-void TRequest::SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value) {
+void TRequest::SetHeader(
+    NYdbGrpc::TCallMeta& meta,
+    const TString& name,
+    const TString& value) {
     for (auto& [exname, exvalue] : meta.Aux) {
         if (exname == name) {
             exvalue = value;
@@ -311,38 +331,32 @@ void TRequest::SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const T
     meta.Aux.emplace_back(name, value);
 }
 
-void TRequest::ForwardHeaders(NYdbGrpc::TCallMeta& meta, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const {
-    NHttp::THeaders headers(Request->Headers);
-    TString token = GetAuthToken(headers, tokenFetcher);
-    if (!token.empty()) {
+TString TRequest::GetAuthToken(
+    const NKikimr::NSecurity::TAuthTokenFetcher& tokenFetcher) const {
+    const NHttp::THeaders headers(Request->Headers);
+    return tokenFetcher.GetAuthToken(headers);
+}
+
+void TRequest::ForwardHeaders(
+    NYdbGrpc::TCallMeta& meta,
+    const NKikimr::NSecurity::TAuthTokenFetcher& tokenFetcher) const {
+    const NHttp::THeaders headers(Request->Headers);
+    if (const TString token = tokenFetcher.GetAuthToken(headers); !token.empty()) {
         SetHeader(meta, "authorization", "Bearer " + token);
         SetHeader(meta, NYdb::YDB_AUTH_TICKET_HEADER, token);
     }
-    ForwardHeader(headers, meta, "x-request-id");
+    ForwardHeaderImpl(meta, headers, "x-request-id");
 }
 
-void TRequest::ForwardHeaders(NHttp::THttpOutgoingRequestPtr& request, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const {
-    NHttp::THeaders headers(Request->Headers);
-    TString token = GetAuthToken(headers, tokenFetcher);
-    if (!token.empty()) {
+void TRequest::ForwardHeaders(
+    NHttp::THttpOutgoingRequestPtr& request,
+    const NKikimr::NSecurity::TAuthTokenFetcher& tokenFetcher) const {
+    const NHttp::THeaders headers(Request->Headers);
+    if (const TString token = tokenFetcher.GetAuthToken(headers); !token.empty()) {
         request->Set("authorization", "Bearer " + token);
         request->Set(NYdb::YDB_AUTH_TICKET_HEADER, token);
     }
-    ForwardHeader(headers, request, "x-request-id");
-}
-
-void TRequest::ForwardHeader(const NHttp::THeaders& header, NYdbGrpc::TCallMeta& meta, TStringBuf name) const {
-    TStringBuf value(header[name]);
-    if (!value.empty()) {
-        SetHeader(meta, TString(name), TString(value));
-    }
-}
-
-void TRequest::ForwardHeader(const NHttp::THeaders& header, NHttp::THttpOutgoingRequestPtr& request, TStringBuf name) const {
-    TStringBuf value(header[name]);
-    if (!value.empty()) {
-        request->Set(name, value);
-    }
+    ForwardHeaderImpl(request, headers, "x-request-id");
 }
 
 TString GetAuthHeaderValue(const TString& tokenName) {

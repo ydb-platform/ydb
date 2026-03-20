@@ -148,7 +148,7 @@ NActors::IActor* CreateMemProfiler();
 TString TMVP::GetMetaDatabaseAuthToken(const TRequest& request) {
     TString authToken;
     if (TMVP::MetaDatabaseTokenName.empty()) {
-        authToken = request.GetAuthToken(MetaLocation.TokenFetcher);
+        authToken = request.GetAuthToken(*MetaLocation.TokenFetcher);
     } else {
         NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
         if (tokenator) {

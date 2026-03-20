@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
 
     struct TSupportLinksTestContext {
         NMVP::TMetaSettings Settings;
-        const TYdbLocation Location = TYdbLocation("meta", "meta", {}, "/Root");
+        const TYdbLocation Location = TYdbLocation("meta", "meta", {}, "/Root", NKikimr::NSecurity::CreateAuthTokenFetcherStub());
 
         explicit TSupportLinksTestContext(const NMVP::TSupportLinksConfig& config) {
             static std::once_flag once;

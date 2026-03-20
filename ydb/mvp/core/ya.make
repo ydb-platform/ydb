@@ -36,6 +36,7 @@ PEERDIR(
     library/cpp/string_utils/url
     ydb/core/protos
     ydb/core/util
+    ydb/core/security/auth_token_fetcher
     ydb/core/viewer/json
     ydb/library/actors/core
     ydb/library/actors/http

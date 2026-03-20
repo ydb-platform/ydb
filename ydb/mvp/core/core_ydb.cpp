@@ -54,7 +54,7 @@ TString TYdbLocation::SslCertificate;
 
 NYdb::NScheme::TSchemeClient TYdbLocation::GetSchemeClient(const TRequest& request) const {
     NYdb::TCommonClientSettings clientSettings;
-    TString authToken = request.GetAuthToken();
+    TString authToken = TokenFetcher->GetAuthToken(request.Request->Headers);
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
@@ -113,7 +113,7 @@ TYdbLocation::GetReplicationClientPtr(TStringBuf endpoint, TStringBuf scheme,
 
 NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request, const NYdb::NTable::TClientSettings& defaultClientSettings) const {
     NYdb::NTable::TClientSettings clientSettings(defaultClientSettings);
-    TString authToken = request.GetAuthToken();
+    TString authToken = TokenFetcher->GetAuthToken(request.Request->Headers);
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
@@ -140,7 +140,7 @@ TString TYdbLocation::GetDatabaseName(const TRequest& request) const {
 
 NYdb::NScripting::TScriptingClient TYdbLocation::GetScriptingClient(const TRequest& request) const {
     NYdb::NTable::TClientSettings clientSettings;
-    TString authToken = request.GetAuthToken();
+    TString authToken = TokenFetcher->GetAuthToken(request.Request->Headers);
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
@@ -164,7 +164,7 @@ NHttp::THttpOutgoingRequestPtr TYdbLocation::CreateHttpMonRequestGet(TStringBuf 
     TString endpoint = GetEndpoint("http-mon", "http");
     if (!endpoint.empty()) {
         out = NHttp::THttpOutgoingRequest::CreateRequestGet(endpoint, uri);
-        TString userToken = request.GetAuthToken();
+        TString userToken = TokenFetcher->GetAuthToken(request.Request->Headers);
         if (!userToken.empty()) {
             NHttp::THeadersBuilder httpHeaders;
             httpHeaders.Set("Authorization", "OAuth " + userToken);
@@ -292,51 +292,13 @@ void TParameters::ParamsToProto(google::protobuf::Message& proto, TJsonSettings:
     }
 }
 
-TString TRequest::GetAuthToken() const {
+TString TRequest::GetAuthToken(NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const {
     NHttp::THeaders headers(Request->Headers);
-    return GetAuthToken(headers);
+    return GetAuthToken(headers, tokenFetcher);
 }
 
-TString TRequest::GetAuthToken(const NHttp::THeaders& headers) const {
-    NHttp::TCookies cookies(headers["Cookie"]);
-    TStringBuf authorization = headers["Authorization"];
-    if (!authorization.empty()) {
-        TStringBuf scheme = authorization.NextTok(' ');
-        if (scheme == "OAuth" || scheme == "Bearer") {
-            return TString(authorization);
-        }
-    }
-    TStringBuf subjectToken = headers["x-yacloud-subjecttoken"];
-    if (!subjectToken.empty()) {
-        return TString(subjectToken);
-    }
-    TStringBuf sessionId = cookies["Session_id"];
-    if (!sessionId.empty()) {
-        // TODO: check later
-        // return BlackBoxTokenFromSessionId(sessionId);
-        return TString();
-    }
-    return TString();
-}
-
-TString TRequest::GetAuthTokenForIAM() const {
-    NHttp::THeaders headers(Request->Headers);
-    return GetAuthTokenForIAM(headers);
-}
-
-TString TRequest::GetAuthTokenForIAM(const NHttp::THeaders& headers) const {
-    TStringBuf authorization = headers["Authorization"];
-    if (!authorization.empty()) {
-        TStringBuf scheme = authorization.NextTok(' ');
-        if (scheme == "Bearer") {
-            return "Bearer " + TString(authorization);
-        }
-    }
-    TStringBuf subjectToken = headers["x-yacloud-subjecttoken"];
-    if (!subjectToken.empty()) {
-        return "Bearer " + TString(subjectToken);
-    }
-    return TString();
+TString TRequest::GetAuthToken(const NHttp::THeaders& headers, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const {
+    return tokenFetcher->GetAuthToken(headers);
 }
 
 void TRequest::SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value) {
@@ -349,9 +311,9 @@ void TRequest::SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const T
     meta.Aux.emplace_back(name, value);
 }
 
-void TRequest::ForwardHeaders(NYdbGrpc::TCallMeta& meta) const {
+void TRequest::ForwardHeaders(NYdbGrpc::TCallMeta& meta, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const {
     NHttp::THeaders headers(Request->Headers);
-    TString token = GetAuthToken(headers);
+    TString token = GetAuthToken(headers, tokenFetcher);
     if (!token.empty()) {
         SetHeader(meta, "authorization", "Bearer " + token);
         SetHeader(meta, NYdb::YDB_AUTH_TICKET_HEADER, token);
@@ -359,35 +321,14 @@ void TRequest::ForwardHeaders(NYdbGrpc::TCallMeta& meta) const {
     ForwardHeader(headers, meta, "x-request-id");
 }
 
-void TRequest::ForwardHeaders(NHttp::THttpOutgoingRequestPtr& request) const {
+void TRequest::ForwardHeaders(NHttp::THttpOutgoingRequestPtr& request, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const {
     NHttp::THeaders headers(Request->Headers);
-    TString token = GetAuthToken(headers);
+    TString token = GetAuthToken(headers, tokenFetcher);
     if (!token.empty()) {
         request->Set("authorization", "Bearer " + token);
         request->Set(NYdb::YDB_AUTH_TICKET_HEADER, token);
     }
     ForwardHeader(headers, request, "x-request-id");
-}
-
-void TRequest::ForwardHeadersOnlyForIAM(NYdbGrpc::TCallMeta& meta) const {
-    NHttp::THeaders headers(Request->Headers);
-    TString token;
-    TStringBuf srcAuthorization = headers["Authorization"];
-    if (!srcAuthorization.empty()) {
-        TStringBuf scheme = srcAuthorization.NextTok(' ');
-        if (scheme == "Bearer") {
-            token = srcAuthorization;
-        }
-    }
-    TStringBuf subjectToken = headers["x-yacloud-subjecttoken"];
-    if (!subjectToken.empty()) {
-        token = subjectToken;
-    }
-    if (!token.empty()) {
-        SetHeader(meta, "authorization", "Bearer " + token);
-        SetHeader(meta, NYdb::YDB_AUTH_TICKET_HEADER, "Bearer " + token);
-    }
-    ForwardHeader(headers, meta, "x-request-id");
 }
 
 void TRequest::ForwardHeader(const NHttp::THeaders& header, NYdbGrpc::TCallMeta& meta, TStringBuf name) const {
@@ -402,24 +343,6 @@ void TRequest::ForwardHeader(const NHttp::THeaders& header, NHttp::THttpOutgoing
     if (!value.empty()) {
         request->Set(name, value);
     }
-}
-
-void TRequest::ForwardHeadersOnlyForIAM(NHttp::THttpOutgoingRequestPtr& request) const {
-    NHttp::THeaders headers(Request->Headers);
-    TString token;
-    TStringBuf srcAuthorization = headers["Authorization"];
-    if (!srcAuthorization.empty()) {
-        TStringBuf scheme = srcAuthorization.NextTok(' ');
-        if (scheme == "Bearer") {
-            token = srcAuthorization;
-        }
-    }
-    ForwardHeader(headers, request, "x-yacloud-subjecttoken");
-    if (!token.empty()) {
-        request->Set("authorization", "Bearer " + token);
-        request->Set(NYdb::YDB_AUTH_TICKET_HEADER, "Bearer " + token);
-    }
-    ForwardHeader(headers, request, "x-request-id");
 }
 
 TString GetAuthHeaderValue(const TString& tokenName) {

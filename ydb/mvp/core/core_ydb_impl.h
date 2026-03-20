@@ -784,25 +784,6 @@ struct THandlerActorYdb {
         }
     }
 
-    static TString GetAuthToken(NHttp::THttpIncomingRequestPtr request) {
-        NHttp::THeaders headers(request->Headers);
-        NHttp::TCookies cookies(headers["Cookie"]);
-        TStringBuf sessionId = cookies["Session_id"];
-        if (!sessionId.empty()) {
-            // TODO: Check later
-            // return BlackBoxTokenFromSessionId(sessionId);
-            return TString();
-        }
-        TStringBuf authorization = headers["Authorization"];
-        if (!authorization.empty()) {
-            TStringBuf scheme = authorization.NextTok(' ');
-            if (scheme == "OAuth" || scheme == "Bearer") {
-                return TString(authorization);
-            }
-        }
-        return TString();
-    }
-
     static void CopyHeader(const NHttp::THeaders& request, NHttp::THeadersBuilder& headers, TStringBuf header) {
         if (request.Has(header)) {
             headers.Set(header, request[header]);

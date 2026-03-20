@@ -2,6 +2,7 @@
 
 #include "grpc_log.h"
 
+#include <ydb/core/security/auth_token_fetcher/auth_token_fetcher.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/library/actors/http/http.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
@@ -98,17 +99,13 @@ struct TRequest {
         , Parameters(request)
     {}
 
-    TString GetAuthToken() const;
-    TString GetAuthToken(const NHttp::THeaders& headers) const;
-    TString GetAuthTokenForIAM() const;
-    TString GetAuthTokenForIAM(const NHttp::THeaders& headers) const;
+    TString GetAuthToken(NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const;
+    TString GetAuthToken(const NHttp::THeaders& headers, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const;
     static void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
-    void ForwardHeaders(NYdbGrpc::TCallMeta& meta) const;
-    void ForwardHeadersOnlyForIAM(NYdbGrpc::TCallMeta& meta) const;
+    void ForwardHeaders(NYdbGrpc::TCallMeta& meta, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const;
     void ForwardHeader(const NHttp::THeaders& header, NYdbGrpc::TCallMeta& meta, TStringBuf name) const;
     void ForwardHeader(const NHttp::THeaders& header, NHttp::THttpOutgoingRequestPtr& request, TStringBuf name) const;
-    void ForwardHeaders(NHttp::THttpOutgoingRequestPtr& request) const;
-    void ForwardHeadersOnlyForIAM(NHttp::THttpOutgoingRequestPtr& request) const;
+    void ForwardHeaders(NHttp::THttpOutgoingRequestPtr& request, NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher) const;
 };
 
 struct TYdbUnitResources {
@@ -161,16 +158,19 @@ struct TYdbLocation {
     static TString SslCertificate;
     TString ServerlessDocumentProxyEndpoint;
     TString ServerlessYdbProxyEndpoint;
+    NKikimr::NSecurity::TAuthTokenFetcherPtr TokenFetcher;
 
     TYdbLocation(const TString& name,
                  const TString& environment,
                  const TVector<std::pair<TString, TString>>& endpoints,
-                 const TString& rootDomain)
+                 const TString& rootDomain,
+                 NKikimr::NSecurity::TAuthTokenFetcherPtr tokenFetcher)
         : Name(name)
         , Environment(environment)
         , Endpoints(endpoints)
         , RootDomain(rootDomain)
         , UnitResources(DefaultUnitResources)
+        , TokenFetcher(std::move(tokenFetcher))
     {}
 
     TYdbLocation(const TString& name,

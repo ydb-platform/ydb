@@ -1082,6 +1082,50 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessageBatch, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName.fifo"},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ContentBasedDeduplication", "true"}
+            }}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        json = SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{
+                    {"Id", "Id-0"},
+                    {"MessageBody", "MessageBody-0"},
+                    {"MessageGroupId", "MessageGroupId-0"},
+                    {"MessageAttributes", NJson::TJsonMap{
+                        {"SomeAttribute", NJson::TJsonMap{
+                            {"DataType", "String"},
+                            {"StringValue", "1"}
+                        }}
+                    }}
+                },
+                NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-1"}, {"MessageGroupId", "MessageGroupId-1"}},
+                NJson::TJsonMap{{"Id", "Id-2"}, {"MessageBody", "MessageBody-2"}},
+            }}
+        });
+
+        UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
+        auto succesful0 = json["Successful"][0];
+        UNIT_ASSERT(succesful0["Id"] == "Id-0");
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageAttributes").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MessageId").empty());
+
+        UNIT_ASSERT(json["Successful"][1]["Id"] == "Id-1");
+
+        UNIT_ASSERT(json["Failed"].GetArray().size() == 1);
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageBatch_OldImplementation, THttpProxyTestMock) {
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName.fifo"},
             {"Attributes", NJson::TJsonMap{

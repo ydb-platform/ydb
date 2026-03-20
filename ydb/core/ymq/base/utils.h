@@ -4,9 +4,11 @@
 #include <util/string/builder.h>
 #include <util/string/split.h>
 
-#include <ydb/core/persqueue/public/mlp/mlp.h>
-
 constexpr TStringBuf PRIVATE_REQUEST_PATH_PREFIX = "/private";
+
+namespace NKikimr::NPQ::NMLP {
+    struct TMessageId;
+} // namespace NKikimr::NPQ::NMLP
 
 namespace NKikimr::NSQS {
     static inline bool IsPrivateRequest(const TStringBuf& path) {
@@ -34,7 +36,5 @@ namespace NKikimr::NSQS {
         return GetRequestPathPart(path, 1, isPrivateRequest);
     }
 
-    static inline TString ToMessageId(const NPQ::NMLP::TMessageId& messageId) {
-        return TStringBuilder() << "m-" << messageId.PartitionId << "-" << messageId.Offset;
-    }
-}
+    TString ToMessageId(const NPQ::NMLP::TMessageId& messageId);
+} // namespace NKikimr::NSQS

@@ -162,7 +162,8 @@ private:
     }
 
     void DoAction() override {
-        if (EnableSQSMigrationCompatibility_ && TopicCreated_) {
+        Y_ABORT_UNLESS(QueueAttributes_.Defined());
+        if (EnableSQSMigrationCompatibility_ && IsTopicCreated()) {
             DoActionNewImplimentation();
         } else {
             DoActionOldImplementation();
@@ -171,7 +172,6 @@ private:
 
     void DoActionNewImplimentation() {
         Become(&TThis::StateFunc);
-        Y_ABORT_UNLESS(QueueAttributes_.Defined());
 
         const bool isFifo = IsFifoQueue();
         NPQ::NMLP::TWriterSettings writerSettings;
@@ -205,6 +205,7 @@ private:
                 }
             }
 
+            RequestToReplyIndexMapping_.push_back(i);
 
             writerSettings.Messages.emplace_back();
             auto& message = writerSettings.Messages.back();
@@ -233,7 +234,6 @@ private:
     // coverity[var_deref_model]: false positive
     void DoActionOldImplementation() {
         Become(&TThis::StateFunc);
-        Y_ABORT_UNLESS(QueueAttributes_.Defined());
 
         const bool isFifo = IsFifoQueue();
         THolder<TSqsEvents::TEvSendMessageBatch> req;
@@ -315,23 +315,21 @@ private:
 
     void Handle(NPQ::NMLP::TEvWriteResponse::TPtr& ev) {
         const auto* response = ev->Get();
-
-        if (response->DescribeStatus != NPQ::NDescriber::EStatus::SUCCESS) {
-            MakeError(Response_.MutableSendMessageBatch(), NErrors::INTERNAL_FAILURE, NPQ::NDescriber::Description(GetTopicName(), response->DescribeStatus));
-            return SendReplyAndDie();
-        }
-
         const auto& messages = response->Messages;
 
         const bool isFifo = IsFifoQueue();
         for (size_t i = 0, size = messages.size(); i < size; ++i) {
             const auto& message = messages[i];
 
-            auto* currentResponse = IsBatch_ ? Response_.MutableSendMessageBatch()->MutableEntries(RequestToReplyIndexMapping_[i])
+            auto* currentResponse = IsBatch_ ?
+                  Response_.MutableSendMessageBatch()->MutableEntries(RequestToReplyIndexMapping_[i])
                 : Response_.MutableSendMessage();
             auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(RequestToReplyIndexMapping_[i]) : &Request();
 
-            if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {
+            if (response->DescribeStatus != NPQ::NDescriber::EStatus::SUCCESS) {
+                MakeError(currentResponse, NErrors::INTERNAL_FAILURE,
+                    NPQ::NDescriber::Description(GetTopicName(), response->DescribeStatus));
+            } else if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {
                 currentResponse->SetMessageId(ToMessageId(message.MessageId.value()));
                 if (isFifo) {
                     currentResponse->SetSequenceNumber(message.MessageId->Offset); // TODO: как быть с несколькими партициями?

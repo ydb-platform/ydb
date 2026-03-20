@@ -12,35 +12,33 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
     auto lambda = TCoLambda(node);
     auto lambdaBody = lambda.Body().Ptr();
 
-    auto sublinks = FindNodes(lambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
-    if (sublinks.empty()) {
+    auto sublink = FindNode(lambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
+    if (!sublink) {
         return node;
     }
     else {
         TExprNode::TPtr newLambdaBody = lambdaBody;
 
-        while(sublinks.size()){
-            auto link = sublinks[0];
-
+        while(sublink){
             TNodeOnNodeOwnedMap replaceMap;
 
-            YQL_CLOG(TRACE, CoreDq) << "Replacing sublink: " << PrintRBOExpression(link, Ctx);
+            YQL_CLOG(TRACE, CoreDq) << "Replacing sublink: " << PrintRBOExpression(sublink, Ctx);
             auto sublinkVar = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++), true);
             // clang-format off
             auto member = Build<TCoMember>(Ctx, lambda.Pos())
                     .Struct(lambda.Args().Arg(0).Ptr())
                     .Name<TCoAtom>().Value(sublinkVar.GetFullName()).Build()
                     .Done().Ptr();
-            replaceMap[link.Get()] = member;
+            replaceMap[sublink.Get()] = member;
             // clang-format on
-            auto subplan = ExprNodeToOperator(TKqpSublinkBase(link).Subquery().Ptr());
+            auto subplan = ExprNodeToOperator(TKqpSublinkBase(sublink).Subquery().Ptr());
             TSubplanEntry entry;
-            if (TKqpExprSublink::Match(link.Get())) {
+            if (TKqpExprSublink::Match(sublink.Get())) {
                 entry = TSubplanEntry(subplan, {}, ESubplanType::EXPR, sublinkVar);
-            } else if (TKqpExistsSublink::Match(link.Get())) {
+            } else if (TKqpExistsSublink::Match(sublink.Get())) {
                 entry = TSubplanEntry(subplan, {}, ESubplanType::EXISTS, sublinkVar);
             } else /* In sublink */ {
-                auto tupleType = link->Child(TKqpInSublink::idx_InTuple);
+                auto tupleType = sublink->Child(TKqpInSublink::idx_InTuple);
                 Y_ENSURE(tupleType->IsCallable("StructType"));
                 TVector<TInfoUnit> tuple;
 
@@ -53,7 +51,7 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
             TOptimizeExprSettings settings(&TypeCtx);
             RemapExpr(newLambdaBody, newLambdaBody, replaceMap, Ctx, settings);
 
-            sublinks = FindNodes(newLambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
+            sublink = FindNode(newLambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
         }
 
         // clang-format off

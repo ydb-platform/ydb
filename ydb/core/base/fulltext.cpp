@@ -416,7 +416,9 @@ void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString
         while (it.HasNext()) {
             auto kv = it.Next();
             Y_ENSURE(kv.first.GetType() == NBinaryJson::EEntryType::String);
-            TokenizeBinaryJson(kv.second, TokenizeJsonNextPrefix(prefix, kv.first.GetString()), tokens);
+            TString nextPrefix = TokenizeJsonNextPrefix(prefix, kv.first.GetString());
+            tokens.push_back(nextPrefix);
+            TokenizeBinaryJson(kv.second, nextPrefix, tokens);
         }
         break;
     }

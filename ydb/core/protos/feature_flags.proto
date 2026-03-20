@@ -244,4 +244,18 @@ message TFeatureFlags {
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
+    // Split protocol control.
+    // By default, the schemeshard handles sorting and split boundary selection.
+    // These flags move that work to the datashard side:
+    //
+    // EnableDataShardSplitHistogramSorting - sort KeyAccessSample on datashard
+    // EnableDataShardSplitKeySelection - select split boundaries on datashard
+    //     using sorted key access histogram and data size histogram
+    // EnableDataShardSplitHistogramOmission - stop sending KeyAccessSample
+    //     and DataSizeHistogram in datashard stats
+    //
+    // Enabling a flag also enables all flags above it (HistogramSorting ⊃ KeySelection ⊃ HistogramOmission).
+    optional bool EnableDataShardSplitHistogramSorting = 244 [default = false];
+    optional bool EnableDataShardSplitKeySelection = 245 [default = false];
+    optional bool EnableDataShardSplitHistogramOmission  = 246 [default = false];
 }

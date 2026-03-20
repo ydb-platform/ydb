@@ -146,9 +146,13 @@ public:
         return TAstListNode::DoInit(ctx, src);
     }
 
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
         if (Args_.empty() || (Aggr_->GetAggregationMode() != EAggregateMode::Distinct && Aggr_->GetAggregationMode() != EAggregateMode::OverWindowDistinct)) {
-            return;
+            return true;
+        }
+
+        if (PreaggregateExpr_) {
+            return true; // Already collected
         }
 
         auto& expr = Args_.front();
@@ -156,12 +160,12 @@ public:
         // need to initialize expr before checking whether it is a column
         auto clone = expr->Clone();
         if (!clone->Init(ctx, &src)) {
-            return;
+            return !ctx.StrictWarningAsError;
         }
 
         const auto column = clone->GetColumnName();
         if (column) {
-            return;
+            return true;
         }
 
         auto tmpColumn = src.MakeLocalName("_yql_preagg_" + Name_);
@@ -173,6 +177,7 @@ public:
         expr = BuildColumn(expr->GetPos(), tmpColumn);
 
         Aggr_->MarkKeyColumnAsGenerated();
+        return true;
     }
 
     TNodePtr DoClone() const final {

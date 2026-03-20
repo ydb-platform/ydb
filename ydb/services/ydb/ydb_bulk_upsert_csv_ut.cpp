@@ -91,6 +91,94 @@ TString MakeInvalidDataCsv(
     return csv;
 }
 
+NYdb::NTable::TBulkUpsertResult BulkUpsertCsvUint8Row(NYdb::NTable::TTableClient& client, const TString& path, ui32 key, ui32 value) {
+    TStringBuilder csv;
+    csv << "Key,Value\n";
+    csv << key << "," << value << "\n";
+
+    auto upsert = client.BulkUpsert(
+        path,
+        EDataFormat::CSV,
+        csv,
+        {},
+        BulkUpsertSettings(CsvSettingsWithHeader()))
+        .GetValueSync();
+    Cerr << upsert.GetIssues().ToString() << Endl;
+    return upsert;
+}
+
+void WaitAndCompareQueryYson(NYdb::NTable::TTableClient& client, const TString& query, const TString& expectedYson) {
+    TString actualYson;
+    for (ui32 attempt = 0; attempt != 30; ++attempt) {
+        actualYson = StreamQueryToYson(client, query);
+        if (actualYson == expectedYson) {
+            break;
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+
+    NKqp::CompareYson(expectedYson, actualYson);
+}
+
+void Index(NYdb::NTable::EIndexType indexType, bool enableBulkUpsertToAsyncIndexedTables = false) {
+    auto server = TKikimrWithGrpcAndRootSchema({}, {}, {}, false, nullptr, [=](auto& settings) {
+        settings.SetEnableBulkUpsertToAsyncIndexedTables(enableBulkUpsertToAsyncIndexedTables);
+    });
+    auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+    NYdb::NTable::TTableClient client(connection);
+    auto session = client.GetSession().ExtractValueSync().GetSession();
+
+    {
+        auto tableBuilder = client.GetTableBuilder();
+        tableBuilder
+            .AddNullableColumn("Key", EPrimitiveType::Uint8)
+            .AddNullableColumn("Value", EPrimitiveType::Uint8)
+            .AddSecondaryIndex("Value_index", indexType, "Value");
+
+        tableBuilder.SetPrimaryKeyColumns({"Key"});
+        auto result = session.CreateTable("/Root/ui8", tableBuilder.Build()).ExtractValueSync();
+
+        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    }
+
+    {
+        auto res = BulkUpsertCsvUint8Row(client, "/Root/ui8", 1, 2);
+
+        if (indexType == NYdb::NTable::EIndexType::GlobalAsync) {
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), enableBulkUpsertToAsyncIndexedTables
+                ? EStatus::SUCCESS : EStatus::SCHEME_ERROR);
+
+            if (enableBulkUpsertToAsyncIndexedTables) {
+                WaitAndCompareQueryYson(client, R"(
+                    SELECT Key, Value
+                    FROM `/Root/ui8`
+                    ORDER BY Key;
+                )", R"([
+                    [[1u];[2u]]
+                ])");
+
+                WaitAndCompareQueryYson(client, R"(
+                    SELECT Value, Key
+                    FROM `/Root/ui8` VIEW Value_index
+                    ORDER BY Value, Key;
+                )", R"([
+                    [[2u];[1u]]
+                ])");
+            }
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
+        }
+    }
+
+    {
+        auto res = BulkUpsertCsvUint8Row(client, "/Root/ui8/Value_index/indexImplTable", 1, 2);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS_C(res.GetIssues().ToString(), "Writing to index implementation tables is not allowed", res.GetIssues().ToString());
+    }
+}
+
 Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
     Y_UNIT_TEST(Simple) {
         TKikimrWithGrpcAndRootSchema server;
@@ -582,5 +670,17 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
         }
+    }
+
+    Y_UNIT_TEST(SyncIndexShouldSucceed) {
+        Index(NYdb::NTable::EIndexType::GlobalSync);
+    }
+
+    Y_UNIT_TEST(AsyncIndexShouldFail) {
+        Index(NYdb::NTable::EIndexType::GlobalAsync, false);
+    }
+
+    Y_UNIT_TEST(AsyncIndexShouldSucceed) {
+        Index(NYdb::NTable::EIndexType::GlobalAsync, true);
     }
 }

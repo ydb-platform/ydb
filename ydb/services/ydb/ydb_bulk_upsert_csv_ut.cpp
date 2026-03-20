@@ -38,6 +38,31 @@ TString StreamQueryToYson(NYdb::NTable::TTableClient& client, const TString& que
     return NKqp::StreamResultToYson(it);
 }
 
+struct TLimitCsvRow {
+    TString Key1;
+    TString Key2;
+    TString Key3;
+    TString Value1;
+    TString Value2;
+    TString Value3;
+};
+
+NYdb::NTable::TBulkUpsertResult BulkUpsertCsvLimitRow(NYdb::NTable::TTableClient& client, const TLimitCsvRow& row) {
+    TStringBuilder csv;
+    csv << "Key1,Key2,Key3,Value1,Value2,Value3\n";
+    csv << row.Key1 << "," << row.Key2 << "," << row.Key3 << "," << row.Value1 << "," << row.Value2 << "," << row.Value3 << "\n";
+
+    auto upsert = client.BulkUpsert(
+        "/Root/Limits",
+        EDataFormat::CSV,
+        csv,
+        {},
+        BulkUpsertSettings(CsvSettingsWithHeader()))
+        .GetValueSync();
+    Cerr << upsert.GetIssues().ToString() << Endl;
+    return upsert;
+}
+
 Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
     Y_UNIT_TEST(Simple) {
         TKikimrWithGrpcAndRootSchema server;
@@ -377,5 +402,61 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 CAST(Column_Decimal35 AS String)
             FROM `/Root/Types`;
         )"));
+    }
+
+    Y_UNIT_TEST(Limits) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key1", EPrimitiveType::Utf8)
+                .AddNullableColumn("Key2", EPrimitiveType::String)
+                .AddNullableColumn("Key3", EPrimitiveType::Utf8)
+                .AddNullableColumn("Value1", EPrimitiveType::String)
+                .AddNullableColumn("Value2", EPrimitiveType::Utf8)
+                .AddNullableColumn("Value3", EPrimitiveType::String);
+
+            tableBuilder.SetPrimaryKeyColumns({"Key1", "Key2", "Key3"});
+            auto result = session.CreateTable("/Root/Limits", tableBuilder.Build()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto res = BulkUpsertCsvLimitRow(client, {TString(1100000, 'a'), "bb", "", "val1", "val2", "val3"});
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto res = BulkUpsertCsvLimitRow(client, {"aa", TString(1100000, 'b'), "", "val1", "val2", "val3"});
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto res = BulkUpsertCsvLimitRow(client, {TString(600000, 'a'), TString(500000, 'b'), "", "val1", "val2", "val3"});
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto res = BulkUpsertCsvLimitRow(client, {TString(500000, 'a'), TString(500000, 'b'), "", TString(17 * 1000000, '1'), "val2", "val3"});
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto res = BulkUpsertCsvLimitRow(client, {TString(500000, 'a'), TString(500000, 'b'), "", TString(15.9 * 1000000, '1'), "val2", "val3"});
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto res = BulkUpsertCsvLimitRow(client, {TString(500000, 'a'), "", TString(500000, 'c'),
+                                                      TString(15.9 * 1000000, '1'), TString(15.9 * 1000000, '2'), TString(15.9 * 1000000, '3')});
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+        }
     }
 }

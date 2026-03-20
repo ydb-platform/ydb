@@ -11,6 +11,9 @@
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <map>
+#include <tuple>
+
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -1591,34 +1594,45 @@ namespace NActors {
                 }
             }
 
-            if (LastSubscriber) {
+            if (!Subscribers.empty()) {
+                std::map<std::tuple<TString, TString, TString>, size_t> subscriberGroups;
+                for (const auto& [actorId, info] : Subscribers) {
+                    Y_UNUSED(actorId);
+                    ++subscriberGroups[std::tuple(info.StackTrace, info.Activity, info.EventTypeName)];
+                }
+
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
-                        str << "Last subscriber";
+                        str << "Subscriptions";
                     }
                     DIV_CLASS("panel-body") {
-                        TABLE_CLASS("table") {
+                        TABLE_CLASS("table table-sortable") {
                             TABLEHEAD() {
                                 TABLER() {
-                                    TABLEH() { str << "ActorId"; }
-                                    TABLEH() { str << "Cookie"; }
+                                    TABLEH() { str << "Count"; }
                                     TABLEH() { str << "Activity"; }
                                     TABLEH() { str << "EventTypeName"; }
+                                    TABLEH() { str << "StackTrace"; }
                                 }
                             }
                             TABLEBODY() {
-                                TABLER() {
-                                    TABLED() { str << LastSubscriber->ActorId; }
-                                    TABLED() { str << LastSubscriber->Info.Cookie; }
-                                    TABLED() { str << (LastSubscriber->Info.Activity.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.Activity)); }
-                                    TABLED() { str << (LastSubscriber->Info.EventTypeName.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.EventTypeName)); }
+                                for (const auto& [groupKey, count] : subscriberGroups) {
+                                    const auto& [stackTrace, activity, eventTypeName] = groupKey;
+                                    TABLER() {
+                                        TABLED() { str << count; }
+                                        TABLED() { str << EncodeHtmlPcdata(activity.empty() ? TStringBuf("manual") : TStringBuf(activity)); }
+                                        TABLED() { str << EncodeHtmlPcdata(eventTypeName.empty() ? TStringBuf("manual") : TStringBuf(eventTypeName)); }
+                                        TABLED() {
+                                            if (stackTrace.empty()) {
+                                                str << "manual";
+                                            } else {
+                                                PRE() {
+                                                    str << EncodeHtmlPcdata(stackTrace);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                        if (!LastSubscriber->Info.StackTrace.empty()) {
-                            str << "<h4>Stack trace</h4>";
-                            PRE() {
-                                str << EncodeHtmlPcdata(LastSubscriber->Info.StackTrace);
                             }
                         }
                     }

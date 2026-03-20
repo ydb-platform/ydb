@@ -41,11 +41,7 @@ TString StreamQueryToYson(NYdb::NTable::TTableClient& client, const TString& que
 Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
     Y_UNIT_TEST(Simple) {
         TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-
-        TString location = TStringBuilder() << "localhost:" << grpc;
-
-        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
 
         NYdb::NTable::TTableClient client(connection);
         auto session = client.GetSession().ExtractValueSync().GetSession();
@@ -98,11 +94,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
     Y_UNIT_TEST(NullValueSetting) {
         TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-
-        TString location = TStringBuilder() << "localhost:" << grpc;
-
-        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
 
         NYdb::NTable::TTableClient client(connection);
         auto session = client.GetSession().ExtractValueSync().GetSession();
@@ -148,11 +140,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
     Y_UNIT_TEST(ValidateNullsInNotNullColumns) {
         TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-
-        TString location = TStringBuilder() << "localhost:" << grpc;
-
-        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
 
         NYdb::NTable::TTableClient client(connection);
         auto session = client.GetSession().ExtractValueSync().GetSession();
@@ -207,11 +195,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
     Y_UNIT_TEST(Errors) {
         TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-
-        TString location = TStringBuilder() << "localhost:" << grpc;
-
-        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
 
         NYdb::NTable::TTableClient client(connection);
         auto session = client.GetSession().ExtractValueSync().GetSession();
@@ -271,11 +255,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
     Y_UNIT_TEST(DecimalPK) {
         TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-
-        TString location = TStringBuilder() << "localhost:" << grpc;
-
-        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
 
         NYdb::NTable::TTableClient client(connection);
         auto session = client.GetSession().ExtractValueSync().GetSession();
@@ -318,6 +298,84 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 CAST(Value_Decimal35 AS String)
             FROM `/Root/Decimal`
             ORDER BY Key_Decimal22, Key_Decimal35;
+        )"));
+    }
+
+    Y_UNIT_TEST(Types) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Column_Bool", EPrimitiveType::Bool)
+                .AddNullableColumn("Column_Uint8", EPrimitiveType::Uint8)
+                .AddNullableColumn("Column_Int32", EPrimitiveType::Int32)
+                .AddNullableColumn("Column_Uint32", EPrimitiveType::Uint32)
+                .AddNullableColumn("Column_Int64", EPrimitiveType::Int64)
+                .AddNullableColumn("Column_Uint64", EPrimitiveType::Uint64)
+                .AddNullableColumn("Column_Float", EPrimitiveType::Float)
+                .AddNullableColumn("Column_Double", EPrimitiveType::Double)
+                .AddNullableColumn("Column_Date", EPrimitiveType::Date)
+                .AddNullableColumn("Column_Datetime", EPrimitiveType::Datetime)
+                .AddNullableColumn("Column_Timestamp", EPrimitiveType::Timestamp)
+                .AddNullableColumn("Column_String", EPrimitiveType::String)
+                .AddNullableColumn("Column_Utf8", EPrimitiveType::Utf8)
+                .AddNullableColumn("Column_Yson", EPrimitiveType::Yson)
+                .AddNullableColumn("Column_Json", EPrimitiveType::Json)
+                .AddNullableColumn("Column_JsonDocument", EPrimitiveType::JsonDocument)
+                .AddNullableColumn("Column_DyNumber", EPrimitiveType::DyNumber)
+                .AddNullableColumn("Column_Decimal", TDecimalType(22, 9))
+                .AddNullableColumn("Column_Decimal35", TDecimalType(35, 10));
+            tableBuilder.SetPrimaryKeyColumns({"Key"});
+            auto result = session.CreateTable("/Root/Types", tableBuilder.Build()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        TStringBuilder csv;
+        csv << "Key,Column_Bool,Column_Uint8,Column_Int32,Column_Uint32,Column_Int64,Column_Uint64,Column_Float,Column_Double,Column_Date,Column_Datetime,Column_Timestamp,Column_String,Column_Utf8,Column_Yson,Column_Json,Column_JsonDocument,Column_DyNumber,Column_Decimal,Column_Decimal35\n";
+        csv << "1,0,1,2,3,4,5,123.7,456.5,1970-01-01,1997-08-29T07:14:00Z,1970-01-01T00:00:00Z,\"string\",\"utf8\",\"{ \"\"a\"\" = [ { \"\"b\"\" = 1; } ]; }\",\"{}\",\"{}\",123,99.95,555555555555555.95\n";
+
+        auto upsert = client.BulkUpsert(
+            "/Root/Types",
+            EDataFormat::CSV,
+            csv,
+            {},
+            BulkUpsertSettings(CsvSettingsWithHeader()))
+            .GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        NKqp::CompareYson(R"([
+            [[1u];[%false];[1u];[2];[3u];[4];[5u];[123.6999969];[456.5];["1970-01-01"];["1997-08-29T07:14:00Z"];["1970-01-01T00:00:00Z"];["string"];["utf8"];["{ \"a\" = [ { \"b\" = 1; } ]; }"];["{}"];["{}"];[".123e3"];["99.95"];["555555555555555.95"]]
+        ])", StreamQueryToYson(client, R"(
+            SELECT
+                Key,
+                Column_Bool,
+                Column_Uint8,
+                Column_Int32,
+                Column_Uint32,
+                Column_Int64,
+                Column_Uint64,
+                Column_Float,
+                Column_Double,
+                CAST(Column_Date AS String),
+                CAST(Column_Datetime AS String),
+                CAST(Column_Timestamp AS String),
+                Column_String,
+                Column_Utf8,
+                Column_Yson,
+                Column_Json,
+                Column_JsonDocument,
+                Column_DyNumber,
+                CAST(Column_Decimal AS String),
+                CAST(Column_Decimal35 AS String)
+            FROM `/Root/Types`;
         )"));
     }
 }

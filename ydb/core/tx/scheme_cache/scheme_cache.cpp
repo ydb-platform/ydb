@@ -27,12 +27,13 @@ TString TDomainInfo::ToString() const {
         << " ServerlessComputeResourcesMode: " << ServerlessComputeResourcesMode;
 
     result << " Users: [";
-    for (ui32 i = 0; i < Users.size(); ++i) {
-        if (i) {
+    const auto usersView = std::views::keys(Users);
+    for (auto it = usersView.begin(); it != usersView.end(); ++it) {
+        if (it != usersView.begin()) {
             result << ",";
         }
 
-        result << Users.at(i).ToString();
+        result << *it;
     }
     result << "]";
 
@@ -86,7 +87,7 @@ TString TSchemeCacheNavigate::TEntry::ToString() const {
         << " Status: " << Status
         << " Kind: " << Kind
         << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>");
-    
+
     if (ListNodeEntry) {
         out << " Children [";
         for (ui32 i = 0; i < ListNodeEntry->Children.size(); ++i) {
@@ -98,7 +99,7 @@ TString TSchemeCacheNavigate::TEntry::ToString() const {
         }
         out << "]";
     }
-    
+
     out << " }";
     return out;
 }

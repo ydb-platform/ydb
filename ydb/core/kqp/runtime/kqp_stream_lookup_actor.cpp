@@ -340,8 +340,12 @@ private:
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
         const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
 
-        if (hasPendingResults) {
-            // has more results
+        if (hasPendingResults && !PendingResultsNotificationSent) {
+            // Notify compute actor that more results are available. The flag
+            // prevents sending duplicate notifications between async events
+            // (HandleReadResult/HandleResolve), which would cause a tight
+            // event loop under backpressure.
+            PendingResultsNotificationSent = true;
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         }
 
@@ -424,6 +428,7 @@ private:
 
         ProcessInputRows();
 
+        PendingResultsNotificationSent = false;
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -588,6 +593,7 @@ private:
         StreamLookupWorker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
             shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
         });
+        PendingResultsNotificationSent = false;
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -889,6 +895,7 @@ private:
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
+    bool PendingResultsNotificationSent = false;
     NKqpProto::EIsolationLevel IsolationLevel;
     const TString Database;
 

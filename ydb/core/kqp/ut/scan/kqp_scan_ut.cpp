@@ -2703,6 +2703,165 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             ON a.Key = b.Key;
         )");
     }
+
+    Y_UNIT_TEST(StreamLookupBackpressureLivelock) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+        appConfig.MutableTableServiceConfig()->SetDqChannelVersion(1u);
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(100);
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(100);
+
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(appConfig);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+        auto runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
+
+        InitRoot(server, sender);
+
+        auto createSession = [&]() {
+            runtime->Send(new IEventHandle(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
+            auto record = reply->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            return record.GetResponse().GetSessionId();
+        };
+
+        auto createTable = [&](const TString& sessionId, const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->SetSessionId(sessionId);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        };
+
+        auto sendQuery = [&](const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+            ActorIdToProto(sender, ev->Record.MutableRequestActorId());
+
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                reply->Get()->Record.GetYdbStatus(),
+                Ydb::StatusIds::SUCCESS,
+                reply->Get()->Record.GetResponse().DebugString());
+        };
+
+        // Create table and insert data
+        createTable(createSession(), R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/LookupTable` (Key uint32, Value uint32, PRIMARY KEY(Key));
+        )");
+
+        // Insert 1000 rows
+        for (int batch = 0; batch < 10; ++batch) {
+            TStringBuilder insertQuery;
+            insertQuery << "REPLACE INTO `/Root/LookupTable` (Key, Value) VALUES ";
+            for (int i = 0; i < 100; ++i) {
+                int key = batch * 100 + i + 1;
+                if (i > 0) insertQuery << ", ";
+                insertQuery << "(" << key << "u, " << (key * 10) << "u)";
+            }
+            sendQuery(insertQuery);
+        }
+
+        // Setup event filter to simulate backpressure
+        int newAsyncInputCount = 0;
+        int streamDataCount = 0;
+        bool blockStreamData = true;
+        TActorId executerActorId;
+        ui64 lastSeqNo = 0;
+        ui64 lastChannelId = 0;
+
+        std::vector<TAutoPtr<IEventHandle>> capturedStreamData;
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::EventType) {
+                ++newAsyncInputCount;
+            }
+            if (ev->GetTypeRewrite() == NKqp::TEvKqpExecuter::TEvStreamData::EventType) {
+                ++streamDataCount;
+                if (blockStreamData) {
+                    auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+                    executerActorId = ev->Sender;
+                    lastSeqNo = record.GetSeqNo();
+                    lastChannelId = record.GetChannelId();
+                    // Hold the event — do not respond. This prevents the executer
+                    // from receiving TEvStreamDataAck, simulating a stalled GRPC client.
+                    capturedStreamData.push_back(ev.Release());
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        runtime->SetEventFilter(captureEvents);
+
+        // Send a generic (streaming) query that triggers stream lookup join.
+        // Generic queries set StreamResult=true, so results flow via TEvStreamData.
+        {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+
+            // Build query with 1000 keys to produce enough data
+            TStringBuilder query;
+            query << "$data = AsList(";
+            for (int i = 1; i <= 1000; ++i) {
+                if (i > 1) query << ", ";
+                query << "AsStruct(" << i << "u AS Key)";
+            }
+            query << "); SELECT a.Key, b.Value FROM AS_TABLE($data) a "
+                  << "JOIN `/Root/LookupTable` b ON a.Key = b.Key;";
+
+            ev->Record.MutableRequest()->SetQuery(query);
+            ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+            ActorIdToProto(sender, ev->Record.MutableRequestActorId());
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+        }
+
+        // Pump runtime under backpressure.
+        // Stop when livelock detected (>= 1000 EvNewAsyncInputDataArrived) or events dry up.
+        newAsyncInputCount = 0;
+        {
+            TDispatchOptions opts;
+            opts.CustomFinalCondition = [&]() {
+                return newAsyncInputCount >= 1000;
+            };
+            runtime->DispatchEvents(opts, TDuration::Seconds(5));
+        }
+
+        // Under livelock, GetAsyncInputData sends EvNewAsyncInputDataArrived on every
+        // call when hasPendingResults is true, creating a tight event loop that floods
+        // the actor system (~56 events). With the fix, GetAsyncInputData sends at most
+        // one notification per async event (HandleReadResult/HandleResolve), so the count
+        // stays proportional to actual shard reads (~39 events) rather than spinning.
+        UNIT_ASSERT_C(newAsyncInputCount < 45,
+            "Livelock detected: " << newAsyncInputCount
+            << " EvNewAsyncInputDataArrived events during backpressure"
+            << " (streamDataCount=" << streamDataCount << ")");
+
+        // Test complete — we verified the event count above.
+        // No need to complete the query; the assertion is what matters.
+    }
 }
 
 

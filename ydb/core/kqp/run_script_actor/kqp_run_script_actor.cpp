@@ -349,9 +349,10 @@ private:
         if (!FinalStatusIsSaved) {
             FinalStatusIsSaved = true;
             WaitFinalizationRequest = true;
+            const bool cancelledByUser = (RunState == ERunState::Cancelling);
             RunState = IsExecuting() ? ERunState::Finishing : RunState;
 
-            if (RunState == ERunState::Cancelling) {
+            if (cancelledByUser) {
                 NYql::TIssue cancelIssue("Request was canceled by user");
                 cancelIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
                 Issues.AddIssue(std::move(cancelIssue));
@@ -361,7 +362,7 @@ private:
 
             auto scriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
                 GetFinalizationStatusFromRunState(), ExecutionId, Database, Status, GetExecStatusFromStatusCode(Status),
-                Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst), LeaseGeneration
+                Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst), LeaseGeneration, cancelledByUser
             );
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
             return;

@@ -17,6 +17,7 @@ SRCS(
     kqp_tasks_validate.cpp
     kqp_partitioned_executer.cpp
     shard_key_ranges.cpp
+    tasks_graph/max_tasks_graph.cpp
 )
 
 PEERDIR(

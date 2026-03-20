@@ -1,8 +1,7 @@
 #pragma once
 
-#include "kqp_node_quota_manager.h"
 #include "shard_key_ranges.h"
-#include <regex>
+#include "tasks_graph/max_tasks_graph.h"
 
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -10,6 +9,8 @@
 
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
+
+#include <regex>
 
 namespace NKikimrKqp {
     class TKqpFullTextSourceSettings;
@@ -73,6 +74,15 @@ struct TColumnShardHashV1Params {
 
 struct TStageInfoMeta {
     const IKqpGateway::TPhysicalTxData& Tx;
+
+    enum ETasksType : ui32 {
+        UNKNOWN_TASKS = 0,
+        SOURCE_TASKS,
+        SYSVIEW_TASKS,
+        COMPUTE_TASKS,
+        SCAN_TASKS,
+    };
+    ETasksType TasksType = UNKNOWN_TASKS;
 
     TTableId TableId;
     TString TablePath;
@@ -413,6 +423,14 @@ public:
 private:
     void FillKqpTasksGraphStages();
 
+    void CountScanTasksFromSource(const TStageInfo& stageInfo, bool limitTasksPerNode);
+    void CountFullTextScanTasksFromSource(const TStageInfo& stageInfo);
+    void CountSysViewTasksFromSource(const TStageInfo& stageInfo);
+    void CountReadTasksFromSource(const TStageInfo& stageInfo, size_t resourceSnapshotSize, ui32 scheduledTaskCount);
+    void CountSysViewScanTasks(const TStageInfo& stageInfo);
+    void CountComputeTasks(const TStageInfo& stageInfo, const ui32 nodesCount);
+    void CountScanTasksFromShards(const TStageInfo& stageInfo, bool enableShuffleElimination);
+
     void BuildSysViewScanTasks(TStageInfo& stageInfo);
     bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
     void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
@@ -421,7 +439,7 @@ private:
     void BuildSysViewTasksFromSource(TStageInfo& stageInfo);
     void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount);
     void FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings);
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, TQueryExecutionStats* stats);
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
 
     void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
     bool IsCrossShardChannel(const NYql::NDq::TChannel& channel) const;
@@ -453,8 +471,8 @@ private:
 
     void SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const;
 
-    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount);
-    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 nodeId, bool enableShuffleElimination = false) const;
+    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(const TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount) const;
+    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetScanTasksPerNode(const TStageInfo& stageInfo, const bool isOlapScan, const ui64 nodeId, bool enableShuffleElimination = false) const;
 
     void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
 
@@ -475,7 +493,7 @@ private:
     TActorId BufferActorId; // TODO: not sure if it belongs here
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 
-    TNodeQuotaManager QuotaManager;
+    TMaxTasksGraph MaxTasksGraph;
 };
 
 } // namespace NKikimr::NKqp

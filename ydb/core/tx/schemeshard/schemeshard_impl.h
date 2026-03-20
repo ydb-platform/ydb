@@ -96,6 +96,7 @@ struct TIncrementalRestoreState;
 
 // Forward declaration for index build info
 struct TIndexBuildInfo;
+struct TSetColumnConstraintOperationInfo;
 struct TIndexBuildShardStatus;
 
 class TSchemeShard
@@ -1703,6 +1704,7 @@ public:
         struct TTxBilling;
 
         class TTxCreateSetColumnConstraint;
+        struct TTxProgressSetColumnConstraint;
     };
 
     NTabletFlatExecutor::ITransaction* CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TPtr& ev);
@@ -1751,17 +1753,25 @@ public:
     void Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);
     void SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);
 
-    // namespace NSetColumnConstraint {
+
+    // Begin SetColumnConstraint
     void Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxCreateSetColumnConstraint(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxSetColumnConstraintProgress(TIndexBuildId id);
 
-    THashMap<TIndexBuildId, std::shared_ptr<TIndexBuildInfo>> SetColumnConstraintOperations;
-    THashMap<TString, std::shared_ptr<TIndexBuildInfo>> SetColumnConstraintOperationsByUid;
+    THashMap<TIndexBuildId, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperations;
+    THashMap<TString, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperationsByUid;
     TSet<std::pair<TInstant, TIndexBuildId>> SetColumnConstraintOperationsByTime;
     THashMap<TTxId, TIndexBuildId> TxIdToSetColumnConstraintOperations;
-    // } // NSetColumnConstraint
 
-    // } //NIndexBuilder
+    void PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
+    void PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
+
+    void AddSetColumnConstraintOperation(const std::shared_ptr<TSetColumnConstraintOperationInfo>& indexInfo);
+
+    // End SetColumnConstraint
+
+    // } // NIndexBuilder
 
     // namespace NForcedCompaction {
     THashMap<ui64, TForcedCompactionInfo::TPtr> ForcedCompactions;

@@ -363,6 +363,10 @@ void TSchemeShard::AddIndexBuild(const std::shared_ptr<TIndexBuildInfo>& buildIn
     }
 }
 
+void TSchemeShard::AddSetColumnConstraintOperation(const std::shared_ptr<TSetColumnConstraintOperationInfo>& operationInfo) {
+    AddIndexBuild(operationInfo);
+}
+
 void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo& indexBuildInfo) {
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.LockTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.InitiateTxId);

@@ -521,7 +521,13 @@ void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorCon
             continue;
         }
 
-        Execute(CreateTxProgress(id), ctx);
+        if (buildInfoPtr->get()->IsBuildColumns() || buildInfoPtr->get()->IsBuildIndex()) {
+            Execute(CreateTxProgress(id), ctx);
+        } else if (buildInfoPtr->get()->IsSetColumnConstraint()) {
+            Execute(CreateTxSetColumnConstraintProgress(id), ctx);
+        } else {
+            Y_UNREACHABLE();
+        }
     }
 }
 

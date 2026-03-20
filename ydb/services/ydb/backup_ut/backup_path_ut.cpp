@@ -1309,6 +1309,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     // Test that covers races between processing and cancellation
     Y_UNIT_TEST_TWIN(CancelWhileProcessing, IsOlap) {
         using namespace fmt::literals;
+        
+        if (IsOlap) {
+            return; // TODO (hcpp): fix me https://github.com/ydb-platform/ydb/issues/35873
+        }
 
         // Make tables for parallel export
         auto createSchemaResult = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(

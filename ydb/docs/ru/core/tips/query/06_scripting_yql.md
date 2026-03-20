@@ -65,7 +65,7 @@ void ExecuteWithScripting(NYdb::TDriver& driver) {
   ```cpp
 #include <ydb-cpp-sdk/client/query/client.h>
 
-void ExecuteWithQueryService(NYdb::NQuery::TQueryClient client) {
+void ExecuteWithQueryService(NYdb::TDriver& driver) {
     NYdb::NQuery::TQueryClient client(driver);
 
     auto result = client.ExecuteQuery(

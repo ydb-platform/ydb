@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NActors {
@@ -238,7 +239,8 @@ namespace NActors {
         Y_ABORT_UNLESS(msg->Event);
 
         LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", msg->Event->Sender.ToString().data());
-        UpdateSubscriber(msg->Event->Sender, msg->Event->Cookie, std::move(msg->Activity), std::move(msg->EventTypeName));
+        UpdateSubscriber(msg->Event->Sender, msg->Event->Cookie, std::move(msg->Activity), std::move(msg->EventTypeName),
+            std::move(msg->StackTrace));
         Send(msg->Event->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, msg->Event->Cookie);
 
         EnqueueForward(TAutoPtr<IEventHandle>(msg->Event.Release()));
@@ -280,15 +282,13 @@ namespace NActors {
         Proxy->Metrics->SubSubscribersCount(Subscribers.erase(ev->Sender));
     }
 
-    void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, TString activity, TString eventTypeName) {
+    void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, TString activity, TString eventTypeName,
+            TString stackTrace) {
         auto updateInfo = [&] (TSubscriberInfo& info) {
             info.Cookie = cookie;
-            if (!activity.empty()) {
-                info.Activity = activity;
-            }
-            if (!eventTypeName.empty()) {
-                info.EventTypeName = eventTypeName;
-            }
+            info.Activity = activity;
+            info.EventTypeName = eventTypeName;
+            info.StackTrace = stackTrace;
         };
 
         const auto [it, inserted] = Subscribers.emplace(actorId, TSubscriberInfo{});
@@ -1613,6 +1613,12 @@ namespace NActors {
                                     TABLED() { str << (LastSubscriber->Info.Activity.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.Activity)); }
                                     TABLED() { str << (LastSubscriber->Info.EventTypeName.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.EventTypeName)); }
                                 }
+                            }
+                        }
+                        if (!LastSubscriber->Info.StackTrace.empty()) {
+                            str << "<h4>Stack trace</h4>";
+                            PRE() {
+                                str << EncodeHtmlPcdata(LastSubscriber->Info.StackTrace);
                             }
                         }
                     }

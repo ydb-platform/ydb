@@ -18,6 +18,7 @@
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <util/generic/hash.h>
+#include <util/system/backtrace.h>
 #include <util/system/rwlock.h>
 #include <util/random/random.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
@@ -48,6 +49,12 @@ namespace NActors {
                 return ev.GetTypeName();
             }
             return Sprintf("0x%08" PRIx32, ev.Type);
+        }
+
+        TString ExtractCurrentStackTrace() {
+            TBackTrace backTrace;
+            backTrace.Capture();
+            return backTrace.PrintToString();
         }
     } // namespace
 
@@ -280,7 +287,8 @@ namespace NActors {
                 const ui64 cookie = ev->Cookie;
                 const TString eventTypeName = ExtractForwardedEventTypeName(*ev);
                 auto wrapped = std::make_unique<IEventHandle>(recipient, sender,
-                    new TEvForwardSubscribeSession(ev.release(), ExtractCurrentSenderActivity(), eventTypeName),
+                    new TEvForwardSubscribeSession(ev.release(), ExtractCurrentSenderActivity(), eventTypeName,
+                        ExtractCurrentStackTrace()),
                     0, cookie);
                 ev = std::move(wrapped);
             } else {

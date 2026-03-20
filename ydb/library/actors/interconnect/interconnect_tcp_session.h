@@ -459,6 +459,7 @@ namespace NActors {
             ui64 Cookie = 0;
             TString Activity;
             TString EventTypeName;
+            TString StackTrace;
         };
 
         struct TLastSubscriberInfo {
@@ -502,7 +503,8 @@ namespace NActors {
         void Subscribe(STATEFN_SIG);
         void Unsubscribe(STATEFN_SIG);
         void EnqueueForward(TAutoPtr<IEventHandle> ev);
-        void UpdateSubscriber(const TActorId& actorId, ui64 cookie, TString activity = {}, TString eventTypeName = {});
+        void UpdateSubscriber(const TActorId& actorId, ui64 cookie, TString activity = {}, TString eventTypeName = {},
+            TString stackTrace = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         std::optional<TTimeLimit> TimeLimit;

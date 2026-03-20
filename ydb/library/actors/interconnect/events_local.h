@@ -363,11 +363,13 @@ namespace NActors {
         TAutoPtr<IEventHandle> Event;
         TString Activity;
         TString EventTypeName;
+        TString StackTrace;
 
-        TEvForwardSubscribeSession(TAutoPtr<IEventHandle> event, TString activity, TString eventTypeName)
+        TEvForwardSubscribeSession(TAutoPtr<IEventHandle> event, TString activity, TString eventTypeName, TString stackTrace)
             : Event(std::move(event))
             , Activity(std::move(activity))
             , EventTypeName(std::move(eventTypeName))
+            , StackTrace(std::move(stackTrace))
         {}
 
         ui32 CalculateSerializedSize() const override {

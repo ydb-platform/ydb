@@ -1406,10 +1406,16 @@ private:
                 // After filling unique index we need to validate it.
                 // This includes:
                 // - Locking index shards
+                // - Publishing shadow data and creating a consistent snapshot if enabled
                 // - Validating each index shard for index keys uniqueness
                 // - Applying cross-shard validation
                 NIceDb::TNiceDb db{txc.DB};
-                buildInfo.SubState = TIndexBuildInfo::ESubState::PrepareValidation;
+                if (Self->EnableOnlineAddUniqueIndex) {
+                    buildInfo.SubState = TIndexBuildInfo::ESubState::PrepareValidation;
+                } else {
+                    buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
+                    Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+                }
                 Self->PersistBuildIndexState(db, buildInfo);
                 ChangeState(BuildId, TIndexBuildInfo::EState::LockBuild);
                 Progress(BuildId);

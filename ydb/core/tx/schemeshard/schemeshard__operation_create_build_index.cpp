@@ -171,7 +171,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
-        implTableDesc.MutablePartitionConfig()->SetShadowData(true);
+        if (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique ||
+            context.SS->EnableOnlineAddUniqueIndex) {
+            implTableDesc.MutablePartitionConfig()->SetShadowData(true);
+        }
 
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
         *outTx.MutableCreateTable() = std::move(implTableDesc);

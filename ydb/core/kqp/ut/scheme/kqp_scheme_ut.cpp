@@ -3528,9 +3528,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     class TKikimrRunnerWithPauseIndexBuild : public TKikimrRunner {
     public:
-        static TKikimrSettings MakeSettings() {
+        static TKikimrSettings MakeSettings(bool onlineUnique = false) {
             NKikimrConfig::TFeatureFlags featureFlags;
             featureFlags.SetEnableAddUniqueIndex(true);
+            featureFlags.SetEnableOnlineAddUniqueIndex(onlineUnique);
 
             TKikimrSettings settings;
             settings
@@ -3540,8 +3541,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             return settings;
         }
 
-        TKikimrRunnerWithPauseIndexBuild(bool yqlDetailedLogging = false)
-            : TKikimrRunner(MakeSettings())
+        TKikimrRunnerWithPauseIndexBuild(bool yqlDetailedLogging = false, bool onlineUnique = false)
+            : TKikimrRunner(MakeSettings(onlineUnique))
             , BuildIndexRequestPromise(NThreading::NewPromise<void>())
             , BuildIndexRequest(BuildIndexRequestPromise.GetFuture())
             , ValidateIndexRequestPromise(NThreading::NewPromise<void>())
@@ -3600,8 +3601,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         bool ValidateIndexEventIsIntercepted = false;
     };
 
-    void BuildingUniqIndexAllowsTableModifications(bool sqlInterface) {
-        TKikimrRunnerWithPauseIndexBuild kikimr(false /* yqlDetailedLogging */);
+    void BuildingUniqIndexAllowsTableModifications(bool sqlInterface, bool onlineBuild) {
+        TKikimrRunnerWithPauseIndexBuild kikimr(false /* yqlDetailedLogging */, onlineBuild);
         kikimr.RunCall([&]
         {
             auto db = kikimr.GetTableClient();
@@ -3685,10 +3686,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 for (const TString& query : modificationQueries) {
                     Cerr << "Running query:\n" << query << Endl;
                     auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                    if (result.GetStatus() != EStatus::SUCCESS) {
+                    bool ok = false;
+                    if (onlineBuild || i == 2) {
+                        ok = (result.GetStatus() == EStatus::SUCCESS);
+                    } else {
+                        ok = (result.GetStatus() == EStatus::BAD_REQUEST
+                            && result.GetIssues().ToString().find("Table `/Root/TestTable` modification is disabled: Unique index uniq_value_idx is under construction") != TString::npos);
+                    }
+                    if (!ok) {
                         Cerr << "Execute query issues. Query: " << query << Endl;
                         Cerr << "Execute issues:\n" << result.GetIssues().ToString() << Endl;
-                        ythrow yexception() << "Unexpected status of upsert query: " << result.GetStatus() << ": " << result.GetIssues().ToString();
+                        ythrow yexception() << "Unexpected status of modification query: " << result.GetStatus() << ": " << result.GetIssues().ToString();
                     }
                 }
 
@@ -3742,12 +3750,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         });
     }
 
+    Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsPublicApi) {
+        BuildingUniqIndexAllowsTableModifications(false, false);
+    }
+
+    Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsSql) {
+        BuildingUniqIndexAllowsTableModifications(true, false);
+    }
+
     Y_UNIT_TEST(BuildingUniqIndexAllowsTableModificationsPublicApi) {
-        BuildingUniqIndexAllowsTableModifications(false);
+        BuildingUniqIndexAllowsTableModifications(false, true);
     }
 
     Y_UNIT_TEST(BuildingUniqIndexAllowsTableModificationsSql) {
-        BuildingUniqIndexAllowsTableModifications(true);
+        BuildingUniqIndexAllowsTableModifications(true, true);
     }
 
     void ValidatingUniqIndex(bool sqlInterface, bool isUnique) {

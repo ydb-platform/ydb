@@ -5180,6 +5180,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
+    EnableOnlineAddUniqueIndex = appData->FeatureFlags.GetEnableOnlineAddUniqueIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
     EnableJsonIndex = appData->FeatureFlags.GetEnableJsonIndex();
     EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();

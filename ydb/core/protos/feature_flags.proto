@@ -282,4 +282,5 @@ message TFeatureFlags {
     optional bool EnableDataShardSplitHistogramSorting = 244 [default = false];
     optional bool EnableDataShardSplitKeySelection = 245 [default = false];
     optional bool EnableDataShardSplitHistogramOmission  = 246 [default = false];
+    optional bool EnableOnlineAddUniqueIndex = 247 [default = false];
 }

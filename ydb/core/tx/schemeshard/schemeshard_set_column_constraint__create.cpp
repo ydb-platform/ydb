@@ -20,14 +20,18 @@ public:
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& request = Request->Get()->Record;
 
+        Response = MakeHolder<TEvSetColumnConstraint::TEvCreateResponse>(request.GetTxId());
+
+        if (!Self->EnableSetColumnConstraint) {
+            return Reply(Ydb::StatusIds::UNSUPPORTED, "SetColumnConstraint feature is disabled");
+        }
+
         if (!request.HasSettings()) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: There are no columns that need to be updated");
         }
 
         const auto& settings = request.GetSettings();
         LOG_N("DoExecute " << request.ShortDebugString());
-
-        Response = MakeHolder<TEvSetColumnConstraint::TEvCreateResponse>(request.GetTxId());
 
         if (Self->SetColumnConstraintOperations.contains(BuildId)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()

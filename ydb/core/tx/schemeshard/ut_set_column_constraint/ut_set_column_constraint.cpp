@@ -54,9 +54,10 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
 
+        // Progress stub replies UNSUPPORTED until the operation is fully implemented
         UNIT_ASSERT_VALUES_EQUAL_C(
             response.GetStatus(),
-            Ydb::StatusIds::PRECONDITION_FAILED,
+            Ydb::StatusIds::UNSUPPORTED,
             response.ShortDebugString());
     }
 
@@ -75,9 +76,9 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
 
-        UNIT_ASSERT_VALUES_UNEQUAL_C(
+        UNIT_ASSERT_VALUES_EQUAL_C(
             response.GetStatus(),
-            Ydb::StatusIds::SUCCESS,
+            Ydb::StatusIds::BAD_REQUEST,
             response.ShortDebugString());
     }
 
@@ -96,9 +97,9 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
 
-        UNIT_ASSERT_VALUES_UNEQUAL_C(
+        UNIT_ASSERT_VALUES_EQUAL_C(
             response.GetStatus(),
-            Ydb::StatusIds::SUCCESS,
+            Ydb::StatusIds::BAD_REQUEST,
             response.ShortDebugString());
     }
 } // Y_UNIT_TEST_SUITE(SetColumnConstraintTest)

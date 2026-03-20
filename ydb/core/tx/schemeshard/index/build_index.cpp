@@ -516,15 +516,10 @@ bool TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
 
 void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx) {
     for (const auto& id : indexIds) {
-        const auto* buildInfoPtr = IndexBuilds.FindPtr(id);
-        if (!buildInfoPtr || buildInfoPtr->get()->IsBroken) {
-            continue;
-        }
-
-        if (buildInfoPtr->get()->IsBuildColumns() || buildInfoPtr->get()->IsBuildIndex()) {
-            Execute(CreateTxProgress(id), ctx);
-        } else if (buildInfoPtr->get()->IsSetColumnConstraint()) {
+        if (const auto* opPtr = SetColumnConstraintOperations.FindPtr(id); opPtr) {
             Execute(CreateTxSetColumnConstraintProgress(id), ctx);
+        } else if (const auto* buildInfoPtr = IndexBuilds.FindPtr(id); buildInfoPtr && buildInfoPtr->get()->IsBroken) {
+            Execute(CreateTxProgress(id), ctx);
         } else {
             Y_UNREACHABLE();
         }

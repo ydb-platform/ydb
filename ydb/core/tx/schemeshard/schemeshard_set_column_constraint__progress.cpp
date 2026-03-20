@@ -1,18 +1,11 @@
 #include "schemeshard_build_index.h"
-#include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_index_utils.h"
+#include "schemeshard_set_column_constraint.h"
+#include "schemeshard_build_index_helpers.h"
+#include "schemeshard_xxport__helpers.h"
 
-#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-
-#include <ydb/core/base/table_index.h>
-#include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/ydb_convert/table_description.h>
-
-#include <yql/essentials/public/issue/yql_issue_message.h>
 
 
 namespace NKikimr {
@@ -29,18 +22,30 @@ public:
     {}
 
     bool DoExecute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
-        LOG_D("TTxProgressSetColumnConstraint::DoExecute"
-            << ", id# " << BuildId);
+        LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId);
 
         auto it = Self->SetColumnConstraintOperations.find(BuildId);
         if (it == Self->SetColumnConstraintOperations.end()) {
             LOG_W("TTxProgressSetColumnConstraint::DoExecute"
-                << ": SetColumnConstraintOperation not found"
-                << ", id# " << BuildId);
+                ": SetColumnConstraintOperation not found"
+                ", id# " << BuildId);
             return true;
         }
 
+        const auto& buildInfo = *it->second;
+
         // TODO: implement progress logic
+        auto response = MakeHolder<TEvSetColumnConstraint::TEvCreateResponse>(ui64(BuildId));
+        response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
+        AddIssue(response->Record.MutableIssues(),
+            "SetColumnConstraint operation is not yet implemented");
+
+        LOG_N("TTxProgressSetColumnConstraint::DoExecute: replying UNSUPPORTED"
+            << ", id# " << BuildId
+            << ", replyTo# " << buildInfo.CreateSender.ToString());
+
+        Send(buildInfo.CreateSender, std::move(response), 0, buildInfo.SenderCookie);
+
         return true;
     }
 
@@ -52,11 +57,11 @@ public:
     {
         if (!buildInfo) {
             LOG_N("TTxProgressSetColumnConstraint: OnUnhandledException: id not found"
-                << ", id# " << BuildId);
+                ", id# " << BuildId);
             return;
         }
         LOG_E("TTxProgressSetColumnConstraint: OnUnhandledException"
-            << ", id# " << BuildId
+            ", id# " << BuildId
             << ", exception: " << exc.what());
     }
 };

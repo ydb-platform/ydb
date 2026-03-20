@@ -364,7 +364,14 @@ void TSchemeShard::AddIndexBuild(const std::shared_ptr<TIndexBuildInfo>& buildIn
 }
 
 void TSchemeShard::AddSetColumnConstraintOperation(const std::shared_ptr<TSetColumnConstraintOperationInfo>& operationInfo) {
-    AddIndexBuild(operationInfo);
+    Y_ASSERT(!SetColumnConstraintOperations.contains(operationInfo->Id));
+    SetColumnConstraintOperations[operationInfo->Id] = operationInfo;
+    SetColumnConstraintOperationsByTime.emplace(operationInfo->StartTime, operationInfo->Id);
+
+    if (operationInfo->Uid) {
+        Y_ASSERT(!SetColumnConstraintOperationsByUid.contains(operationInfo->Uid));
+        SetColumnConstraintOperationsByUid[operationInfo->Uid] = operationInfo;
+    }
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo& indexBuildInfo) {

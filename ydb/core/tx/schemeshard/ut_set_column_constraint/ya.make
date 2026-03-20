@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-SIZE(MEDIUM)
-
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

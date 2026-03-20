@@ -36,12 +36,19 @@ TLI (Transaction Locks Invalidated) возникает в {{ ydb-short-name }} �
 def update_user_balance(user_id: int, amount: int):
     with db.transaction() as tx:
         # Читаем текущий баланс
-        current_balance = tx.execute("SELECT balance FROM users WHERE id = ?", user_id)
-        
+        result = tx.execute(
+            "SELECT balance FROM users WHERE id = $userId",
+            {"$userId": user_id},
+        )
+        current_balance = result[0].rows[0]["balance"]
+
         # Обновляем баланс
         new_balance = current_balance + amount
-        tx.execute("UPDATE users SET balance = ? WHERE id = ?", new_balance, user_id)
-        
+        tx.execute(
+            "UPDATE users SET balance = $newBalance WHERE id = $userId",
+            {"$userId": user_id, "$newBalance": new_balance},
+        )
+
         # Если здесь произойдет TLI - транзакция упадет без ретрая
         tx.commit()
 ```
@@ -57,72 +64,98 @@ def update_user_balance_with_retry(user_id: int, amount: int, max_retries: int =
         try:
             with db.transaction() as tx:
                 # Читаем текущий баланс
-                current_balance = tx.execute("SELECT balance FROM users WHERE id = ?", user_id)
-                
+                result = tx.execute(
+                    "SELECT balance FROM users WHERE id = $userId",
+                    {"$userId": user_id},
+                )
+                current_balance = result[0].rows[0]["balance"]
+
                 # Обновляем баланс
                 new_balance = current_balance + amount
-                tx.execute("UPDATE users SET balance = ? WHERE id = ?", new_balance, user_id)
-                
+                tx.execute(
+                    "UPDATE users SET balance = $newBalance WHERE id = $userId",
+                    {"$userId": user_id, "$newBalance": new_balance},
+                )
+
                 tx.commit()
                 return new_balance
-                
+
         except RetryableError as e:
             if "Transaction locks invalidated" in str(e) and attempt < max_retries - 1:
                 # Экспоненциальная задержка
                 time.sleep(2 ** attempt)
                 continue
             raise
-    
+
     raise Exception(f"Failed after {max_retries} attempts")
 
 # Альтернативный вариант с использованием встроенного ретрая YDB SDK
 def update_user_balance_ydb_retry(user_id: int, amount: int):
     def operation(tx):
-        current_balance = tx.execute("SELECT balance FROM users WHERE id = ?", user_id)
+        result = tx.execute(
+            "SELECT balance FROM users WHERE id = $userId",
+            {"$userId": user_id},
+        )
+        current_balance = result[0].rows[0]["balance"]
         new_balance = current_balance + amount
-        tx.execute("UPDATE users SET balance = ? WHERE id = ?", new_balance, user_id)
-    
+        tx.execute(
+            "UPDATE users SET balance = $newBalance WHERE id = $userId",
+            {"$userId": user_id, "$newBalance": new_balance},
+        )
+
     # Используем встроенный механизм ретраев YDB SDK
     return db.retry_operation(operation, idempotent=True)
 ```
 
-### Пример на Go с использованием database/sql
+### Пример на Go с использованием YDB Go SDK
 
 ```go
 package main
 
 import (
     "context"
-    "database/sql"
     "fmt"
-    "log"
     "time"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 
-func updateUserBalanceWithRetry(ctx context.Context, db *sql.DB, userID int, amount int) error {
+func updateUserBalanceWithRetry(ctx context.Context, db *ydb.Driver, userID int64, amount int64) error {
     maxRetries := 3
-    
+
     for i := 0; i < maxRetries; i++ {
-        tx, err := db.BeginTx(ctx, nil)
-        if err != nil {
+        err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
+            // Читаем текущий баланс
+            var currentBalance int64
+            row, err := tx.QueryRow(ctx,
+                "SELECT balance FROM users WHERE id = $userId",
+                query.WithParameters(
+                    ydb.ParamsBuilder().
+                        Param("$userId").Int64(userID).
+                        Build(),
+                ),
+            )
+            if err != nil {
+                return err
+            }
+            if err = row.Scan(&currentBalance); err != nil {
+                return err
+            }
+
+            // Обновляем баланс
+            newBalance := currentBalance + amount
+            _, err = tx.Exec(ctx,
+                "UPDATE users SET balance = $newBalance WHERE id = $userId",
+                query.WithParameters(
+                    ydb.ParamsBuilder().
+                        Param("$userId").Int64(userID).
+                        Param("$newBalance").Int64(newBalance).
+                        Build(),
+                ),
+            )
             return err
-        }
-        
-        var currentBalance int
-        err = tx.QueryRowContext(ctx, "SELECT balance FROM users WHERE id = $1", userID).Scan(&currentBalance)
-        if err != nil {
-            tx.Rollback()
-            return err
-        }
-        
-        newBalance := currentBalance + amount
-        _, err = tx.ExecContext(ctx, "UPDATE users SET balance = $1 WHERE id = $2", newBalance, userID)
-        if err != nil {
-            tx.Rollback()
-            return err
-        }
-        
-        err = tx.Commit()
+        }, query.WithIdempotent())
         if err != nil {
             // Проверяем, является ли ошибка TLI
             if isTLIError(err) && i < maxRetries-1 {
@@ -131,65 +164,59 @@ func updateUserBalanceWithRetry(ctx context.Context, db *sql.DB, userID int, amo
             }
             return err
         }
-        
+
         return nil
     }
-    
+
     return fmt.Errorf("failed after %d attempts", maxRetries)
 }
 
 func isTLIError(err error) bool {
-    // Логика проверки на TLI ошибку
-    return err != nil && contains(err.Error(), "transaction locks invalidated")
-}
-
-func contains(s, substr string) bool {
-    return len(s) >= len(substr) && s[:len(substr)] == substr
+    return ydb.IsOperationError(err, Ydb.StatusIds_ABORTED)
 }
 ```
 
 ### Пример на Java с {{ ydb-short-name }} Native SDK
 
 ```java
-import com.yandex.ydb.table.Session;
-import com.yandex.ydb.table.TableClient;
-import com.yandex.ydb.table.transaction.TxControl;
-import com.yandex.ydb.table.transaction.Transaction;
+import tech.ydb.table.Session;
+import tech.ydb.table.TableClient;
+import tech.ydb.table.query.Params;
+import tech.ydb.table.transaction.TxControl;
+import tech.ydb.table.values.PrimitiveValue;
 
 public class TLIHandler {
-    
-    public static void updateUserBalanceWithRetry(TableClient client, String userId, int amount) {
+
+    public static void updateUserBalanceWithRetry(TableClient client, long userId, int amount) {
         RetrySettings retrySettings = RetrySettings.newBuilder()
             .maxRetries(3)
             .idempotent(true)
             .build();
-            
+
         Retry.retryWithSettings(retrySettings, () -> {
             try (Session session = client.createSession().join()) {
-                Transaction tx = session.beginTransaction().join();
-                
-                // Выполняем операции в транзакции
+                // Читаем текущий баланс
                 ResultSetReader reader = session.executeDataQuery(
-                    "SELECT balance FROM users WHERE id = ?",
-                    TxControl.tx(tx),
-                    Params.of("id", Value.ofUtf8(userId))
+                    "SELECT balance FROM users WHERE id = $userId",
+                    TxControl.serializableRw().setCommitTx(false),
+                    Params.of(
+                        "$userId", PrimitiveValue.newInt64(userId)
+                    )
                 ).join().getResultSet(0);
-                
+
                 if (reader.next()) {
                     int currentBalance = reader.getColumn("balance").getInt32();
                     int newBalance = currentBalance + amount;
-                    
+
                     session.executeDataQuery(
-                        "UPDATE users SET balance = ? WHERE id = ?",
-                        TxControl.tx(tx),
+                        "UPDATE users SET balance = $newBalance WHERE id = $userId",
+                        TxControl.serializableRw().setCommitTx(true),
                         Params.of(
-                            "balance", Value.ofInt32(newBalance),
-                            "id", Value.ofUtf8(userId)
+                            "$userId", PrimitiveValue.newInt64(userId),
+                            "$newBalance", PrimitiveValue.newInt32(newBalance)
                         )
                     ).join();
                 }
-                
-                tx.commit().join();
             }
             return null;
         });

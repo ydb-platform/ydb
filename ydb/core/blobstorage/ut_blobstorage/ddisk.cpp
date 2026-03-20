@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             };
 
             auto res = testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-            UNIT_ASSERT(testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD) == -1);
+            UNIT_ASSERT(testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK) == res);
             for (auto it = PersistentBuffers.begin(); it != PersistentBuffers.end() && it->first <= lsn; ) {
                 auto current = it++;
                 PersistentBuffers.erase(current);
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             };
 
             auto res = testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-            UNIT_ASSERT(testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD) == -1);
+            UNIT_ASSERT(testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK) == res);
             for (auto [lsn, _] : erases) {
                 PersistentBuffers.erase(lsn);
             }
@@ -398,8 +398,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
             }
 
             for (ui64 lsn : selectedLsns) {
-                Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvErasePersistentBuffer(
-                    PBCreds, lsn, PBCreds.Generation)),
+                Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvBatchErasePersistentBuffer(
+                    PBCreds, {{lsn, PBCreds.Generation}})),
                     Edge.NodeId());
                 auto eraseRes = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
                 UNIT_ASSERT(eraseRes->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);

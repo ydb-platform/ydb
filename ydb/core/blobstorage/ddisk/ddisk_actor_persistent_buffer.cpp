@@ -608,20 +608,6 @@ namespace NKikimr::NDDisk {
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
             .Attribute("tablet_id", static_cast<long>(creds.TabletId)));
 
-        for (auto& e : erases) {
-            auto lsn = std::get<0>(e);
-            auto generation = std::get<1>(e);
-            const auto it = PersistentBuffers.find({creds.TabletId, generation});
-            if (it == PersistentBuffers.end()
-                || it->second.Records.find(lsn) == it->second.Records.end()) {
-                Counters.Interface.ErasePersistentBuffer.Reply(false);
-                span.End();
-                SendReply(queryEv, std::make_unique<TEvErasePersistentBufferResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
-                return;
-            }
-        }
-
         const ui64 batchEraseCookie = NextCookie++;
 
         auto [inflightRecord, inserted] = PersistentBufferDiskOperationInflight.try_emplace(batchEraseCookie, TPersistentBufferDiskOperationInFlight{
@@ -682,7 +668,12 @@ namespace NKikimr::NDDisk {
 
         std::vector<std::tuple<ui64, ui32>> erases;
         for (auto& e : record.GetErases()) {
-            erases.emplace_back(e.GetLsn(), e.GetGeneration());
+            auto lsn = e.GetLsn();
+            auto generation = e.GetGeneration();
+            const auto it = PersistentBuffers.find({creds.TabletId, generation});
+            if (it != PersistentBuffers.end() && it->second.Records.find(lsn) != it->second.Records.end()) {
+                erases.emplace_back(lsn, generation);
+            }
         }
 
         if (erases.empty()) {
@@ -714,7 +705,7 @@ namespace NKikimr::NDDisk {
         const auto it = PersistentBuffers.find({creds.TabletId, generation});
         if (it == PersistentBuffers.end()) {
             SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
-                NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace(), NormalizedOccupancy));
             return;
         }
         auto recordIt = it->second.Records.begin();

@@ -19,6 +19,11 @@ public:
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& request = Request->Get()->Record;
+
+        if (!request.HasSettings()) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: There are no columns that need to be updated");
+        }
+
         const auto& settings = request.GetSettings();
         LOG_N("DoExecute " << request.ShortDebugString());
 
@@ -86,8 +91,32 @@ public:
             return Reply(NKikimrScheme::StatusPreconditionFailed, "Cannot set constraint on index");
         }
 
-        return Reply(NKikimrScheme::StatusPreconditionFailed, "Create set constraint not implemented");
-        // return true;
+        auto operationInfo = std::make_shared<TSetColumnConstraintOperationInfo>();
+        operationInfo->Id = BuildId;
+        operationInfo->Uid = uid;
+        operationInfo->DomainPathId = domainPath.Base()->PathId;
+        operationInfo->TablePathId = tablePath.Base()->PathId;
+
+        operationInfo->CreateSender = Request->Sender;
+        operationInfo->SenderCookie = Request->Cookie;
+        operationInfo->StartTime = TAppData::TimeProvider->Now();
+
+        if (request.HasUserSID()) {
+            operationInfo->UserSID = request.GetUserSID();
+        }
+
+        operationInfo->BuildKind = TIndexBuildInfo::EBuildKind::SetColumnConstraint;
+
+        Self->PersistCreateSetColumnConstraint(db, *operationInfo);
+        operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps;
+
+        Self->PersistBuildIndexState(db, *operationInfo);
+
+        Self->AddSetColumnConstraintOperation(operationInfo);
+
+        Progress(BuildId);
+
+        return true;
     }
 
     void DoComplete(const TActorContext&) override {}

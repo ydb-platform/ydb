@@ -54,7 +54,7 @@ struct TIndexBuildShardStatus {
 // > TBuildColumnsInfo
 // > TBuildSecondaryInfo
 // > TBuildVectorInfo
-// >TSetColumnConstraintOperationInfo
+// > TSetColumnConstraintOperationInfo
 // with single base TBuildInfo
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     using TPtr = TIntrusivePtr<TIndexBuildInfo>;
@@ -139,6 +139,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         BuildSecondaryUniqueIndex = 13,
         BuildColumns = 20,
         BuildFulltext = 30,
+        SetColumnConstraint = 40,
     };
 
     TActorId CreateSender;
@@ -767,6 +768,10 @@ public:
         return IndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
     }
 
+    bool IsSetColumnConstraint() const {
+        return BuildKind == EBuildKind::SetColumnConstraint;
+    }
+
     void AddNotifySubscriber(const TActorId& actorID) {
         Y_ENSURE(!IsFinished());
         Subscribers.insert(actorID);
@@ -841,6 +846,19 @@ public:
 
 };
 
+struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
+    enum class EOperationState: ui32 {
+        Invalid = 0,
+        LockTableOnSchemaOps = 10,
+        LockNullWrites = 20,
+        Validate = 30,
+        UnlockTableOnSchemaOps = 40,
+        UnlockNullWrites = 50,
+        Done = 60
+    };
+
+    EOperationState OperationState = EOperationState::Invalid;
+};
 
 }
 

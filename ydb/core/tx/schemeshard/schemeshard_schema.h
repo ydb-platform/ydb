@@ -2400,6 +2400,13 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<OriginalOpId, ItemSeq>;
         using TColumns = TableColumns<OriginalOpId, ItemSeq, ItemKind, TablePathId, WaitTxId, SrcTablePathId>;
+    }
+
+    struct SetColumnConstraintOperation : Table<134> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<Id>;
     };
 
     // Alternative to TablePartitions/MigratedTablePartitions: keyed by path+shard identity so
@@ -2711,7 +2718,8 @@ struct Schema : NIceDb::Schema {
         TablePartitionsByShardIdx,
         TablePartitionStatsByShardIdx,
         FullBackups,
-        FullBackupItems
+        FullBackupItems,
+        SetColumnConstraintOperation
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

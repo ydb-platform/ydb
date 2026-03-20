@@ -281,18 +281,24 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, TString activity, TString eventTypeName) {
-        const auto [it, inserted] = Subscribers.emplace(actorId, TSubscriberInfo{cookie, std::move(activity), std::move(eventTypeName)});
-        if (inserted) {
-            Proxy->Metrics->IncSubscribersCount();
-        } else {
-            it->second.Cookie = cookie;
+        auto updateInfo = [&] (TSubscriberInfo& info) {
+            info.Cookie = cookie;
             if (!activity.empty()) {
-                it->second.Activity = std::move(activity);
+                info.Activity = activity;
             }
             if (!eventTypeName.empty()) {
-                it->second.EventTypeName = std::move(eventTypeName);
+                info.EventTypeName = eventTypeName;
             }
+        };
+
+        const auto [it, inserted] = Subscribers.emplace(actorId, TSubscriberInfo{});
+        if (inserted) {
+            Proxy->Metrics->IncSubscribersCount();
         }
+        updateInfo(it->second);
+
+        LastSubscriber.emplace(TLastSubscriberInfo{actorId, {}});
+        updateInfo(LastSubscriber->Info);
     }
 
     THolder<TEvHandshakeAck> TInterconnectSessionTCP::ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) {
@@ -1585,13 +1591,13 @@ namespace NActors {
                 }
             }
 
-            if (!Subscribers.empty()) {
+            if (LastSubscriber) {
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
-                        str << "Subscribers";
+                        str << "Last subscriber";
                     }
                     DIV_CLASS("panel-body") {
-                        TABLE_CLASS("table table-sortable") {
+                        TABLE_CLASS("table") {
                             TABLEHEAD() {
                                 TABLER() {
                                     TABLEH() { str << "ActorId"; }
@@ -1601,13 +1607,11 @@ namespace NActors {
                                 }
                             }
                             TABLEBODY() {
-                                for (const auto& [actorId, info] : Subscribers) {
-                                    TABLER() {
-                                        TABLED() { str << actorId; }
-                                        TABLED() { str << info.Cookie; }
-                                        TABLED() { str << (info.Activity.empty() ? TStringBuf("manual") : TStringBuf(info.Activity)); }
-                                        TABLED() { str << (info.EventTypeName.empty() ? TStringBuf("manual") : TStringBuf(info.EventTypeName)); }
-                                    }
+                                TABLER() {
+                                    TABLED() { str << LastSubscriber->ActorId; }
+                                    TABLED() { str << LastSubscriber->Info.Cookie; }
+                                    TABLED() { str << (LastSubscriber->Info.Activity.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.Activity)); }
+                                    TABLED() { str << (LastSubscriber->Info.EventTypeName.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.EventTypeName)); }
                                 }
                             }
                         }

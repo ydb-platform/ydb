@@ -461,6 +461,11 @@ namespace NActors {
             TString EventTypeName;
         };
 
+        struct TLastSubscriberInfo {
+            TActorId ActorId;
+            TSubscriberInfo Info;
+        };
+
         TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
         ~TInterconnectSessionTCP();
 
@@ -672,6 +677,7 @@ namespace NActors {
         ui64 RdmaInflightDataAmount = 0;
 
         std::unordered_map<TActorId, TSubscriberInfo, TActorId::THash> Subscribers;
+        std::optional<TLastSubscriberInfo> LastSubscriber;
 
         struct TDelayedEvent {
             TAutoPtr<IEventHandle> Event;

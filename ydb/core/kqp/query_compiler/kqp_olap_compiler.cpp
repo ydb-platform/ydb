@@ -14,6 +14,8 @@
 namespace NKikimr {
 namespace NKqp {
 
+// CI: trigger olap tests
+
 using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NKikimrSSA;

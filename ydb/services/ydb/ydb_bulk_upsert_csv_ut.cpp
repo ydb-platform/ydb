@@ -71,10 +71,10 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         }
 
         TStringBuilder csv;
-        csv << "Shard,App,Timestamp,HttpCode,Message,Ratio,Binary,Empty\n";
-        csv << "0,app_0,0,200,message,0.33,\"\",\n";
-        csv << "2305843009213693952,app_0,1,200,message,0.33,,\n";
-        csv << "4611686018427387904,\"app_0\",2,200,message,0.33,bin_data,\n";
+        csv << "Shard,App,Timestamp,HttpCode,Message,Ratio,Binary,Empty,AdditionalUnknownColumn\n";
+        csv << "0,app_0,0,200,message,0.33,\"\",,thrash\n";
+        csv << "2305843009213693952,app_0,1,200,message,0.33,,,thrash\n";
+        csv << "4611686018427387904,\"app_0\",2,200,message,0.33,bin_data,,\n";
 
         auto upsert = client.BulkUpsert(
             "/Root/Logs",
@@ -266,23 +266,6 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 .GetValueSync();
             UNIT_ASSERT(!upsert.IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "No column 'Timestamp' in source batch");
-        }
-
-        {
-            TStringBuilder csv;
-            csv << "Shard,App,Timestamp,HttpCode,Message,Ratio\n";
-            csv << "42,app_,-3,200,message,0.33\n";
-
-            auto upsert = client.BulkUpsert(
-                "/Root/Logs",
-                EDataFormat::CSV,
-                csv,
-                {},
-                BulkUpsertSettings(CsvSettingsWithHeader()))
-                .GetValueSync();
-            UNIT_ASSERT(!upsert.IsSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "Unknown column: HttpCode");
-            UNIT_ASSERT_EQUAL(upsert.GetStatus(), EStatus::SCHEME_ERROR);
         }
     }
 

@@ -1,7 +1,10 @@
 #pragma once
 
 #include <util/generic/string.h>
+#include <util/string/builder.h>
 #include <util/string/split.h>
+
+#include <ydb/core/persqueue/public/mlp/mlp.h>
 
 constexpr TStringBuf PRIVATE_REQUEST_PATH_PREFIX = "/private";
 
@@ -29,5 +32,9 @@ namespace NKikimr::NSQS {
 
     static inline TString ExtractAccountNameFromPath(const TStringBuf path, bool isPrivateRequest) {
         return GetRequestPathPart(path, 1, isPrivateRequest);
+    }
+
+    static inline TString ToMessageId(const NPQ::NMLP::TMessageId& messageId) {
+        return TStringBuilder() << "m-" << messageId.PartitionId << "-" << messageId.Offset;
     }
 }

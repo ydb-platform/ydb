@@ -5,9 +5,12 @@
 #include "params.h"
 #include "serviceid.h"
 
+#include <ydb/core/persqueue/public/mlp/mlp.h>
+
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
+#include <ydb/core/ymq/base/utils.h>
 #include <ydb/core/ymq/actor/sha256.h>
 #include <ydb/core/ymq/proto/records.pb.h>
 
@@ -31,6 +34,7 @@ public:
     TSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, isBatch ? EAction::SendMessageBatch : EAction::SendMessage, std::move(cb))
         , IsBatch_(isBatch)
+        , EnableSQSMigrationCompatibility_(AppData()->FeatureFlags.GetEnableSQSMigrationCompatibility())
     {
     }
 
@@ -156,8 +160,77 @@ private:
         return IsBatch_ ? Response_.MutableSendMessageBatch()->MutableError() : Response_.MutableSendMessage()->MutableError();
     }
 
-    // coverity[var_deref_model]: false positive
     void DoAction() override {
+        if (EnableSQSMigrationCompatibility_ && TopicCreated_) {
+            DoActionNewImplimentation();
+        } else {
+            DoActionOldImplimentation();
+        }
+    }
+
+    void DoActionNewImplimentation() {
+        Become(&TThis::StateFunc);
+        Y_ABORT_UNLESS(QueueAttributes_.Defined());
+
+        const bool isFifo = IsFifoQueue();
+        NPQ::NMLP::TWriterSettings writerSettings;
+        writerSettings.DatabasePath = GetDatabaseName();
+        writerSettings.TopicName = GetTopicName();
+        //writerSettings.UserToken = UserToken_; // TODO Permissions already checked??
+        writerSettings.Messages.reserve(IsBatch_ ? BatchRequest().EntriesSize() : 1);
+
+        for (size_t i = 0, size = IsBatch_ ? BatchRequest().EntriesSize() : 1; i < size; ++i) {
+            auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(i) : &Request();
+            auto* currentResponse = IsBatch_ ? Response_.MutableSendMessageBatch()->AddEntries() : Response_.MutableSendMessage();
+
+            currentResponse->SetId(currentRequest->GetId());
+            if (!ValidateSingleRequest(*currentRequest, currentResponse)) {
+                continue;
+            }
+
+            TString deduplicationId;
+            if (isFifo) {
+                const TString& dedupParam = currentRequest->GetMessageDeduplicationId();
+                if (dedupParam) {
+                    deduplicationId = dedupParam;
+                } else if (QueueAttributes_->ContentBasedDeduplication) {
+                    try {
+                        deduplicationId = CalcSHA256(currentRequest->GetMessageBody());
+                    } catch (const std::exception& ex) {
+                        RLOG_SQS_ERROR("Failed to calculate SHA-256 of message body: " << ex.what());
+                        MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+                        continue;
+                    }
+                }
+            }
+
+
+            writerSettings.Messages.emplace_back();
+            auto& message = writerSettings.Messages.back();
+            message.Index = i;
+            message.MessageBody = std::move(currentRequest->GetMessageBody());
+            message.Delay = GetDelay(*currentRequest);
+            message.MessageDeduplicationId = std::move(deduplicationId);
+            message.MessageGroupId = std::move(currentRequest->GetMessageGroupId());
+
+            {
+                TMessageAttributeList attrs;
+                for (const auto& a : currentRequest->GetMessageAttributes()) {
+                    attrs.AddAttributes()->CopyFrom(a);
+                }
+                message.SerializedMessageAttributes = ProtobufToString(attrs);
+            }
+        }
+
+        if (writerSettings.Messages.size() > 0) {
+            NPQ::NMLP::CreateWriter(SelfId(), std::move(writerSettings));
+        } else {
+            SendReplyAndDie();
+        }
+    }
+
+    // coverity[var_deref_model]: false positive
+    void DoActionOldImplimentation() {
         Become(&TThis::StateFunc);
         Y_ABORT_UNLESS(QueueAttributes_.Defined());
 
@@ -234,11 +307,43 @@ private:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup,         HandleWakeup);
-            hFunc(TSqsEvents::TEvSendMessageBatchResponse, HandleSendResponse);
+            hFunc(NPQ::NMLP::TEvWriteResponse, Handle);
+            hFunc(TSqsEvents::TEvSendMessageBatchResponse, HandleSendResponseOldImplimentation);
         }
     }
 
-    void HandleSendResponse(TSqsEvents::TEvSendMessageBatchResponse::TPtr& ev) {
+    void Handle(NPQ::NMLP::TEvWriteResponse::TPtr& ev) {
+        const auto* response = ev->Get();
+        const auto& messages = response->Messages;
+
+        const bool isFifo = IsFifoQueue();
+        for (size_t i = 0, size = messages.size(); i < size; ++i) {
+            const auto& message = messages[i];
+
+            auto* currentResponse = IsBatch_ ? Response_.MutableSendMessageBatch()->MutableEntries(RequestToReplyIndexMapping_[i])
+                : Response_.MutableSendMessage();
+            auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(RequestToReplyIndexMapping_[i]) : &Request();
+
+            if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {
+                currentResponse->SetMessageId(ToMessageId(message.MessageId.value()));
+                if (isFifo) {
+                    currentResponse->SetSequenceNumber(message.MessageId->Offset); // TODO: как быть с несколькими партициями?
+                }
+                currentResponse->SetMD5OfMessageBody(MD5::Calc(currentRequest->GetMessageBody()));
+                if (currentRequest->MessageAttributesSize() > 0) {
+                    const TString md5 = CalcMD5OfMessageAttributes(currentRequest->GetMessageAttributes());
+                    currentResponse->SetMD5OfMessageAttributes(md5);
+                    RLOG_SQS_DEBUG("Calculating MD5 of message attributes. Request: " << *currentRequest << "\nMD5 of message attributes: " << md5);
+                }
+            } else {
+                MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+            }
+        }
+
+        SendReplyAndDie();
+    }
+
+    void HandleSendResponseOldImplimentation(TSqsEvents::TEvSendMessageBatchResponse::TPtr& ev) {
         const bool isFifo = IsFifoQueue();
         for (size_t i = 0, size = ev->Get()->Statuses.size(); i < size; ++i) {
             const auto& status = ev->Get()->Statuses[i];
@@ -277,6 +382,7 @@ private:
     std::vector<size_t> RequestToReplyIndexMapping_;
 
     const bool IsBatch_;
+    const bool EnableSQSMigrationCompatibility_;
 };
 
 IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

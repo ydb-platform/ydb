@@ -263,6 +263,14 @@ protected:
         return Join("/", RootUrl_, UserName_, name);
     }
 
+    TString GetDatabaseName() const {
+        return Cfg().GetRoot();
+    }
+
+    TString GetTopicName() const {
+        return Join("/", RootUrl_, UserName_, DoGetQueueName(), TStringBuilder() << "v" << QueueVersion_, "streamImpl");
+    }
+
     void SendReplyAndDie() {
         RLOG_SQS_TRACE("SendReplyAndDie from action actor " << Response_);
         auto* detailedCounters = UserCounters_ ? UserCounters_->GetDetailedCounters() : nullptr;

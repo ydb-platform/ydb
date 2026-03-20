@@ -4,7 +4,9 @@ ADDINCL(
     ydb/public/sdk/cpp
 )
 
-SIZE(medium)
+SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
+
 SRCS(
     kafka_test_client.cpp
     kafka_test_client.h

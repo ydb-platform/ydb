@@ -1,5 +1,6 @@
 #include "flat_executor_recovery.h"
 
+#include "flat_executor_backup_common.h"
 #include "flat_cxx_database.h"
 #include "flat_part_iface.h"
 #include "tablet_flat_executed.h"
@@ -15,13 +16,11 @@
 #include <yql/essentials/types/binary_json/write.h>
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/openssl/crypto/sha.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/util.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/file.h>
-#include <util/string/hex.h>
 
 
 namespace NKikimr::NTabletFlatExecutor::NRecovery {
@@ -192,6 +191,14 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
                 NTable::ECellOp::Set,
                 MakeTypeValueFromJson(column.PType.GetTypeId(), value, pool)
             ));
+        }
+    }
+
+    for (size_t i = 0; i < key.size(); ++i) {
+        if (key[i].IsEmpty()) {
+            ui32 keyColId = table->KeyColumns.at(i);
+            const auto& col = table->Columns.at(keyColId);
+            throw yexception() << "Key column " << col.Name << " is missing in table " << table->Name;
         }
     }
 
@@ -461,6 +468,7 @@ public:
 
     void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false, bool dryRun = false) {
         RestoreState = ERestoreState::InProgress;
+        SkipChecksumValidation = skipChecksumValidation;
         DryRun = dryRun;
 
         BackupPath = backupPath;
@@ -684,6 +692,7 @@ private:
 
     TActorId RestoreSubscriber; // only for tests
 
+    bool SkipChecksumValidation = false;
     bool DryRun = false;
 }; // TRecoveryShard
 
@@ -989,26 +998,23 @@ public:
         , SnapshotDirPath(BackupPath.Child("snapshot"))
         , SchemaFilePath(SnapshotDirPath.Child("schema.json"))
         , ChangelogFilePath(BackupPath.Child("changelog.json"))
+        , ChangelogChecksumPath(BackupPath.Child("changelog.json.sha256"))
         , ExpectedTabletType(tabletType)
         , ExpectedTabletId(tabletId)
         , SkipChecksumValidation(skipChecksumValidation)
     {}
 
     void Bootstrap() {
-        if (!SnapshotDirPath.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
+        if (!BackupPath.Exists()) {
+            return SendResultAndDie(false, TStringBuilder() << "Backup dir doesn't exist: " << BackupPath);
         }
 
-        if (!ValidateManifest(SnapshotDirPath)) {
+        if (!ValidateSnapshot()) {
             return;
         }
 
-        if (!SchemaFilePath.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Snapshot schema file doesn't exist: " << SchemaFilePath);
-        }
-
-        if (!ChangelogFilePath.Exists()) {
-            return SendResultAndDie(false, TStringBuilder() << "Changelog file doesn't exist: " << ChangelogFilePath);
+        if (!ValidateChangelog()) {
+            return;
         }
 
         ui64 totalBytes = 0;
@@ -1112,8 +1118,18 @@ public:
         }
     }
 
-    bool ValidateManifest(const TFsPath& snapshotDir) {
-        auto manifestFile = snapshotDir.Child("manifest.json");
+    bool ValidateSnapshot() {
+        if (!SnapshotDirPath.Exists()) {
+            SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
+            return false;
+        }
+ 
+        if (!SchemaFilePath.Exists()) {
+            SendResultAndDie(false, TStringBuilder() << "Snapshot schema file doesn't exist: " << SchemaFilePath);
+            return false;
+        }
+    
+        auto manifestFile = SnapshotDirPath.Child("manifest.json");
         if (!manifestFile.Exists()) {
             SendResultAndDie(false, TStringBuilder() << "Manifest file doesn't exist: " << manifestFile);
             return false;
@@ -1128,7 +1144,7 @@ public:
         }
 
         if (!SkipChecksumValidation) {
-            auto manifestChecksumFile = snapshotDir.Child("manifest.json.sha256");
+            auto manifestChecksumFile = SnapshotDirPath.Child("manifest.json.sha256");
             if (!manifestChecksumFile.Exists()) {
                 SendResultAndDie(false, TStringBuilder() << "Manifest checksum file doesn't exist: " << manifestChecksumFile);
                 return false;
@@ -1142,8 +1158,7 @@ public:
                 return false;
             }
 
-            auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
-            TString actualManifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
+            TString actualManifestChecksum = NBackup::TSha256Hasher::Hash(manifestStr);
             if (actualManifestChecksum != expectedManifestChecksum) {
                 SendResultAndDie(false, TStringBuilder() << "Manifest checksum mismatch: "
                                                          << "expected " << expectedManifestChecksum
@@ -1188,6 +1203,16 @@ public:
             return false;
         }
 
+        if (!manifest.Has("generation") || !manifest["generation"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'generation' field or it is not an unsigned integer: " << manifest);
+            return false;
+        }
+
+        if (!manifest.Has("step") || !manifest["step"].IsUInteger()) {
+            SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'step' field or it is not an unsigned integer: " << manifest);
+            return false;
+        }
+
         if (!manifest.Has("files") || !manifest["files"].IsArray()) {
             SendResultAndDie(false, TStringBuilder() << "Manifest is missing 'files' array or it is not an array: " << manifest);
             return false;
@@ -1202,7 +1227,7 @@ public:
 
             TString name = fileEntry["name"].GetString();
 
-            auto filePath = snapshotDir.Child(name);
+            auto filePath = SnapshotDirPath.Child(name);
             if (!filePath.Exists()) {
                 SendResultAndDie(false, TStringBuilder() << "File listed in manifest not found: " << filePath);
                 return false;
@@ -1221,21 +1246,20 @@ public:
 
                 TString expectedFileSha256 = fileEntry["sha256"].GetString();
 
-                NOpenSsl::NSha256::TCalcer calcer;
+                NBackup::TSha256Hasher hasher;
                 try {
                     TFileInput input(filePath, 1_MB);
                     char buf[64_KB];
                     size_t bytesRead;
                     while ((bytesRead = input.Read(buf, sizeof(buf))) > 0) {
-                        calcer.Update(buf, bytesRead);
+                        hasher.Update(buf, bytesRead);
                     }
                 } catch (const TIoException& e) {
                     SendResultAndDie(false, TStringBuilder() << "Failed to read file " << filePath << " for checksum validation: " << e.what());
                     return false;
                 }
 
-                auto fileDigest = calcer.Final();
-                TString actualFileSha256 = to_lower(HexEncode(fileDigest.data(), fileDigest.size()));
+                TString actualFileSha256 = hasher.Final();
                 if (actualFileSha256 != expectedFileSha256) {
                     SendResultAndDie(false, TStringBuilder() << "Checksum mismatch for " << filePath
                                              << ": expected " << expectedFileSha256
@@ -1243,6 +1267,108 @@ public:
                     return false;
                 }
             }
+        }
+
+        return true;
+    }
+
+    bool ValidateChangelog() {
+        if (!ChangelogFilePath.Exists()) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog file doesn't exist: " << ChangelogFilePath);
+            return false;
+        }
+
+        if (SkipChecksumValidation) {
+            return true;
+        }
+
+        if (!ChangelogChecksumPath.Exists()) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog checksum file doesn't exist: " << ChangelogChecksumPath);
+            return false;
+        }
+
+        TString expectedSha256;
+        try {
+            expectedSha256 = TFileInput(ChangelogChecksumPath).ReadAll();
+        } catch (const TIoException& e) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Failed to read changelog checksum " << ChangelogChecksumPath << ": " << e.what());
+            return false;
+        }
+
+        NBackup::TSha256Hasher hasher;
+        TString error;
+
+        try {
+            TFileInput input(ChangelogFilePath, 1_MB);
+            TString line;
+            TString prevLine;
+            TString lastValidLine;
+
+            while (input.ReadLine(line)) {
+                auto ok = ValidateChangelogPrevLine(line, lastValidLine, hasher, error);
+                if (!ok) {
+                    break;
+                }
+
+                hasher.Update(line);
+                hasher.Update("\n");
+                lastValidLine = std::move(prevLine);
+                prevLine = std::move(line);
+            }
+        } catch (const TIoException& e) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Failed to read changelog " << ChangelogFilePath << ": " << e.what());
+            return false;
+        }
+
+        if (error) {
+            SendResultAndDie(false, error);
+            return false;
+        }
+
+        TString sha256 = hasher.Final();
+        if (sha256 != expectedSha256) {
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog checksum mismatch: expected " << expectedSha256
+                << ", got " << sha256);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ValidateChangelogPrevLine(const TString& line, const TString& lastValidLine,
+                                      const NBackup::TSha256Hasher& hasher, TString& error) const
+    {
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(line, &json, true);
+        } catch (const std::exception& e) {
+            error = TStringBuilder()
+                << "Failed to parse changelog line " << line << ": " << e.what()
+                << ", last valid line: " << lastValidLine;
+            return false;
+        }   
+
+        if (!json.Has("prev_sha256") || !json["prev_sha256"].IsString()) {
+            error = TStringBuilder()
+                << "Changelog line is missing 'prev_sha256' field: " << line
+                << ", last valid line: " << lastValidLine;
+            return false;
+        }
+
+        TString expectedPrevSha256 = json["prev_sha256"].GetString();
+        TString prevSha256 = hasher.Intermediate();
+        if (prevSha256 != expectedPrevSha256) {
+            error = TStringBuilder()
+                << "Changelog checksum chain mismatch for line " << line
+                << ": expected " << expectedPrevSha256
+                << ", got " << prevSha256
+                << ", last valid line: " << lastValidLine;
+            return false;
         }
 
         return true;
@@ -1275,6 +1401,7 @@ private:
     const TFsPath SnapshotDirPath;
     const TFsPath SchemaFilePath;
     const TFsPath ChangelogFilePath;
+    const TFsPath ChangelogChecksumPath;
 
     const TTabletTypes::EType ExpectedTabletType;
     const ui64 ExpectedTabletId;

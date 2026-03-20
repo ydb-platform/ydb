@@ -1570,6 +1570,7 @@ namespace NKikimr {
                         << " Self# " << SelfVDiskId << " Source# " << protoVDisk
                         << " Marker# BSVS24");
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, now);
+                return;
             }
             if (!SelfVDiskId.SameDisk(record.GetTargetVDiskID())) {
                 auto protoVDisk = VDiskIDFromVDiskID(record.GetTargetVDiskID());
@@ -1578,6 +1579,7 @@ namespace NKikimr {
                         << " Self# " << SelfVDiskId << " Source# " << protoVDisk
                         << " Marker# BSVS25");
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, now);
+                return;
             }
 
             ctx.Send(ev->Forward(Db->SyncerID));
@@ -2689,7 +2691,8 @@ namespace NKikimr {
 
             const TMonotonic now = ctx.Monotonic();
             TSnapshotExpirationMap::iterator it;
-            for (it = SnapshotExpirationMap.begin(); it != SnapshotExpirationMap.end() && now <= it->first; ++it) {
+            // Erase snapshots that have expired (expiration time <= now)
+            for (it = SnapshotExpirationMap.begin(); it != SnapshotExpirationMap.end() && it->first <= now; ++it) {
                 Snapshots.erase(TString(it->second->SnapshotId));
             }
             SnapshotExpirationMap.erase(SnapshotExpirationMap.begin(), it);

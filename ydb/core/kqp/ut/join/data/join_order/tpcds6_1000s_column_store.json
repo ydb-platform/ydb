@@ -19,16 +19,6 @@
                           "args":
                             [
                               {
-                                "op_name":"TableFullScan",
-                                "table":"item"
-                              }
-                            ]
-                        },
-                        {
-                          "op_name":"HashShuffle",
-                          "args":
-                            [
-                              {
                                 "op_name":"InnerJoin (Grace)",
                                 "args":
                                   [
@@ -41,10 +31,6 @@
                                             "args":
                                               [
                                                 {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"date_dim"
-                                                },
-                                                {
                                                   "op_name":"HashShuffle",
                                                   "args":
                                                     [
@@ -53,6 +39,10 @@
                                                         "table":"store_sales"
                                                       }
                                                     ]
+                                                },
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"date_dim"
                                                 }
                                               ]
                                           }
@@ -67,10 +57,6 @@
                                             "args":
                                               [
                                                 {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"customer_address"
-                                                },
-                                                {
                                                   "op_name":"HashShuffle",
                                                   "args":
                                                     [
@@ -79,12 +65,26 @@
                                                         "table":"customer"
                                                       }
                                                     ]
+                                                },
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"customer_address"
                                                 }
                                               ]
                                           }
                                         ]
                                     }
                                   ]
+                              }
+                            ]
+                        },
+                        {
+                          "op_name":"HashShuffle",
+                          "args":
+                            [
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"item"
                               }
                             ]
                         }

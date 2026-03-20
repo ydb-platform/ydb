@@ -11,6 +11,10 @@
               "args":
                 [
                   {
+                    "op_name":"TableFullScan",
+                    "table":"supplier"
+                  },
+                  {
                     "op_name":"HashShuffle",
                     "args":
                       [
@@ -87,10 +91,6 @@
                             ]
                         }
                       ]
-                  },
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"supplier"
                   }
                 ]
             },

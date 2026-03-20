@@ -1,6 +1,6 @@
 # Векторный поиск
 
-В данном разделе содержатся рецепты кода на разных языках программирования для решения задач [векторного поиска](../../concepts/vector_search.md) с использованием {{ ydb-short-name }} SDK.
+В данном разделе содержатся рецепты кода на разных языках программирования для решения задач [векторного поиска](../../concepts/query_execution/vector_search.md) с использованием {{ ydb-short-name }} SDK.
 
 Подробно будут разобраны операции:
 
@@ -134,7 +134,7 @@
     import struct
 
     def convert_vector_to_bytes(vector: list[float]) -> bytes:
-        b = struct.pack("<f" * len(vector), *vector)
+        b = struct.pack("f" * len(vector), *vector)
         return b + b"\x01"
 
     def insert_items_vector_as_bytes(

@@ -132,6 +132,7 @@
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
@@ -1222,6 +1223,11 @@ namespace Tests {
             auto* actor = NConveyorComposite::TServiceOperator::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+        }
+        {
+            auto actor = NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(appData.Counters);
+            const auto aid = Runtime->Register(actor.release(), nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(), aid, nodeIdx);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
@@ -3074,8 +3080,18 @@ namespace Tests {
         ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(args...), 0);
         TAutoPtr<IEventHandle> handle;
         // Timeout for DEBUG purposes only
-        runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(handle);
-        TString res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json;
+        runtime->GrabEdgeEvents<NMon::TEvRemoteJsonInfoRes, NMon::TEvRemoteBinaryInfoRes>(handle);
+        TString res;
+        switch (handle->GetTypeRewrite()) {
+            case NMon::RemoteJsonInfoRes:
+                res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json;
+                break;
+            case NMon::RemoteBinaryInfoRes:
+                res = handle->Get<NMon::TEvRemoteBinaryInfoRes>()->Blob;
+                break;
+            default:
+                Y_FAIL("unreachable");
+        }
         Cerr << res << Endl;
         return res;
     }

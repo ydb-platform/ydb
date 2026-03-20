@@ -41,7 +41,7 @@
 
 {% list tabs %}
 
-- Python
+* Python
 
   ```python
   import ydb
@@ -60,7 +60,7 @@
 
 {% if oss == true %}
 
-- C++
+* C++
 
   ```cpp
   #include <ydb/public/sdk/cpp/client/ydb.h>
@@ -84,21 +84,22 @@
 
 {% endif %}
 
-- Go
+* Go
 
   ```go
   import (
     "context"
+    "time"
 
     ydb "github.com/ydb-platform/ydb-go-sdk/v3"
     "github.com/ydb-platform/ydb-go-sdk/v3/table"
   )
 
   func executeInTx(ctx context.Context, s table.Session, query string) {
-  ctx, cancel := context.WithTimeout(ctx, time.Millisecond*300) // client and by default operation timeout
+  ctx, cancel := context.WithTimeout(ctx, time.Millisecond*500) // transport timeout
   defer cancel()
-  ctx = ydb.WithOperationTimeout(ctx, time.Millisecond*400)     // operation timeout override
-  ctx = ydb.WithOperationCancelAfter(ctx, time.Millisecond*300) // cancel after timeout
+  ctx = ydb.WithOperationTimeout(ctx, time.Millisecond*400)     // operation timeout
+  ctx = ydb.WithOperationCancelAfter(ctx, time.Millisecond*400) // cancel after timeout
   tx := table.TxControl(table.BeginTx(table.WithSerializableReadWrite()), table.CommitTx())
   _, res, err := s.Execute(ctx, tx, query, table.NewQueryParameters())
   }

@@ -38,7 +38,9 @@ docker_args=(
 docker run "${docker_args[@]}"
 ```
 
-{% include [index.md](_includes/rosetta.md) %}
+{% include [laptop](_includes/laptop.md) %}
+
+{% include [rosetta](_includes/rosetta.md) %}
 
 Подробнее про переменные окружения, используемые при запуске Docker-контейнера с {{ ydb-short-name }}, можно узнать в разделе [{#T}](configuration.md).
 
@@ -107,7 +109,7 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
        -e MON_PORT=8765
        {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
    )
-   
+
    docker run "${docker_args[@]}" --config-path /ydb_config/my-ydb-config.yaml
    ```
 

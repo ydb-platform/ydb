@@ -1821,7 +1821,7 @@ void TPartition::CheckHeadConsistency() const
 }
 
 ui64 TPartition::GetSizeLag(i64 offset) {
-    return BlobEncoder.GetSizeLag(offset);
+    return BlobEncoder.GetSizeLag(offset) + CompactionBlobEncoder.GetSizeLag(offset);
 }
 
 
@@ -3347,11 +3347,12 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         OffloadActor = {};
     }
 
+    if (MonitoringProjectId != Config.GetMonitoringProjectId() || !DetailedMetricsAreEnabled()) {
+        ResetDetailedMetrics();
+    }
     MonitoringProjectId = Config.GetMonitoringProjectId();
     if (DetailedMetricsAreEnabled()) {
         SetupDetailedMetrics();
-    } else {
-        ResetDetailedMetrics();
     }
 }
 
@@ -4484,7 +4485,7 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
 }
 
 void TPartition::SetupDetailedMetrics() {
-    if (!DetailedMetricsAreEnabled()) {
+    if (!DetailedMetricsAreEnabled() || IsSupportive()) {
         return;
     }
     if (WriteTimeLagMsByLastWritePerPartition) {

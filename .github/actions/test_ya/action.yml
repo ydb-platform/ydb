@@ -218,15 +218,22 @@ runs:
         # For each script: if unchanged in PR - use from main
         # git checkout main -- "$script" doesn't change HEAD, only files in working directory
         for script in "${MAIN_SCRIPTS[@]}"; do
-          if git diff --quiet main HEAD -- "$script" 2>/dev/null; then
-            git checkout main -- "$script" 2>/dev/null && echo "✅ $script"
+          # If file is absent in HEAD, always checkout from main.
+          if ! git cat-file -e "HEAD:$script" 2>/dev/null; then
+            git checkout main -- "$script" 2>/dev/null && echo "✅ $script (from main, missing in HEAD)"
+          elif git diff --quiet main HEAD -- "$script" 2>/dev/null; then
+            git checkout main -- "$script" 2>/dev/null && echo "✅ $script (from main)"
           else
             echo "✅ $script (PR version)"
           fi
         done
 
-        # Check YDB configuration (after checkout from main)
-        python3 .github/scripts/check_ydb_qa_config.py || true
+        # Check YDB configuration (after checkout from main), if script exists.
+        if [ -f ".github/scripts/check_ydb_qa_config.py" ]; then
+          python3 .github/scripts/check_ydb_qa_config.py || true
+        else
+          echo "⚠️ .github/scripts/check_ydb_qa_config.py (missing, skip validation)"
+        fi
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")

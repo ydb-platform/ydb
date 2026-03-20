@@ -2026,18 +2026,34 @@ IGraphTransformer::TStatus SqlResultItemWrapper(const TExprNode::TPtr& input, TE
 
     if (input->Head().IsList()) {
         for (const auto& x : input->Head().Children()) {
+            if (x->GetTypeAnn() && x->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(x->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!x->IsList() && !x->IsAtom()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), TStringBuilder() << "Expected atom or list, but got: " << x->Type()));
                 return IGraphTransformer::TStatus::Error;
             }
         }
     } else {
-        if (!EnsureAtom(input->Head(), ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(input->Head(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
     }
 
     bool hasType = false;
+    if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!input->Child(1)->IsCallable("Void")) {
         hasType = true;
         if (auto status = EnsureTypeRewrite(input->ChildRef(1), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
@@ -2150,6 +2166,11 @@ IGraphTransformer::TStatus SqlWhereWrapper(const TExprNode::TPtr& input, TExprNo
     bool hasType = false;
     if (!input->Child(0)->IsCallable("Void")) {
         hasType = true;
+        if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (auto status = EnsureTypeRewrite(input->ChildRef(0), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -2190,8 +2211,14 @@ IGraphTransformer::TStatus SqlSortWrapper(const TExprNode::TPtr& input, TExprNod
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(2), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (input->Child(2)->Content() != "asc" && input->Child(2)->Content() != "desc") {
@@ -2200,8 +2227,13 @@ IGraphTransformer::TStatus SqlSortWrapper(const TExprNode::TPtr& input, TExprNod
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(3), ctx.Expr)) {
+    if (!EnsureAtomOrUniversal(*input->Child(3), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (input->Child(3)->Content() != "first" && input->Child(3)->Content() != "last") {
@@ -2211,6 +2243,11 @@ IGraphTransformer::TStatus SqlSortWrapper(const TExprNode::TPtr& input, TExprNod
     }
 
     bool hasType = false;
+    if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!input->Child(0)->IsCallable("Void")) {
         hasType = true;
         if (auto status = EnsureTypeRewrite(input->ChildRef(0), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
@@ -2219,7 +2256,6 @@ IGraphTransformer::TStatus SqlSortWrapper(const TExprNode::TPtr& input, TExprNod
     }
 
     auto& lambda = input->ChildRef(1);
-    bool isUniversal;
     const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 1 : 0);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
@@ -2261,6 +2297,11 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
     const bool isColumnOrderForced = !isYql || ctx.Types.OrderedColumns;
 
     auto& options = input->Head();
+    if (options.GetTypeAnn() && options.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(options.GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureTuple(options, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -3929,6 +3970,11 @@ IGraphTransformer::TStatus SqlValuesListWrapper(const TExprNode::TPtr& input, TE
     }
 
     auto& firstValue = input->Head();
+    if (firstValue.GetTypeAnn() && firstValue.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(firstValue.GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureTuple(firstValue, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -3944,6 +3990,10 @@ IGraphTransformer::TStatus SqlValuesListWrapper(const TExprNode::TPtr& input, TE
     bool needRetype = false;
     for (size_t i = 0; i < input->ChildrenSize(); ++i) {
         auto* value = input->Child(i);
+        if (value->GetTypeAnn() && value->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(value->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
 
         if (!EnsureTuple(*value, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -4035,6 +4085,11 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
     }
 
     auto& options = input->Head();
+    if (options.GetTypeAnn() && options.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(options.GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureTuple(options, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -4377,8 +4432,14 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     auto linkType = input->Child(0)->Content();
@@ -4389,12 +4450,22 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
     }
 
     bool hasType = false;
+    if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!input->Child(1)->IsCallable("Void")) {
         if (!ValidateInputTypes(*input->Child(1), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         hasType = true;
+    }
+
+    if (input->Child(2)->GetTypeAnn() && input->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(2)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!input->Child(2)->IsCallable("Void")) {
@@ -4406,6 +4477,11 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Missing input types"));
             return IGraphTransformer::TStatus::Error;
         }
+    }
+
+    if (input->Child(3)->GetTypeAnn() && input->Child(3)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(3)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!input->Child(3)->IsCallable("Void")) {
@@ -4420,6 +4496,11 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
+    }
+
+    if (input->Child(4)->GetTypeAnn() && input->Child(4)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(4)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!input->Child(4)->IsCallable(sqlSelect)) {
@@ -4588,21 +4669,42 @@ IGraphTransformer::TStatus SqlGroupRefWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureStructType(*input->Child(0), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureType(*input->Child(1), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(2), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (input->ChildrenSize() >= 4) {
-        if (!EnsureAtom(*input->Child(3), ctx.Expr)) {
+        if (!EnsureAtomOrUniversal(*input->Child(3), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
     }
 
@@ -4656,8 +4758,14 @@ IGraphTransformer::TStatus SqlGroupingSetWrapper(const TExprNode::TPtr& input, T
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     auto kind = input->Child(0)->Content();
@@ -4674,6 +4782,11 @@ IGraphTransformer::TStatus SqlGroupingSetWrapper(const TExprNode::TPtr& input, T
     }
 
     for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+        if (input->Child(i)->GetTypeAnn() && input->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(i)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureTuple(*input->Child(i), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }

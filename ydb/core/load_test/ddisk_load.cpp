@@ -143,18 +143,18 @@ private:
     }
 };
 
-class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTestActor> {
+class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
     static constexpr ui32 WriteSizeBytes = 4096;
 
     struct TAreaInfo {
         // write positions as indices for every WriteSizeBytes
-        TDeque<ui32> WriteQueue;
+        TDeque<ui32> IOQueue;
         ui32 AreaSizeBytes = 0;
         ui32 Weight = 1;
         bool Sequential = true;
 
-        NKikimr::TEvLoadTestRequest::TDDiskWriteLoad::TWriteArea::EAreaInit InitType =
-            NKikimr::TEvLoadTestRequest::TDDiskWriteLoad::TWriteArea::INIT_NONE;
+        NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::EAreaInit InitType =
+            NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::INIT_NONE;
 
         ui64 BaseChunkIndex = 0; // index of the first area chunk
         ui32 NumChunks = 0;
@@ -165,11 +165,10 @@ class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTest
         ui32 Size;
         TInstant StartTime;
         bool IsInit = false;
-        bool IsBackgroundRead = false;
     };
 
     struct TRequestStat {
-        ui64 BytesWrittenTotal;
+        ui64 BytesProcessedTotal;
         ui32 Size;
         TDuration Latency;
     };
@@ -214,9 +213,9 @@ class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTest
     TRope RandomData;
     TRope ZeroData;
     bool AlignSourceData = true;
-    ui32 BackgroundReadRatio = 0; // percentage of background read requests (0-100)
+    bool IsReadLoad = false;
 
-    TString WriteSizeInfo = ToString(WriteSizeBytes);
+    TString IOSizeInfo = ToString(WriteSizeBytes);
     TString SequentialInfo = "unknown";
 
     ui64 ExpectedChunkSizeBytes = 0;
@@ -224,13 +223,13 @@ class TDDiskWriterLoadTestActor : public TActorBootstrapped<TDDiskWriterLoadTest
     TInstant TestStartTime;
     TInstant MeasurementStartTime;
 
-    ui64 Write_RequestsSent = 0;
-    ui64 Write_OK = 0;
-    ui64 Write_Error = 0;
+    ui64 RequestsSent = 0;
+    ui64 RequestsOK = 0;
+    ui64 RequestsError = 0;
 
     // Monitoring
     TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesProcessed;
     NMonitoring::TPercentileTrackerLg<6, 5, 15> ResponseTimes;
 
     TIntrusivePtr<TEvLoad::TLoadReport> Report;
@@ -241,7 +240,7 @@ public:
         return NKikimrServices::TActivity::BS_LOAD_DDISK_WRITE;
     }
 
-    TDDiskWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TDDiskWriteLoad& cmd, const TActorId& parent,
+    TDDiskLoadTestActor(const NKikimr::TEvLoadTestRequest::TDDiskLoad& cmd, const TActorId& parent,
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 /*index*/, ui64 tag)
         : Parent(parent)
         , Tag(tag)
@@ -254,10 +253,12 @@ public:
         DelayBeforeMeasurements = TDuration::Seconds(cmd.GetDelayBeforeMeasurementsSeconds());
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
         Report->Duration = TDuration::Seconds(DurationSeconds);
-        Report->LoadType = TEvLoad::TLoadReport::LOAD_WRITE;
 
-        VERIFY_PARAM(InFlightWrites);
-        MaxInFlight = cmd.GetInFlightWrites();
+        IsReadLoad = cmd.GetIsReadLoad();
+        Report->LoadType = IsReadLoad ? TEvLoad::TLoadReport::LOAD_READ : TEvLoad::TLoadReport::LOAD_WRITE;
+
+        VERIFY_PARAM(InFlight);
+        MaxInFlight = cmd.GetInFlight();
         Report->InFlight = MaxInFlight;
 
         VERIFY_PARAM(DDiskId);
@@ -267,10 +268,10 @@ public:
         DDiskSlotId = ddiskId.GetDDiskSlotId();
         DDiskServiceId = MakeBlobStorageDDiskId(DDiskNodeId, DDiskPDiskId, DDiskSlotId);
 
-        InitInFlightMax = cmd.GetInitInFlightWrites()
-            ? cmd.GetInitInFlightWrites()
+        InitInFlightMax = cmd.GetInitInFlight()
+            ? cmd.GetInitInFlight()
             : static_cast<ui32>(MaxInFlight);
-        Y_ABORT_UNLESS(InitInFlightMax, "InitInFlightWrites must be non-zero");
+        Y_ABORT_UNLESS(InitInFlightMax, "InitInFlight must be non-zero");
 
         IntervalMsMin = cmd.GetIntervalMsMin();
         IntervalMsMax = cmd.GetIntervalMsMax();
@@ -291,9 +292,6 @@ public:
             SimulateActorsCount = 1;
         }
         AlignSourceData = !cmd.HasAlignSourceData() || cmd.GetAlignSourceData();
-
-        BackgroundReadRatio = cmd.GetBackgroundReadRatio();
-        Y_ABORT_UNLESS(BackgroundReadRatio <= 100, "BackgroundReadRatio must be in [0, 100]");
 
         ui64 nextBaseChunk = 0;
         for (const auto& area : cmd.GetAreas()) {
@@ -342,19 +340,19 @@ public:
         LoadCounters = counters->GetSubgroup("tag", Sprintf("%" PRIu64, tag))->
                 GetSubgroup("ddisk", Sprintf("%" PRIu32 ":%" PRIu32 ":%" PRIu32,
                         DDiskNodeId, DDiskPDiskId, DDiskSlotId));
-        BytesWritten = LoadCounters->GetCounter("LoadActorBytesWritten", true);
+        BytesProcessed = LoadCounters->GetCounter("LoadActorBytesProcessed", true);
         TVector<float> percentiles {0.1f, 0.5f, 0.9f, 0.99f, 0.999f, 1.0f};
-        ResponseTimes.Initialize(LoadCounters, "subsystem", "LoadActorWriteDuration", "Time in microseconds", percentiles);
+        ResponseTimes.Initialize(LoadCounters, "subsystem", "LoadActorDuration", "Time in microseconds", percentiles);
     }
 
-    ~TDDiskWriterLoadTestActor() {
+    ~TDDiskLoadTestActor() {
         LoadCounters->ResetCounters();
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        Become(&TDDiskWriterLoadTestActor::StateFunc);
+        Become(&TDDiskLoadTestActor::StateFunc);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
-        AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("DDiskWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
+        AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("DDiskLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (Simulate) {
             SimulatedServiceIds.reserve(SimulateActorsCount);
             for (ui32 i = 0; i < SimulateActorsCount; ++i) {
@@ -385,18 +383,20 @@ public:
     }
 
     void PrepareDataAndStart(const TActorContext& ctx) {
-        RandomData = BuildPayload(false);
+        if (!IsReadLoad) {
+            RandomData = BuildPayload(false);
+        }
         ZeroData = BuildPayload(true);
 
         for (auto& area : Areas) {
             const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
             Y_ABORT_UNLESS(positions, "WriteSizeBytes must be smaller than AreaSizeBytes");
-            if (area.InitType != NKikimr::TEvLoadTestRequest::TDDiskWriteLoad::TWriteArea::INIT_NONE) {
+            if (area.InitType != NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::INIT_NONE) {
                 Initializing = true;
             }
-            FillWritePositions(area.WriteQueue, positions, area.Sequential);
+            FillPositions(area.IOQueue, positions, area.Sequential);
         }
-        SendWriteRequests(ctx);
+        SendRequests(ctx);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -404,10 +404,10 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void HandleWakeup(const TActorContext& ctx) {
-        SendWriteRequests(ctx);
+        SendRequests(ctx);
     }
 
-    void FillWritePositions(TDeque<ui32>& queue, ui32 positionsCount, bool sequential) {
+    void FillPositions(TDeque<ui32>& queue, ui32 positionsCount, bool sequential) {
         TVector<ui32> positions;
         positions.reserve(positionsCount);
         for (ui32 i = 0; i < positionsCount; ++i) {
@@ -447,12 +447,12 @@ public:
 
     bool HasPendingInit() const {
         for (const auto& area : Areas) {
-            if (area.InitType == NKikimr::TEvLoadTestRequest::TDDiskWriteLoad::TWriteArea::INIT_ZEROES_FIRST_BLOCK) {
+            if (area.InitType == NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::INIT_ZEROES_FIRST_BLOCK) {
                 if (area.InitNextChunk < area.NumChunks) {
                     return true;
                 }
             } else if (area.InitType ==
-                    NKikimr::TEvLoadTestRequest::TDDiskWriteLoad::TWriteArea::INIT_ZEROES_FULL) {
+                    NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::INIT_ZEROES_FULL) {
                 const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
                 if (area.InitNextPosition < positions) {
                     return true;
@@ -529,7 +529,7 @@ public:
             if (begin != TimeSeries.end()) {
                 auto end = std::prev(TimeSeries.lower_bound(now));
                 if (end != begin) {
-                    ui64 speedBps = (end->second.BytesWrittenTotal - begin->second.BytesWrittenTotal) /
+                    ui64 speedBps = (end->second.BytesProcessedTotal - begin->second.BytesProcessedTotal) /
                         TDuration::MilliSeconds(MonitoringUpdateCycleMs).SecondsFloat();
                     Report->RwSpeedBps.push_back(speedBps);
                 } else {
@@ -540,10 +540,10 @@ public:
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // DDisk writing
+    // DDisk I/O
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    void SendWriteRequests(const TActorContext& ctx) {
+    void SendRequests(const TActorContext& ctx) {
         if (!Connected) {
             return;
         }
@@ -584,16 +584,16 @@ public:
             }
 
             TAreaInfo& area = PickAreaByWeight();
-            if (area.WriteQueue.empty()) {
+            if (area.IOQueue.empty()) {
                 const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
                 Y_ABORT_UNLESS(positions, "WriteSizeBytes must be smaller than AreaSizeBytes");
-                FillWritePositions(area.WriteQueue, positions, area.Sequential);
+                FillPositions(area.IOQueue, positions, area.Sequential);
             }
-            const ui32 writeIndex = area.WriteQueue.front();
-            area.WriteQueue.pop_front();
-            area.WriteQueue.push_back(writeIndex);
+            const ui32 ioIndex = area.IOQueue.front();
+            area.IOQueue.pop_front();
+            area.IOQueue.push_back(ioIndex);
 
-            const ui32 offset = writeIndex * WriteSizeBytes;
+            const ui32 offset = ioIndex * WriteSizeBytes;
             const ui32 size = WriteSizeBytes;
             Report->Size = size;
 
@@ -601,10 +601,9 @@ public:
             const ui64 vChunkIndex = area.BaseChunkIndex + offset / ExpectedChunkSizeBytes;
             const ui32 offsetInChunk = offset % ExpectedChunkSizeBytes;
 
-            const bool isBackgroundRead = BackgroundReadRatio > 0 && (Rng() % 100) < BackgroundReadRatio;
-            const ui64 requestIdx = NewTRequestInfo(size, now, false, isBackgroundRead);
+            const ui64 requestIdx = NewTRequestInfo(size, now, false);
 
-            if (isBackgroundRead) {
+            if (IsReadLoad) {
                 auto ev = std::make_unique<NDDisk::TEvRead>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TReadInstruction(false));
                 SendRequest(ctx, std::move(ev), requestIdx);
@@ -613,8 +612,8 @@ public:
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
                 ev->AddPayload(TRope(RandomData));
                 SendRequest(ctx, std::move(ev), requestIdx);
-                ++Write_RequestsSent;
             }
+            ++RequestsSent;
             ++InFlight;
         }
 
@@ -627,7 +626,7 @@ public:
             for (ui32 i = 0; i < Areas.size(); ++i) {
                 const ui32 idx = (CurrentInitArea + i) % Areas.size();
                 TAreaInfo& area = Areas[idx];
-                if (area.InitType == NKikimr::TEvLoadTestRequest::TDDiskWriteLoad::TWriteArea::INIT_NONE) {
+                if (area.InitType == NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::INIT_NONE) {
                     continue;
                 }
 
@@ -635,7 +634,7 @@ public:
                 ui64 vChunkIndex = 0;
                 ui32 offsetInChunk = 0;
                 if (area.InitType ==
-                        NKikimr::TEvLoadTestRequest::TDDiskWriteLoad::TWriteArea::INIT_ZEROES_FIRST_BLOCK) {
+                        NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::INIT_ZEROES_FIRST_BLOCK) {
                     if (area.InitNextChunk >= area.NumChunks) {
                         continue;
                     }
@@ -662,7 +661,7 @@ public:
                 ++InFlight;
 
                 if (area.InitType ==
-                        NKikimr::TEvLoadTestRequest::TDDiskWriteLoad::TWriteArea::INIT_ZEROES_FIRST_BLOCK) {
+                        NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::INIT_ZEROES_FIRST_BLOCK) {
                     ++area.InitNextChunk;
                 } else {
                     ++area.InitNextPosition;
@@ -679,7 +678,7 @@ public:
 
         if (!HasPendingInit() && InFlight == 0) {
             Initializing = false;
-            SendWriteRequests(ctx);
+            SendRequests(ctx);
         }
     }
 
@@ -699,9 +698,9 @@ public:
         CheckDie(ctx);
     }
 
-    ui64 NewTRequestInfo(ui32 size, TInstant startTime, bool isInit, bool isBackgroundRead = false) {
+    ui64 NewTRequestInfo(ui32 size, TInstant startTime, bool isInit) {
         const ui64 requestIdx = NextRequestIdx++;
-        RequestInfo.emplace(requestIdx, TRequestInfo{size, startTime, isInit, isBackgroundRead});
+        RequestInfo.emplace(requestIdx, TRequestInfo{size, startTime, isInit});
         return requestIdx;
     }
 
@@ -713,20 +712,20 @@ public:
         }
         const TRequestInfo& request = it->second;
 
-        if (!request.IsInit && !request.IsBackgroundRead) {
+        if (!request.IsInit) {
             if (ok) {
-                ++Write_OK;
+                ++RequestsOK;
             } else {
-                ++Write_Error;
+                ++RequestsError;
             }
 
             if (now > MeasurementStartTime) {
                 Report->LatencyUs.Increment((now - request.StartTime).MicroSeconds());
             }
 
-            *BytesWritten += request.Size;
+            *BytesProcessed += request.Size;
             TimeSeries.emplace(now, TRequestStat{
-                    static_cast<ui64>(*BytesWritten),
+                    static_cast<ui64>(*BytesProcessed),
                     request.Size,
                     now - request.StartTime
                 });
@@ -737,7 +736,7 @@ public:
         }
         --InFlight;
         RequestInfo.erase(it);
-        SendWriteRequests(ctx);
+        SendRequests(ctx);
     }
 
     template<typename TRequest>
@@ -773,12 +772,12 @@ public:
                 TABLEBODY() {
                     PARAM("Elapsed time / Duration", (TAppData::TimeProvider->Now() - TestStartTime).Seconds() << "s / "
                             << DurationSeconds << "s");
-                    PARAM("TEvWrite msgs sent", Write_RequestsSent);
-                    PARAM("TEvWriteResult msgs received, OK", Write_OK);
-                    PARAM("TEvWriteResult msgs received, not OK", Write_Error);
-                    PARAM("Bytes written", static_cast<ui64>(*BytesWritten));
+                    PARAM("Requests sent", RequestsSent);
+                    PARAM("Requests OK", RequestsOK);
+                    PARAM("Requests Error", RequestsError);
+                    PARAM("Bytes processed", static_cast<ui64>(*BytesProcessed));
                     PARAM("DDiskId", Sprintf("%" PRIu32 ":%" PRIu32 ":%" PRIu32, DDiskNodeId, DDiskPDiskId, DDiskSlotId));
-                    PARAM("Write size", WriteSizeInfo);
+                    PARAM("I/O size", IOSizeInfo);
                     PARAM("Sequential", SequentialInfo);
 
                     for (ui32 dt : {5, 10, 15, 20, 60}) {
@@ -791,9 +790,9 @@ public:
                             auto end = std::prev(TimeSeries.end());
                             if (end != it) {
                                 double seconds = (end->first - it->first).GetValue() * 1e-6;
-                                double speed = (end->second.BytesWrittenTotal - it->second.BytesWrittenTotal) / seconds;
+                                double speed = (end->second.BytesProcessedTotal - it->second.BytesProcessedTotal) / seconds;
                                 speed /= 1e6;
-                                PARAM("Average write speed at last " << dt << " seconds, MB/s", Sprintf("%.3f", speed));
+                                PARAM("Average speed at last " << dt << " seconds, MB/s", Sprintf("%.3f", speed));
                             }
                         }
                     }
@@ -834,9 +833,9 @@ public:
 
 } // namespace
 
-IActor *CreateDDiskWriterLoadTest(const NKikimr::TEvLoadTestRequest::TDDiskWriteLoad& cmd,
+IActor *CreateDDiskLoadTest(const NKikimr::TEvLoadTestRequest::TDDiskLoad& cmd,
         const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
-    return new TDDiskWriterLoadTestActor(cmd, parent, counters, index, tag);
+    return new TDDiskLoadTestActor(cmd, parent, counters, index, tag);
 }
 
 } // NKikimr

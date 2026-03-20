@@ -214,13 +214,22 @@ runs:
         # For each script: if unchanged in PR - use from main
         # git checkout main -- "$script" doesn't change HEAD, only files in working directory
         for script in "${MAIN_SCRIPTS[@]}"; do
-          # If file is absent in HEAD, always checkout from main.
           if ! git cat-file -e "HEAD:$script" 2>/dev/null; then
             git checkout main -- "$script" 2>/dev/null && echo "✅ $script (from main, missing in HEAD)"
-          elif git diff --quiet main HEAD -- "$script" 2>/dev/null; then
-            git checkout main -- "$script" 2>/dev/null && echo "✅ $script (from main)"
           else
-            echo "✅ $script (PR version)"
+            # For PR merge commits, decide based on changes introduced by PR itself.
+            # HEAD^1 is base branch parent; if script unchanged in PR diff, use main version.
+            if git rev-parse --verify HEAD^1 >/dev/null 2>&1 && git rev-parse --verify HEAD^2 >/dev/null 2>&1; then
+              if git diff --quiet HEAD^1 HEAD -- "$script" 2>/dev/null; then
+                git checkout main -- "$script" 2>/dev/null && echo "✅ $script (from main, unchanged in PR)"
+              else
+                echo "✅ $script (PR version, changed in PR)"
+              fi
+            elif git diff --quiet main HEAD -- "$script" 2>/dev/null; then
+              git checkout main -- "$script" 2>/dev/null && echo "✅ $script (from main)"
+            else
+              echo "✅ $script (PR version)"
+            fi
           fi
         done
 

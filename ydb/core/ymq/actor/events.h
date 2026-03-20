@@ -874,7 +874,7 @@ struct TSqsEvents {
             ui64 ShardsCount = 0;
             TInstant CreatedTimestamp;
             bool IsFifo = false;
-            bool TopicCreated = false; // TODO заполнение
+            bool TopicCreated = false;
 
             bool operator<(const TQueueRecord& r) const {
                 return std::tie(UserName, QueueName) < std::tie(r.UserName, r.QueueName);

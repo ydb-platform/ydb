@@ -249,5 +249,85 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         ui32 nodeId = 0;
         UNIT_ASSERT(DeserializeTrace(buf, restored, nodeId));
         UNIT_ASSERT_VALUES_EQUAL(restored.Events.size(), chunk.Events.size());
+
+        THashSet<ui32> eventTypesInTrace;
+        for (const auto& ev : chunk.Events) {
+            auto type = static_cast<ETraceEventType>(ev.Type);
+            if (type == ETraceEventType::SendLocal || type == ETraceEventType::ReceiveLocal) {
+                if (ev.Aux != 0) {
+                    eventTypesInTrace.insert(ev.Aux);
+                }
+            }
+        }
+        for (ui32 eventType : eventTypesInTrace) {
+            UNIT_ASSERT_C(chunk.EventNamesDict.contains(eventType),
+                "Event type " << eventType << " should be in EventNamesDict");
+        }
+    }
+
+    Y_UNIT_TEST(EventsFilteredByStartTimestamp) {
+        THolder<TActorSystemSetup> setup(new TActorSystemSetup());
+        setup->NodeId = 1;
+        setup->ExecutorsCount = 1;
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[1]);
+        setup->Executors[0].Reset(new TBasicExecutorPool(0, 1, 10));
+        setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 0)));
+
+        auto logSettings = MakeIntrusive<NLog::TSettings>(TActorId(1, "logger"), 0, NLog::PRI_WARN);
+        logSettings->TracerSettings.AutoStart = false;
+        logSettings->TracerSettings.MaxBufferSizePerThread = 4096;
+
+        TActorSystem actorSystem(setup, nullptr, logSettings);
+        actorSystem.Start();
+
+        auto* tracer = actorSystem.GetActorTracer();
+        UNIT_ASSERT(tracer != nullptr);
+
+        UNIT_ASSERT(tracer->Start());
+        auto pongActorId = actorSystem.Register(new TPongActor());
+        TManualEvent done1;
+        auto pingActorId = actorSystem.Register(new TPingActor(pongActorId, done1, 5));
+        actorSystem.Send(pingActorId, new TEvents::TEvBootstrap());
+        done1.WaitT(TDuration::Seconds(5));
+
+        tracer->Stop();
+        auto chunk1 = tracer->GetTraceData();
+        UNIT_ASSERT_C(!chunk1.Events.empty(), "First session should have events");
+
+        ui64 maxTimestampFromFirstSession = 0;
+        for (const auto& ev : chunk1.Events) {
+            maxTimestampFromFirstSession = std::max(maxTimestampFromFirstSession, ev.Timestamp);
+        }
+
+        ui64 secondStartTimestamp = TInstant::Now().MicroSeconds();
+        Sleep(TDuration::MilliSeconds(10));
+
+        UNIT_ASSERT(tracer->Start());
+        TManualEvent done2;
+        auto pingActorId2 = actorSystem.Register(new TPingActor(pongActorId, done2, 3));
+        actorSystem.Send(pingActorId2, new TEvents::TEvBootstrap());
+        done2.WaitT(TDuration::Seconds(5));
+
+        tracer->Stop();
+        auto chunk2 = tracer->GetTraceData();
+        UNIT_ASSERT_C(!chunk2.Events.empty(), "Second session should have events");
+
+        for (const auto& ev : chunk2.Events) {
+            UNIT_ASSERT_C(ev.Timestamp >= secondStartTimestamp - 1000000,
+                "Event timestamp " << ev.Timestamp << " should be >= second Start timestamp " 
+                << secondStartTimestamp << " (diff: " << (secondStartTimestamp - ev.Timestamp) << ")");
+        }
+
+        for (const auto& ev : chunk2.Events) {
+            UNIT_ASSERT_C(ev.Timestamp > maxTimestampFromFirstSession,
+                "Event from first session (timestamp " << ev.Timestamp 
+                << " <= " << maxTimestampFromFirstSession << ") should not be in chunk2");
+        }
+
+        UNIT_ASSERT_C(chunk2.Events.size() >= 6,
+            "Second chunk should contain events from second session, got " << chunk2.Events.size());
+
+        actorSystem.Stop();
+        actorSystem.Cleanup();
     }
 }

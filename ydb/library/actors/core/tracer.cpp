@@ -15,6 +15,7 @@ namespace NActors::NTracing {
     struct TThreadBuffer {
         std::vector<TTraceEvent> Events;
         std::atomic<ui64> WritePos{0};
+        TEventNamesDict EventNames;
 
         explicit TThreadBuffer(size_t capacity) {
             Events.resize(capacity);
@@ -60,15 +61,17 @@ namespace NActors::NTracing {
             }
         }
 
-        void RegisterEventTypeName(ui32 typeIndex, const TString& typeName) {
-            TGuard<TAdaptiveLock> guard(EventNamesDictLock);
-            EventNamesDict.emplace(typeIndex, typeName);
+        void RegisterEventTypeName(TThreadBuffer* buf, ui32 typeIndex, const TString& typeName) {
+            buf->EventNames.emplace(typeIndex, typeName);
         }
 
         TTraceChunk GetTraceChunk() {
+            ui64 startTimestamp = StartTimestamp.load(std::memory_order_acquire);         
             TVector<TTraceEvent> events;
             ui32 usedBuffers = NextBufferIdx.load(std::memory_order_acquire);
             usedBuffers = std::min<ui32>(usedBuffers, MaxThreads);
+
+            TEventNamesDict eventNames;
 
             for (ui32 i = 0; i < usedBuffers; ++i) {
                 auto& buf = *Buffers[i];
@@ -80,14 +83,15 @@ namespace NActors::NTracing {
                 ui64 safeEnd = (total > 0) ? total - 1 : 0;
 
                 for (ui64 j = first; j < safeEnd; ++j) {
-                    events.push_back(buf.Events[j % BufferSize]);
+                    const auto& event = buf.Events[j % BufferSize];
+                    if (event.Timestamp >= startTimestamp) {
+                        events.push_back(event);
+                    }
                 }
-            }
 
-            TEventNamesDict eventNames;
-            {
-                TGuard<TAdaptiveLock> guard(EventNamesDictLock);
-                eventNames = EventNamesDict;
+                for (const auto& [typeIndex, typeName] : buf.EventNames) {
+                    eventNames.emplace(typeIndex, typeName);
+                }
             }
 
             TThreadPoolDict threadPoolDict;
@@ -106,12 +110,8 @@ namespace NActors::NTracing {
             };
         }
 
-        void ResetBuffers() {
-            ui32 usedBuffers = NextBufferIdx.load(std::memory_order_acquire);
-            usedBuffers = std::min<ui32>(usedBuffers, MaxThreads);
-            for (ui32 i = 0; i < usedBuffers; ++i) {
-                Buffers[i]->WritePos.store(0, std::memory_order_release);
-            }
+        void RecordStartTimestamp() {
+            StartTimestamp.store(TInstant::Now().MicroSeconds(), std::memory_order_release);
         }
 
     private:
@@ -132,9 +132,7 @@ namespace NActors::NTracing {
         size_t MaxThreads;
         std::vector<std::unique_ptr<TThreadBuffer>> Buffers;
         std::atomic<ui32> NextBufferIdx{0};
-
-        TAdaptiveLock EventNamesDictLock;
-        TEventNamesDict EventNamesDict;
+        std::atomic<ui64> StartTimestamp{0};
 
         TAdaptiveLock ThreadPoolDictLock;
         THashMap<ui32, TString> ThreadPoolNames;
@@ -189,7 +187,7 @@ namespace NActors::NTracing {
             ev.Aux = event.GetTypeRewrite();
             ev.Extra = ts.CurrentActivityIndex;
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
-            TracerImpl.RegisterEventTypeName(event.GetTypeRewrite(), event.GetTypeName());
+            TracerImpl.RegisterEventTypeName(ts.Buffer, event.GetTypeRewrite(), event.GetTypeName());
         }
 
         void HandleReceive(IActor& recipient, IEventHandle& event) override {
@@ -207,7 +205,7 @@ namespace NActors::NTracing {
             ev.Aux = event.GetTypeRewrite();
             ev.Extra = activityIndex;
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
-            TracerImpl.RegisterEventTypeName(event.GetTypeRewrite(), event.GetTypeName());
+            TracerImpl.RegisterEventTypeName(ts.Buffer, event.GetTypeRewrite(), event.GetTypeName());
         }
 
         bool Start() override {
@@ -215,7 +213,7 @@ namespace NActors::NTracing {
             if (!State.compare_exchange_strong(expected, ETracerState::Recording)) {
                 return false;
             }
-            TracerImpl.ResetBuffers();
+            TracerImpl.RecordStartTimestamp();
             return true;
         }
 

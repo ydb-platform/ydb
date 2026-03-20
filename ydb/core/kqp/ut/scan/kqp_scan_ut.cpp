@@ -1770,6 +1770,46 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
     }
 
+    Y_UNIT_TEST(EmptyTableLimitMultiNode) {
+        auto appCfg = AppCfg();
+        auto settings = TKikimrSettings(appCfg)
+            .SetNodeCount(2)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto status = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/EmptyTable` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+        )").GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        // Scan query: SELECT * FROM EmptyTable LIMIT 1
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                SELECT * FROM `/Root/EmptyTable` LIMIT 1
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(R"([])", StreamResultToYson(it));
+        }
+
+        // Query service: SELECT * FROM EmptyTable LIMIT 1
+        {
+            auto db = kikimr.GetQueryClient();
+            auto response = db.ExecuteQuery(R"(
+                SELECT * FROM `/Root/EmptyTable` LIMIT 1
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetResultSets().size(), 1);
+            UNIT_ASSERT_EQUAL(response.GetResultSets()[0].RowsCount(), 0);
+        }
+    }
+
     Y_UNIT_TEST(RestrictSqlV0) {
         auto kikimr = DefaultKikimrRunner({}, AppCfg());
         auto db = kikimr.GetTableClient();

@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST_F(TestCreateQueue_OldImplimentation, THttpProxyTestMock) {
+    Y_UNIT_TEST_F(TestCreateQueue_OldImplementation, THttpProxyTestMock) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         CreateQueue({{"QueueName", "ExampleQueueName"}});
     }
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         CreateQueue(req);
     }
 
-    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndSameParams_OldImplimentation, THttpProxyTestMock) {
+    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndSameParams_OldImplementation, THttpProxyTestMock) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         auto req = NJson::TJsonMap{{"QueueName", "ExampleQueueName"}};
         CreateQueue(req);
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(resultType, "ValidationError");
     }
 
-    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndDifferentParams_OldImplimentation, THttpProxyTestMock) {
+    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndDifferentParams_OldImplementation, THttpProxyTestMock) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         auto req = NJson::TJsonMap{
             {"QueueName", "ExampleQueueName"},
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidParameterValue");
     }
 
-    Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName_OldImplimentation, THttpProxyTestMock) {
+    Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName_OldImplementation, THttpProxyTestMock) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         auto json = CreateQueue({
             {"QueueName", "B@d_queue_name"},
@@ -335,7 +335,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
     }
 
-    Y_UNIT_TEST_F(TestSendMessage_OldImplimentation, THttpProxyTestMock) {
+    Y_UNIT_TEST_F(TestSendMessage_OldImplementation, THttpProxyTestMock) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
@@ -523,7 +523,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
     }
 
-    Y_UNIT_TEST_F(TestSendMessageFifoQueue_OldImplimentation, THttpProxyTestMock) {
+    Y_UNIT_TEST_F(TestSendMessageFifoQueue_OldImplementation, THttpProxyTestMock) {
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName.fifo"},
             {"Attributes", NJson::TJsonMap{
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(attrs["custom-type-attr"]["StringValue"].GetString(), "2.7182818284");
     }
 
-    Y_UNIT_TEST_F(TestSendMessageWithAttributes_OldImplimentation, THttpProxyTestMock) {
+    Y_UNIT_TEST_F(TestSendMessageWithAttributes_OldImplementation, THttpProxyTestMock) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 

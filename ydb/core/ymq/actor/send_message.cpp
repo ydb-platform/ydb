@@ -165,7 +165,7 @@ private:
         if (EnableSQSMigrationCompatibility_ && TopicCreated_) {
             DoActionNewImplimentation();
         } else {
-            DoActionOldImplimentation();
+            DoActionOldImplementation();
         }
     }
 
@@ -231,7 +231,7 @@ private:
     }
 
     // coverity[var_deref_model]: false positive
-    void DoActionOldImplimentation() {
+    void DoActionOldImplementation() {
         Become(&TThis::StateFunc);
         Y_ABORT_UNLESS(QueueAttributes_.Defined());
 
@@ -309,7 +309,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup,         HandleWakeup);
             hFunc(NPQ::NMLP::TEvWriteResponse, Handle);
-            hFunc(TSqsEvents::TEvSendMessageBatchResponse, HandleSendResponseOldImplimentation);
+            hFunc(TSqsEvents::TEvSendMessageBatchResponse, HandleSendResponseOldImplementation);
         }
     }
 
@@ -350,7 +350,7 @@ private:
         SendReplyAndDie();
     }
 
-    void HandleSendResponseOldImplimentation(TSqsEvents::TEvSendMessageBatchResponse::TPtr& ev) {
+    void HandleSendResponseOldImplementation(TSqsEvents::TEvSendMessageBatchResponse::TPtr& ev) {
         const bool isFifo = IsFifoQueue();
         for (size_t i = 0, size = ev->Get()->Statuses.size(); i < size; ++i) {
             const auto& status = ev->Get()->Statuses[i];

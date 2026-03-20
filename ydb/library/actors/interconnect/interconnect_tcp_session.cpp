@@ -139,6 +139,9 @@ namespace NActors {
         ReceiveContext->Terminated = true; // prevent further message generation by receiving actor
         for (const auto& kv : Subscribers) {
             Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second.Cookie);
+            if (kv.second.HasActivityMetric) {
+                Proxy->Metrics->AddSubscribersByActivity(kv.second.ActivityIndex, -1);
+            }
         }
         Proxy->Metrics->SubSubscribersCount(Subscribers.size());
         Subscribers.clear();
@@ -166,10 +169,6 @@ namespace NActors {
         Proxy->Metrics->SubInflightRdmaDataAmount(RdmaInflightDataAmount);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session destroyed", Proxy->PeerNodeId);
-
-        if (!Subscribers.empty()) {
-            Proxy->Metrics->SubSubscribersCount(Subscribers.size());
-        }
 
         guard->Terminate(std::move(Pool), XdcSocket, TlsActivationContext->AsActorContext());
 
@@ -289,7 +288,13 @@ namespace NActors {
 
     void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS05", "unsubscribe for session state for %s", ev->Sender.ToString().data());
-        Proxy->Metrics->SubSubscribersCount(Subscribers.erase(ev->Sender));
+        if (const auto it = Subscribers.find(ev->Sender); it != Subscribers.end()) {
+            if (it->second.HasActivityMetric) {
+                Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
+            }
+            Subscribers.erase(it);
+            Proxy->Metrics->SubSubscribersCount(1);
+        }
     }
 
     void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex, TString eventTypeName,
@@ -315,6 +320,20 @@ namespace NActors {
         const auto [it, inserted] = Subscribers.emplace(actorId, TSubscriberInfo{});
         if (inserted) {
             Proxy->Metrics->IncSubscribersCount();
+            if (shouldUpdateInfo) {
+                Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
+                it->second.HasActivityMetric = true;
+            }
+        } else if (shouldUpdateInfo) {
+            if (it->second.HasActivityMetric) {
+                if (it->second.ActivityIndex != activityIndex) {
+                    Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
+                    Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
+                }
+            } else {
+                Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
+                it->second.HasActivityMetric = true;
+            }
         }
         it->second.Cookie = cookie;
         if (shouldUpdateInfo) {

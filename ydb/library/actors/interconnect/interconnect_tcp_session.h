@@ -462,6 +462,7 @@ namespace NActors {
             ui32 ActivityIndex = Max<ui32>();
             TString EventTypeName;
             TString StackTrace;
+            bool HasActivityMetric = false;
         };
 
         using TSubscriberHistoryKey = std::tuple<TString, ui32, TString>;

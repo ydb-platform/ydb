@@ -59,6 +59,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
         Borders[portion->IndexKeyStart()].Start.push_back(portion->GetPortionId());
         Borders[portion->IndexKeyEnd()].Finish.push_back(portion->GetPortionId());
     }
+    BuildExclusivePortions();
     if (!Borders.empty()) {
         PreviousBorder = Borders.begin()->first;
         for (const auto& portionId : Borders.begin()->second.Start) {
@@ -66,7 +67,6 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
             ProcessedPortions.insert(portionId);
         }
     }
-    BuildExclusivePortions();
     Counters->OnLeftBorders(Borders.size());
 }
 

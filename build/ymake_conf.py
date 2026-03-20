@@ -2627,6 +2627,8 @@ class Cuda(object):
         if version < (13, 0):
             architectures.extend(['sm_50', 'sm_52', 'sm_60', 'sm_61', 'sm_70'])
 
+        architectures.append('sm_75')
+
         if version >= (11, 0):
             architectures.append('sm_80')
 

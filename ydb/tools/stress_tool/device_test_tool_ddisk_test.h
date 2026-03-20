@@ -167,7 +167,8 @@ protected:
                     if (area.GetInitType() == TEvLoadTestRequest::TDDiskLoad::TArea::INIT_NONE) {
                         Cerr << "Error: read load requires area initialization"
                              << " (InitType != INIT_NONE) to allocate chunks before reading" << Endl;
-                        return;
+                        ASSERT_YTHROW(false,
+                            "Invalid configuration: read load requires area initialization (InitType != INIT_NONE)");
                     }
                 }
             }
@@ -176,7 +177,7 @@ protected:
         default:
             CurrentTestType = "Unknown";
             Cerr << "Unknown load type" << Endl;
-            return;
+            ASSERT_YTHROW(false, "Invalid configuration: unknown load type in TDDiskPerfTestActor");
         }
 
         PendingResults.clear();

@@ -139,9 +139,7 @@ namespace NActors {
         ReceiveContext->Terminated = true; // prevent further message generation by receiving actor
         for (const auto& kv : Subscribers) {
             Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second.Cookie);
-            if (kv.second.ActivityIndex != Max<ui32>()) {
-                Proxy->Metrics->AddSubscribersByActivity(kv.second.ActivityIndex, -1);
-            }
+            Proxy->Metrics->AddSubscribersByActivity(kv.second.ActivityIndex, -1);
         }
         Proxy->Metrics->SubSubscribersCount(Subscribers.size());
         Subscribers.clear();
@@ -289,9 +287,7 @@ namespace NActors {
     void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS05", "unsubscribe for session state for %s", ev->Sender.ToString().data());
         if (const auto it = Subscribers.find(ev->Sender); it != Subscribers.end()) {
-            if (it->second.ActivityIndex != Max<ui32>()) {
-                Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
-            }
+            Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
             Subscribers.erase(it);
             Proxy->Metrics->SubSubscribersCount(1);
         }
@@ -318,16 +314,10 @@ namespace NActors {
         const auto [it, inserted] = Subscribers.emplace(actorId, TSubscriberInfo{});
         if (inserted) {
             Proxy->Metrics->IncSubscribersCount();
-            if (activityIndex != Max<ui32>()) {
-                Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
-            }
+            Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
         } else if (it->second.ActivityIndex != activityIndex) {
-            if (it->second.ActivityIndex != Max<ui32>()) {
-                Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
-            }
-            if (activityIndex != Max<ui32>()) {
-                Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
-            }
+            Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
+            Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
         }
         updateInfo(it->second);
     }

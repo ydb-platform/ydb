@@ -88,6 +88,8 @@ def update_user_balance_ydb_retry(user_id: int, amount: int):
 
 ### Пример на Go с использованием database/sql
 
+Для `database/sql` рекомендуется использовать `retry.DoTx` из пакета `github.com/ydb-platform/ydb-go-sdk/v3/retry`, который автоматически обрабатывает ретраи, включая TLI-ошибки:
+
 ```go
 package main
 
@@ -96,55 +98,37 @@ import (
     "database/sql"
     "fmt"
     "log"
-    "time"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
 )
 
-func updateUserBalanceWithRetry(ctx context.Context, db *sql.DB, userID int, amount int) error {
-    maxRetries := 3
-    
-    for i := 0; i < maxRetries; i++ {
-        tx, err := db.BeginTx(ctx, nil)
-        if err != nil {
-            return err
-        }
-        
+func updateUserBalance(ctx context.Context, db *sql.DB, userID int, amount int) error {
+    return retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
         var currentBalance int
-        err = tx.QueryRowContext(ctx, "SELECT balance FROM users WHERE id = $1", userID).Scan(&currentBalance)
+        err := tx.QueryRowContext(ctx,
+            "SELECT balance FROM users WHERE id = $1", userID,
+        ).Scan(&currentBalance)
         if err != nil {
-            tx.Rollback()
-            return err
+            return fmt.Errorf("select balance: %w", err)
         }
-        
+
         newBalance := currentBalance + amount
-        _, err = tx.ExecContext(ctx, "UPDATE users SET balance = $1 WHERE id = $2", newBalance, userID)
+        _, err = tx.ExecContext(ctx,
+            "UPDATE users SET balance = $1 WHERE id = $2", newBalance, userID,
+        )
         if err != nil {
-            tx.Rollback()
-            return err
+            return fmt.Errorf("update balance: %w", err)
         }
-        
-        err = tx.Commit()
-        if err != nil {
-            // Проверяем, является ли ошибка TLI
-            if isTLIError(err) && i < maxRetries-1 {
-                time.Sleep(time.Duration(1<<i) * time.Second) // Экспоненциальная задержка
-                continue
-            }
-            return err
-        }
-        
+
         return nil
+    }, retry.WithDoTxRetryOptions(retry.WithIdempotent(true)))
+}
+
+func main() {
+    // ...
+    if err := updateUserBalance(ctx, db, 42, 100); err != nil {
+        log.Printf("update failed: %v\n", err)
     }
-    
-    return fmt.Errorf("failed after %d attempts", maxRetries)
-}
-
-func isTLIError(err error) bool {
-    // Логика проверки на TLI ошибку
-    return err != nil && contains(err.Error(), "transaction locks invalidated")
-}
-
-func contains(s, substr string) bool {
-    return len(s) >= len(substr) && s[:len(substr)] == substr
 }
 ```
 

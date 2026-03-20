@@ -1638,6 +1638,40 @@ namespace NActors {
                     }
                 }
             }
+
+            if (LastSubscriber) {
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        str << "Last subscriber";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { str << "Activity"; }
+                                    TABLEH() { str << "EventTypeName"; }
+                                    TABLEH() { str << "StackTrace"; }
+                                }
+                            }
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() { str << EncodeHtmlPcdata(LastSubscriber->Info.Activity.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.Activity)); }
+                                    TABLED() { str << EncodeHtmlPcdata(LastSubscriber->Info.EventTypeName.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.EventTypeName)); }
+                                    TABLED() {
+                                        if (LastSubscriber->Info.StackTrace.empty()) {
+                                            str << "manual";
+                                        } else {
+                                            PRE() {
+                                                str << EncodeHtmlPcdata(LastSubscriber->Info.StackTrace);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         auto h = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

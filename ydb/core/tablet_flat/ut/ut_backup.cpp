@@ -858,6 +858,8 @@ struct TEnv : public TMyEnvBase {
     }
 
     void RestoreBackupExpectFail(const TString& backupPath) {
+        DryRunRestoreBackupExpectFail(backupPath);
+
         Cerr << "...restarting dummy tablet in recovery mode" << Endl;
         RestartTabletInRecoveryMode();
 
@@ -897,23 +899,6 @@ struct TEnv : public TMyEnvBase {
         return genDirs.back();
     }
 
-    void RestoreLastBackupExpectFail() {
-        DryRunRestoreLastBackupExpectFail();
-
-        auto backupPath = GetLastBackupPath();
-
-        Cerr << "...restarting dummy tablet in recovery mode" << Endl;
-        RestartTabletInRecoveryMode();
-
-        Cerr << "...restoring backup (expecting failure)" << Endl;
-        SendAsync(new NRecovery::TEvRestoreBackup(backupPath));
-
-        TAutoPtr<IEventHandle> handle;
-        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
-        Cerr << "...restore result: Success=" << result->Success << ", Error=" << result->Error << Endl;
-        UNIT_ASSERT_C(!result->Success, "Restore should have failed but succeeded");
-    }
-
     void DryRunRestoreBackup(const TString& backupPath, bool skipChecksumValidation = false) {
         Cerr << "...restarting dummy tablet in recovery mode (dry-run)" << Endl;
         RestartTabletInRecoveryMode();
@@ -927,9 +912,7 @@ struct TEnv : public TMyEnvBase {
         UNIT_ASSERT_C(result->Error.empty(), "Dry-run restore completed with warning: " << result->Error);
     }
 
-    void DryRunRestoreLastBackupExpectFail() {
-        auto backupPath = GetLastBackupPath();
-
+    void DryRunRestoreBackupExpectFail(const TString& backupPath) {
         Cerr << "...restarting dummy tablet in recovery mode (dry-run)" << Endl;
         RestartTabletInRecoveryMode();
 

@@ -790,7 +790,7 @@ public:
         try {
             WriteChangelogChecksum();
         } catch (const std::exception& e) {
-            return ReplyAndDie(TStringBuilder() << "Failed to write changelog meta " << ChangelogChecksumPath << ": " << e.what());
+            return ReplyAndDie(TStringBuilder() << "Failed to write changelog checksum " << ChangelogChecksumPath << ": " << e.what());
         }
 
         Become(&TThis::StateWork);

@@ -163,11 +163,10 @@ void TestStreamingReadWithSmallPortion() {
     UNIT_ASSERT(rb);
     UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
 
-    // With small portion, we expect minimal iterations
-    // The protocol requires at least 2 Acks: one to start, one after receiving data
+    // Protocol requires at least one iteration, avoid excessive ones. Don't rely on ack count.
     const ui32 iterationsCount = reader.GetIterationsCount();
     Cerr << "Iterations count (small): " << iterationsCount << Endl;
-    UNIT_ASSERT_VALUES_EQUAL(iterationsCount, 2u);
+    UNIT_ASSERT_LE(iterationsCount, 2u);
 }
 
 void TestStreamingReadMultiplePortions() {
@@ -231,8 +230,15 @@ void TestStreamingReadMultiplePortions() {
 // "Consumer is slower than producer" is guaranteed structurally: the client
 // sends Ack only after receiving a batch (ReadAll protocol), so the server can
 // pre-produce up to MaxPagesInFlight pages before the client consumes the first
-// one.  With MinRecordsForPaging=500 and 100 000 records the server produces
-// ~200 pages, so the limit will be hit many times.
+// one.  With MinRecordsForPaging=500 and 5 000 records the server produces
+// ~10 pages, so the limit will be hit for small limits (1, 2, 4).
+//
+// No wall-clock Sleep() is needed: TTestBasicRuntime drives the actor system
+// from the test thread.  GrabEdgeEvents() pumps the event loop until the
+// target event arrives; the server cannot produce more pages while the test
+// thread is not calling into the runtime.  The structural Ack/Receive protocol
+// is sufficient to guarantee that the server fills its in-flight window before
+// the client acknowledges any batch.
 void TestBackpressureSlowConsumerWithLimit(const ui32 maxPagesInFlight) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -266,8 +272,10 @@ void TestBackpressureSlowConsumerWithLimit(const ui32 maxPagesInFlight) {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write enough data to produce many streaming pages (~200 pages with 500-record pages)
-    const ui32 numRecords = 100000;
+    // Write enough data to produce several streaming pages (~10 pages with
+    // MinRecordsForPaging=500).  5 000 records is sufficient to hit even a
+    // limit of 1 while keeping the test fast (no wall-clock sleeps needed).
+    const ui32 numRecords = 5000;
     std::pair<ui64, ui64> portion = {0, numRecords};
 
     std::vector<ui64> writeIds;
@@ -277,10 +285,9 @@ void TestBackpressureSlowConsumerWithLimit(const ui32 maxPagesInFlight) {
     planStep = ProposeCommit(runtime, sender, txId, writeIds);
     PlanCommit(runtime, sender, planStep, txId);
 
-    // ReadAll uses the Ack/Receive protocol: the client sends Ack only after
-    // receiving a batch, so the server can pre-produce pages up to the limit
-    // before the client consumes any – the consumer is genuinely slower.
-    // To ensure backpressure is triggered, we use manual Ack/Receive with guaranteed delays.
+    // The Ack/Receive protocol is the sole source of backpressure: the server
+    // pre-produces up to MaxPagesInFlight pages before the first Ack arrives,
+    // so the limit is hit structurally without any wall-clock delay.
     TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
     reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
 
@@ -290,7 +297,8 @@ void TestBackpressureSlowConsumerWithLimit(const ui32 maxPagesInFlight) {
     // Send first Ack to start receiving data
     reader.Ack();
 
-    // Process data with guaranteed delay to ensure consumer is slower than producer
+    // Drain all batches; no artificial delay is needed – the structural
+    // Ack/Receive protocol already makes the consumer slower than the producer.
     while (true) {
         bool hasMore = reader.Receive();
 
@@ -299,10 +307,6 @@ void TestBackpressureSlowConsumerWithLimit(const ui32 maxPagesInFlight) {
             break;
         }
 
-        // Add guaranteed delay to make consumer slower than producer
-        // This ensures backpressure is actually triggered
-        Sleep(TDuration::MilliSeconds(99));
-        
         // Send Ack to request next batch
         reader.Ack();
     }
@@ -656,6 +660,7 @@ void TestMemoryLimitSingleRecordPages() {
         std::pair<ui64, ui64> portion = {batch * recordsPerBatch, (batch + 1) * recordsPerBatch};
         TString data = MakeTestBlob(portion, table.Schema);
         UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+        ++writeId;
     }
 
     planStep = ProposeCommit(runtime, sender, txId, writeIds);

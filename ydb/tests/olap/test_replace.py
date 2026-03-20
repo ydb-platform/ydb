@@ -33,6 +33,11 @@ class TestReplace(object):
 
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
     def get_table_path(self):
         # avoid using same table in parallel tests
         return f"{self.test_dir}/table{random.randrange(99999)}"

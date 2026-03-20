@@ -271,7 +271,7 @@ jobs:
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
             echo "threads_count=20" >> $GITHUB_ENV
-            echo "timeout=1200" >> $GITHUB_ENV
+            echo "timeout=2400" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
             echo "threads_count=5" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV

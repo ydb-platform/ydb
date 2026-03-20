@@ -11,6 +11,8 @@
 -- В DataLens: фильтр is_last_run_in_pr = 1 — только last; без фильтра — вся история в окне.
 -- Поля PR из github_data/pull_requests: pr_status, pr_state, pr_merged, pr_created_at (открыт),
 -- pr_updated_at, pr_merged_at (влитие), pr_closed_at.
+-- Mute-поля из tests_monitor:
+--   mute_status_today и mute_status_in_run_date.
 --
 -- YDB: test_results/analytics/pr_check_failures_by_attempt
 --
@@ -19,7 +21,7 @@
 
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
-$pr_check_lookback_days = 65;
+$pr_check_lookback_days = 30;
 
 $raw_pr_check = (
     SELECT
@@ -154,6 +156,34 @@ $pr_latest = (
         ranked.rn = 1
 );
 
+$monitor_today = (
+    SELECT
+        full_name AS m_full_name,
+        branch AS m_branch,
+        build_type AS m_build_type,
+        is_muted
+    FROM
+        `test_results/analytics/tests_monitor`
+    WHERE
+        build_type = 'relwithdebinfo'
+        AND date_window = CurrentUtcDate()
+);
+
+$monitor_run_day = (
+    SELECT
+        full_name AS m_run_full_name,
+        branch AS m_run_branch,
+        build_type AS m_run_build_type,
+        date_window,
+        is_muted
+    FROM
+        `test_results/analytics/tests_monitor`
+    WHERE
+        build_type = 'relwithdebinfo'
+        AND date_window >= CurrentUtcDate() - $pr_check_lookback_days * Interval("P1D")
+        AND date_window <= CurrentUtcDate()
+);
+
 SELECT
     CAST(f.full_name AS String) AS full_name,
     CAST(f.suite_folder AS Utf8) AS suite_folder,
@@ -163,6 +193,7 @@ SELECT
     CAST(
         COALESCE('https://github.com/ydb-platform/ydb/actions/runs/' || CAST(f.job_id AS UTF8), '') AS String
     ) AS run_url,
+    f.run_timestamp AS run_timestamp,
     f.run_timestamp AS last_run_timestamp,
     CAST(f.branch AS Utf8) AS branch,
     CAST(COALESCE(f.build_type, 'relwithdebinfo') AS String) AS build_type,
@@ -186,6 +217,8 @@ SELECT
     pr.updated_at AS pr_updated_at,
     pr.merged_at AS pr_merged_at,
     pr.closed_at AS pr_closed_at,
+    CAST(COALESCE(m.is_muted, 0) AS Uint8) AS mute_status_today,
+    CAST(COALESCE(m_run.is_muted, 0) AS Uint8) AS mute_status_in_run_date,
     COALESCE(o.owners, f.owners) AS owners
 FROM
     $raw_pr_check AS f
@@ -203,6 +236,19 @@ LEFT JOIN
 ON
     o.suite_folder = f.suite_folder
     AND o.test_name = f.test_name
+LEFT JOIN
+    $monitor_today AS m
+ON
+    f.full_name = m.m_full_name
+    AND f.branch = m.m_branch
+    AND f.build_type = m.m_build_type
+LEFT JOIN
+    $monitor_run_day AS m_run
+ON
+    f.full_name = m_run.m_run_full_name
+    AND f.branch = m_run.m_run_branch
+    AND f.build_type = m_run.m_run_build_type
+    AND m_run.date_window = CAST(f.run_timestamp AS Date)
 WHERE
     f.status = 'failure'
     AND f.status != 'skipped'

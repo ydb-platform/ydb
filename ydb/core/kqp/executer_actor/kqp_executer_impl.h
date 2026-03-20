@@ -19,6 +19,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
+#include <ydb/core/kqp/executer_actor/kqp_streaming_helper.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -503,6 +504,8 @@ protected:
             );
             StatCollectInflightBytes = collectBytes;
             Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
+
+            ProcessStreamingQueryCounters();
         }
 
         YQL_ENSURE(Planner);
@@ -859,20 +862,20 @@ protected:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
-        HandleAbortExecution(msg.GetStatusCode(), ev->Get()->GetIssues(), ev->Sender != Target);
+        HandleAbortExecution(msg.GetStatusCode(), ev->Get()->GetIssues(), ev->Sender == Target);
     }
 
     void HandleAbortExecution(
             NYql::NDqProto::StatusIds::StatusCode statusCode,
             const NYql::TIssues& issues,
-            const bool sessionSender) {
+            const bool isTargetSender) {
         LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)
             << ", message: " << issues.ToOneLineString());
         auto ydbStatusCode = NYql::NDq::DqStatusToYdbStatus(statusCode);
         if (ydbStatusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
         } else if (ydbStatusCode == Ydb::StatusIds::TIMEOUT) {
-            TimeoutError(sessionSender, issues);
+            TimeoutError(isTargetSender, issues);
         } else {
             RuntimeError(NYql::NDq::DqStatusToYdbStatus(statusCode), issues);
         }
@@ -1044,7 +1047,7 @@ protected:
         ReplyErrorAndDie(status, &issues);
     }
 
-    void TimeoutError(bool sessionSender, NYql::TIssues issues) {
+    void TimeoutError(bool isTargetSender, NYql::TIssues issues) {
         if (AlreadyReplied) {
             LOG_E("Timeout when we already replied - not good" << Endl << TBackTrace().PrintToString() << Endl);
             return;
@@ -1067,8 +1070,8 @@ protected:
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::TIMEOUT);
         NYql::IssuesToMessage(issues, ResponseEv->Record.MutableResponse()->MutableIssues());
 
-        // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
-        if (!sessionSender) {
+        // TEvAbortExecution can come from ComputeActor or SessionActor/PartitionedExecuterActor (== Target).
+        if (!isTargetSender) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, issues);
             this->Send(Target, abortEv.Release());
         }
@@ -1300,6 +1303,26 @@ protected:
         return !databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler);
     }
 
+    void ProcessStreamingQueryCounters() {
+        const auto context = TasksGraph.GetMeta().UserRequestContext;
+        if (!CheckpointCoordinatorId || !AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() || !context || context->StreamingQueryPath.empty()) {
+            return;
+        }
+        if (!StreamingQueryCounters) {
+            StreamingQueryCounters = MakeStreamingQueryCounters(Counters->Counters->GetKqpCounters(), context->StreamingQueryPath);
+        }
+        auto now = TInstant::Now();
+        if (!LastStreamingQueryUpdateCounters) {
+            LastStreamingQueryUpdateCounters = now + TDuration::Seconds(10);
+        }
+        if (LastStreamingQueryUpdateCounters + StreamingQueryUpdateCountersPeriod <= now) {
+            TAggExecStat stats;
+            Stats->ExportAggExecStats(&stats);
+            StreamingQueryCounters->Update(stats);
+            LastStreamingQueryUpdateCounters = now;
+        }
+    }
+
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
@@ -1314,6 +1337,7 @@ protected:
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
+    TInstant LastStreamingQueryUpdateCounters;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
     TMaybe<TInstant> CancelAt;
@@ -1379,6 +1403,7 @@ protected:
     THashSet<ui32> SentResultIndexes;
 
     TActorId CheckpointCoordinatorId;
+    TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
 
 protected:
     TKqpTasksGraph TasksGraph;

@@ -35,6 +35,7 @@ public:
             {"folder_id"},
             {"resource_id"},
             {"source_id"},
+            {"database"},
         };
         auto& metricFields = srcMetric.metric_fields().fields();
 
@@ -301,6 +302,9 @@ static void CopyProps(const Ydb::RateLimiter::Resource& src, NKikimrKesus::TStre
                 if (metricFields.contains("source_id") && metricFields.at("source_id").has_string_value()) {
                     metric.SetSourceId(metricFields.at("source_id").string_value());
                 }
+                if (metricFields.contains("database") && metricFields.at("database").has_string_value()) {
+                    metric.SetDatabase(metricFields.at("database").string_value());
+                }
             }
         };
         if (srcAcc.has_provisioned()) {
@@ -356,6 +360,7 @@ static void CopyProps(const NKikimrKesus::TStreamingQuoterResource& src, Ydb::Ra
             metricFields["folder_id"].set_string_value(srcMetric.GetFolderId());
             metricFields["resource_id"].set_string_value(srcMetric.GetResourceId());
             metricFields["source_id"].set_string_value(srcMetric.GetSourceId());
+            metricFields["database"].set_string_value(srcMetric.GetDatabase());
         };
         if (srcAcc.HasProvisioned()) {
             copyMetric(srcAcc.GetProvisioned(), *acc.mutable_provisioned());

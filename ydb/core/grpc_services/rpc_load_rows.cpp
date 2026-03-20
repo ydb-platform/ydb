@@ -74,13 +74,23 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, 
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
         case arrow::Type::FIXED_SIZE_BINARY: {
-            if (tableColumnType && tableColumnType->GetTypeId() == NScheme::NTypeIds::Decimal) {
-                Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
-                decimalType->set_precision(tableColumnType->GetDecimalType().GetPrecision());
-                decimalType->set_scale(tableColumnType->GetDecimalType().GetScale());
-                return true;
+            if (!tableColumnType || dynamic_cast<const arrow::FixedSizeBinaryType&>(type).byte_width() != NScheme::FSB_SIZE) {
+                break;
             }
 
+            switch (tableColumnType->GetTypeId()) {
+                case NScheme::NTypeIds::Decimal: {
+                    Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
+                    decimalType->set_precision(tableColumnType->GetDecimalType().GetPrecision());
+                    decimalType->set_scale(tableColumnType->GetDecimalType().GetScale());
+                    return true;
+                }
+
+                case NScheme::NTypeIds::Uuid: {
+                    toType.set_type_id(Ydb::Type::UUID);
+                    return true;
+                }
+            }
             break;
         }
         case arrow::Type::BOOL:

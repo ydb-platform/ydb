@@ -2099,6 +2099,10 @@ ui64 TErasureType::PartSize(ECrcMode crcMode, ui64 dataSize) const {
             } else {
                 return 0;
             }
+#ifdef NDEBUG
+        default:
+            return dataSize;
+#endif
         }
         ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
     case TErasureType::ErasureParityStripe:
@@ -2112,6 +2116,10 @@ ui64 TErasureType::PartSize(ECrcMode crcMode, ui64 dataSize) const {
                 return partSize;
             case CrcModeWholePart:
                 return partSize + sizeof(ui32);
+#ifdef NDEBUG
+            default:
+                return partSize;
+#endif
             }
             ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
         }

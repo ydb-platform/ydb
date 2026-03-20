@@ -298,6 +298,15 @@ struct TIngressExternalPartitionStat {
     TIngressExternalPartitionStat(const TString& name) : Name(name) {}
 };
 
+struct TAggExecStat {
+    ui64 CpuTimeMs = 0;
+    ui64 DurationSeconds = 0;
+    ui64 MemoryUsageBytes = 0;
+    ui64 TasksCount = 0;
+    ui64 InputBytes = 0;
+    ui64 OutputBytes = 0;
+};
+
 struct TQueryExecutionStats {
 private:
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
@@ -377,6 +386,7 @@ public:
 
     void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
+    void ExportAggExecStats(TAggExecStat* metrics);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();
@@ -432,6 +442,40 @@ public:
 private:
     TEntry Total;
     TEntry Cur;
+};
+
+struct TBatchOperationTableStats {
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
+    ui64 WriteRows = 0;
+    ui64 WriteBytes = 0;
+    ui64 EraseRows = 0;
+    ui64 EraseBytes = 0;
+};
+
+struct TBatchOperationExecutionStats {
+public:
+    explicit TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
+
+    void TakeExecStats(NYql::NDqProto::TDqExecutionStats&& stats);
+
+    void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) const;
+
+public:
+    const Ydb::Table::QueryStatsCollection::Mode StatsMode;
+
+    // Local stats
+    TInstant StartTs = TInstant::Max();
+    TInstant FinishTs = TInstant::Max();
+    std::unordered_set<ui64> AffectedPartitions;
+
+    // Per-table accumulated stats from child executers
+    std::unordered_map<std::string, TBatchOperationTableStats> TableStats;
+
+    // Common accumulated stats from child executers
+    ui64 CpuTimeUs = 0;
+    ui64 DurationUs = 0;
+    ui64 ExecutersCpuTimeUs = 0;
 };
 
 } // namespace NKqp

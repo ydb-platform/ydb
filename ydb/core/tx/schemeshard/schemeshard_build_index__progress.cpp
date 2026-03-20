@@ -635,6 +635,8 @@ private:
             path->PathId.ToProto(ev->Record.MutablePathId());
         }
 
+        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+            buildInfo.SpecializedIndexDescription).GetSettings().settings();
         ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetMaxProbability(buildInfo.Sample.MaxProbability);
         if (buildInfo.KMeans.Parent != 0) {
@@ -2877,11 +2879,14 @@ public:
                     << "At " << state << " state got unsuccess propose result"
                     << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason());
-                Self->PersistBuildIndexForget(db, buildInfo);
+                if (!Self->PersistBuildIndexForget(db, buildInfo)) {
+                    return false;
+                }
                 EraseBuildInfo(buildInfo);
             }
 
             ReplyOnCreation(buildInfo, statusCode);
+            return true;
         };
 
         auto ifErrorMoveTo = [&] (TIndexBuildInfo::EState to) {
@@ -2907,7 +2912,9 @@ public:
             buildInfo.LockTxStatus = record.GetStatus();
             Self->PersistBuildIndexLockTxStatus(db, buildInfo);
 
-            replyOnCreation();
+            if (!replyOnCreation()) {
+                return false;
+            }
             break;
         }
         case TIndexBuildInfo::EState::AlterMainTable:

@@ -104,4 +104,5 @@ message TDqPqTopicSink {
     bool AddBearerToToken = 6;
     EClusterType ClusterType = 7;
     bool UseActorSystemThreadsInTopicClient = 8;
+    bool EnableDeduplication = 9;
 }

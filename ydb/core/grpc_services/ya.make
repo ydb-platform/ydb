@@ -86,6 +86,7 @@ SRCS(
     rpc_scheme_base.cpp
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
+    rpc_test_shard.cpp
     rpc_view.cpp
     rpc_whoami.cpp
     table_settings.cpp
@@ -131,7 +132,6 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
-    ydb/core/kqp/session_actor
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view

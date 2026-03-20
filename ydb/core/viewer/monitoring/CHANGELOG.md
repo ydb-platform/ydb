@@ -1,5 +1,12 @@
 # Changelog
 
+## [14.1.0-hotfix.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.1.0...v14.1.0-hotfix.1) (2026-02-02)
+
+
+### Bug Fixes
+
+* improve error parsing ([#3386](https://github.com/ydb-platform/ydb-embedded-ui/issues/3386)) ([eadd453](https://github.com/ydb-platform/ydb-embedded-ui/commit/eadd453db00c86fb92c59795f03611e87bf36161))
+
 ## [14.1.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.0.1...v14.1.0) (2025-12-23)
 
 

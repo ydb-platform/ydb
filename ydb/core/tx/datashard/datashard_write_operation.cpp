@@ -241,6 +241,8 @@ TVector<TKeyValidator::TColumnWriteMeta> TValidatedWriteTxOperation::GetColumnWr
 
 void TValidatedWriteTxOperation::SetTxKeys(const TUserTable& tableInfo, ui64 tabletId, TKeyValidator& keyValidator)
 {
+    bool isErase = GetOperationType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE;
+
     auto columnsWrites = GetColumnWrites();
 
     TVector<TCell> keyCells;
@@ -252,7 +254,7 @@ void TValidatedWriteTxOperation::SetTxKeys(const TUserTable& tableInfo, ui64 tab
             << "write point " << DebugPrintPoint(tableInfo.KeyColumnTypes, keyCells, *AppData()->TypeRegistry));
 
         TTableRange tableRange(keyCells);
-        keyValidator.AddWriteRange(TableId, tableRange, tableInfo.KeyColumnTypes, columnsWrites, false);
+        keyValidator.AddWriteRange(TableId, tableRange, tableInfo.KeyColumnTypes, columnsWrites, isErase);
     }
 }
 
@@ -669,7 +671,7 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
 }
 
 std::optional<TString> TWriteOperation::OnMigration(TDataShard& self, const TActorContext&) {
-    if (!IsImmediate() && HasVolatilePrepareFlag() && !HasCompletedFlag() && !HasResultSentFlag() && !Result()) {
+    if (!IsImmediate() && HasVolatilePrepareFlag() && !HasCompletedFlag() && !HasResultSentFlag() && !GetWriteResult()) {
         self.SendRestartNotification(this);
         return GetTxBody();
     }
@@ -745,7 +747,7 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
     } else if (HasVolatilePrepareFlag()) {
         // Volatile transactions may be aborted at any time unless executed,
         // but we want them to migrate and run to completion when possible.
-        if (!HasCompletedFlag() && !HasResultSentFlag() && !Result()) {
+        if (!HasCompletedFlag() && !HasResultSentFlag() && !GetWriteResult()) {
             // It is possible this transaction already migrated or will migrate soon
             self.SendRestartNotification(this);
             return false;

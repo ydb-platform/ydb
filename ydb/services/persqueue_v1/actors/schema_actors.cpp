@@ -510,6 +510,12 @@ bool TDescribeTopicActorImpl::StateWork(TAutoPtr<IEventHandle>& ev, const TActor
     return true;
 }
 
+void TDescribeTopicActorImpl::PassAway(const TActorContext& ctx) {
+    for (auto& [_, tablet] : Tablets) {
+        NTabletPipe::CloseClient(ctx, tablet.Pipe);
+    }
+}
+
 void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     if (!TDescribeTopicActorImpl::StateWork(ev, this->ActorContext())) {
         TBase::StateWork(ev);
@@ -560,7 +566,7 @@ void TDescribeTopicActorImpl::RestartTablet(ui64 tabletId, const TActorContext& 
         if (GotLocation && GotReadSessions) {
             return;
         }
-        BalancerPipe = nullptr;
+        BalancerPipe = {};
     }
 
     NTabletPipe::CloseClient(ctx, tabletInfo.Pipe);
@@ -618,7 +624,7 @@ void TDescribeTopicActorImpl::RequestTablet(TTabletInfo& tablet, const TActorCon
         tablet.Pipe = CreatePipe(tablet.TabletId, ctx);
 
     if (tablet.TabletId == BalancerTabletId) {
-        BalancerPipe = &tablet.Pipe;
+        BalancerPipe = tablet.Pipe;
         RequestBalancer(ctx);
     } else {
         RequestPartitionStatus(tablet, ctx);
@@ -679,7 +685,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
         }
     }
     NTabletPipe::SendData(
-        ctx, *BalancerPipe,
+        ctx, BalancerPipe,
         new TEvPersQueue::TEvGetPartitionsLocation(partsVector)
     );
     ++RequestsInfly;
@@ -688,7 +694,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
 void TDescribeTopicActorImpl::RequestReadSessionsInfo(const TActorContext& ctx) {
     Y_ABORT_UNLESS(Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer);
     NTabletPipe::SendData(
-            ctx, *BalancerPipe,
+            ctx, BalancerPipe,
                     new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
             );
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Request sessions");
@@ -788,8 +794,15 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
 void TDescribeTopicActorImpl::CheckCloseBalancerPipe(const TActorContext& ctx) {
     if (!GotLocation || !GotReadSessions)
         return;
-    NTabletPipe::CloseClient(ctx, *BalancerPipe);
-    *BalancerPipe = TActorId{};
+    if (BalancerPipe) {
+        NTabletPipe::CloseClient(ctx, BalancerPipe);
+        BalancerPipe = {};
+
+        auto it = Tablets.find(BalancerTabletId);
+        if (it != Tablets.end()) {
+            it->second.Pipe = {};
+        }
+    }
     BalancerTabletId = 0;
 }
 
@@ -918,6 +931,10 @@ bool TDescribeTopicActor::ApplyResponse(
     return true;
 }
 
+void TDescribeTopicActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
 
 
 void TDescribeTopicActor::Reply(const TActorContext& ctx) {
@@ -1032,6 +1049,10 @@ bool TDescribeConsumerActor::ApplyResponse(
     return true;
 }
 
+void TDescribeConsumerActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
 
 void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     Y_ABORT_UNLESS(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
@@ -1318,6 +1339,11 @@ bool TDescribePartitionActor::ApplyResponse(
     return true;
 }
 
+void TDescribePartitionActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
+
 void TDescribePartitionActor::RaiseError(
         const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status,
         const TActorContext&
@@ -1396,6 +1422,11 @@ bool TPartitionsLocationActor::ApplyResponse(
     }
     Finalize();
     return true;
+}
+
+void TPartitionsLocationActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
 }
 
 void TPartitionsLocationActor::Finalize() {

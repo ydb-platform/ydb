@@ -65,6 +65,7 @@
 #include <ydb/core/protos/http_config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 
@@ -115,7 +116,8 @@
 #include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/fq/ydb_over_fq.h>
 #include <ydb/services/kesus/grpc_service.h>
-#include <ydb/services/keyvalue/grpc_service.h>
+#include <ydb/services/keyvalue/grpc_service_v1.h>
+#include <ydb/services/keyvalue/grpc_service_v2.h>
 #include <ydb/services/local_discovery/grpc_service.h>
 #include <ydb/services/maintenance/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
@@ -125,6 +127,7 @@
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/replication/grpc_service.h>
+#include <ydb/services/test_shard/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/services/ydb/ydb_export.h>
@@ -798,6 +801,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["config"] = &hasConfig;
         TServiceCfg hasBridge = services.empty();
         names["bridge"] = &hasBridge;
+        TServiceCfg hasTestShard = services.empty();
+        names["test_shard"] = &hasTestShard;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -1072,7 +1077,9 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         }
 
         if (hasKeyValue) {
-            server.AddService(new NGRpcService::TKeyValueGRpcService(ActorSystem.Get(), Counters,
+            server.AddService(new NGRpcService::TKeyValueV1GRpcService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0]));
+            server.AddService(new NGRpcService::TKeyValueV2GRpcService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0]));
         }
 
@@ -1097,6 +1104,10 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
 
         if (hasBridge) {
             server.AddService(new NGRpcService::TBridgeGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        }
+
+        if (hasTestShard) {
+            server.AddService(new NGRpcService::TTestShardGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (ModuleFactories) {

@@ -125,6 +125,9 @@ public:
 
 class TCompactionTaskData {
 private:
+    static constexpr ui64 DefaultMemoryUsageLimit = ((ui64)512) << 20;
+    static constexpr ui64 DefaultPortionsCountLimit = 10000;
+
     YDB_ACCESSOR_DEF(std::vector<TPortionInfo::TConstPtr>, Portions);
     const TPositiveControlInteger TargetCompactionLevel;
     std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> Predictor =
@@ -142,6 +145,8 @@ private:
     std::vector<TPortionsChain> Chains;
     std::optional<NArrow::TSimpleRow> StopSeparation;
     std::optional<ui64> ExpectedPortionSize;
+    ui64 MemoryUsageLimit = DefaultMemoryUsageLimit;
+    ui64 PortionsCountLimit = DefaultPortionsCountLimit;
 
 public:
     ui64 GetTargetCompactionLevel() const {
@@ -271,13 +276,15 @@ public:
         if (Portions.size() <= 1) {
             return true;
         }
-        return MemoryUsage < (((ui64)512) << 20) && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < 10000 &&
-               Portions.size() < 10000;
+        return MemoryUsage < MemoryUsageLimit && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < PortionsCountLimit &&
+               Portions.size() < PortionsCountLimit;
     }
 
-    TCompactionTaskData(const ui64 targetCompactionLevel, const std::optional<ui64> expectedPortionSize = std::nullopt)
+    TCompactionTaskData(const ui64 targetCompactionLevel,  std::optional<ui64> compactionTaskMemoryLimit = std::nullopt, std::optional<ui64> compactionTaskPortionsCountLimit = std::nullopt, const std::optional<ui64> expectedPortionSize = std::nullopt)
         : TargetCompactionLevel(targetCompactionLevel)
-        , ExpectedPortionSize(expectedPortionSize) {
+        , ExpectedPortionSize(expectedPortionSize)
+        , MemoryUsageLimit(compactionTaskMemoryLimit.value_or(DefaultMemoryUsageLimit))
+        , PortionsCountLimit(compactionTaskPortionsCountLimit.value_or(DefaultPortionsCountLimit)) {
     }
 };
 

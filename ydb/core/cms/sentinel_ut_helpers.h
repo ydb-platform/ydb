@@ -68,6 +68,7 @@ class TTestEnv: public TCmsTestEnv {
         UNIT_ASSERT(DispatchEvents(options));
     }
 
+public:
     void SetPDiskStateImpl(const TSet<TPDiskID>& ids, EPDiskState state) {
         for (const auto& id : ids) {
             Y_ABORT_UNLESS(MockNodes.contains(id.NodeId));
@@ -82,7 +83,6 @@ class TTestEnv: public TCmsTestEnv {
         Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateState));
     }
 
-public:
     explicit TTestEnv(ui32 nodeCount, ui32 pdisks, NKikimrCms::TCmsConfig config = {})
         : TCmsTestEnv(nodeCount, pdisks)
     {
@@ -272,7 +272,6 @@ public:
             default:
                 break;
             }
-
             bool allUpdateStatusRequestedOrIgnored = true;
             for (const auto& [id, info] : pdiskUpdates) {
                 allUpdateStatusRequestedOrIgnored &= (info.UpdateStatusRequested || info.IgnoredUpdateRequests == 6);

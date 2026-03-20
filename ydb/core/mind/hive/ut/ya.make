@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/mind/hive)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 PEERDIR(
     library/cpp/getopt
@@ -21,8 +22,11 @@ SRCS(
     scale_recommender_policy_ut.cpp
     sequencer_ut.cpp
     storage_pool_info_ut.cpp
+    tenants_ut.cpp
     hive_ut.cpp
     hive_impl_ut.cpp
+    ut_common.cpp
+    ut_common.h
 )
 
 END()

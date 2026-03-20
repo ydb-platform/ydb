@@ -1003,7 +1003,7 @@ struct TAnalyzeSettings {
 };
 
 struct TBackupCollectionSettings {
-    bool IncrementalBackupEnabled;
+    bool IncrementalBackupEnabled = false;
 };
 
 struct TCreateBackupCollectionSettings {

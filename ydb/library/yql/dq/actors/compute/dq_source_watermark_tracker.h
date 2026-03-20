@@ -17,12 +17,13 @@ public:
         bool idlePartitionsEnabled,
         TDuration lateArrivalDelay,
         TDuration idleTimeout,
-        const TString& logPrefix)
+        const TString& logPrefix,
+        const ::NMonitoring::TDynamicCounterPtr& counters = {})
         : Granularity_(granularity)
         , IdlePartitionsEnabled_(idlePartitionsEnabled)
         , LateArrivalDelay_(lateArrivalDelay)
         , IdleTimeout_(idleTimeout)
-        , Impl_(logPrefix)
+        , Impl_(logPrefix, counters)
     {}
 
     [[nodiscard]] TMaybe<TInstant> NotifyNewPartitionTime(
@@ -61,6 +62,10 @@ public:
         return Impl_.GetWatermarkDiscrepancy();
     }
 
+    void Out(IOutputStream& str) const {
+        Impl_.Out(str);
+    }
+
 private:
     TInstant ToDiscreteTime(TInstant time) const {
         return TInstant::MicroSeconds(time.MicroSeconds() - time.MicroSeconds() % Granularity_.MicroSeconds());
@@ -79,4 +84,4 @@ private:
     TDqWatermarkTrackerImpl<TPartitionKey> Impl_;
 };
 
-}
+} // namespace NYql::NDq

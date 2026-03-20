@@ -1,5 +1,5 @@
-#include "kqp_proxy_service.h"
 #include "kqp_proxy_service_impl.h"
+#include "kqp_proxy_service.h"
 #include "kqp_script_executions.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -467,6 +467,8 @@ public:
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+        InitSharedReading();
+        InitCheckpointStorage();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -701,7 +703,7 @@ public:
 
         auto cancelAfter = ev->Get()->GetCancelAfter();
         auto timeout = ev->Get()->GetOperationTimeout();
-        auto timerDuration = ev->Get()->GetDisableDefaultTimeout() ? timeout : GetQueryTimeout(queryType, timeout.MilliSeconds(), TableServiceConfig, QueryServiceConfig);
+        auto timerDuration = GetQueryTimeout(queryType, timeout.MilliSeconds(), TableServiceConfig, QueryServiceConfig, ev->Get()->GetDisableDefaultTimeout());
         if (cancelAfter) {
             timerDuration = Min(timerDuration, cancelAfter);
         }
@@ -716,7 +718,7 @@ public:
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::ScriptRequest)) {
             auto req = ev->Get()->Record.MutableRequest();
-            auto maxRunTime = ev->Get()->DisableDefaultTimeout ? TDuration::MilliSeconds(req->GetTimeoutMs()) : GetQueryTimeout(req->GetType(), req->GetTimeoutMs(), TableServiceConfig, QueryServiceConfig);
+            auto maxRunTime = GetQueryTimeout(req->GetType(), req->GetTimeoutMs(), TableServiceConfig, QueryServiceConfig, ev->Get()->DisableDefaultTimeout);
             req->SetTimeoutMs(maxRunTime.MilliSeconds());
             if (req->GetCancelAfterMs()) {
                 maxRunTime = TDuration::MilliSeconds(Min(req->GetCancelAfterMs(), maxRunTime.MilliSeconds()));
@@ -1699,7 +1701,7 @@ private:
     }
 
     void Handle(TEvKqp::TEvListSessionsRequest::TPtr& ev) {
-        KQP_PROXY_LOG_D("incoming list sessions request " << ev->Get()->Record.ShortUtf8DebugString());
+        KQP_PROXY_LOG_D("incoming list sessions request " << ev->Get()->Record.ShortUtf8DebugString() << ", local sessions #" << LocalSessions->size());
 
         auto result = std::make_unique<TEvKqp::TEvListSessionsResponse>();
 
@@ -1708,7 +1710,7 @@ private:
 
         auto startIt = LocalSessions->GetOrderedLowerBound(tenant, ev->Get()->Record.GetSessionIdStart());
         auto endIt = LocalSessions->GetOrderedEnd();
-        i32 freeSpace = ev->Get()->Record.GetFreeSpace();
+        i64 freeSpace = ev->Get()->Record.GetFreeSpace();
 
         TKqpSessionInfo::TFieldsMap fieldsMap(ev->Get()->Record.GetColumns());
 
@@ -1792,9 +1794,12 @@ private:
 
     void InitSharedReading() {
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
-        if (!streamingQueries.HasExternalStorage() || !FederatedQuerySetup) {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableStreamingQueries() || RowDispatcherService) {
             return;
         }
+
+        const auto& pqGatewayFactory = FederatedQuerySetup->PqGatewayFactory;
+        Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");
 
         auto rowDispatcher = NFq::NewRowDispatcherService(
             streamingQueries.GetExternalStorage(),
@@ -1803,12 +1808,12 @@ private:
             AppData()->FunctionRegistry,
             AppData()->TenantName,
             Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
-            FederatedQuerySetup->PqGateway,
+            pqGatewayFactory->CreatePqGateway(),
             *FederatedQuerySetup->Driver,
             AppData()->Mon,
             Counters->GetKqpCounters(),
             {},
-            AppData()->FeatureFlags.GetEnableStreamingQueriesCounters());
+            FeatureFlags.GetEnableStreamingQueriesCounters());
 
         RowDispatcherService = TActivationContext::Register(rowDispatcher.release());
         TActivationContext::ActorSystem()->RegisterLocalService(
@@ -1816,7 +1821,7 @@ private:
     }
 
     void InitCheckpointStorage() {
-        if (!FederatedQuerySetup || !AppData()->FeatureFlags.GetEnableStreamingQueries()) {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableStreamingQueries() || CheckpointStorageService) {
             return;
         }
 

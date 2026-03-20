@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/kqp/proxy_service)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_proxy_ut.cpp
@@ -10,14 +11,15 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/protobuf/interop
     ydb/core/kqp/run_script_actor
     ydb/core/kqp/proxy_service
     ydb/core/kqp/ut/common
     ydb/core/kqp/workload_service/ut/common
-    yql/essentials/sql/pg_dummy
-    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/query
     ydb/services/ydb
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

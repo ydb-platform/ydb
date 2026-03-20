@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
+REQUIREMENTS(cpu:4)
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -32,6 +34,7 @@ SRCDIR(
 
 SRCS(
     basic_usage_ut.cpp
+    binary_producer_id_ut.cpp
     describe_topic_ut.cpp
     direct_read_ut.cpp
     local_partition_ut.cpp

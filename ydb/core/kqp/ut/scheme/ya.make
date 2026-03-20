@@ -3,6 +3,8 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
+REQUIREMENTS(cpu:2)
+
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -14,6 +16,7 @@ SRCS(
     kqp_acl_ut.cpp
     kqp_constraints_ut.cpp
     kqp_scheme_ut.cpp
+    kqp_scheme_type_info_ut.cpp
     kqp_secrets_ut.cpp
 )
 

@@ -214,6 +214,13 @@ public:
             settings.Add(std::move(skipJsonErrors));
         }
 
+        if (auto streamingTopicRead = topicKeyParser.GetStreamingTopicRead()) {
+            if (!topicKeyParser.ParseStreamingTopicRead(*streamingTopicRead, ctx)) {
+                return nullptr;
+            }
+            settings.Add(std::move(streamingTopicRead));
+        }
+
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())

@@ -177,7 +177,6 @@ namespace Tests {
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
-        NYql::ISolomonGateway::TPtr SolomonGateway;
         NYql::IPqGateway::TPtr PqGateway;
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         bool InitializeFederatedQuerySetupFactory = false;
@@ -191,7 +190,9 @@ namespace Tests {
         std::function<IActor*(const TTokenManagerSettings&)> CreateTokenManager = NKikimr::CreateTokenManager;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
+        std::shared_ptr<void> KqpLoggerScope;
 
+        TServerSettings& SetKqpLoggerScope(std::shared_ptr<void> value) { KqpLoggerScope = value; return *this; }
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetGrpcHost(TString value) { GrpcHost = value; return *this; }
         TServerSettings& SetGrpcMaxMessageSize(int value) { GrpcMaxMessageSize = value; return *this; }
@@ -243,7 +244,6 @@ namespace Tests {
         TServerSettings& SetCredentialsFactory(NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { CredentialsFactory = std::move(credentialsFactory); return *this; }
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
-        TServerSettings& SetSolomonGateway(NYql::ISolomonGateway::TPtr solomonGateway) { SolomonGateway = std::move(solomonGateway); return *this; }
         TServerSettings& SetPqGateway(NYql::IPqGateway::TPtr pqGateway) { PqGateway = std::move(pqGateway); return *this; }
         TServerSettings& SetDqTaskTransformFactory(NYql::TTaskTransformFactory value) { DqTaskTransformFactory = std::move(value); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
@@ -428,6 +428,14 @@ namespace Tests {
         const bool UseStoragePools;
 
         std::shared_ptr<void> KqpLoggerScope;
+        // This Driver is used exclusively by TKqpFederatedQuerySetup
+        // (DO NOT USE IT IN A TSERVER), but is stored here in
+        // TServer to ensure it outlives TTestActorRuntime. During
+        // graceful shutdown, the Driver must be destroyed after all
+        // actors are gone; otherwise, lingering gRPC contexts or
+        // background operations can cause the gRPC client to hang
+        // or trigger use-after-free during its destruction.
+        std::shared_ptr<NYdb::TDriver> FederatedQuerySetupDriver_;
         THolder<TTestActorRuntime> Runtime;
         THolder<NYdb::TDriver> Driver;
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;
@@ -850,6 +858,8 @@ namespace Tests {
         ui32 Capacity() const;
 
         void CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes = 1, TDuration timeout = TDuration::Seconds(30), bool acceptAlreadyExist = false);
+        void RemoveTenant(Ydb::Cms::RemoveDatabaseRequest request, TDuration timeout = TDuration::Seconds(30));
+        void RemoveTenant(const TString& path, TDuration timeout = TDuration::Seconds(30));
 
     private:
         TVector<ui32>& Nodes(const TString &name);

@@ -164,6 +164,7 @@ template <typename T>
 using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 
 class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    friend class TEvWriteCommitSyncTransactionOperator;
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInit;
@@ -550,7 +551,7 @@ private:
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
-    TSpaceWatcher* SpaceWatcher;
+    std::unique_ptr<TSpaceWatcher, std::function<void(TSpaceWatcher*)>> SpaceWatcher;
     TActorId SpaceWatcherId;
     THashMap<TActorId, TActorId> PipeServersInterconnectSessions;
 

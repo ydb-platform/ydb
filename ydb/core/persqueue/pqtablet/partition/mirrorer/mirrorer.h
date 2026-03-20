@@ -29,7 +29,7 @@ private:
     const TDuration UPDATE_COUNTERS_INTERVAL = TDuration::Seconds(5);
 
     const TDuration LOG_STATE_INTERVAL = TDuration::Minutes(1);
-    const TDuration INIT_TIMEOUT = TDuration::Minutes(1);
+    const TDuration INIT_TIMEOUT = TDuration::Minutes(2);
     const TDuration RECEIVE_READ_EVENT_TIMEOUT = TDuration::Minutes(1);
     const TDuration WRITE_TIMEOUT = TDuration::Minutes(10);
 

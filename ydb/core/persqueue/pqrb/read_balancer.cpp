@@ -699,7 +699,7 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             auto jt = Consumers.find(consumerStats.GetConsumer());
             if (jt == Consumers.end())
                 continue;
-            for (ui32 i = 0; i < consumerStats.ValuesSize() && i < labeledCounters->GetCounters().Size(); ++i) {
+            for (ui32 i = 0; i < consumerStats.ValuesSize() && i < labeledConsumerCounters->GetCounters().Size(); ++i) {
                 labeledConsumerCounters->GetCounters()[i] = consumerStats.GetValues(i);
             }
             jt->second.Aggr->AggregateWith(*labeledConsumerCounters);

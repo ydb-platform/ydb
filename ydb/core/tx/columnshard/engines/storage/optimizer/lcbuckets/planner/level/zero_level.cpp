@@ -5,7 +5,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks() const {
     std::vector<TCompactionTaskData> result;
     AFL_VERIFY(Portions.size());
-    result.emplace_back(NextLevel->GetLevelId(), CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
+    result.emplace_back(NextLevel->GetLevelId(), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit, CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
     i64 tasksLeft = GetMaxConcurrency();
     for (auto&& i : Portions) {
         result.back().AddCurrentLevelPortion(
@@ -15,7 +15,7 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks() co
             if (--tasksLeft <= 0) {
                 break;
             }
-            result.emplace_back(NextLevel->GetLevelId(), CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
+            result.emplace_back(NextLevel->GetLevelId(), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit, CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
         }
     }
     
@@ -89,14 +89,16 @@ TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
 TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel,
     const TLevelCounters& levelCounters, const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop,
     const ui64 expectedBlobsSize, const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors,
-    const TString& defaultSelectorName, const ui64 concurrency, const ui64 highPriorityContribution, bool compactAtLevel)
+    const TString& defaultSelectorName, const ui64 concurrency,  std::optional<ui64> compactionTaskMemoryLimit, std::optional<ui64> compactionTaskPortionsCountLimit, const ui64 highPriorityContribution, bool compactAtLevel)
     : TBase(levelIdx, nextLevel, overloadChecker, levelCounters, selectors, defaultSelectorName)
     , DurationToDrop(durationToDrop)
     , ExpectedBlobsSize(expectedBlobsSize)
     , PortionsCountAvailable(portionsCountAvailable)
     , HighPriorityContribution(highPriorityContribution)
     , CompactAtLevel(compactAtLevel)
-    , Concurrency(concurrency) {
+    , Concurrency(concurrency)
+    , CompactionTaskMemoryLimit(compactionTaskMemoryLimit)
+    , CompactionTaskPortionsCountLimit(compactionTaskPortionsCountLimit) {
     if (DurationToDrop != TDuration::Max() && PredOptimization) {
         *PredOptimization -= TDuration::Seconds(RandomNumber<ui32>(DurationToDrop.Seconds()));
     }

@@ -38,18 +38,20 @@ ui64 GetDefaultQueryTimeoutMs(NKikimrKqp::EQueryType queryType,
     }
 }
 
-}
+} // anonymous namespace
 
-TDuration GetQueryTimeout(NKikimrKqp::EQueryType queryType,
-                          ui64 timeoutMs,
-                          const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-                          const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+TDuration GetQueryTimeout(NKikimrKqp::EQueryType queryType, ui64 timeoutMs, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, bool disableDefaultTimeout)
+{
+    if (disableDefaultTimeout && timeoutMs) {
+        return TDuration::MilliSeconds(timeoutMs);
+    }
+
     ui64 defaultTimeoutMs = GetDefaultQueryTimeoutMs(queryType, tableServiceConfig, queryServiceConfig);
-
 
     return timeoutMs
         ? TDuration::MilliSeconds(Min(defaultTimeoutMs, timeoutMs))
         : TDuration::MilliSeconds(defaultTimeoutMs);
 }
 
-}
+} // namespace NKikimr::NKqp

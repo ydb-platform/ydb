@@ -53,7 +53,7 @@ CREATE ASYNC REPLICATION my_replication_for_single_table
 FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret'
+    TOKEN_SECRET_PATH = 'my_secret'
 );
 ```
 
@@ -66,7 +66,7 @@ CREATE ASYNC REPLICATION my_replication_for_multiple_tables
 FOR original_table_1 AS replica_table_1, original_table_2 AS replica_table_2
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret'
+    TOKEN_SECRET_PATH = 'my_secret'
 );
 ```
 
@@ -77,7 +77,7 @@ CREATE ASYNC REPLICATION my_replication_for_dir
 FOR original_dir AS replica_dir
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret'
+    TOKEN_SECRET_PATH = 'my_secret'
 );
 ```
 
@@ -88,7 +88,7 @@ CREATE ASYNC REPLICATION my_replication_for_database
 FOR `/Root/another_database` AS `/Root/my_database`
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret'
+    TOKEN_SECRET_PATH = 'my_secret'
 );
 ```
 
@@ -99,7 +99,7 @@ CREATE ASYNC REPLICATION my_consistent_replication
 FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret',
+    TOKEN_SECRET_PATH = 'my_secret',
     CA_CERT = '-----BEGIN CERTIFICATE-----...'
 );
 ```
@@ -111,7 +111,7 @@ CREATE ASYNC REPLICATION my_consistent_replication
 FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret',
+    TOKEN_SECRET_PATH = 'my_secret',
     CONSISTENCY_LEVEL = 'GLOBAL'
 );
 ```
@@ -123,7 +123,7 @@ CREATE ASYNC REPLICATION my_consistent_replication_1min_commit_interval
 FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret',
+    TOKEN_SECRET_PATH = 'my_secret',
     CONSISTENCY_LEVEL = 'GLOBAL',
     COMMIT_INTERVAL = Interval('PT1M')
 );

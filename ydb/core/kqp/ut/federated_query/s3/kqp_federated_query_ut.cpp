@@ -13,6 +13,8 @@
 
 #include <yql/essentials/utils/log/log.h>
 
+#include <library/cpp/protobuf/interop/cast.h>
+
 #include <fmt/format.h>
 
 namespace NKikimr::NKqp {
@@ -2927,10 +2929,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
             NKikimrKqp::TScriptExecutionRetryState::TMapping retryMapping;
             retryMapping.AddStatusCode(Ydb::StatusIds::PRECONDITION_FAILED);
-            auto& policy = *retryMapping.MutableBackoffPolicy();
-            policy.SetRetryPeriodMs(BACKOFF_DURATION.MilliSeconds());
-            policy.SetBackoffPeriodMs(BACKOFF_DURATION.MilliSeconds());
-            policy.SetRetryRateLimit(1);
+            auto& policy = *retryMapping.MutableExponentialDelayPolicy();
+            policy.SetBackoffMultiplier(1.5);
+            *policy.MutableInitialBackoff() = NProtoInterop::CastToProto(TDuration::Seconds(1));
+            *policy.MutableMaxBackoff() = NProtoInterop::CastToProto(TDuration::Seconds(5));
 
             NKikimrKqp::TEvQueryRequest queryProto;
             queryProto.SetUserToken(NACLib::TUserToken(BUILTIN_ACL_ROOT, TVector<NACLib::TSID>{runtime.GetAppData().AllAuthenticatedUsers}).SerializeAsString());

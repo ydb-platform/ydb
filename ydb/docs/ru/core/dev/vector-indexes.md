@@ -91,6 +91,24 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
+### Перекрытие кластеров {#overlap-clusters}
+
+Векторный индекс в YDB может добавлять каждый вектор в несколько кластеров с целью
+улучшения полноты и скорости поиска:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (embedding)
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+```
+
+В данном примере каждый вектор будет добавлен в 3 ближайших кластера вместо 1.
+
+Использование такого индекса позволяет значительно улучшить полноту поиска даже с небольшими значениями PRAGMA
+[KMeansTreeSearchTopSize](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) (например, 3).
+
 ## Создание векторных индексов {#creation}
 
 Векторные индексы можно создавать:

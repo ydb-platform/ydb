@@ -6,6 +6,7 @@ TEST_SRCS(
     conftest.py
     test_secrets.py
     test_secrets_usage.py
+    test_secrets_monitoring.py
 )
 
 SPLIT_FACTOR(20)

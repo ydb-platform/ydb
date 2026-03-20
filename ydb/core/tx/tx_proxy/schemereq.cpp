@@ -502,7 +502,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
     }
 
-    static THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForAdjustPathNames(NKikimrSchemeOp::TModifyScheme& scheme) {
+    static THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForAdjustPathNames(
+        const TString& database, NKikimrSchemeOp::TModifyScheme& scheme) 
+    {
         auto parts = GetFullPath(scheme);
         if (parts.size() < 2) {
             return {};
@@ -510,6 +512,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         TVector<TString> path;
+        request->DatabaseName = database;
 
         for (auto it = parts.begin(); it != parts.end() - 1; ++it) {
             path.emplace_back(*it);
@@ -1696,7 +1699,7 @@ void TFlatSchemeReq::Start(const TActorContext &ctx) {
     }
 
     if (NeedAdjustPathNames(GetModifyScheme())) {
-        auto resolveRequest = ResolveRequestForAdjustPathNames(GetModifyScheme());
+        auto resolveRequest = ResolveRequestForAdjustPathNames(GetRequestProto().GetDatabaseName(), GetModifyScheme());
         if (!resolveRequest) {
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
             TxProxyMon->ResolveKeySetWrongRequest->Inc();

@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST(AlterWithProfileChange) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
         TPathVersion pqVer;
 
@@ -254,8 +254,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST_FLAG(CreateDrop, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
-
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard)
+                             .EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
             t.Runtime->SetScheduledLimit(400);
 
@@ -292,8 +292,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST_FLAG(CreateDropAbort, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
-
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard)
+                             .EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
             t.Runtime->SetScheduledLimit(400);
 

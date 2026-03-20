@@ -90,6 +90,24 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
+### Overlapping clusters {#overlap-clusters}
+
+Vector index in YDB can add each vector to multiple clusters to increase quality of the vector search:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (embedding)
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+```
+
+Here, each vector will be added to 3 nearest clusters instead of 1.
+
+Using such an index dramatically increases vector search quality, even with small PRAGMA
+[KMeansTreeSearchTopSize](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize)
+values (for example, 3).
+
 ## Creating Vector Indexes {#creation}
 
 Vector indexes can be created:

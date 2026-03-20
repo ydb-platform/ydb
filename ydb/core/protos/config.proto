@@ -13,8 +13,8 @@ import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/compaction.proto";
 import "ydb/core/protos/config_metrics.proto";
 import "ydb/core/protos/config_units.proto";
-import "ydb/core/protos/counters_schemeshard.proto";
 import "ydb/core/protos/data_integrity_trails.proto";
+import "ydb/core/protos/schemeshard_config.proto";
 import "ydb/core/protos/datashard_config.proto";
 import "ydb/core/protos/drivemodel.proto";
 import "ydb/core/protos/feature_flags.proto";
@@ -1174,8 +1174,10 @@ message TStreamingQueriesConfig {
         optional string DiscoveryCommonHostnamePrefixPatch = 1; // Added to discovered hostnames if original hostname starts with this prefix
     }
 
-    optional TExternalStorageConfig ExternalStorage = 1;
-    optional TExternalTopicsSettings TopicSdkSettings = 2;
+    reserved 1;
+    reserved 2;
+    optional TExternalStorageConfig ExternalStorage = 3;
+    optional TExternalTopicsSettings TopicSdkSettings = 4;
 }
 
 message TQueryServiceConfig {
@@ -1204,9 +1206,8 @@ message TQueryServiceConfig {
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
     reserved 24;
-    reserved 25;
+    optional TStreamingQueriesConfig StreamingQueries = 25;
     reserved 26;
-    optional TStreamingQueriesConfig StreamingQueries = 27;
 }
 
 // Config describes immediate controls and allows
@@ -2049,6 +2050,7 @@ message THiveConfig {
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
     optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
+    optional uint64 DataCenterChangeReactionPeriod = 91 [default = 1]; // seconds
 }
 
 message THealthCheckConfig {
@@ -2163,39 +2165,14 @@ message TColumnShardConfig {
         string DefaultCompactionPreset = 61 [default = "lc-buckets"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
+
+    optional uint64 ScanMemoryLimit = 63 [default = 3221225472];
+    optional uint64 CompactionStageMemoryLimit = 64 [default = 3221225472];
+    optional uint64 TieringStageMemoryLimit = 65 [default = 1000000000];
+    optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
 }
 
-message TSchemeShardConfig {
-    message TInFlightCounterConfig {
-        optional NKikimr.NSchemeShard.ESimpleCounters Type = 1;
-        // after this amount scheme shard begin to abort the operations
-        // to disable set to 0
-        optional uint32 InFlightLimit = 2 [default = 10000];
-    }
-    // after this amount of time we forcibly write full stats to local DB
-    // to disable set to 0
-    optional uint32 StatsBatchTimeoutMs = 1 [default = 100];
-
-    // number of shards stats to batch together
-    // to disable set to 0
-    optional uint32 StatsMaxBatchSize = 2 [default = 100];
-
-    optional uint32 StatsMaxExecuteMs = 3 [default = 10];
-
-    repeated TInFlightCounterConfig InFlightCounterConfig = 4;
-
-    // number of shards per table
-    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 32];
-
-    // number of shards per table
-    // 0 means default - NKikimrIndexBuilder.TIndexBuildSettings.max_shards_in_flight
-    optional uint32 MaxRestoreBuildIndexShardsInFlight = 6 [default = 1000];
-
-    // number of shards per table
-    // database level default for TTL mechanics
-    // 0 means no limit
-    optional uint32 MaxTTLShardsInFlight = 7 [default = 0];
-}
+// TSchemeShardConfig has been moved to ydb/core/protos/schemeshard_config.proto
 
 message TCompactionConfig {
     message TBackgroundCompactionConfig {

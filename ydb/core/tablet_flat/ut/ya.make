@@ -2,6 +2,8 @@ UNITTEST_FOR(ydb/core/tablet_flat)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:2)
+
 IF (WITH_VALGRIND)
     TAG(ya:fat)
     SIZE(LARGE)

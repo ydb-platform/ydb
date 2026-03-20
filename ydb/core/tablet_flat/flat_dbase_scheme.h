@@ -227,8 +227,9 @@ public:
     TAlter& Merge(const TSchemeChanges &delta);
     TAlter& AddTable(const TString& name, ui32 id);
     TAlter& DropTable(ui32 id);
-    TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null = { });
-    TAlter& AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null = { });
+    TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null = { });
+    TAlter& AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type,
+            const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null = { });
     TAlter& DropColumn(ui32 table, ui32 id);
     TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family);
     TAlter& AddFamily(ui32 table, ui32 family, ui32 room);

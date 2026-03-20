@@ -44,7 +44,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<NTopic::EMetricsLevel> GetMetricsLevel() const;
 
     private:
-        NTopic::EMetricsLevel MetricsLevel_;
+        TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
     };
 
     class TCommandWithAutoPartitioning {

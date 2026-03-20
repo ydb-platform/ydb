@@ -1585,6 +1585,36 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     ExportAggAsyncStats(data.Egress, *stats.MutableEgress());
 }
 
+void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
+    if (!metrics) {
+        return;
+    }
+    metrics->DurationSeconds = (TInstant::Now().MicroSeconds() - StartTs.MicroSeconds()) / 1000000;
+
+    ui64 cpuTimeUs = 0;
+    ui64 memoryUsageBytes = 0;
+    ui64 tasksCount = 0;
+    ui64 inputBytes = 0;
+    ui64 outputBytes = 0;
+
+    for (const auto& [stageId, stageStat] : StageStats) {
+        cpuTimeUs += stageStat.CpuTimeUs.Sum;
+        memoryUsageBytes += stageStat.MaxMemoryUsage.Sum;
+        tasksCount += stageStat.Task2Index.size();
+        for (auto b : stageStat.IngressBytes) {
+            inputBytes += b;
+        }
+        for (auto b : stageStat.EgressBytes) {
+            outputBytes += b;
+        }
+    }
+    metrics->CpuTimeMs = cpuTimeUs / 1000;
+    metrics->MemoryUsageBytes = memoryUsageBytes;
+    metrics->TasksCount = tasksCount;
+    metrics->InputBytes = inputBytes;
+    metrics->OutputBytes = outputBytes;
+}
+
 void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) {
 
     THashMap<ui32, NDqProto::TDqStageStats*> protoStages;
@@ -1977,6 +2007,59 @@ TProgressStat::TEntry TProgressStat::GetLastUsage() const {
 void TProgressStat::Update() {
     Total = Cur;
     Cur = TEntry();
+}
+
+TBatchOperationExecutionStats::TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode)
+    : StatsMode(statsMode) {}
+
+void TBatchOperationExecutionStats::TakeExecStats(NYql::NDqProto::TDqExecutionStats&& stats) {
+    for (const auto& tableStat : stats.GetTables()) {
+        auto& tableStats = TableStats[tableStat.GetTablePath()];
+        tableStats.ReadRows += tableStat.GetReadRows();
+        tableStats.ReadBytes += tableStat.GetReadBytes();
+        tableStats.WriteRows += tableStat.GetWriteRows();
+        tableStats.WriteBytes += tableStat.GetWriteBytes();
+        tableStats.EraseRows += tableStat.GetEraseRows();
+        tableStats.EraseBytes += tableStat.GetEraseBytes();
+    }
+
+    CpuTimeUs += stats.GetCpuTimeUs();
+    DurationUs += stats.GetDurationUs();
+    ExecutersCpuTimeUs += stats.GetExecuterCpuTimeUs();
+}
+
+void TBatchOperationExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) const {
+    switch (StatsMode) {
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
+            [[fallthrough]];
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+            stats.SetExecuterCpuTimeUs(ExecutersCpuTimeUs);
+            stats.SetStartTimeMs(StartTs.MilliSeconds());
+            stats.SetFinishTimeMs(FinishTs.MilliSeconds());
+            [[fallthrough]];
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
+            stats.SetCpuTimeUs(CpuTimeUs);
+            stats.SetDurationUs(DurationUs);
+            [[fallthrough]];
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
+            [[fallthrough]];
+        default:
+            break;
+    }
+
+    for (const auto& [tablePath, tableStats] : TableStats) {
+        auto& tableAggr = *stats.AddTables();
+        tableAggr.SetTablePath(tablePath.c_str());
+        tableAggr.SetReadRows(tableStats.ReadRows);
+        tableAggr.SetReadBytes(tableStats.ReadBytes);
+        tableAggr.SetWriteRows(tableStats.WriteRows);
+        tableAggr.SetWriteBytes(tableStats.WriteBytes);
+        tableAggr.SetEraseRows(tableStats.EraseRows);
+        tableAggr.SetEraseBytes(tableStats.EraseBytes);
+
+        // TODO: it is not correct for indexImplTables
+        tableAggr.SetAffectedPartitions(AffectedPartitions.size());
+    }
 }
 
 } // namespace NKikimr::NKqp

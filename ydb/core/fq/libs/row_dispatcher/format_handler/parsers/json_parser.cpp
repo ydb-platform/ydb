@@ -116,6 +116,10 @@ public:
         if (Y_UNLIKELY(!SkipErrors && Status.IsFail())) {
             return false;
         }
+        if (ParsedRowsCount > 0 && ParsedRows[ParsedRowsCount - 1] == rowId) {
+            // duplicated key, ignore
+            return true;
+        }
         ParsedRows[ParsedRowsCount++] = rowId;
         bool success = false;
         if (DataSlot != NYql::NUdf::EDataSlot::Json) {

@@ -168,18 +168,18 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
     ui32 fetchedChunks = 0;
     ui32 nullChunks = 0;
 
-    // Get page range if in streaming mode
-    std::optional<ui32> pageStartRow;
+    // In streaming mode, only fetch/default chunks with chunkStart < pageEndRow.
+    // PrepareForAssemblePageImpl assembles the prefix [0, pageEndRow) of the portion,
+    // so blobsData must contain entries for exactly those chunks.
     std::optional<ui32> pageEndRow;
     if (IsStreamingMode() && StageResult && !StageResult->GetPagesToResultVerified().empty()) {
         // Use the front page from the deque - this is the current page to fetch
         const auto& page = StageResult->GetPagesToResultVerified().front();
-        pageStartRow = page.GetIndexStart();
         pageEndRow = page.GetIndexStart() + page.GetRecordsCount();
 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetch_page_range")(
             "remaining_pages", StageResult->GetPagesToResultVerified().size())(
-            "start", *pageStartRow)("end", *pageEndRow);
+            "end", *pageEndRow);
     }
 
     for (auto&& i : columnIds) {
@@ -196,13 +196,15 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             const ui32 chunkStart = currentRowOffset;
             const ui32 chunkEnd = currentRowOffset + c->GetMeta().GetRecordsCount();
 
-            // Check if chunk intersects with current page (if in streaming mode)
+            // In streaming mode, PrepareForAssemblePageImpl assembles all chunks with
+            // chunkStart < pageEndRow (i.e. the prefix [0, pageEndRow)).  We must
+            // provide a blobsData entry for every such chunk, so the condition here
+            // mirrors the one in PrepareForAssemblePageImpl: chunkStart < pageEndRow.
+            // Chunks starting at pageEndRow or later are not needed for this page.
             bool chunkNeeded = true;
-            if (pageStartRow && pageEndRow) {
-                // Chunk is needed only if it intersects with [pageStartRow, pageEndRow)
-                chunkNeeded = (chunkEnd > *pageStartRow) && (chunkStart < *pageEndRow);
+            if (pageEndRow) {
+                chunkNeeded = (chunkStart < *pageEndRow);
             }
-            // If not in streaming mode or page range is not set, fetch all chunks (chunkNeeded stays true)
             if (chunkNeeded) {
                 if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                     auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
@@ -210,7 +212,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
                     reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange));
                     ++fetchedChunks;
                 } else {
-                    // Chunk is within the current page but skipped by filter: use default values
+                    // Chunk is needed for the page prefix but skipped by filter: use default values.
                     defaultBlocks.emplace(
                         c->GetAddress(),
                         TPortionDataAccessor::TAssembleBlobInfo(
@@ -218,10 +220,9 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
                             Schema->GetExternalDefaultValueVerified(c->GetColumnId())));
                     ++nullChunks;
                 }
-            } else {
-                // Chunk is outside the current streaming page: do not fetch and do not create defaults here.
-                // Future pages may need to fetch the real data for this chunk.
             }
+            // Chunks with chunkStart >= pageEndRow are not needed for this page;
+            // they will be fetched when the corresponding future page is processed.
 
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
             currentRowOffset = chunkEnd;
@@ -486,10 +487,24 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
         }
     }
 
-    auto batch = GetPortionAccessor()
-                     .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
-                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
-                     .DetachResult();
+    // In streaming mode the fetch step only populated blobsData for chunks that
+    // intersect the current page.  Use the page-aware PrepareForAssemble overload
+    // so that out-of-page chunks are silently skipped instead of triggering the
+    // AFL_VERIFY that requires every chunk to have an entry in blobsData.
+    std::shared_ptr<NArrow::TGeneralContainer> batch;
+    if (IsStreamingMode() && StageResult && !StageResult->GetPagesToResultVerified().empty()) {
+        const auto& page = StageResult->GetPagesToResultVerified().front();
+        const TPortionDataAccessor::TPageRange pageRange(page.GetIndexStart(), page.GetIndexStart() + page.GetRecordsCount());
+        batch = GetPortionAccessor()
+                    .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), pageRange, ss)
+                    .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>(), Portion->GetPathId().DebugString())
+                    .DetachResult();
+    } else {
+        batch = GetPortionAccessor()
+                    .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
+                    .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>(), Portion->GetPathId().DebugString())
+                    .DetachResult();
+    }
 
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }

@@ -85,6 +85,94 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
     return TPortionDataAccessor::TPreparedBatchData(std::move(preparedColumns), rowsCount);
 }
 
+// Page-aware variant: assembles only the chunks needed to cover rows [0, pageRange.End)
+// of the portion.  Chunks whose start row is >= pageRange.End are silently skipped;
+// blobsData is only required to contain entries for chunks with chunkStart < pageRange.End.
+//
+// Page boundaries produced by BuildReadPages are at the union of all column chunk-start
+// positions, so pageRange.End is a chunk boundary for every column.  This guarantees
+// that for every present column, the sum of rows in chunks with chunkStart < pageRange.End
+// equals exactly pageRange.End.  Absent columns are also filled with pageRange.End rows
+// so that all columns in the resulting TGeneralContainer have the same length.
+//
+// TBuildResultStep then slices the assembled batch with
+//   SetStartIndex(pageRange.Start).SetRecordsCount(pageRange.GetRecordsCount())
+// to extract exactly the page rows.
+template <class TExternalBlobInfo>
+TPortionDataAccessor::TPreparedBatchData PrepareForAssemblePageImpl(const TPortionDataAccessor& portionData, const TPortionInfo& portionInfo,
+    const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TExternalBlobInfo>& blobsData,
+    const TPortionDataAccessor::TPageRange& pageRange, const std::optional<TSnapshot>& defaultSnapshot, const bool restoreAbsent) {
+
+    // pageRange.End is a chunk boundary for every column (guaranteed by BuildReadPages),
+    // so the sum of rows in chunks with chunkStart < pageRange.End equals pageRange.End
+    // for every present column.  We use pageRange.End as the common row count.
+    const ui32 batchRowsCount = pageRange.End;
+
+    std::vector<TPortionDataAccessor::TColumnAssemblingInfo> columns;
+    columns.reserve(resultSchema.GetColumnIds().size());
+    auto it = portionData.GetRecordsVerified().begin();
+
+    for (auto&& i : resultSchema.GetColumnIds()) {
+        while (it != portionData.GetRecordsVerified().end() && it->GetColumnId() < i) {
+            ++it;
+            continue;
+        }
+        if ((it == portionData.GetRecordsVerified().end() || i < it->GetColumnId())) {
+            // Column is absent from the portion entirely — fill with defaults for
+            // batchRowsCount rows.
+            if (restoreAbsent || IIndexInfo::IsSpecialColumn(i)) {
+                columns.emplace_back(batchRowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
+                portionInfo.FillDefaultColumn(columns.back(), defaultSnapshot);
+            }
+        }
+        if (it == portionData.GetRecordsVerified().end()) {
+            continue;
+        } else if (it->GetColumnId() != i) {
+            AFL_VERIFY(i < it->GetColumnId());
+            continue;
+        }
+
+        // Add blob infos for all chunks with chunkStart < pageRange.End.
+        // Because pageRange.End is a chunk boundary for this column, the total row
+        // count of included chunks equals exactly pageRange.End (== batchRowsCount).
+        columns.emplace_back(batchRowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
+        ui32 chunkIdx = 0;
+        ui32 chunkRowOffset = 0;
+        auto itCol = it;
+        while (itCol != portionData.GetRecordsVerified().end() && itCol->GetColumnId() == i) {
+            if (chunkRowOffset >= pageRange.End) {
+                break;
+            }
+            const ui32 chunkRows = itCol->GetMeta().GetRecordsCount();
+            auto itBlobs = blobsData.find(itCol->GetAddress());
+            AFL_VERIFY(itBlobs != blobsData.end())("size", blobsData.size())("address", itCol->GetAddress().DebugString());
+            columns.back().AddBlobInfo(chunkIdx, chunkRows, std::move(itBlobs->second));
+            blobsData.erase(itBlobs);
+            ++chunkIdx;
+            chunkRowOffset += chunkRows;
+            ++itCol;
+        }
+        // Verify the chunk-alignment guarantee: included chunks cover exactly batchRowsCount rows.
+        AFL_VERIFY(chunkRowOffset == batchRowsCount)
+            ("chunk_row_offset", chunkRowOffset)("batch_rows_count", batchRowsCount)
+            ("column_id", i)("page_end", pageRange.End);
+
+        // Advance the main iterator past all chunks of this column.
+        while (it != portionData.GetRecordsVerified().end() && it->GetColumnId() == i) {
+            ++it;
+        }
+    }
+
+    // Make chunked arrays for columns.
+    std::vector<TPortionDataAccessor::TPreparedColumn> preparedColumns;
+    preparedColumns.reserve(columns.size());
+    for (auto& c : columns) {
+        preparedColumns.emplace_back(c.Compile());
+    }
+
+    return TPortionDataAccessor::TPreparedBatchData(std::move(preparedColumns), batchRowsCount);
+}
+
 }   // namespace
 
 TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssemble(const ISnapshotSchema& dataSchema,
@@ -97,6 +185,18 @@ TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssembl
     const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot,
     const bool restoreAbsent) const {
     return PrepareForAssembleImpl(*this, *PortionInfo, dataSchema, resultSchema, blobsData, defaultSnapshot, restoreAbsent);
+}
+
+TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssemble(const ISnapshotSchema& dataSchema,
+    const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData, const TPageRange& pageRange,
+    const std::optional<TSnapshot>& defaultSnapshot, const bool restoreAbsent) const {
+    return PrepareForAssemblePageImpl(*this, *PortionInfo, dataSchema, resultSchema, blobsData, pageRange, defaultSnapshot, restoreAbsent);
+}
+
+TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssemble(const ISnapshotSchema& dataSchema,
+    const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const TPageRange& pageRange,
+    const std::optional<TSnapshot>& defaultSnapshot, const bool restoreAbsent) const {
+    return PrepareForAssemblePageImpl(*this, *PortionInfo, dataSchema, resultSchema, blobsData, pageRange, defaultSnapshot, restoreAbsent);
 }
 
 void TPortionDataAccessor::FillBlobRangesByStorage(

@@ -267,4 +267,5 @@ message TFeatureFlags {
     optional bool EnableSQSMigrationCompatibility = 240 [default = false];
     optional bool EnableSQSMigrationFinished = 241 [default = false];
     optional bool EnablePDiskSpaceColorOverride = 242 [default = false];
+    optional bool EnableSkipConflictCheckForTopicsInTransaction = 243 [default = false];
 }

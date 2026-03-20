@@ -1,4 +1,3 @@
-
 #include "kqp_opt_peephole.h"
 #include "kqp_opt_peephole_rules.h"
 
@@ -216,7 +215,6 @@ public:
         if (config->GetUseDqHashAggregate()) {
             AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashAggregator));
         }
-        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapPackUnpack));
 #undef HNDL
     }
 
@@ -232,14 +230,26 @@ public:
         return output;
     }
 
+private:
+    bool DqHashOperatorsUseBlocks;
+};
+
+class TKqpPeepholeBlockPackUnpackTransformer : public TOptimizeTransformerBase {
+public:
+    TKqpPeepholeBlockPackUnpackTransformer(TTypeAnnotationContext& ctx)
+        : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+    {
+#define HNDL(name) "KqpPeepholeBlockPackUnpack-"#name, Hndl(&TKqpPeepholeBlockPackUnpackTransformer::name)
+        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapPackUnpack));
+#undef HNDL
+    }
+
+private:
     TMaybeNode<TExprBase> EliminateWideMapPackUnpack(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpEliminateWideMapPackUnpack(node, ctx, *GetTypes());
         DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
-private:
-    bool DqHashOperatorsUseBlocks;
 };
 
 class TKqpPeepholeFinalTransformer : public TOptimizeTransformerBase {
@@ -265,8 +275,9 @@ private:
 };
 
 struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
-    TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config, const bool /*withFinalStageRules*/)
+    TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config, const bool withFinalStageRules)
         : Config(config)
+        , WithFinalStageRules(withFinalStageRules)
     {}
 
     void AfterCreate(TTransformationPipeline*) const override {}
@@ -276,12 +287,16 @@ struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
     }
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
-        pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config),
-            "KqpPeepholeNewOperator");
+        if (WithFinalStageRules) {
+            pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
+        }
+        pipeline->Add(new TKqpPeepholeBlockPackUnpackTransformer(*pipeline->GetTypeAnnotationContext()),
+            "KqpPeepholeBlockPackUnpack");
     }
 
 private:
     const TKikimrConfiguration::TPtr Config;
+    const bool WithFinalStageRules;
 };
 
 // Sort stages in topological order by their inputs, so that we optimize the ones without inputs first.
@@ -722,4 +737,3 @@ TAutoPtr<IGraphTransformer> CreateKqpTxsPeepholeTransformer(
 }
 
 } // namespace NKikimr::NKqp::NOpt
-

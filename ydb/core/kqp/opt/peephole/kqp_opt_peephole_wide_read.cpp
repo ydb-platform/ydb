@@ -70,8 +70,15 @@ TExprBase KqpEliminateWideMapPackUnpack(const TExprBase& node, TExprContext& ctx
         return node;
     }
 
+    if (bas->ChildrenSize() != packLambda.Head().ChildrenSize() - 1) {
+        return node;
+    }
+
     for (ui32 i = 0; i < bas->ChildrenSize(); ++i) {
         if (bas->Child(i)->Child(0)->Content() != unpackColumns[i]) {
+            return node;
+        }
+        if (bas->Child(i)->Child(1) != packLambda.Head().Child(i)) {
             return node;
         }
     }

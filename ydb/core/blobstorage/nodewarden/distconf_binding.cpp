@@ -223,7 +223,7 @@ namespace NKikimr::NStorage {
             (SubscriptionExists, SubscribedSessions.contains(nodeId)));
 
         if (!IsSelfStatic) {
-            return OnStaticNodeConnected(nodeId, sessionId);
+            return OnStaticNodeConnected(nodeId, sessionId, cookie);
         }
 
         // check subscription map, do we really have this subscription in flight
@@ -269,7 +269,7 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC07, "TEvNodeDisconnected", (NodeId, nodeId), (SessionId, sessionId), (Cookie, cookie));
 
         if (!IsSelfStatic) {
-            return OnStaticNodeDisconnected(nodeId, sessionId);
+            return OnStaticNodeDisconnected(nodeId, sessionId, cookie);
         }
 
         const auto it = SubscribedSessions.find(nodeId);

@@ -17,9 +17,14 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
         return node;
     }
     else {
-        TNodeOnNodeOwnedMap replaceMap;
+        TExprNode::TPtr newLambdaBody = lambdaBody;
 
-        for (auto link : sublinks) {
+        while(sublinks.size()){
+            auto link = sublinks[0];
+
+            TNodeOnNodeOwnedMap replaceMap;
+
+            YQL_CLOG(TRACE, CoreDq) << "Replacing sublink: " << PrintRBOExpression(link, Ctx);
             auto sublinkVar = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++), true);
             // clang-format off
             auto member = Build<TCoMember>(Ctx, lambda.Pos())
@@ -45,11 +50,11 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
                 entry = TSubplanEntry(subplan, {TInfoUnit(TString(tupleElement))}, ESubplanType::IN_SUBPLAN, sublinkVar);
             }
             PlanProps.Subplans.Add(sublinkVar, entry);
-        }
+            TOptimizeExprSettings settings(&TypeCtx);
+            RemapExpr(newLambdaBody, newLambdaBody, replaceMap, Ctx, settings);
 
-        TOptimizeExprSettings settings(&TypeCtx);
-        TExprNode::TPtr newLambdaBody;
-        RemapExpr(lambdaBody, newLambdaBody, replaceMap, Ctx, settings);
+            sublinks = FindNodes(newLambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
+        }
 
         // clang-format off
         return Build<TCoLambda>(Ctx, lambda.Pos())
@@ -210,7 +215,9 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node
     auto input = ExprNodeToOperator(opFilter.Input().Ptr());
     auto lambda = opFilter.Lambda().Ptr();
     auto newLambda = RemoveSubplans(lambda);
-    return MakeIntrusive<TOpFilter>(input, node->Pos(), TExpression(newLambda, &Ctx));
+    auto filter = MakeIntrusive<TOpFilter>(input, node->Pos(), TExpression(newLambda, &Ctx));
+    YQL_CLOG(TRACE, CoreDq) << "Processed filter, new lambda " << filter->ToString(Ctx);
+    return filter;
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) {

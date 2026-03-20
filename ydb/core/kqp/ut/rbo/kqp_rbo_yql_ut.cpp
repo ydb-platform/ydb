@@ -997,6 +997,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                            {15, 31, 58, 64, 72, 85}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/false);
     }
 
+    Y_UNIT_TEST(TPCH_YQL_20) {
+        RunTPC_YqlTest(EBenchType::TPCH, 20, true, true);
+    }
+
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, int numRows) {
         NYdb::TValueBuilder rows;
         rows.BeginList();

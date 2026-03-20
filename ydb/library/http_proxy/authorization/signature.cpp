@@ -59,7 +59,7 @@ static const TString SIGNED_HEADERS_PARAM = "signedheaders";
 static const TString SIGNATURE_PARAM = "signature";
 static const TString CREDENTIAL_PARAM = "credential";
 
-TAwsRequestSignV4::TAwsRequestSignV4(const TString& request) {
+TAwsRequestSignV4::TAwsRequestSignV4(const TString& request) try {
     // special standalone ctor for tests
     TStringInput si(request);
     THttpInput input(&si);
@@ -82,6 +82,11 @@ TAwsRequestSignV4::TAwsRequestSignV4(const TString& request) {
     }
 
     Process(input, parsed, inputData);
+} catch (const NKikimr::NSQS::TSQSException&) {
+    throw;
+} catch (const std::exception& e) {
+    throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::INTERNAL_FAILURE)
+        << "Failed to parse request: " << e.what();
 }
 
 TAwsRequestSignV4::TAwsRequestSignV4(const THttpInput& input, const TParsedHttpFull& parsed, const TMaybe<TBuffer>& inputData) {

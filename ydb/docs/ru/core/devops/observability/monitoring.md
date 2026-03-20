@@ -86,7 +86,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
           - "ydb-s3.example.com:31012"
           - "ydb-s3.example.com:31022"
         ```
-  
+
         Для локального однонодового кластера YDB, в секции `targets` укажите один адрес:
 
         ```json
@@ -96,7 +96,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
           - "localhost:8765"
         ```
 
-    1. В файле [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml) при необходимости в секции `tls_config` укажите [сертификат центра регистрации](../deployment-options/manual/initial-deployment.md#tls-certificates) (Certification Authority, CA), которым подписаны остальные сертификаты TLS кластера {{ ydb-short-name }}:
+    1. В файле [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml) при необходимости в секции `tls_config` укажите [сертификат центра регистрации](../deployment-options/manual/initial-deployment/index.md#tls-certificates) (Certification Authority, CA), которым подписаны остальные сертификаты TLS кластера {{ ydb-short-name }}:
 
        ```json
        scheme: https

@@ -6,8 +6,8 @@
 * `<index_name>` — уникальное имя индекса, по которому будет возможно обращение к данным.
 * `SYNC/ASYNC` — признак синхронности индекса.
 
-    * `SYNC` - [синхронный](../../../../concepts/secondary_indexes.md#sync) индекс. Значение по умолчанию.
-    * `ASYNC` - [асинхронный](../../../../concepts/secondary_indexes.md#async) индекс.
+    * `SYNC` - [синхронный](../../../../concepts/query_execution/secondary_indexes.md#sync) индекс. Значение по умолчанию.
+    * `ASYNC` - [асинхронный](../../../../concepts/query_execution/secondary_indexes.md#async) индекс.
 
 * `<index_type>` - тип индекса, в настоящее время поддерживаются:
 

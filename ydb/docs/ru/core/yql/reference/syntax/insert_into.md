@@ -70,17 +70,16 @@ SELECT key FROM my_table_source;
 
 {% endif %}
 
-
 {% if feature_federated_queries %}
 
 При работе с [внешними файловыми источниками данных](../../../concepts/datamodel/external_data_source.md) можно дополнительно указывать ряд параметров:
 
-* `FORMAT` - формат хранимых данных в файловых хранилищах в [федеративных запросах](../../../concepts/federated_query/s3/formats.md). Допустимые значения: `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row`, `json_as_string`, `parquet`, `raw`.
-* `COMPRESSION` - формат сжатия файлов в файловых хранилищах в [федеративных запросах](../../../concepts/federated_query/s3/partition_projection). Допустимые значения: [gzip](https://ru.wikipedia.org/wiki/Gzip), [zstd](https://ru.wikipedia.org/wiki/Zstandard), [lz4](https://ru.wikipedia.org/wiki/LZ4), [brotli](https://ru.wikipedia.org/wiki/Brotli), [bzip2](https://ru.wikipedia.org/wiki/Bzip2), [xz](https://ru.wikipedia.org/wiki/XZ).
-* `PARTITIONED_BY` - список [колонок партиционирования](../../../concepts/federated_query/s3/partitioning.md) данных в файловых хранилищах в федеративных запросах. Содержит список колонок в порядке их размещения в файловом хранилище.
-* `projection.enabled` - флаг включения [расширенного партиционирования данных](../../../concepts/federated_query/s3/partition_projection.md). Допустимые значения: `true`, `false`.
-* `projection.<field_name>.type` - тип поля [расширенного партиционирования данных](../../../concepts/federated_query/s3/partition_projection.md). Допустимые значения: `integer`, `enum`, `date`.
-* `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../concepts/federated_query/s3/partition_projection.md).
+* `FORMAT` - формат хранимых данных в файловых хранилищах в [федеративных запросах](../../../concepts/query_execution/federated_query/s3/formats.md). Допустимые значения: `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row`, `json_as_string`, `parquet`, `raw`.
+* `COMPRESSION` - формат сжатия файлов в файловых хранилищах в [федеративных запросах](../../../concepts/query_execution/federated_query/s3/partition_projection). Допустимые значения: [gzip](https://ru.wikipedia.org/wiki/Gzip), [zstd](https://ru.wikipedia.org/wiki/Zstandard), [lz4](https://ru.wikipedia.org/wiki/LZ4), [brotli](https://ru.wikipedia.org/wiki/Brotli), [bzip2](https://ru.wikipedia.org/wiki/Bzip2), [xz](https://ru.wikipedia.org/wiki/XZ).
+* `PARTITIONED_BY` - список [колонок партиционирования](../../../concepts/query_execution/federated_query/s3/partitioning.md) данных в файловых хранилищах в федеративных запросах. Содержит список колонок в порядке их размещения в файловом хранилище.
+* `projection.enabled` - флаг включения [расширенного партиционирования данных](../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `true`, `false`.
+* `projection.<field_name>.type` - тип поля [расширенного партиционирования данных](../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `integer`, `enum`, `date`.
+* `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../concepts/query_execution/federated_query/s3/partition_projection.md).
 
 
 ## Пример
@@ -101,4 +100,28 @@ SELECT
 * `test/`— путь внутри бакета, куда будут записаны данные. При записи создаются файлы со случайными именами.
 
 {% endif %}
+
+## INSERT INTO ... RETURNING {insert-into-returning}
+
+Используется для вставки строк и одновременного возврата значений из них. Это позволяет получить информацию о вставленных записях за один запрос, избавляя от необходимости выполнять последующий SELECT.
+
+### Примеры
+
+* Возврат всех значений вставленной строки
+
+```yql
+INSERT INTO some_table (id, year, color, price)
+VALUES (1103, 2023, 'blue', 400)
+RETURNING *;
+```
+
+* Возврат конкретных столбцов
+
+```yql
+INSERT INTO some_table (id, color, price)
+VALUES
+    (1101, 'red', 200),
+    (1102, 'green', 300)
+RETURNING id, price;
+```
 

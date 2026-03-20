@@ -70,10 +70,14 @@ class KiKiMRClusterInterface(object):
         pass
 
     @abc.abstractmethod
-    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None):
+    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None, num_groups=None):
         """
         Adds storage pool to the cluster
-        :param erasure: Erasure for storage pool
+        :param name: storage pool name
+        :param kind: either "rot" or "ssd"
+        :param pdisk_user_kind: integer, default 0
+        :param erasure: see `from ydb.tests.library.common.types import Erasure`
+        :param num_groups:
         :return:
         """
 

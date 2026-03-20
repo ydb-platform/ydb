@@ -19,6 +19,7 @@ class FailDomainType(IntEnum):
     Room = 20
     Rack = 30
     Body = 40
+    Disk = 255
 
 
 @unique

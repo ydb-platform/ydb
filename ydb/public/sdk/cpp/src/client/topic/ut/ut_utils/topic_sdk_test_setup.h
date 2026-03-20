@@ -46,7 +46,8 @@ public:
     TReadResult Read(const std::string& topic, const std::string& consumer,
                      std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler,
                      std::optional<std::size_t> partition = std::nullopt,
-                     const TDuration timeout = TDuration::Seconds(5));
+                     const TDuration timeout = TDuration::Seconds(5),
+                     bool autoPartitioningSupport = true);
 
     TStatus Commit(const std::string& path, const std::string& consumerName,
                    std::size_t partitionId, std::size_t offset,

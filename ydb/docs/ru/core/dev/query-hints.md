@@ -52,7 +52,7 @@ SELECT * FROM
 
 {% note info %}
 
-Все подсказки (`Rows`, `Bytes`, `JoinOrder`) работают только с **включенным** [стоимостным оптимизатором](../concepts/optimizer.md), кроме `JoinType` - его можно указывать и для выключенного CBO.
+Все подсказки (`Rows`, `Bytes`, `JoinOrder`) работают только с **включенным** [стоимостным оптимизатором](../concepts/query_execution/optimizer.md), кроме `JoinType` - его можно указывать и для выключенного CBO.
 
 {% endnote %}
 

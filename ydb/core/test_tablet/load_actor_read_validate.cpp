@@ -148,7 +148,8 @@ namespace NKikimr::NTestShard {
 
                 ProcessReadResult(r.GetCookie(), TStringBuilder() << "Status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " Message# " << res.GetMessage(), status == NKikimrProto::OK ? EReadOutcome::OK :
-                    status == NKikimrProto::ERROR ? EReadOutcome::RETRY : EReadOutcome::ERROR, res.GetValue());
+                    status == NKikimrProto::ERROR || status == NKikimrProto::BLOCKED ? EReadOutcome::RETRY : EReadOutcome::ERROR,
+                    res.GetValue());
             } else {
                 WaitedReadRangesViaEvResponse--;
                 if (r.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
@@ -190,6 +191,7 @@ namespace NKikimr::NTestShard {
             const EReadOutcome outcome =
                 status == NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT        ? EReadOutcome::IMMEDIATE_RETRY :
                 status == NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR ? EReadOutcome::RETRY           :
+                status == NKikimrKeyValue::Statuses::RSTATUS_BLOCKED        ? EReadOutcome::RETRY           : 
                 status == NKikimrKeyValue::Statuses::RSTATUS_OK             ? EReadOutcome::OK              :
                                                                               EReadOutcome::ERROR;
 

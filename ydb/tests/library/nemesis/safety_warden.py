@@ -3,6 +3,7 @@
 import functools
 import itertools
 import logging
+import six
 import subprocess
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
@@ -10,6 +11,10 @@ from ydb.tests.library.nemesis.remote_execution import execute_command_with_outp
 
 
 logger = logging.getLogger()
+
+
+if six.PY2:
+    FileNotFoundError = IOError
 
 
 class SafetyWarden(object):
@@ -279,11 +284,11 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
             # Get ALL VERIFY failed occurrences with full stack traces
             # No head limit - collect everything
             sample_cmd = (
-                f"ulimit -n 100500 2>/dev/null; "
-                f"unified_agent select -S '{start_str}' -U '{end_str}' -s kikimr-start 2>/dev/null | "
-                f"grep -i -A {self.LINES_AFTER_MATCH} --no-group-separator '{verify_pattern}' | "
-                f"sed '/{verify_pattern}/i --'"
-            )
+                "ulimit -n 100500 2>/dev/null; "
+                "unified_agent select -S '{start}' -U '{end}' -s kikimr-start 2>/dev/null | "
+                "grep -i -A {lines} --no-group-separator '{pattern}' | "
+                "sed '/{pattern}/i --'"
+            ).format(start=start_str, end=end_str, lines=self.LINES_AFTER_MATCH, pattern=verify_pattern)
             sample_result = subprocess.run(
                 sample_cmd, shell=True, capture_output=True, text=True, timeout=1200  # 20 minutes
             )
@@ -300,10 +305,10 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
         except subprocess.TimeoutExpired:
             logger.warning("Timeout while checking unified_agent for VERIFY failed")
         except ValueError as e:
-            logger.warning(f"Error parsing unified_agent output: {e}")
+            logger.warning("Error parsing unified_agent output: {}".format(e))
         except FileNotFoundError:
             logger.warning("unified_agent not found")
         except Exception as e:
-            logger.warning(f"Error checking unified_agent: {e}")
+            logger.warning("Error checking unified_agent: {}".format(e))
 
         return violations

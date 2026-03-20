@@ -256,6 +256,23 @@ private:
     const TKikimrConfiguration::TPtr Config;
 };
 
+class TKqpPeepholePostBlockTransformer : public TOptimizeTransformerBase {
+public:
+    TKqpPeepholePostBlockTransformer(TTypeAnnotationContext& ctx)
+        : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+    {
+#define HNDL(name) "KqpPeepholePostBlock-"#name, Hndl(&TKqpPeepholePostBlockTransformer::name)
+        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateIdentityWideMap));
+#undef HNDL
+    }
+
+    TMaybeNode<TExprBase> EliminateIdentityWideMap(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpEliminateWideMapForLargeOlapTable(node, ctx, *GetTypes());
+        DumpAppliedRule("EliminateIdentityWideMap", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+};
+
 struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
     TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config, const bool withFinalStageRules)
         : Config(config)
@@ -269,6 +286,7 @@ struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
     }
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
+        pipeline->Add(new TKqpPeepholePostBlockTransformer(*pipeline->GetTypeAnnotationContext()), "KqpPeepholePostBlock");
         if (WithFinalStageRules) {
             pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
         }

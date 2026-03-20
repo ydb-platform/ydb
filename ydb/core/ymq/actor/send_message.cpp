@@ -5,6 +5,7 @@
 #include "params.h"
 #include "serviceid.h"
 
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
 #include <ydb/core/ymq/attributes/attributes_md5.h>
@@ -223,7 +224,7 @@ private:
         }
 
         if (writerSettings.Messages.size() > 0) {
-            NPQ::NMLP::CreateWriter(SelfId(), std::move(writerSettings));
+            Register(NPQ::NMLP::CreateWriter(SelfId(), std::move(writerSettings)));
         } else {
             SendReplyAndDie();
         }
@@ -314,6 +315,12 @@ private:
 
     void Handle(NPQ::NMLP::TEvWriteResponse::TPtr& ev) {
         const auto* response = ev->Get();
+
+        if (response->DescribeStatus != NPQ::NDescriber::EStatus::SUCCESS) {
+            MakeError(Response_.MutableSendMessageBatch(), NErrors::INTERNAL_FAILURE, NPQ::NDescriber::Description(GetTopicName(), response->DescribeStatus));
+            return SendReplyAndDie();
+        }
+
         const auto& messages = response->Messages;
 
         const bool isFifo = IsFifoQueue();

@@ -301,6 +301,41 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessage, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        json = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "MessageBody-0"}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "MessageBody-1"},
+            {"DelaySeconds", 900}
+        });
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        NYdb::NTopic::TDescribeTopicSettings settings;
+        settings.IncludeStats(true);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", settings).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset(), 1); // check that message was written
+
+    }
+
+    Y_UNIT_TEST_F(TestSendMessage_OldImplimentation, THttpProxyTestMock) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 

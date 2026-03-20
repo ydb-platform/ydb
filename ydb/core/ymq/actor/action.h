@@ -268,7 +268,8 @@ protected:
     }
 
     TString GetTopicName() const {
-        return Join("/", RootUrl_, UserName_, DoGetQueueName(), TStringBuilder() << "v" << QueueVersion_, "streamImpl");
+        const auto& root = Cfg().GetRoot();
+        return Join("/", root, UserName_, DoGetQueueName(), TStringBuilder() << "v" << QueueVersion_, "streamImpl");
     }
 
     void SendReplyAndDie() {

@@ -42,11 +42,11 @@ NKikimrPQ::TPQTabletConfig MakeConfig(const TMakeConfigParams& params)
         }
     }
 
-    config.SetTopicName("topic");
-    config.SetTopicPath("/Root/LbCommunal/account/topic");
+    config.SetTopicName("rt3.dc1--account--topic");
+    config.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
     config.SetFederationAccount("account");
     config.SetLocalDC(true);
-    config.SetYdbDatabasePath("/Root/LbCommunal/account");
+    config.SetYdbDatabasePath("");
 
     config.SetMeteringMode(params.MeteringMode);
     config.MutablePartitionConfig()->SetLifetimeSeconds(TDuration::Hours(24).Seconds());

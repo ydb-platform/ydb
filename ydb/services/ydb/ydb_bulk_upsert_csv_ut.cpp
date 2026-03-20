@@ -63,6 +63,34 @@ NYdb::NTable::TBulkUpsertResult BulkUpsertCsvLimitRow(NYdb::NTable::TTableClient
     return upsert;
 }
 
+TString MakeInvalidDataCsv(
+    const TString& valueDecimal = "0",
+    const TString& valueDecimal35 = "0",
+    const TString& valueDate = "1970-01-01",
+    const TString& valueDateTime = "1970-01-01T00:00:00Z",
+    const TString& valueTimestamp = "1970-01-01T00:00:00Z",
+    const TString& valueUtf8 = "",
+    const TString& valueYson = "{}",
+    const TString& valueJson = "{}",
+    const TString& valueJsonDocument = "{}",
+    const TString& valueDyNumber = "0")
+{
+    TStringBuilder csv;
+    csv << "Key,Value_Decimal,Value_Decimal35,Value_Date,Value_DateTime,Value_Timestamp,Value_Utf8,Value_Yson,Value_Json,Value_JsonDocument,Value_DyNumber\n";
+    csv << "1," << valueDecimal
+        << "," << valueDecimal35
+        << "," << valueDate
+        << "," << valueDateTime
+        << "," << valueTimestamp
+        << ",\"" << valueUtf8 << "\""
+        << ",\"" << valueYson << "\""
+        << ",\"" << valueJson << "\""
+        << ",\"" << valueJsonDocument << "\""
+        << "," << valueDyNumber
+        << "\n";
+    return csv;
+}
+
 Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
     Y_UNIT_TEST(Simple) {
         TKikimrWithGrpcAndRootSchema server;
@@ -457,6 +485,102 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             auto res = BulkUpsertCsvLimitRow(client, {TString(500000, 'a'), "", TString(500000, 'c'),
                                                       TString(15.9 * 1000000, '1'), TString(15.9 * 1000000, '2'), TString(15.9 * 1000000, '3')});
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST(DataValidation) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint32)
+                .AddNullableColumn("Value_Decimal", TDecimalType(22, 9))
+                .AddNullableColumn("Value_Decimal35", TDecimalType(35, 10))
+                .AddNullableColumn("Value_Date", EPrimitiveType::Date)
+                .AddNullableColumn("Value_DateTime", EPrimitiveType::Datetime)
+                .AddNullableColumn("Value_Timestamp", EPrimitiveType::Timestamp)
+                .AddNullableColumn("Value_Utf8", EPrimitiveType::Utf8)
+                .AddNullableColumn("Value_Yson", EPrimitiveType::Yson)
+                .AddNullableColumn("Value_Json", EPrimitiveType::Json)
+                .AddNullableColumn("Value_JsonDocument", EPrimitiveType::JsonDocument)
+                .AddNullableColumn("Value_DyNumber", EPrimitiveType::DyNumber);
+
+            tableBuilder.SetPrimaryKeyColumns({"Key"});
+            auto result = session.CreateTable("/Root/TestInvalidData", tableBuilder.Build()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto res = client.BulkUpsert(
+                "/Root/TestInvalidData",
+                EDataFormat::CSV,
+                MakeInvalidDataCsv("10000000000000000000000"),
+                {},
+                BulkUpsertSettings(CsvSettingsWithHeader()))
+                .GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto res = client.BulkUpsert(
+                "/Root/TestInvalidData",
+                EDataFormat::CSV,
+                MakeInvalidDataCsv("0", "0", "not-a-date"),
+                {},
+                BulkUpsertSettings(CsvSettingsWithHeader()))
+                .GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto res = client.BulkUpsert(
+                "/Root/TestInvalidData",
+                EDataFormat::CSV,
+                MakeInvalidDataCsv("0", "0", "1970-01-01", "not-a-datetime"),
+                {},
+                BulkUpsertSettings(CsvSettingsWithHeader()))
+                .GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto res = client.BulkUpsert(
+                "/Root/TestInvalidData",
+                EDataFormat::CSV,
+                MakeInvalidDataCsv("0", "0", "1970-01-01", "1970-01-01T00:00:00Z", "not-a-timestamp"),
+                {},
+                BulkUpsertSettings(CsvSettingsWithHeader()))
+                .GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto res = client.BulkUpsert(
+                "/Root/TestInvalidData",
+                EDataFormat::CSV,
+                MakeInvalidDataCsv("0", "0", "1970-01-01", "1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z", "", "{}", "{}", "]]]"),
+                {},
+                BulkUpsertSettings(CsvSettingsWithHeader()))
+                .GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto res = client.BulkUpsert(
+                "/Root/TestInvalidData",
+                EDataFormat::CSV,
+                MakeInvalidDataCsv("0", "0", "1970-01-01", "1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z", "", "{}", "{}", "{}", "[[[]]]"),
+                {},
+                BulkUpsertSettings(CsvSettingsWithHeader()))
+                .GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
         }
     }
 }

@@ -402,7 +402,6 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCo
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")("weight", orderedG.GetPriority().DebugString())("path_id", granule->GetPathId());
         } else {
             granuleToCompact = granule;
-            granuleToCompact->OnStartCompaction();
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "found granule for compaction")("weight", orderedG.GetPriority().DebugString())("path_id", granule->GetPathId());
             break;
         }

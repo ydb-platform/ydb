@@ -806,10 +806,15 @@ private:
         }
 
         if (isLevel) {
-            return { GetCompactLevelTask(granule, locksManager, *maxLevel) };
+            if (auto result = GetCompactLevelTask(granule, locksManager, *maxLevel)) {
+                return { result };
+            }
+        } else {
+            if (auto result = GetCompactAccumulatorTask(granule, locksManager, *maxLevel)) {
+                return { result };
+            }
         }
-
-        return { GetCompactAccumulatorTask(granule, locksManager, *maxLevel) };
+        return {};
     }
 
     void DoActualize(const TInstant currentInstant) override {

@@ -653,6 +653,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
 
     const ui64 compactionStageMemoryLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionStageMemoryLimit() : NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
     for (const auto& indexChanges : indexChangesList) {
+        AFL_VERIFY(indexChanges);
         auto& compaction = *VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges*>(indexChanges.get());
         compaction.SetActivityFlag(GetTabletActivity());
         compaction.SetQueueGuard(guard);

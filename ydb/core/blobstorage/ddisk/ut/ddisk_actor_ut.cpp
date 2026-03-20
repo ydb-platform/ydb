@@ -495,7 +495,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetSelector().GetOffsetInBytes(), selector.OffsetInBytes);
         UNIT_ASSERT_VALUES_EQUAL(record.GetSelector().GetSize(), selector.Size);
 
-        SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvErasePersistentBuffer(creds, selector, lsn, 1));
+        SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvErasePersistentBuffer(creds, lsn, 1));
 
         auto eraseRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         ctx.SendPDiskResponse(disk, *eraseRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
@@ -692,7 +692,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT(writeResult->Get()->Record.GetPDiskNormalizedOccupancy() == expected);
 
 
-        SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvErasePersistentBuffer(creds, selector, lsn, 1));
+        SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvErasePersistentBuffer(creds, lsn, 1));
 
         auto eraseRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         ctx.SendPDiskResponse(disk, *eraseRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));

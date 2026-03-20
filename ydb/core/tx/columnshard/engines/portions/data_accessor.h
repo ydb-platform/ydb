@@ -519,12 +519,39 @@ public:
 
     TString DebugString() const;
 
+    // Row range [Start, End) within the portion that should be assembled.
+    // Used by the streaming (page-aware) assembly path so that only chunks
+    // belonging to the current page are required in blobsData.
+    struct TPageRange {
+        ui32 Start = 0;
+        ui32 End = 0;
+
+        TPageRange(const ui32 start, const ui32 end)
+            : Start(start)
+            , End(end) {
+            AFL_VERIFY(Start < End);
+        }
+
+        ui32 GetRecordsCount() const {
+            return End - Start;
+        }
+    };
+
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
         THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt,
         const bool restoreAbsent = true) const;
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
         THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt,
         const bool restoreAbsent = true) const;
+
+    // Page-aware variants: only chunks intersecting [pageRange.Start, pageRange.End) are
+    // required in blobsData; the assembled batch covers exactly pageRange.GetRecordsCount() rows.
+    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+        THashMap<TChunkAddress, TString>& blobsData, const TPageRange& pageRange,
+        const std::optional<TSnapshot>& defaultSnapshot = std::nullopt, const bool restoreAbsent = true) const;
+    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+        THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const TPageRange& pageRange,
+        const std::optional<TSnapshot>& defaultSnapshot = std::nullopt, const bool restoreAbsent = true) const;
 
     class TPage {
     private:

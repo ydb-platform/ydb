@@ -679,6 +679,7 @@ namespace NActors {
         ui64 RdmaInflightDataAmount = 0;
 
         std::unordered_map<TActorId, TSubscriberInfo, TActorId::THash> Subscribers;
+        std::unordered_map<TActorId, TSubscriberInfo, TActorId::THash> SubscriberHistory;
         std::optional<TLastSubscriberInfo> LastSubscriber;
 
         struct TDelayedEvent {

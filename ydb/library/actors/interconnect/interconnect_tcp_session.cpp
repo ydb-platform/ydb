@@ -300,6 +300,11 @@ namespace NActors {
         }
         updateInfo(it->second);
 
+        if (Proxy->Common->Settings.StoreSubscriptionHistory) {
+            const auto [historyIt, _] = SubscriberHistory.emplace(actorId, TSubscriberInfo{});
+            updateInfo(historyIt->second);
+        }
+
         LastSubscriber.emplace(TLastSubscriberInfo{actorId, {}});
         updateInfo(LastSubscriber->Info);
     }
@@ -1567,6 +1572,9 @@ namespace NActors {
                             MON_VAR(GetTotalInflightAmountOfData())
                             MON_VAR(GetCloseOnIdleTimeout())
                             MON_VAR(Subscribers.size())
+                            if (Proxy->Common->Settings.StoreSubscriptionHistory) {
+                                MON_VAR(SubscriberHistory.size())
+                            }
                             TABLER() {
                                 TABLED() { str << "ZeroCopy state"; }
                                 TABLED() { str << ZcProcessor.GetCurrentStateName(); }
@@ -1594,16 +1602,21 @@ namespace NActors {
                 }
             }
 
-            if (!Subscribers.empty()) {
+            const bool collectSubscriptionStackTrace = Proxy->Common->Settings.CollectSubscriptionStackTrace;
+            auto renderSubscriberGroups = [&](TStringBuf title, const auto& subscribers) {
+                if (subscribers.empty()) {
+                    return;
+                }
+
                 std::map<std::tuple<TString, TString, TString>, size_t> subscriberGroups;
-                for (const auto& [actorId, info] : Subscribers) {
+                for (const auto& [actorId, info] : subscribers) {
                     Y_UNUSED(actorId);
                     ++subscriberGroups[std::tuple(info.StackTrace, info.Activity, info.EventTypeName)];
                 }
 
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
-                        str << "Subscriptions";
+                        str << title;
                     }
                     DIV_CLASS("panel-body") {
                         TABLE_CLASS("table table-sortable") {
@@ -1612,7 +1625,9 @@ namespace NActors {
                                     TABLEH() { str << "Count"; }
                                     TABLEH() { str << "Activity"; }
                                     TABLEH() { str << "EventTypeName"; }
-                                    TABLEH() { str << "StackTrace"; }
+                                    if (collectSubscriptionStackTrace) {
+                                        TABLEH() { str << "StackTrace"; }
+                                    }
                                 }
                             }
                             TABLEBODY() {
@@ -1622,12 +1637,14 @@ namespace NActors {
                                         TABLED() { str << count; }
                                         TABLED() { str << EncodeHtmlPcdata(activity.empty() ? TStringBuf("manual") : TStringBuf(activity)); }
                                         TABLED() { str << EncodeHtmlPcdata(eventTypeName.empty() ? TStringBuf("manual") : TStringBuf(eventTypeName)); }
-                                        TABLED() {
-                                            if (stackTrace.empty()) {
-                                                str << "manual";
-                                            } else {
-                                                PRE() {
-                                                    str << EncodeHtmlPcdata(stackTrace);
+                                        if (collectSubscriptionStackTrace) {
+                                            TABLED() {
+                                                if (stackTrace.empty()) {
+                                                    str << "manual";
+                                                } else {
+                                                    PRE() {
+                                                        str << EncodeHtmlPcdata(stackTrace);
+                                                    }
                                                 }
                                             }
                                         }
@@ -1637,6 +1654,12 @@ namespace NActors {
                         }
                     }
                 }
+            };
+
+            renderSubscriberGroups("Subscriptions", Subscribers);
+
+            if (Proxy->Common->Settings.StoreSubscriptionHistory) {
+                renderSubscriberGroups("Subscription history", SubscriberHistory);
             }
 
             if (LastSubscriber) {
@@ -1650,19 +1673,23 @@ namespace NActors {
                                 TABLER() {
                                     TABLEH() { str << "Activity"; }
                                     TABLEH() { str << "EventTypeName"; }
-                                    TABLEH() { str << "StackTrace"; }
+                                    if (collectSubscriptionStackTrace) {
+                                        TABLEH() { str << "StackTrace"; }
+                                    }
                                 }
                             }
                             TABLEBODY() {
                                 TABLER() {
                                     TABLED() { str << EncodeHtmlPcdata(LastSubscriber->Info.Activity.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.Activity)); }
                                     TABLED() { str << EncodeHtmlPcdata(LastSubscriber->Info.EventTypeName.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.EventTypeName)); }
-                                    TABLED() {
-                                        if (LastSubscriber->Info.StackTrace.empty()) {
-                                            str << "manual";
-                                        } else {
-                                            PRE() {
-                                                str << EncodeHtmlPcdata(LastSubscriber->Info.StackTrace);
+                                    if (collectSubscriptionStackTrace) {
+                                        TABLED() {
+                                            if (LastSubscriber->Info.StackTrace.empty()) {
+                                                str << "manual";
+                                            } else {
+                                                PRE() {
+                                                    str << EncodeHtmlPcdata(LastSubscriber->Info.StackTrace);
+                                                }
                                             }
                                         }
                                     }

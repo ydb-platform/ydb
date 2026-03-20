@@ -286,9 +286,11 @@ namespace NActors {
                 const TActorId sender = ev->Sender;
                 const ui64 cookie = ev->Cookie;
                 const TString eventTypeName = ExtractForwardedEventTypeName(*ev);
+                const TString stackTrace = SystemSetup->InterconnectCollectSubscriptionStackTrace
+                    ? ExtractCurrentStackTrace()
+                    : TString();
                 auto wrapped = std::make_unique<IEventHandle>(recipient, sender,
-                    new TEvForwardSubscribeSession(ev.release(), ExtractCurrentSenderActivity(), eventTypeName,
-                        ExtractCurrentStackTrace()),
+                    new TEvForwardSubscribeSession(ev.release(), ExtractCurrentSenderActivity(), eventTypeName, stackTrace),
                     0, cookie);
                 ev = std::move(wrapped);
             } else {

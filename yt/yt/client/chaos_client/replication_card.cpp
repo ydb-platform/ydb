@@ -333,6 +333,11 @@ ETableReplicaState GetTargetReplicaState(ETableReplicaState state)
         : ETableReplicaState::Disabled;
 }
 
+bool IsTargetReplicaModeSync(NTabletClient::ETableReplicaMode mode)
+{
+    return mode == ETableReplicaMode::Sync || mode == ETableReplicaMode::AsyncToSync;
+}
+
 void UpdateReplicationProgress(TReplicationProgress* progress, const TReplicationProgress& update)
 {
     std::vector<TReplicationProgress::TSegment> segments;

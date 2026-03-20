@@ -143,7 +143,7 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     }
 
     auto encoder = CreateEncoder(&out, *format, nameLabel, visibility);
-    if (set && FilterCallback) {
+    if (FilterCallback) {
         encoder = FilterCallback(set, std::move(encoder));
     }
 

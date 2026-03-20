@@ -9,6 +9,7 @@
 #include <library/cpp/charset/ci_string.h>
 
 #include <util/digest/fnv.h>
+#include <util/generic/string.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <utility>
@@ -423,6 +424,20 @@ INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode
         node.Q(node.Y(node.Q("name"), BuildQuotedAtom(desc.Name.Pos, desc.Name.Name))),
         node.Q(node.Y(node.Q("settings"), node.Q(settings))),
         node.Q(node.Y(node.Q("state"), node.Q(state))));
+}
+
+INode::TPtr CreateEncodingsListSettings(const TVector<TEncoding>& columnEncoding, const INode& node) {
+    auto encodingsList = node.Y();
+    for (const auto& encoding : columnEncoding) {
+        auto encodingParamsList = node.Y();
+        encodingParamsList = node.L(encodingParamsList, node.Q(node.Y(node.Q("name"), node.Q(to_lower(encoding.Name)))));
+        for (const auto& [key, value] : encoding.Entries) {
+            encodingParamsList = node.L(encodingParamsList, node.Q(node.Y(node.Q(key), value)));
+        }
+        encodingsList = node.L(encodingsList, node.Q(encodingParamsList));
+    }
+
+    return encodingsList;
 }
 
 } // namespace
@@ -1305,6 +1320,10 @@ public:
                 }
 
                 columnDesc = L(columnDesc, Q(familiesDesc));
+
+                if (col.ColumnEncoding) {
+                    columnDesc = L(columnDesc, Q(Y(Q("columnEncoding"), Q(CreateEncodingsListSettings(*col.ColumnEncoding, *this)))));
+                }
             }
 
             columns = L(columns, Q(columnDesc));
@@ -1639,6 +1658,10 @@ public:
                 }
                 columnDesc = L(columnDesc, Q(familiesDesc));
 
+                if (col.ColumnEncoding) {
+                    columnDesc = L(columnDesc, Q(Y(Q("columnEncoding"), Q(CreateEncodingsListSettings(*col.ColumnEncoding, *this)))));
+                }
+
                 columns = L(columns, Q(columnDesc));
             }
             actions = L(actions, Q(Y(Q("addColumns"), Q(columns))));
@@ -1721,6 +1744,21 @@ public:
                         columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
 
                         columnDesc = L(columnDesc, Q(Y(Q("dropDefault"))));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
+                    case TColumnSchema::ETypeOfChange::SetEncoding: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+
+                        TPtr encodingsList;
+                        if (col.ColumnEncoding) {
+                            encodingsList = CreateEncodingsListSettings(*col.ColumnEncoding, *this);
+                        } else {
+                            encodingsList = Y();
+                        }
+                        columnDesc = L(columnDesc, Q(Y(Q("changeEncoding"), Q(encodingsList))));
                         columns = L(columns, Q(columnDesc));
 
                         break;

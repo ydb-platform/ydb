@@ -1620,7 +1620,8 @@ bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
 
         if (IsYqlRef_) {
             if (!Source_.empty()) {
-                Node_ = Y("YqlColumnRef", Q(Source_), ref);
+                TNodePtr source = BuildQuotedAtom(Pos_, Source_);
+                Node_ = Y("YqlColumnRef", std::move(source), ref);
             } else {
                 Node_ = Y("YqlColumnRef", ref);
             }

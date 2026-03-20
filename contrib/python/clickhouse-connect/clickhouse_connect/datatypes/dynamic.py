@@ -1,5 +1,5 @@
 from collections import namedtuple
-from typing import List, Sequence, Collection, Any
+from typing import List, Tuple, Sequence, Collection, Any
 from urllib.parse import unquote
 
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
@@ -7,7 +7,7 @@ from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.driver.common import unescape_identifier, first_value, write_uint64
 from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.errors import handle_error
-from clickhouse_connect.driver.exceptions import DataError
+from clickhouse_connect.driver.exceptions import DataError, InternalError
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.query import QueryContext
 from clickhouse_connect.driver.types import ByteSource
@@ -20,7 +20,7 @@ _JSON_NULL_STR = 'null'
 
 json_serialization_format = 0x1
 
-VariantState = namedtuple('VariantState', 'discriminator_node element_states')
+VariantState = namedtuple('VariantState', 'discriminator_mode element_states')
 
 
 def _json_path_segments(path: str) -> List[str]:
@@ -30,18 +30,72 @@ def _json_path_segments(path: str) -> List[str]:
     return segments
 
 
+TypedVariant = namedtuple('TypedVariant', 'value type_name')
+
+
+def typed_variant(value: Any, type_name: str) -> TypedVariant:
+    """Tag a value with an explicit ClickHouse type for insertion into a Variant column.
+
+    When a Variant has members that map to the same Python type (e.g. Array(UInt32) and
+    Array(String) are both Python lists), automatic dispatch cannot determine which member
+    to use. Wrap the value with this helper to resolve the ambiguity.
+
+    :param value: The value to insert. Must not be None — use None directly for nulls.
+    :param type_name: ClickHouse type name, e.g. ``'Array(UInt32)'`` or ``'Int64'``.
+    :returns: A TypedVariant that the Variant write path uses for explicit dispatch.
+    :raises DataError: If type_name is not a valid ClickHouse type or value is None.
+
+    Example::
+
+        from clickhouse_connect.datatypes.dynamic import typed_variant
+
+        data = [[typed_variant([1, 2], 'Array(UInt32)')],
+                [typed_variant(['a', 'b'], 'Array(String)')]]
+        client.insert('my_table', data, column_names=['variant_col'])
+    """
+    if value is None:
+        raise DataError('Use None directly instead of typed_variant for null Variant values')
+    try:
+        return TypedVariant(value, get_from_name(type_name).name)
+    except InternalError:
+        raise DataError(f"Unknown ClickHouse type '{type_name}'") from None
+
+
 class Variant(ClickHouseType):
-    _slots = 'element_types'
+    __slots__ = ('element_types', '_python_map', '_name_index')
     python_type = object
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
         self.element_types: List[ClickHouseType] = [get_from_name(name) for name in type_def.values]
         self._name_suffix = f"({', '.join(ch_type.name for ch_type in self.element_types)})"
+        self._build_dispatch()
 
-    @property
-    def insert_name(self):
-        return 'String'
+    def _build_dispatch(self):
+        seen = {}
+        collisions = set()
+        for i, etype in enumerate(self.element_types):
+            pt = etype.python_type
+            if pt is None:
+                continue
+            if pt in seen:
+                collisions.add(pt)
+            else:
+                seen[pt] = i
+        self._python_map = {pt: idx for pt, idx in seen.items() if pt not in collisions}
+        self._name_index = {etype.name: i for i, etype in enumerate(self.element_types)}
+
+    def _resolve_disc(self, v: Any) -> Tuple[int, Any]:
+        if isinstance(v, TypedVariant):
+            idx = self._name_index.get(v.type_name)
+            if idx is None:
+                raise DataError(f"Type '{v.type_name}' is not a member of {self.name}")
+            return idx, v.value
+        # Use type() rather than isinstance() so that bool and int dispatch separately
+        disc = self._python_map.get(type(v))
+        if disc is not None:
+            return disc, v
+        raise DataError(f"Cannot map Python type {type(v).__name__} to any member of {self.name}")
 
     def read_column_prefix(self, source: ByteSource, ctx: QueryContext) -> VariantState:
         discriminator_mode = source.read_uint64()
@@ -52,8 +106,49 @@ class Variant(ClickHouseType):
                             read_state: VariantState) -> Sequence:
         return read_variant_column(source, num_rows, ctx, self.element_types, read_state.element_states)
 
+    def write_column_prefix(self, dest: bytearray):
+        write_uint64(0, dest)  # discriminator_mode = 0
+        for e_type in self.element_types:
+            e_type.write_column_prefix(dest)
+
     def write_column_data(self, column: Sequence, dest: bytearray, ctx: InsertContext):
-        write_str_values(self, column, dest, ctx)
+        sub_columns: List[list] = [[] for _ in range(len(self.element_types))]
+        discriminators = bytearray()
+        for v in column:
+            if v is None:
+                discriminators.append(255)
+                continue
+            disc, val = self._resolve_disc(v)
+            discriminators.append(disc)
+            sub_columns[disc].append(val)
+        dest += discriminators
+        for ix, e_type in enumerate(self.element_types):
+            if sub_columns[ix]:
+                e_type.write_column_data(sub_columns[ix], dest, ctx)
+
+    def _data_size(self, sample: Collection) -> int:
+        if not sample:
+            return 1
+        v_count = len(self.element_types)
+        if v_count == 0:
+            return 1
+        sub_samples = [[] for _ in range(v_count)]
+        for v in sample:
+            if v is None:
+                continue
+            disc, val = self._resolve_disc(v)
+            sub_samples[disc].append(val)
+
+        total_data_size = 0
+        for ix, sub_sample in enumerate(sub_samples):
+            if sub_sample:
+                etype = self.element_types[ix]
+                if etype.byte_size:
+                    total_data_size += etype.byte_size * len(sub_sample)
+                else:
+                    total_data_size += etype.data_size(sub_sample) * len(sub_sample)
+
+        return (total_data_size // len(sample)) + 1
 
 
 def read_variant_column(source: ByteSource,

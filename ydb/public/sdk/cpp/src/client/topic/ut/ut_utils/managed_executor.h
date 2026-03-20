@@ -18,6 +18,12 @@ public:
     bool IsAsync() const override;
     void Post(TFunction&& f) override;
 
+<<<<<<< HEAD:ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/managed_executor.h
+=======
+    void Stop() override;
+
+    void StartRandomFunc();
+>>>>>>> 771638ae94f (YQ-5187 fixed hanging in PQ read session (#36220)):ydb/public/sdk/cpp/tests/integration/topic/utils/managed_executor.h
     void StartFuncs(const std::vector<size_t>& indicies);
 
     size_t GetFuncsCount() const;

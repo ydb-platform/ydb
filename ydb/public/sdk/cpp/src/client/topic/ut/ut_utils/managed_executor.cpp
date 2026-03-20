@@ -1,6 +1,12 @@
 #include "managed_executor.h"
 
+<<<<<<< HEAD:ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/managed_executor.cpp
 namespace NYdb::NTopic::NTests {
+=======
+#include <util/random/random.h>
+
+namespace NYdb::inline Dev::NTopic::NTests {
+>>>>>>> 771638ae94f (YQ-5187 fixed hanging in PQ read session (#36220)):ydb/public/sdk/cpp/tests/integration/topic/utils/managed_executor.cpp
 
 TManagedExecutor::TManagedExecutor(TExecutorPtr executor) :
     Executor{std::move(executor)}
@@ -42,6 +48,26 @@ void TManagedExecutor::RunTask(TFunction&& func)
     Y_ABORT_UNLESS(Planned > 0);
     --Planned;
     Executor->Post(MakeTask(std::move(func)));
+}
+
+void TManagedExecutor::StartRandomFunc() {
+    std::lock_guard lock(Mutex);
+
+    Y_ABORT_UNLESS(Planned > 0);
+    size_t index = RandomNumber<size_t>(Planned);
+
+    for (size_t i = 0; i < Funcs.size(); ++i) {
+        if (Funcs[i] != nullptr) {
+            if (index == 0) {
+                RunTask(std::move(Funcs[i]));
+                Funcs[i] = nullptr;
+                return;
+            }
+            --index;
+        }
+    }
+
+    Y_ABORT("No functions to start");
 }
 
 void TManagedExecutor::StartFuncs(const std::vector<size_t>& indicies)

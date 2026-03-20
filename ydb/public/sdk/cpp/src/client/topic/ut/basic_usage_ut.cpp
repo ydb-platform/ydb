@@ -22,8 +22,223 @@
 
 namespace NYdb::NTopic::NTests {
 
+<<<<<<< HEAD
 void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message,
     ui32 count, TTopicSdkTestSetup& setup, TIntrusivePtr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10)
+=======
+static const bool EnableDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") ? std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") : ""}.empty();
+
+
+namespace NYdb::inline Dev::NTopic::NTests {
+
+// Serialize data in the format expected by the PQ tablet (TDataChunk proto)
+TString SerializeDataChunk(ui64 seqNo, const TString& payload) {
+    NKikimrPQClient::TDataChunk proto;
+    proto.SetSeqNo(seqNo);
+    proto.SetData(payload);
+    proto.SetCodec(0);  // RAW codec
+    proto.SetCreateTime(TInstant::Now().MilliSeconds());
+    TString result;
+    Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&result);
+    return result;
+}
+
+TWriteMessage CreateMessage(std::string_view payload, const std::string& key, ui64 seqNo) {
+    TWriteMessage msg(key, payload);
+    msg.SeqNo(seqNo);
+    return msg;
+}
+
+struct TExample {
+    std::string Payload;
+    std::string Serialize() const { return Payload; }
+};
+
+std::string Serialize(const TExample& value) {
+    return value.Payload;
+}
+
+// Reads exactly expectedCount messages from the topic and asserts that within each partition
+// messages are ordered by seqNo (strictly increasing). Uses provided client, topic path and consumer.
+void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
+                                         const std::string& topicPath,
+                                         const std::string& consumerName,
+                                         const std::string& expectedPayload,
+                                         size_t expectedCount,
+                                         TDuration timeout = TDuration::Seconds(30)) {
+    struct TMessageInfo {
+        ui64 PartitionId;
+        std::string ProducerId;
+        ui64 SeqNo;
+        std::string Data;
+    };
+    std::vector<TMessageInfo> messages;
+    messages.reserve(expectedCount);
+    NThreading::TPromise<void> donePromise = NThreading::NewPromise<void>();
+
+    TTopicReadSettings topicSettings(topicPath);
+    topicSettings.ReadFromTimestamp(TInstant::Zero());
+
+    auto readSettings = TReadSessionSettings()
+        .ConsumerName(consumerName)
+        .AutoPartitioningSupport(true)
+        .AppendTopics(topicSettings);
+
+    readSettings.EventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) {
+        for (auto& msg : ev.GetMessages()) {
+            messages.push_back(TMessageInfo{
+                msg.GetPartitionSession()->GetPartitionId(),
+                TString(msg.GetProducerId()),
+                msg.GetSeqNo(),
+                TString(msg.GetData()),
+            });
+        }
+        if (messages.size() >= expectedCount) {
+            donePromise.SetValue();
+        }
+    }, true);
+
+    auto readSession = client.CreateReadSession(readSettings);
+    UNIT_ASSERT_C(donePromise.GetFuture().Wait(timeout),
+        "Expected to read " << expectedCount << " messages within " << timeout << ", got " << messages.size());
+    readSession->Close(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), expectedCount,
+        "Read message count mismatch: got " << messages.size() << ", expected " << expectedCount);
+
+    // SeqNo ordering is guaranteed within one producer stream.
+    // Multiple producers can write into the same partition with independent seqNo sequences.
+    std::map<std::pair<ui64, std::string>, std::vector<ui64>> byPartitionAndProducer;
+    for (const auto& m : messages) {
+        UNIT_ASSERT_VALUES_EQUAL(m.Data, expectedPayload);
+        byPartitionAndProducer[{m.PartitionId, m.ProducerId}].push_back(m.SeqNo);
+    }
+    for (const auto& [key, seqNos] : byPartitionAndProducer) {
+        const auto& [partitionId, producerId] = key;
+        for (size_t i = 1; i < seqNos.size(); ++i) {
+            UNIT_ASSERT_C(seqNos[i] > seqNos[i - 1],
+                "Partition " << partitionId << ", producerId " << producerId
+                << ": expected seqNo strictly increasing, got "
+                << seqNos[i - 1] << " then " << seqNos[i] << " at index " << i);
+        }
+    }
+}
+
+// Write a message with binary (non-UTF8) producer ID using direct tablet communication
+// This bypasses gRPC string validation by sending directly to the PQ tablet
+// The SourceId field in TCmdWrite is defined as 'bytes' in protobuf, so it supports binary data
+void WriteBinaryProducerIdWithDirectTabletWrite(TTopicSdkTestSetup& setup,
+                                                 const TString& topicPath,
+                                                 const TString& binaryProducerId,
+                                                 const TString& payload) {
+    auto& runtime = setup.GetRuntime();
+    NActors::TActorId edge = runtime.AllocateEdgeActor();
+
+    // Get the tablet ID for partition 0 using scheme cache navigation
+    auto navigate = std::make_unique<NKikimr::NSchemeCache::TSchemeCacheNavigate>();
+    navigate->DatabaseName = "/Root";
+
+    NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.Path = NKikimr::SplitPath(topicPath);
+    entry.SyncVersion = true;
+    entry.ShowPrivatePath = true;
+    entry.Operation = NKikimr::NSchemeCache::TSchemeCacheNavigate::OpList;
+
+    navigate->ResultSet.push_back(std::move(entry));
+    navigate->Cookie = 12345;
+
+    runtime.Send(NKikimr::MakeSchemeCacheID(), edge,
+                 new NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()),
+                 0,
+                 true);
+    auto response = runtime.GrabEdgeEvent<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Request->Cookie, 12345);
+    UNIT_ASSERT_VALUES_EQUAL(response->Request->ErrorCount, 0);
+
+    auto& front = response->Request->ResultSet.front();
+    UNIT_ASSERT(front.PQGroupInfo);
+    UNIT_ASSERT_GT(front.PQGroupInfo->Description.PartitionsSize(), 0);
+
+    ui64 tabletId = 0;
+    for (size_t i = 0; i < front.PQGroupInfo->Description.PartitionsSize(); ++i) {
+        auto& p = front.PQGroupInfo->Description.GetPartitions(i);
+        if (p.GetPartitionId() == 0) {
+            tabletId = p.GetTabletId();
+            break;
+        }
+    }
+    UNIT_ASSERT(tabletId != 0);
+
+    // First, get ownership of the partition
+    auto [ownerCookie, pipeClient] = NKikimr::NPQ::CmdSetOwner(&runtime, tabletId, edge, 0, "test-owner", true);
+
+    // Encode the binary producer ID using the same encoding as the mirrorer
+    TString encodedSourceId = NKikimr::NPQ::NSourceIdEncoding::EncodeSimple(binaryProducerId);
+
+    // Serialize the data in TDataChunk format (as expected by the PQ tablet)
+    TString serializedData = SerializeDataChunk(1, payload);
+
+    // Build the write request manually to have full control over the SourceId field
+    THolder<NKikimr::TEvPersQueue::TEvRequest> request;
+    request.Reset(new NKikimr::TEvPersQueue::TEvRequest);
+    auto req = request->Record.MutablePartitionRequest();
+    req->SetPartition(0);
+    req->SetOwnerCookie(ownerCookie);
+    req->SetMessageNo(0);
+    req->SetCmdWriteOffset(0);
+
+    auto write = req->AddCmdWrite();
+    write->SetSourceId(encodedSourceId);
+    write->SetSeqNo(1);
+    write->SetData(serializedData);
+    write->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+    write->SetDisableDeduplication(true);
+
+    runtime.SendToPipe(tabletId, edge, request.Release(), 0, NKikimr::GetPipeConfigWithRetries());
+
+    // Wait for the response
+    TAutoPtr<NActors::IEventHandle> handle;
+    auto* result = runtime.GrabEdgeEvent<NKikimr::TEvPersQueue::TEvResponse>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_C(result->Record.GetErrorCode() == ::NPersQueue::NErrorCode::OK,
+                  "Write failed: " << result->Record.GetErrorReason());
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), 1);
+}
+
+static std::string FindKeyForBucket(size_t bucket, size_t bucketsCount) {
+    for (size_t i = 0; i < 1'000'000; ++i) {
+        std::string key = "key-" + ToString(i);
+        if (MurmurHash<ui64>(key.data(), key.size()) % bucketsCount == bucket) {
+            return key;
+        }
+    }
+    UNIT_FAIL("Failed to find a key for bucket");
+    return {};
+}
+
+void CreateTopicWithAutoPartitioning(TTopicClient& client) {
+    TCreateTopicSettings createSettings;
+        createSettings
+            .BeginAddConsumer()
+                .ConsumerName(TEST_CONSUMER)
+            .EndAddConsumer()
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(2)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+    client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+}
+
+void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count,
+    TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10, ui64 shuffleRatio = 1, TDuration shuffleDelay = TDuration::MilliSeconds(10))
+>>>>>>> 771638ae94f (YQ-5187 fixed hanging in PQ read session (#36220))
 {
     auto client = setup.MakeClient();
     auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
@@ -39,10 +254,28 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 
     TTopicClient topicClient = setup.MakeClient();
 
+<<<<<<< HEAD
     auto WaitTasks = [&, timeout = TInstant::Now() + TDuration::Seconds(60)](auto f, size_t c) {
         while (f() < c) {
             Sleep(TDuration::MilliSeconds(100));
             UNIT_ASSERT(timeout > TInstant::Now());
+=======
+    auto WaitTasks = [&](auto f, size_t c) {
+        const auto hardTimeout = TInstant::Now() + TDuration::Seconds(60);
+        const auto shuffleTimeout = TInstant::Now() + shuffleDelay;
+        while (true) {
+            const auto fVal = f();
+            if (fVal >= c * shuffleRatio) {
+                return;
+            }
+
+            const auto now = TInstant::Now();
+            if (fVal >= c && now > shuffleTimeout) {
+                return;
+            }
+
+            UNIT_ASSERT_GE(hardTimeout, now);
+>>>>>>> 771638ae94f (YQ-5187 fixed hanging in PQ read session (#36220))
             ReadSession->WaitEvent();
         };
     };
@@ -53,28 +286,23 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
         WaitTasks([&]() { return e->GetExecutedCount(); }, count);
     };
 
-    auto RunTasks = [&](auto e, const std::vector<size_t>& tasks) {
-        size_t n = tasks.size();
-        WaitPlannedTasks(e, n);
+    auto RunTask = [&](auto e) {
+        WaitPlannedTasks(e, 1);
         size_t completed = e->GetExecutedCount();
-        e->StartFuncs(tasks);
-        WaitExecutedTasks(e, completed + n);
+        e->StartRandomFunc();
+        WaitExecutedTasks(e, completed + 1);
     };
-    Y_UNUSED(RunTasks);
 
-    auto PlanTasksAndRestart = [&](auto e, const std::vector<size_t>& tasks) {
-        size_t n = tasks.size();
-        WaitPlannedTasks(e, n);
+    auto PlanTaskAndRestart = [&](auto e) {
+        WaitPlannedTasks(e, 1);
         size_t completed = e->GetExecutedCount();
 
         setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
         Sleep(TDuration::MilliSeconds(100));
 
-        e->StartFuncs(tasks);
-        WaitExecutedTasks(e, completed + n);
+        e->StartRandomFunc();
+        WaitExecutedTasks(e, completed + 1);
     };
-    Y_UNUSED(PlanTasksAndRestart);
-
 
     NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
     TAtomic lastOffset = 0u;
@@ -95,11 +323,12 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
     ui32 restartCount = 0;
     while (AtomicGet(lastOffset) + 1 < count) {
         if (restartCount < maxRestartsCount && i % restartPeriod == 1) {
-            PlanTasksAndRestart(decompressor, {i++});
+            PlanTaskAndRestart(decompressor);
             restartCount++;
         } else {
-            RunTasks(decompressor, {i++});
+            RunTask(decompressor);
         }
+        i++;
     }
 
     ReadSession->Close(TDuration::MilliSeconds(10));
@@ -404,6 +633,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST(SessionNotDestroyedWhileCompressionInFlight) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
 
@@ -754,6 +984,32 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 UNIT_ASSERT(std::holds_alternative<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(*event));
             }
         }
+=======
+    Y_UNIT_TEST(ReadWithRestartsAndLargeDataAndShuffle) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto compressor = std::make_shared<TSyncExecutor>();
+        auto decompressor = CreateThreadPoolManagedExecutor(1);
+
+        TReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName(setup.GetConsumerName())
+            .MaxMemoryUsageBytes(10_MB)
+            .DecompressionExecutor(decompressor)
+            .AppendTopics(setup.GetTopicPath())
+            // .DirectRead(EnableDirectRead)
+            ;
+
+        TWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .Codec(ECodec::RAW)
+            .CompressionExecutor(compressor);
+
+        std::uint32_t count = 3000;
+        std::string message(8'000, 'x');
+
+        WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor, 7, 10, 10);
+>>>>>>> 771638ae94f (YQ-5187 fixed hanging in PQ read session (#36220))
     }
 
     Y_UNIT_TEST(ConflictingWrites) {

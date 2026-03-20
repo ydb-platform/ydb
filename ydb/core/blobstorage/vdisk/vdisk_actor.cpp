@@ -4,6 +4,7 @@
 
 namespace NKikimr {
 
+    // CI: trigger vdisk tests
     IActor* CreateVDisk(const TIntrusivePtr<TVDiskConfig> &cfg,
                         const TIntrusivePtr<TBlobStorageGroupInfo> &info,
                         const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters) {

@@ -438,6 +438,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
 
     if (State != TShardState::Offline) {
         VolatileTxManager.Start(ctx);
+        MultiTxIdManager.Start();
     }
 
     SignalTabletActive(ctx);
@@ -4782,6 +4783,8 @@ void TDataShard::BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volati
         if (info->State != EVolatileTxState::Aborting) {
             volatileDependencies.insert(txId);
         }
+    } else if (auto* entry = GetMultiTxIdManager().FindMultiTxId(txId)) {
+        GetMultiTxIdManager().BreakMultiTxId(entry);
     } else {
         SysLocksTable().BreakLock(txId);
     }

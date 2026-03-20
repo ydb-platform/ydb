@@ -21,7 +21,6 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
-#include <library/cpp/openssl/crypto/sha.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/util.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -209,7 +208,7 @@ public:
     struct TTableFile {
         TString Name;
         TFile File;
-        std::unique_ptr<NOpenSsl::NSha256::TCalcer> Sha256;
+        TSha256Hasher Sha256;
     };
 
     TSnapshotWriter(TActorId owner, const TFsPath& path,
@@ -228,7 +227,7 @@ public:
         , Exclusion(exclusion)
     {
         for (const auto& [tableId, table] : tables) {
-            Tables.emplace(tableId, TTableFile{table.Name, {}, std::make_unique<NOpenSsl::NSha256::TCalcer>()});
+            Tables.emplace(tableId, TTableFile{table.Name, {}, {}});
         }
     }
 
@@ -349,7 +348,7 @@ public:
         if (!msg->SnapshotData.Empty()) {
             try {
                 it->second.File.Write(msg->SnapshotData.Data(), msg->SnapshotData.Size());
-                it->second.Sha256->Update(msg->SnapshotData.Data(), msg->SnapshotData.Size());
+                it->second.Sha256.Update(msg->SnapshotData.Data(), msg->SnapshotData.Size());
                 WrittenBytes += msg->SnapshotData.Size();
             } catch (const TIoException& e) {
                 return ReplyAndDie(false, TStringBuilder() << "Failed to write snapshot table data " << it->second.File.GetName() << ": " << e.what());
@@ -383,10 +382,10 @@ public:
         }
     }
 
-    static NJson::TJsonValue MakeFileEntry(const TString& name, NOpenSsl::NSha256::TCalcer& calcer) {
+    static NJson::TJsonValue MakeFileEntry(const TString& name, TSha256Hasher& hasher) {
         NJson::TJsonValue entry;
         entry["name"] = name;
-        entry["sha256"] = FormatChecksumDigest(calcer.Final());
+        entry["sha256"] = hasher.Final();
         return entry;
     }
 
@@ -418,7 +417,7 @@ public:
             files.SetType(NJson::JSON_ARRAY);
             files.AppendValue(MakeFileEntry("schema.json", SchemaSha256));
             for (auto& [_, table] : Tables) {
-                files.AppendValue(MakeFileEntry(table.Name + ".json", *table.Sha256));
+                files.AppendValue(MakeFileEntry(table.Name + ".json", table.Sha256));
             }
 
             const TString manifestStr = NJson::WriteJson(manifest, /*formatOutput=*/ false);
@@ -428,7 +427,7 @@ public:
             manifestFile.Write(manifestStr.data(), manifestStr.size());
             manifestFile.Flush();
 
-            const TString manifestChecksum = ComputeChecksum(manifestStr);
+            const TString manifestChecksum = TSha256Hasher::Hash(manifestStr);
 
             auto checksumPath = SnapshotPath.Child("manifest.json.sha256");
             TFile checksumFile(checksumPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
@@ -488,7 +487,7 @@ private:
     THashSet<ui32> DoneTables;
 
     TFile SchemaFile;
-    NOpenSsl::NSha256::TCalcer SchemaSha256;
+    TSha256Hasher SchemaSha256;
     TAutoPtr<TSchemeChanges> Schema;
 
     TIntrusiveConstPtr<TBackupExclusion> Exclusion;
@@ -906,7 +905,7 @@ public:
 
         if (hasCommit) {
             b.WriteKey("prev_sha256");
-            b.WriteString(FormatChecksumDigest(Checksum.Intermediate()));
+            b.WriteString(Checksum.Intermediate());
             b.EndObject();
             out << '\n';
 
@@ -987,7 +986,7 @@ public:
     void WriteChangelogChecksum() {
         TFsPath tmpPath(ChangelogChecksumPath.GetPath() + ".tmp");
         TFileOutput out(tmpPath);
-        out.Write(FormatChecksumDigest(Checksum.Intermediate()));
+        out.Write(Checksum.Intermediate());
         out.Flush();
         tmpPath.RenameTo(ChangelogChecksumPath);
         TFile(ChangelogChecksumPath.Parent(), EOpenModeFlag::RdOnly).Flush();
@@ -1015,7 +1014,7 @@ private:
     ui64 WrittenBytes = 0;
     std::optional<ui64> SnapshotWrittenBytes;
 
-    NOpenSsl::NSha256::TCalcer Checksum;
+    TSha256Hasher Checksum;
 };
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,

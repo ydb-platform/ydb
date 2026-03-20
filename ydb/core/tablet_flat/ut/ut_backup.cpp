@@ -1691,14 +1691,14 @@ Y_UNIT_TEST_SUITE(Backup) {
             R"({"step":6,"data_changes":[{"table":"Data","op":"upsert","Key":3)",  // torn write
         };
 
-        NOpenSsl::NSha256::TCalcer calcer;
+        TSha256Hasher hasher;
         for (size_t i = 0; i < 2; ++i) {
             NJson::TJsonValue json;
             NJson::ReadJsonTree(lines[i], &json, true);
-            json["prev_sha256"] = FormatChecksumDigest(calcer.Intermediate());
+            json["prev_sha256"] = hasher.Intermediate();
             lines[i] = NJson::WriteJson(json, false);
-            calcer.Update(lines[i]);
-            calcer.Update("\n");
+            hasher.Update(lines[i]);
+            hasher.Update("\n");
         }
 
         {

@@ -58,13 +58,6 @@ namespace NOpenSsl {
             Y_ENSURE(SHA256_Final(digest.data(), Context.Get()) == 1);
             return digest;
         }
-
-        TDigest TCalcer::Intermediate() const {
-            SHA256_CTX ctxCopy = *Context.Get();
-            TDigest digest;
-            Y_ENSURE(SHA256_Final(digest.data(), &ctxCopy) == 1);
-            return digest;
-        }
     }
     namespace NSha224 {
         static_assert(DIGEST_LENGTH == SHA224_DIGEST_LENGTH);

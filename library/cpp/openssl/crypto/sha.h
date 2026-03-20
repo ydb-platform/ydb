@@ -72,9 +72,6 @@ namespace NOpenSsl::NSha256 {
 
         TDigest Final();
 
-        // Returns intermediate digest without finalizing the context
-        TDigest Intermediate() const;
-
     private:
         THolder<SHA256state_st> Context;
     };

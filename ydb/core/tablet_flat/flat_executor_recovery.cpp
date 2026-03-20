@@ -1158,7 +1158,7 @@ public:
                 return false;
             }
 
-            TString actualManifestChecksum = NBackup::ComputeChecksum(manifestStr);
+            TString actualManifestChecksum = NBackup::TSha256Hasher::Hash(manifestStr);
             if (actualManifestChecksum != expectedManifestChecksum) {
                 SendResultAndDie(false, TStringBuilder() << "Manifest checksum mismatch: "
                                                          << "expected " << expectedManifestChecksum
@@ -1246,21 +1246,20 @@ public:
 
                 TString expectedFileSha256 = fileEntry["sha256"].GetString();
 
-                NOpenSsl::NSha256::TCalcer calcer;
+                NBackup::TSha256Hasher hasher;
                 try {
                     TFileInput input(filePath, 1_MB);
                     char buf[64_KB];
                     size_t bytesRead;
                     while ((bytesRead = input.Read(buf, sizeof(buf))) > 0) {
-                        calcer.Update(buf, bytesRead);
+                        hasher.Update(buf, bytesRead);
                     }
                 } catch (const TIoException& e) {
                     SendResultAndDie(false, TStringBuilder() << "Failed to read file " << filePath << " for checksum validation: " << e.what());
                     return false;
                 }
 
-                auto fileDigest = calcer.Final();
-                TString actualFileSha256 = NBackup::FormatChecksumDigest(fileDigest);
+                TString actualFileSha256 = hasher.Final();
                 if (actualFileSha256 != expectedFileSha256) {
                     SendResultAndDie(false, TStringBuilder() << "Checksum mismatch for " << filePath
                                              << ": expected " << expectedFileSha256
@@ -1299,7 +1298,7 @@ public:
             return false;
         }
 
-        NOpenSsl::NSha256::TCalcer calcer;
+        NBackup::TSha256Hasher hasher;
         TString firstError;
 
         try {
@@ -1310,15 +1309,15 @@ public:
 
             while (input.ReadLine(line)) {
                 if (!firstError) {
-                    auto err = ValidateChangelogPrevLine(line, lastValidLine, calcer);
+                    auto err = ValidateChangelogPrevLine(line, lastValidLine, hasher);
                     if (err) {
                         firstError = std::move(err);
                     } else {
                         lastValidLine = std::move(prevLine);
                     }
                 }
-                calcer.Update(line);
-                calcer.Update("\n");
+                hasher.Update(line);
+                hasher.Update("\n");
                 prevLine = std::move(line);
             }
         } catch (const TIoException& e) {
@@ -1327,7 +1326,7 @@ public:
             return false;
         }
 
-        TString sha256 = NBackup::FormatChecksumDigest(calcer.Final());
+        TString sha256 = hasher.Final();
         if (sha256 != expectedSha256) {
             TString error;
             if (firstError) {
@@ -1346,7 +1345,7 @@ public:
     }
 
     TString ValidateChangelogPrevLine(const TString& line, const TString& lastValidLine,
-                                      const NOpenSsl::NSha256::TCalcer& calcer) const
+                                      const NBackup::TSha256Hasher& hasher) const
     {
         NJson::TJsonValue json;
         try {
@@ -1364,7 +1363,7 @@ public:
         }
 
         TString expectedPrevSha256 = json["prev_sha256"].GetString();
-        TString prevSha256 = NBackup::FormatChecksumDigest(calcer.Intermediate());
+        TString prevSha256 = hasher.Intermediate();
         if (prevSha256 != expectedPrevSha256) {
             return TStringBuilder()
                 << "Changelog checksum chain mismatch for line " << line

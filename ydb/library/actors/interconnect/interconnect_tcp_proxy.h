@@ -109,6 +109,7 @@ namespace NActors {
     STATEFN(STATE) {                                                                            \
         const ui32 type = ev->GetTypeRewrite();                                                 \
         const bool profiled = type != TEvInterconnect::EvForward                                \
+            && type != TEvForwardSubscribeSession::EventType                                    \
             && type != TEvInterconnect::EvConnectNode                                           \
             && type != TEvents::TSystem::Subscribe                                              \
             && type != TEvents::TSystem::Unsubscribe;                                           \

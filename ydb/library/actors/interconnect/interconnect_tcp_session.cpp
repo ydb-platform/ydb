@@ -1647,7 +1647,7 @@ namespace NActors {
                         if (showOverflowWarning) {
                             DIV_CLASS("alert alert-warning") {
                                 str << "Subscription history storage limit of " << MaxSubscriberHistoryEntries
-                                    << " aggregated entries has been reached; new history groups are no longer stored.";
+                                    << " aggregated entries has been reached; new history groups are no longer added.";
                             }
                         }
                         TABLE_CLASS("table table-sortable") {

@@ -38,6 +38,8 @@ A {{ ydb-short-name }} server can be run on servers with a Linux operating syste
 
 To improve disk and network I/O performance in a trusted environment, you can disable IOMMU by setting the Linux boot parameter `intel_iommu=off` or `amd_iommu=off`. In an untrusted environment, as well as under strict security requirements or with active virtualization use (for example, PCI passthrough and device isolation), disabling IOMMU is not recommended. In such cases, use `intel_iommu=on iommu=pt` or `amd_iommu=on iommu=pt`.
 
+The environment can be considered trusted if only {{ ydb-short-name }} and user-controlled applications are running on the server. Configurations that run third-party applications or virtual machines should be considered untrusted.
+
 If the server has more than 32 CPU cores, to increase {{ ydb-short-name }} performance, run each dynamic node in a separate taskset/cpuset of 10 to 32 cores. For example, with 128 CPU cores, an optimal setup is to run 4 dynamic nodes, each in its own 32-core taskset. Cores within one taskset/cpuset should belong to the same NUMA node.
 
 MacOS and Windows operating systems are currently unsupported for running production {{ ydb-short-name }} servers. However, running {{ ydb-short-name }} in a [Docker container](../../quickstart.md) on them is acceptable for development and functional testing.

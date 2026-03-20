@@ -139,7 +139,7 @@ namespace NActors {
         ReceiveContext->Terminated = true; // prevent further message generation by receiving actor
         for (const auto& kv : Subscribers) {
             Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second.Cookie);
-            if (kv.second.HasActivityMetric) {
+            if (kv.second.ActivityIndex != Max<ui32>()) {
                 Proxy->Metrics->AddSubscribersByActivity(kv.second.ActivityIndex, -1);
             }
         }
@@ -289,7 +289,7 @@ namespace NActors {
     void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS05", "unsubscribe for session state for %s", ev->Sender.ToString().data());
         if (const auto it = Subscribers.find(ev->Sender); it != Subscribers.end()) {
-            if (it->second.HasActivityMetric) {
+            if (it->second.ActivityIndex != Max<ui32>()) {
                 Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
             }
             Subscribers.erase(it);
@@ -300,19 +300,17 @@ namespace NActors {
     void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex, TString eventTypeName,
             TString stackTrace) {
         auto updateInfo = [&] (TSubscriberInfo& info) {
+            info.Cookie = cookie;
             info.ActivityIndex = activityIndex;
             info.EventTypeName = eventTypeName;
             info.StackTrace = stackTrace;
         };
 
         const auto historyKey = TSubscriberHistoryKey(stackTrace, activityIndex, eventTypeName);
-        bool shouldUpdateInfo = false;
         if (const auto it = SubscriberHistory.find(historyKey); it != SubscriberHistory.end()) {
             ++it->second;
-            shouldUpdateInfo = true;
         } else if (SubscriberHistory.size() < MaxSubscriberHistoryEntries) {
             SubscriberHistory.emplace(std::move(historyKey), 1);
-            shouldUpdateInfo = true;
         } else {
             SubscriberHistoryOverflow = true;
         }
@@ -320,25 +318,18 @@ namespace NActors {
         const auto [it, inserted] = Subscribers.emplace(actorId, TSubscriberInfo{});
         if (inserted) {
             Proxy->Metrics->IncSubscribersCount();
-            if (shouldUpdateInfo) {
+            if (activityIndex != Max<ui32>()) {
                 Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
-                it->second.HasActivityMetric = true;
             }
-        } else if (shouldUpdateInfo) {
-            if (it->second.HasActivityMetric) {
-                if (it->second.ActivityIndex != activityIndex) {
-                    Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
-                    Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
-                }
-            } else {
+        } else if (it->second.ActivityIndex != activityIndex) {
+            if (it->second.ActivityIndex != Max<ui32>()) {
+                Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
+            }
+            if (activityIndex != Max<ui32>()) {
                 Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
-                it->second.HasActivityMetric = true;
             }
         }
-        it->second.Cookie = cookie;
-        if (shouldUpdateInfo) {
-            updateInfo(it->second);
-        }
+        updateInfo(it->second);
     }
 
     THolder<TEvHandshakeAck> TInterconnectSessionTCP::ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) {

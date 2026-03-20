@@ -597,6 +597,9 @@ class KikimrConfigGenerator(object):
 
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
+            if self.domain_name != "Root":
+                self.yaml_config["domain_name"] = self.domain_name
+
             for name in ['blob_storage_config', 'domains_config', 'system_tablets',
                          'channel_profile_config']:
                 del self.yaml_config[name]

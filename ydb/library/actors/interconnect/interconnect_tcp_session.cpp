@@ -287,29 +287,31 @@ namespace NActors {
     void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, TString activity, TString eventTypeName,
             TString stackTrace) {
         auto updateInfo = [&] (TSubscriberInfo& info) {
-            info.Cookie = cookie;
             info.Activity = activity;
             info.EventTypeName = eventTypeName;
             info.StackTrace = stackTrace;
         };
 
-        const auto [it, inserted] = Subscribers.emplace(actorId, TSubscriberInfo{});
-        if (inserted) {
-            Proxy->Metrics->IncSubscribersCount();
-        }
-        updateInfo(it->second);
-
         const auto historyKey = TSubscriberHistoryKey(stackTrace, activity, eventTypeName);
+        bool shouldUpdateInfo = false;
         if (const auto it = SubscriberHistory.find(historyKey); it != SubscriberHistory.end()) {
             ++it->second;
+            shouldUpdateInfo = true;
         } else if (SubscriberHistory.size() < MaxSubscriberHistoryEntries) {
             SubscriberHistory.emplace(std::move(historyKey), 1);
+            shouldUpdateInfo = true;
         } else {
             SubscriberHistoryOverflow = true;
         }
 
-        LastSubscriber.emplace(TLastSubscriberInfo{actorId, {}});
-        updateInfo(LastSubscriber->Info);
+        const auto [it, inserted] = Subscribers.emplace(actorId, TSubscriberInfo{});
+        if (inserted) {
+            Proxy->Metrics->IncSubscribersCount();
+        }
+        it->second.Cookie = cookie;
+        if (shouldUpdateInfo) {
+            updateInfo(it->second);
+        }
     }
 
     THolder<TEvHandshakeAck> TInterconnectSessionTCP::ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) {
@@ -1669,44 +1671,6 @@ namespace NActors {
 
             renderSubscriberGroups("Subscriptions", aggregateSubscribers(Subscribers));
             renderSubscriberGroups("Subscription history", SubscriberHistory, SubscriberHistoryOverflow);
-
-            if (LastSubscriber) {
-                DIV_CLASS("panel panel-info") {
-                    DIV_CLASS("panel-heading") {
-                        str << "Last subscriber";
-                    }
-                    DIV_CLASS("panel-body") {
-                        TABLE_CLASS("table") {
-                            TABLEHEAD() {
-                                TABLER() {
-                                    TABLEH() { str << "Activity"; }
-                                    TABLEH() { str << "EventTypeName"; }
-                                    if (collectSubscriptionStackTrace) {
-                                        TABLEH() { str << "StackTrace"; }
-                                    }
-                                }
-                            }
-                            TABLEBODY() {
-                                TABLER() {
-                                    TABLED() { str << EncodeHtmlPcdata(LastSubscriber->Info.Activity.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.Activity)); }
-                                    TABLED() { str << EncodeHtmlPcdata(LastSubscriber->Info.EventTypeName.empty() ? TStringBuf("manual") : TStringBuf(LastSubscriber->Info.EventTypeName)); }
-                                    if (collectSubscriptionStackTrace) {
-                                        TABLED() {
-                                            if (LastSubscriber->Info.StackTrace.empty()) {
-                                                str << "manual";
-                                            } else {
-                                                PRE() {
-                                                    str << EncodeHtmlPcdata(LastSubscriber->Info.StackTrace);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         auto h = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

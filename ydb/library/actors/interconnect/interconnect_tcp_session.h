@@ -464,11 +464,6 @@ namespace NActors {
             TString StackTrace;
         };
 
-        struct TLastSubscriberInfo {
-            TActorId ActorId;
-            TSubscriberInfo Info;
-        };
-
         using TSubscriberHistoryKey = std::tuple<TString, TString, TString>;
 
         struct TSubscriberHistoryKeyHash {
@@ -477,8 +472,8 @@ namespace NActors {
             }
         };
 
-        using TSubscriberHistory = std::unordered_map<TSubscriberHistoryKey, size_t, TSubscriberHistoryKeyHash>;
-        static constexpr size_t MaxSubscriberHistoryEntries = 1000;
+        using TSubscriberHistory = std::unordered_map<TSubscriberHistoryKey, ui64, TSubscriberHistoryKeyHash>;
+        static constexpr ui64 MaxSubscriberHistoryEntries = 1000;
 
         TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
         ~TInterconnectSessionTCP();
@@ -694,7 +689,6 @@ namespace NActors {
         std::unordered_map<TActorId, TSubscriberInfo, TActorId::THash> Subscribers;
         TSubscriberHistory SubscriberHistory;
         bool SubscriberHistoryOverflow = false;
-        std::optional<TLastSubscriberInfo> LastSubscriber;
 
         struct TDelayedEvent {
             TAutoPtr<IEventHandle> Event;

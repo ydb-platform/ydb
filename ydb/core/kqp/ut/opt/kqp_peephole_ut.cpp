@@ -15,10 +15,10 @@ namespace NKikimr::NKqp {
 namespace {
 
 enum class EPackKind {
-    Identity,       // (a, b, count) → BlockAsStruct('c1':a, 'c2':b), count
-    Computation,    // (a, b, count) → BlockAsStruct('c1':Inc(a), 'c2':Inc(b)), count
-    Reorder,        // (a, b, count) → BlockAsStruct('c1':b, 'c2':a), count  — swapped
-    Projection,     // (a, b, c, count) → BlockAsStruct('c1':a, 'c2':b), count — c dropped
+    Identity,       // (a, b, count) -> BlockAsStruct('c1':a, 'c2':b), count
+    Computation,    // (a, b, count) -> BlockAsStruct('c1':Inc(a), 'c2':Inc(b)), count
+    Reorder,        // (a, b, count) -> BlockAsStruct('c1':b, 'c2':a), count -- swapped
+    Projection,     // (a, b, c, count) -> BlockAsStruct('c1':a, 'c2':b), count -- c dropped
 };
 
 NYql::TExprNode::TPtr BuildPackUnpackWideMap(NYql::TExprContext& ctx, EPackKind kind) {
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(KqpPeepholeRules) {
         NYql::TExprContext ctx;
         NYql::TTypeAnnotationContext typesCtx;
 
-        // (a, b) → BlockAsStruct('c1': Increment(a), 'c2': Increment(b))
+        // (a, b) -> BlockAsStruct('c1': Increment(a), 'c2': Increment(b))
         auto node = BuildPackUnpackWideMap(ctx, EPackKind::Computation);
         auto result = NOpt::KqpEliminateWideMapPackUnpack(NYql::NNodes::TExprBase(node), ctx, typesCtx);
 
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(KqpPeepholeRules) {
         NYql::TExprContext ctx;
         NYql::TTypeAnnotationContext typesCtx;
 
-        // (a, b) → BlockAsStruct('c1': b, 'c2': a) — columns swapped
+        // (a, b) -> BlockAsStruct('c1': b, 'c2': a) -- columns swapped
         auto node = BuildPackUnpackWideMap(ctx, EPackKind::Reorder);
         auto result = NOpt::KqpEliminateWideMapPackUnpack(NYql::NNodes::TExprBase(node), ctx, typesCtx);
 
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(KqpPeepholeRules) {
         NYql::TExprContext ctx;
         NYql::TTypeAnnotationContext typesCtx;
 
-        // (a, b, c) → BlockAsStruct('c1': a, 'c2': b) — column c dropped
+        // (a, b, c) -> BlockAsStruct('c1': a, 'c2': b) -- column c dropped
         auto node = BuildPackUnpackWideMap(ctx, EPackKind::Projection);
         auto result = NOpt::KqpEliminateWideMapPackUnpack(NYql::NNodes::TExprBase(node), ctx, typesCtx);
 
@@ -140,4 +140,3 @@ Y_UNIT_TEST_SUITE(KqpPeepholeRules) {
 }
 
 } // namespace NKikimr::NKqp
-

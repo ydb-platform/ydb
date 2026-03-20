@@ -911,6 +911,8 @@ struct TEvPQ {
             Operations.push_back(std::move(operation));
         }
 
+        bool GetSkipSrcIdInfo() const;
+
         ui64 Step;
         ui64 TxId;
         TVector<NKikimrPQ::TPartitionOperation> Operations;
@@ -1180,9 +1182,18 @@ struct TEvPQ {
     };
 
     struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
-        TActorId OriginalPartition;
+        explicit TEvGetWriteInfoRequest(bool skipSrcIdInfo) :
+            SkipSrcIdInfo(skipSrcIdInfo)
+        {
+        }
 
+        bool GetSkipSrcIdInfo() const { return SkipSrcIdInfo; }
+
+        TActorId OriginalPartition;
         NWilson::TSpan Span;
+
+    private:
+        bool SkipSrcIdInfo = false;
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {

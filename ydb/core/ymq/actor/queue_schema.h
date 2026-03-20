@@ -59,6 +59,7 @@ public:
 
     void RequestTablesFormatSettings(const TString& accountName);
     void RegisterMakeDirActor(const TString& workingDir, const TString& dirName);
+    void RegisterMakeTopicActor(const TString& workingDir, const TString& dirName);
 
     void RequestLeaderTabletId();
 
@@ -105,6 +106,7 @@ public:
         GetTablesFormatSetting,
         MakeQueueDir,
         MakeQueueVersionDir,
+        MakeTopic,
         MakeShards,
         MakeTables,
         DiscoverLeaderTabletId,
@@ -141,6 +143,7 @@ private:
     const TString MaskedToken_;
     const TString AuthType_;
     const TString SourceAddress_;
+    const bool EnableSQSMigrationTopicCreation_;
 
     ui64 RequiredShardsCount_ = 0;
     ui64 CreatedShardsCount_ = 0;

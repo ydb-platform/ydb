@@ -49,7 +49,13 @@ struct TIndexBuildShardStatus {
     }
 };
 
-// TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
+// TODO(???) [thank you, mbkkt]
+// Separate it to 4 classes:
+// > TBuildColumnsInfo
+// > TBuildSecondaryInfo
+// > TBuildVectorInfo
+// >TSetColumnConstraintOperationInfo
+// with single base TBuildInfo
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     using TPtr = TIntrusivePtr<TIndexBuildInfo>;
 

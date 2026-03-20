@@ -7,9 +7,7 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
-
-    // Helper: send TEvSetColumnConstraint::TEvCreateRequest and grab the response.
-    NKikimrSetColumnConstraint::TEvCreateResponse AsyncSetColumnConstraint(
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
         TTestActorRuntime& runtime,
         ui64 txId,
         ui64 schemeShard,
@@ -47,9 +45,7 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Send a set column constraint request — currently returns StatusPreconditionFailed
-        // because the implementation is not yet complete.
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
             "/MyRoot",
@@ -58,7 +54,6 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
 
-        // The current stub implementation always returns StatusPreconditionFailed.
         UNIT_ASSERT_VALUES_EQUAL_C(
             response.GetStatus(),
             Ydb::StatusIds::PRECONDITION_FAILED,
@@ -71,8 +66,7 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         ui64 txId = 100;
 
-        // Send request for a non-existent table
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
             "/MyRoot",
@@ -81,7 +75,6 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
 
-        // Table does not exist — expect an error status
         UNIT_ASSERT_VALUES_UNEQUAL_C(
             response.GetStatus(),
             Ydb::StatusIds::SUCCESS,
@@ -94,8 +87,7 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         ui64 txId = 100;
 
-        // Send request with a non-existent database
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
             "/NonExistentDB",
@@ -104,11 +96,9 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
 
-        // Database does not exist — expect an error status
         UNIT_ASSERT_VALUES_UNEQUAL_C(
             response.GetStatus(),
             Ydb::StatusIds::SUCCESS,
             response.ShortDebugString());
     }
-
 } // Y_UNIT_TEST_SUITE(SetColumnConstraintTest)

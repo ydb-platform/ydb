@@ -1734,9 +1734,6 @@ public:
     void Handle(TEvIndexBuilder::TEvForgetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvListRequest::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
-    NTabletFlatExecutor::ITransaction* CreateTxCreateSetColumnConstraint(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev);
-
     void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx);
@@ -1753,6 +1750,16 @@ public:
 
     void Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);
     void SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);
+
+    // namespace NSetColumnConstraint {
+    void Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
+    NTabletFlatExecutor::ITransaction* CreateTxCreateSetColumnConstraint(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev);
+
+    THashMap<TIndexBuildId, std::shared_ptr<TIndexBuildInfo>> SetColumnConstraintOperations;
+    THashMap<TString, std::shared_ptr<TIndexBuildInfo>> SetColumnConstraintOperationsByUid;
+    TSet<std::pair<TInstant, TIndexBuildId>> SetColumnConstraintOperationsByTime;
+    THashMap<TTxId, TIndexBuildId> TxIdToSetColumnConstraintOperations;
+    // } // NSetColumnConstraint
 
     // } //NIndexBuilder
 

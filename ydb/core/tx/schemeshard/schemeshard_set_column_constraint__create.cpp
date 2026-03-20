@@ -24,6 +24,17 @@ public:
 
         Response = MakeHolder<TEvSetColumnConstraint::TEvCreateResponse>(request.GetTxId());
 
+        if (Self->SetColumnConstraintOperations.contains(BuildId)) {
+            return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
+                << "Index build with id '" << BuildId << "' already exists");
+        }
+
+        const TString& uid = GetUid(request.GetOperationParams());
+        if (uid && Self->SetColumnConstraintOperationsByUid.contains(uid)) {
+            return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
+                << "Index build with uid '" << uid << "' already exists");
+        }
+
         const auto domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
         {
             const auto checks = domainPath.Check();

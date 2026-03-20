@@ -378,6 +378,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/resource_pools
     ydb/core/scheme
+    ydb/core/split
     ydb/core/statistics
     ydb/core/sys_view/common
     ydb/core/sys_view/partition_stats

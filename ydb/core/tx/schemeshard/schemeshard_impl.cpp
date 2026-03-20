@@ -432,6 +432,10 @@ TTxId TSchemeShard::GetCachedTxId(const TActorContext &ctx) {
     return txId;
 }
 
+void TSchemeShard::ReturnTxIdToCache(const TTxId txId) {
+    CachedTxIds.push_back(txId);
+}
+
 EAttachChildResult TSchemeShard::AttachChild(TPathElement::TPtr child) {
     Y_ABORT_UNLESS(PathsById.contains(child->ParentPathId));
     TPathElement::TPtr parent = PathsById.at(child->ParentPathId);

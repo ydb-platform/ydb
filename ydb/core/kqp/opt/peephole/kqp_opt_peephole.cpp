@@ -290,8 +290,7 @@ struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
         if (WithFinalStageRules) {
             pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
         }
-        pipeline->Add(new TKqpPeepholeBlockPackUnpackTransformer(*pipeline->GetTypeAnnotationContext()),
-            "KqpPeepholeBlockPackUnpack");
+        pipeline->Add(new TKqpPeepholeBlockPackUnpackTransformer(*pipeline->GetTypeAnnotationContext()), "KqpPeepholeBlockPackUnpack");
     }
 
 private:

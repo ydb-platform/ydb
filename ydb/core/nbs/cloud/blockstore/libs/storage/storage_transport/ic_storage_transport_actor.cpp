@@ -155,7 +155,6 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
         msg->Credentials);
     for (size_t i = 0; i < msg->Selectors.size(); ++i) {
         request->AddErase(
-            msg->Selectors[i],
             msg->Lsns[i],
             msg->Credentials.Generation);
     }

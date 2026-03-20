@@ -1299,7 +1299,7 @@ public:
         }
 
         NBackup::TSha256Hasher hasher;
-        TString firstError;
+        TString error;
 
         try {
             TFileInput input(ChangelogFilePath, 1_MB);
@@ -1308,16 +1308,14 @@ public:
             TString lastValidLine;
 
             while (input.ReadLine(line)) {
-                if (!firstError) {
-                    auto err = ValidateChangelogPrevLine(line, lastValidLine, hasher);
-                    if (err) {
-                        firstError = std::move(err);
-                    } else {
-                        lastValidLine = std::move(prevLine);
-                    }
+                auto ok = ValidateChangelogPrevLine(line, lastValidLine, hasher, error);
+                if (!ok) {
+                    break;
                 }
+
                 hasher.Update(line);
                 hasher.Update("\n");
+                lastValidLine = std::move(prevLine);
                 prevLine = std::move(line);
             }
         } catch (const TIoException& e) {
@@ -1326,53 +1324,54 @@ public:
             return false;
         }
 
+        if (error) {
+            SendResultAndDie(false, error);
+            return false;
+        }
+
         TString sha256 = hasher.Final();
         if (sha256 != expectedSha256) {
-            TString error;
-            if (firstError) {
-                error = std::move(firstError);
-            } else {
-                error = TStringBuilder() << "Changelog checksum mismatch: "
-                    << "expected " << expectedSha256
-                    << ", got " << sha256;
-            }
-
-            SendResultAndDie(false, error);
+            SendResultAndDie(false, TStringBuilder()
+                << "Changelog checksum mismatch: expected " << expectedSha256
+                << ", got " << sha256);
             return false;
         }
 
         return true;
     }
 
-    TString ValidateChangelogPrevLine(const TString& line, const TString& lastValidLine,
-                                      const NBackup::TSha256Hasher& hasher) const
+    bool ValidateChangelogPrevLine(const TString& line, const TString& lastValidLine,
+                                      const NBackup::TSha256Hasher& hasher, TString& error) const
     {
         NJson::TJsonValue json;
         try {
             NJson::ReadJsonTree(line, &json, true);
         } catch (const std::exception& e) {
-            return TStringBuilder()
+            error = TStringBuilder()
                 << "Failed to parse changelog line " << line << ": " << e.what()
                 << ", last valid line: " << lastValidLine;
+            return false;
         }   
 
         if (!json.Has("prev_sha256") || !json["prev_sha256"].IsString()) {
-            return TStringBuilder()
+            error = TStringBuilder()
                 << "Changelog line is missing 'prev_sha256' field: " << line
                 << ", last valid line: " << lastValidLine;
+            return false;
         }
 
         TString expectedPrevSha256 = json["prev_sha256"].GetString();
         TString prevSha256 = hasher.Intermediate();
         if (prevSha256 != expectedPrevSha256) {
-            return TStringBuilder()
+            error = TStringBuilder()
                 << "Changelog checksum chain mismatch for line " << line
                 << ": expected " << expectedPrevSha256
                 << ", got " << prevSha256
                 << ", last valid line: " << lastValidLine;
+            return false;
         }
 
-        return {};
+        return true;
     }
 
     ui64 CalculateTotalSize() const {

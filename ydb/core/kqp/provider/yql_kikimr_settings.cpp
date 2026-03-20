@@ -101,6 +101,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
     REGISTER_SETTING(*this, DqChannelVersion);
 
+    REGISTER_SETTING(*this, DisableBlockExecution);
     REGISTER_SETTING(*this, UseDqHashCombine);
     REGISTER_SETTING(*this, UseDqHashAggregate);
     REGISTER_SETTING(*this, DqHashOperatorsUseBlocks);

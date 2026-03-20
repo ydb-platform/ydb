@@ -229,16 +229,20 @@ public:
         const auto dataQueryBlocks = TKiDataQueryBlocks(query);
 
         if (IsOlapQuery(dataQueryBlocks)) {
-            switch (TransformCtx->Config->GetBlockChannelsMode()) {
-                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
-                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
-                    TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
-                    break;
-                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
-                    TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Force;
-                    break;
-                default:
-                    YQL_ENSURE(false);
+            if (TransformCtx->Config->DisableBlockExecution.Get().GetOrElse(false)) {
+                TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Disable;
+            } else {
+                switch (TransformCtx->Config->GetBlockChannelsMode()) {
+                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
+                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
+                        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
+                        break;
+                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
+                        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Force;
+                        break;
+                    default:
+                        YQL_ENSURE(false);
+                }
             }
         }
 

@@ -29,19 +29,19 @@ namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     namespace {
-        TString ExtractCurrentSenderActivity() {
+        ui32 ExtractCurrentSenderActivityIndex() {
             if (!TlsActivationContext) {
-                return {};
+                return Max<ui32>();
             }
 
             const TActorContext& ctx = TActivationContext::AsActorContext();
             if (IActor* actor = ctx.Mailbox.FindActor(ctx.SelfID.LocalId())) {
-                return TString(actor->GetActivityType().GetName());
+                return actor->GetActivityType().GetIndex();
             }
             if (IActor* actor = ctx.Mailbox.FindAlias(ctx.SelfID.LocalId())) {
-                return TString(actor->GetActivityType().GetName());
+                return actor->GetActivityType().GetIndex();
             }
-            return {};
+            return Max<ui32>();
         }
 
         TString ExtractForwardedEventTypeName(const IEventHandle& ev) {
@@ -285,12 +285,16 @@ namespace NActors {
             if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
                 const TActorId sender = ev->Sender;
                 const ui64 cookie = ev->Cookie;
-                const TString eventTypeName = ExtractForwardedEventTypeName(*ev);
-                const TString stackTrace = SystemSetup->InterconnectCollectSubscriptionStackTrace
+                const ui32 activityIndex = ExtractCurrentSenderActivityIndex();
+                const bool collectTrace = SystemSetup->InterconnectCollectSubscriptionStackTrace;
+                const TString eventTypeName = collectTrace
+                    ? ExtractForwardedEventTypeName(*ev)
+                    : TString();
+                const TString stackTrace = collectTrace
                     ? ExtractCurrentStackTrace()
                     : TString();
                 auto wrapped = std::make_unique<IEventHandle>(recipient, sender,
-                    new TEvForwardSubscribeSession(ev.release(), ExtractCurrentSenderActivity(), eventTypeName, stackTrace),
+                    new TEvForwardSubscribeSession(ev.release(), activityIndex, eventTypeName, stackTrace),
                     0, cookie);
                 ev = std::move(wrapped);
             } else {

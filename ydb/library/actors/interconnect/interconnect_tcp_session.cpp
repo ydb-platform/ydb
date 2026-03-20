@@ -30,6 +30,14 @@ namespace NActors {
         }
     }
 
+    TStringBuf FormatActivityName(ui32 activityIndex) {
+        return activityIndex == Max<ui32>() ? TStringBuf("manual") : GetActivityTypeName(activityIndex);
+    }
+
+    TStringBuf FormatEventTypeName(const TString& eventTypeName) {
+        return eventTypeName.empty() ? TStringBuf("manual") : TStringBuf(eventTypeName);
+    }
+
     TInterconnectSessionTCP::TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params)
         : TActor(&TInterconnectSessionTCP::StateFunc)
         , Created(TInstant::Now())
@@ -241,7 +249,7 @@ namespace NActors {
         Y_ABORT_UNLESS(msg->Event);
 
         LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", msg->Event->Sender.ToString().data());
-        UpdateSubscriber(msg->Event->Sender, msg->Event->Cookie, std::move(msg->Activity), std::move(msg->EventTypeName),
+        UpdateSubscriber(msg->Event->Sender, msg->Event->Cookie, msg->ActivityIndex, std::move(msg->EventTypeName),
             std::move(msg->StackTrace));
         Send(msg->Event->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, msg->Event->Cookie);
 
@@ -284,15 +292,15 @@ namespace NActors {
         Proxy->Metrics->SubSubscribersCount(Subscribers.erase(ev->Sender));
     }
 
-    void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, TString activity, TString eventTypeName,
+    void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex, TString eventTypeName,
             TString stackTrace) {
         auto updateInfo = [&] (TSubscriberInfo& info) {
-            info.Activity = activity;
+            info.ActivityIndex = activityIndex;
             info.EventTypeName = eventTypeName;
             info.StackTrace = stackTrace;
         };
 
-        const auto historyKey = TSubscriberHistoryKey(stackTrace, activity, eventTypeName);
+        const auto historyKey = TSubscriberHistoryKey(stackTrace, activityIndex, eventTypeName);
         bool shouldUpdateInfo = false;
         if (const auto it = SubscriberHistory.find(historyKey); it != SubscriberHistory.end()) {
             ++it->second;
@@ -1610,7 +1618,7 @@ namespace NActors {
                 TSubscriberHistory subscriberGroups;
                 for (const auto& [actorId, info] : subscribers) {
                     Y_UNUSED(actorId);
-                    ++subscriberGroups[TSubscriberHistoryKey(info.StackTrace, info.Activity, info.EventTypeName)];
+                    ++subscriberGroups[TSubscriberHistoryKey(info.StackTrace, info.ActivityIndex, info.EventTypeName)];
                 }
                 return subscriberGroups;
             };
@@ -1637,7 +1645,9 @@ namespace NActors {
                                 TABLER() {
                                     TABLEH() { str << "Count"; }
                                     TABLEH() { str << "Activity"; }
-                                    TABLEH() { str << "EventTypeName"; }
+                                    if (collectSubscriptionStackTrace) {
+                                        TABLEH() { str << "EventTypeName"; }
+                                    }
                                     if (collectSubscriptionStackTrace) {
                                         TABLEH() { str << "StackTrace"; }
                                     }
@@ -1645,12 +1655,12 @@ namespace NActors {
                             }
                             TABLEBODY() {
                                 for (const auto& [groupKey, count] : subscriberGroups) {
-                                    const auto& [stackTrace, activity, eventTypeName] = groupKey;
+                                    const auto& [stackTrace, activityIndex, eventTypeName] = groupKey;
                                     TABLER() {
                                         TABLED() { str << count; }
-                                        TABLED() { str << EncodeHtmlPcdata(activity.empty() ? TStringBuf("manual") : TStringBuf(activity)); }
-                                        TABLED() { str << EncodeHtmlPcdata(eventTypeName.empty() ? TStringBuf("manual") : TStringBuf(eventTypeName)); }
+                                        TABLED() { str << EncodeHtmlPcdata(FormatActivityName(activityIndex)); }
                                         if (collectSubscriptionStackTrace) {
+                                            TABLED() { str << EncodeHtmlPcdata(FormatEventTypeName(eventTypeName)); }
                                             TABLED() {
                                                 if (stackTrace.empty()) {
                                                     str << "manual";

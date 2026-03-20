@@ -459,12 +459,12 @@ namespace NActors {
 
         struct TSubscriberInfo {
             ui64 Cookie = 0;
-            TString Activity;
+            ui32 ActivityIndex = Max<ui32>();
             TString EventTypeName;
             TString StackTrace;
         };
 
-        using TSubscriberHistoryKey = std::tuple<TString, TString, TString>;
+        using TSubscriberHistoryKey = std::tuple<TString, ui32, TString>;
 
         struct TSubscriberHistoryKeyHash {
             size_t operator()(const TSubscriberHistoryKey& key) const noexcept {
@@ -511,7 +511,8 @@ namespace NActors {
         void Subscribe(STATEFN_SIG);
         void Unsubscribe(STATEFN_SIG);
         void EnqueueForward(TAutoPtr<IEventHandle> ev);
-        void UpdateSubscriber(const TActorId& actorId, ui64 cookie, TString activity = {}, TString eventTypeName = {},
+        void UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex = Max<ui32>(),
+            TString eventTypeName = {},
             TString stackTrace = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

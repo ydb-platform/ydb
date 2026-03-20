@@ -361,13 +361,13 @@ namespace NActors {
 
     struct TEvForwardSubscribeSession : TEventLocal<TEvForwardSubscribeSession, (ui32)ENetwork::EvForwardSubscribeSession> {
         TAutoPtr<IEventHandle> Event;
-        TString Activity;
+        ui32 ActivityIndex = Max<ui32>();
         TString EventTypeName;
         TString StackTrace;
 
-        TEvForwardSubscribeSession(TAutoPtr<IEventHandle> event, TString activity, TString eventTypeName, TString stackTrace)
+        TEvForwardSubscribeSession(TAutoPtr<IEventHandle> event, ui32 activityIndex, TString eventTypeName, TString stackTrace)
             : Event(std::move(event))
-            , Activity(std::move(activity))
+            , ActivityIndex(activityIndex)
             , EventTypeName(std::move(eventTypeName))
             , StackTrace(std::move(stackTrace))
         {}

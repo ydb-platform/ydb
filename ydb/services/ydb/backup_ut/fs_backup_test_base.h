@@ -10,16 +10,14 @@
 
 #include <util/folder/tempdir.h>
 
-using namespace NYdb;
-
 class TFsBackupTestFixture : public TBackupTestBaseFixture {
 public:
     const TTempDir& GetTempDir() {
         return TempDir;
     }
 
-    NExport::TExportToFsSettings MakeExportSettings(const TString& sourcePath) {
-        NExport::TExportToFsSettings settings;
+    NYdb::NExport::TExportToFsSettings MakeExportSettings(const TString& sourcePath) {
+        NYdb::NExport::TExportToFsSettings settings;
         settings.BasePath(TString(GetTempDir().Path()));
         if (sourcePath) {
             settings.SourcePath(sourcePath);
@@ -27,8 +25,8 @@ public:
         return settings;
     }
 
-    NImport::TImportFromFsSettings MakeImportSettings(const TString& destinationPath) {
-        NImport::TImportFromFsSettings settings;
+    NYdb::NImport::TImportFromFsSettings MakeImportSettings(const TString& destinationPath) {
+        NYdb::NImport::TImportFromFsSettings settings;
         settings.BasePath(TString(GetTempDir().Path()));
         if (destinationPath) {
             settings.DestinationPath(destinationPath);
@@ -52,7 +50,7 @@ private:
             if (child.IsDirectory()) {
                 CollectFiles(child, base, result);
             } else {
-                result.insert(child.GetPath().substr(base.GetPath().size()));
+                result.insert(child.RelativeTo(base).GetPath());
             }
         }
     }

@@ -11,35 +11,7 @@
 #include <util/generic/scope.h>
 
 class TS3BackupTestFixture : public TBackupTestBaseFixture {
-protected:
-    TS3BackupTestFixture() = default;
-
-    YDB_SDK_CLIENT(NYdb::NTable::TTableClient, YdbTableClient);
-    YDB_SDK_CLIENT(NYdb::NTopic::TTopicClient, YdbTopicClient);
-    YDB_SDK_CLIENT(NYdb::NCoordination::TClient, YdbCoordinationClient);
-    YDB_SDK_CLIENT(NYdb::NRateLimiter::TRateLimiterClient, YdbRateLimiterClient);
-
-    NKikimr::NWrappers::NTestHelpers::TS3Mock& S3Mock() {
-        if (!S3Mock_) {
-            S3Port_ = Server().GetPortManager().GetPort();
-            S3Mock_.ConstructInPlace(NKikimr::NWrappers::NTestHelpers::TS3Mock::TSettings(S3Port_));
-            UNIT_ASSERT_C(S3Mock_->Start(), S3Mock_->GetError());
-        }
-        return *S3Mock_;
-    }
-
-    ui16 S3Port() {
-        S3Mock();
-        return S3Port_;
-    }
-
-
-    template <class TResponseType>
-    void ForgetOp(const TResponseType& res) {
-        auto result = YdbOperationClient().Forget(res.Id()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), "Status: " << result.GetStatus() << ". Issues: " << result.GetIssues().ToString());
-    }
-
+public:
     NYdb::NExport::TExportToS3Settings MakeExportSettings(const TString& sourcePath, const TString& destinationPrefix) {
         NYdb::NExport::TExportToS3Settings exportSettings;
         exportSettings
@@ -74,6 +46,40 @@ protected:
         return importSettings;
     }
 
+    void ValidateS3FileList(const TSet<TString>& paths, const TString& prefix = {}) {
+        TSet<TString> keys;
+        for (const auto& [key, _] : S3Mock().GetData()) {
+            if (!prefix || key.StartsWith(prefix)) {
+                keys.insert(key);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(keys, paths);
+    }
+
+protected:
+    TS3BackupTestFixture() = default;
+
+    NKikimr::NWrappers::NTestHelpers::TS3Mock& S3Mock() {
+        if (!S3Mock_) {
+            S3Port_ = Server().GetPortManager().GetPort();
+            S3Mock_.ConstructInPlace(NKikimr::NWrappers::NTestHelpers::TS3Mock::TSettings(S3Port_));
+            UNIT_ASSERT_C(S3Mock_->Start(), S3Mock_->GetError());
+        }
+        return *S3Mock_;
+    }
+
+    ui16 S3Port() {
+        S3Mock();
+        return S3Port_;
+    }
+
+
+    template <class TResponseType>
+    void ForgetOp(const TResponseType& res) {
+        auto result = YdbOperationClient().Forget(res.Id()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), "Status: " << result.GetStatus() << ". Issues: " << result.GetIssues().ToString());
+    }
+
     NYdb::NImport::TListObjectsInS3ExportSettings MakeListObjectsInS3ExportSettings(const TString& prefix) {
         NYdb::NImport::TListObjectsInS3ExportSettings listSettings;
         listSettings
@@ -86,16 +92,6 @@ protected:
             listSettings.Prefix(prefix);
         }
         return listSettings;
-    }
-
-    void ValidateS3FileList(const TSet<TString>& paths, const TString& prefix = {}) {
-        TSet<TString> keys;
-        for (const auto& [key, _] : S3Mock().GetData()) {
-            if (!prefix || key.StartsWith(prefix)) {
-                keys.insert(key);
-            }
-        }
-        UNIT_ASSERT_VALUES_EQUAL(keys, paths);
     }
 
     void ValidateListObjectInS3Export(const TSet<std::pair<TString /*prefix*/, TString /*path*/>>& paths, const NYdb::NImport::TListObjectsInS3ExportSettings& listSettings) {
@@ -233,6 +229,11 @@ protected:
         auto desc = YdbSchemeClient().DescribePath(Sprintf("/Root/Restored/%s", objectName.c_str())).GetValueSync();
         UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
     }
+
+    YDB_SDK_CLIENT(NYdb::NTable::TTableClient, YdbTableClient);
+    YDB_SDK_CLIENT(NYdb::NTopic::TTopicClient, YdbTopicClient);
+    YDB_SDK_CLIENT(NYdb::NCoordination::TClient, YdbCoordinationClient);
+    YDB_SDK_CLIENT(NYdb::NRateLimiter::TRateLimiterClient, YdbRateLimiterClient);
 
 private:
     ui16 S3Port_ = 0;

@@ -58,19 +58,19 @@ TExprBase KqpEliminateWideMapPackUnpack(const TExprBase& node, TExprContext& ctx
         return node;
     }
 
-    const auto& packLambda = *inp.Head().Child(1);
-    if (packLambda.ChildrenSize() != 3 ||
-        !packLambda.Child(1)->IsCallable("BlockAsStruct") ||
-        packLambda.Child(2) != packLambda.Head().Child(packLambda.Head().ChildrenSize() - 1)) {
+    const auto packLambda = inp.Head().ChildPtr(1);
+    if (packLambda->ChildrenSize() != 3 ||
+        !packLambda->Child(1)->IsCallable("BlockAsStruct") ||
+        packLambda->Child(2) != packLambda->Head().Child(packLambda->Head().ChildrenSize() - 1)) {
         return node;
     }
 
-    const auto* bas = packLambda.Child(1);
+    const auto* bas = packLambda->Child(1);
     if (bas->ChildrenSize() != unpackColumns.size()) {
         return node;
     }
 
-    if (bas->ChildrenSize() != packLambda.Head().ChildrenSize() - 1) {
+    if (bas->ChildrenSize() != packLambda->Head().ChildrenSize() - 1) {
         return node;
     }
 
@@ -78,7 +78,7 @@ TExprBase KqpEliminateWideMapPackUnpack(const TExprBase& node, TExprContext& ctx
         if (bas->Child(i)->Child(0)->Content() != unpackColumns[i]) {
             return node;
         }
-        if (bas->Child(i)->Child(1) != packLambda.Head().Child(i)) {
+        if (bas->Child(i)->Child(1) != packLambda->Head().Child(i)) {
             return node;
         }
     }

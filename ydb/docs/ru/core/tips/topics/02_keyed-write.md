@@ -73,6 +73,6 @@ public class ShardedEventService {
 
 В Kafka API все сообщения с одинаковым ключом попадают в одну партицию (при неизменном количестве партиций) и тем самым гарантируется порядок обработки сообщений с одинаковым ключом.
 
-Начало работы с Kafka API: [{#T}](../../kafka-api/examples)
+Начало работы с Kafka API: [{#T}](../../reference/kafka-api/examples)
 
-Ограничения Kafka API: [{#T}](../../kafka-api/constraints)
+Ограничения Kafka API: [{#T}](../../reference/kafka-api/constraints)

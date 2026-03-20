@@ -10,6 +10,11 @@ items:
   include:
     path: datamodel/toc_p.yaml
     mode: link
+- name: analytics
+  href: analytics/concepts/ingest.md
+  include:
+    path: analytics/concepts/toc_p.yaml
+    mode: link    
 - name: Cluster topology
   href: topology.md
 - name: Transactions

@@ -38,8 +38,8 @@
 
 ### Взаимодействие с внешними системами
 
-  - [Федеративные запросы](../federated_query/index.md): выполнение запросов к данным, находящимся во внешних системах (S3, ClickHouse, Postgres).
-  - [Работа с S3 через внешние таблицы](../federated_query/s3/external_table.md): чтение и запись данных в формате Parquet/CSV в Object Storage.
+  - [Федеративные запросы](../query_execution/federated_query/index.md): выполнение запросов к данным, находящимся во внешних системах (S3, ClickHouse, Postgres).
+  - [Работа с S3 через внешние таблицы](../query_execution/federated_query/s3/external_table.md): чтение и запись данных в формате Parquet/CSV в Object Storage.
 
 ## Обработка и трансформация данных (ETL/ELT)
 
@@ -86,7 +86,7 @@
 
   - [Анализ планов запросов (EXPLAIN)](../../dev/query-plans-optimization.md): как понять план выполнения запроса и найти узкие места.
   - [Управление нагрузкой (Resource Pools)](../../dev/resource-consumption-management.md): изоляция ресурсов CPU для разных команд или нагрузок.
-  - [Стоимостной оптимизатор](../optimizer.md): обзор принципов работы планировщика запросов.
+  - [Стоимостной оптимизатор](../query_execution/optimizer.md): обзор принципов работы планировщика запросов.
 
 ### Мониторинг и диагностика
 

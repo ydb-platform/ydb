@@ -43,10 +43,10 @@ Using the `ALTER FAMILY` command, you can change the parameters of the column gr
 
 {% endif %}
 
-The code below changes the storage type to `hdd` for the `default` column group in the `series_with_families` table:
+The code below changes the storage type to `rot` for the `default` column group in the `series_with_families` table:
 
 ```yql
-ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
+ALTER TABLE series_with_families ALTER FAMILY default SET DATA "rot";
 ```
 
 {% note info %}

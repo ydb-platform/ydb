@@ -3349,13 +3349,14 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto locks2 = observer.LastLocks;
         observer.Inject = {};
 
-        // Write uncommitted changes to key 2 with tx 345
+        // Write uncommitted changes to key 1 and 2 with tx 345
+        // We expect write to key 1 to also be rolled back
         observer.Inject.LockId = 345;
         observer.Inject.LockNodeId = runtime.GetNodeId(0);
         observer.Inject.MvccSnapshot = snapshot;
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, Q_(R"(
-                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 23)
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 13), (2, 23)
                 )")),
             UseSink ? "ERROR: INTERNAL_ERROR" : "ERROR: GENERIC_ERROR");
         observer.Inject = {};

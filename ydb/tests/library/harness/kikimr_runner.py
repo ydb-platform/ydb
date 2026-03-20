@@ -17,6 +17,7 @@ from six.moves.queue import Queue
 import yatest
 
 from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.common.types import FailDomainType
 from . import daemon
 from . import kikimr_config
 from . import kikimr_node_interface
@@ -336,6 +337,25 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__use_config_store = True
         self.update_command(self.__make_run_command())
 
+    def disable_config_dir(self, cleanup=True):
+        self.__use_config_store = False
+        self.update_command(self.__make_run_command())
+        if cleanup:
+            if self.__configurator.separate_node_configs:
+                node_config_dir = os.path.join(
+                    self.__config_path,
+                )
+                if os.path.exists(node_config_dir):
+                    shutil.rmtree(node_config_dir)
+            else:
+                config_file = os.path.join(self.__config_path, "config.yaml")
+                if os.path.exists(config_file):
+                    os.remove(config_file)
+
+    def set_seed_nodes_file(self, seed_nodes_file):
+        self.__seed_nodes_file = seed_nodes_file
+        self.update_command(self.__make_run_command())
+
     def make_config_dir(self, source_config_yaml_path, target_config_dir_path):
         if not os.path.exists(source_config_yaml_path):
             raise RuntimeError("Source config file not found: %s" % source_config_yaml_path)
@@ -541,6 +561,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 name=p['name'],
                 kind=p['kind'],
                 pdisk_user_kind=p['pdisk_user_kind'],
+                num_groups=p.get('num_groups'),
             )
             pools[p['name']] = p['kind']
 
@@ -737,6 +758,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node_id in node_ids:
             self.nodes[node_id].enable_config_dir()
 
+    def disable_config_dir(self, node_ids=None):
+        if node_ids is None:
+            node_ids = self.__configurator.all_node_ids()
+        self.__configurator.use_config_store = False
+        for node_id in node_ids:
+            self.nodes[node_id].disable_config_dir()
+
     @property
     def config_path(self):
         if self.__configurator.separate_node_configs:
@@ -759,9 +787,18 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         else:
             self.__configurator.write_proto_configs(self.__config_path)
 
-    def overwrite_configs(self, config):
+    def overwrite_configs(self, config, node_ids=None):
         self.__configurator.full_config = config
-        self.__write_configs()
+        if node_ids is None:
+            self.__write_configs()
+        else:
+            if not self.__configurator.separate_node_configs:
+                raise ValueError(
+                    "overwrite_configs(node_ids=...) is only supported when "
+                    "separate_node_configs is enabled"
+                )
+            for node_id in node_ids:
+                self.__write_node_config(node_id)
 
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()
@@ -836,9 +873,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 if retries == 0:
                     raise
 
-    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None):
+    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None, num_groups=None):
         if erasure is None:
             erasure = self.__configurator.static_erasure
+        if num_groups is None:
+            num_groups = 2
         request = bs.TConfigRequest()
         cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = 1
@@ -851,7 +890,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         cmd.DefineStoragePool.Kind = kind
         cmd.DefineStoragePool.ErasureSpecies = str(erasure)
         cmd.DefineStoragePool.VDiskKind = "Default"
-        cmd.DefineStoragePool.NumGroups = 2
+        cmd.DefineStoragePool.NumGroups = num_groups
+
+        if str(erasure) == "mirror-3-dc" and len(self.__configurator.all_node_ids()) == 3:
+            cmd.DefineStoragePool.Geometry.RealmLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.RealmLevelEnd = int(FailDomainType.Room)
+            cmd.DefineStoragePool.Geometry.DomainLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.DomainLevelEnd = int(FailDomainType.Disk) + 1
 
         pdisk_filter = cmd.DefineStoragePool.PDiskFilter.add()
         pdisk_filter.Property.add().Type = 0

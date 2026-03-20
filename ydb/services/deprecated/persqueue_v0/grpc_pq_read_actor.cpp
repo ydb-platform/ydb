@@ -212,7 +212,8 @@ private:
     void CommitDone(ui64 cookie, const TActorContext& ctx);
     void SendPartitionReady(const TActorContext& ctx);
 
-    const std::set<NPQ::TPartitionGraph::Node*>& GetParents() const;
+    const std::set<NPQ::TPartitionGraph::Node*>& GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const;
+
 private:
     const TActorId ParentId;
     const TString InternalClientId;
@@ -989,7 +990,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
             topicHolder->IsServerless = t.IsServerless;
             topicHolder->FolderId = t.FolderId;
             topicHolder->FullConverter = t.TopicNameConverter;
-            topicHolder->PartitionGraph = t.PartitionGraph;
+            topicHolder->SetPartitionGraph(t.PartitionGraph);
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
             const auto& second = t.TopicNameConverter->GetSecondaryPath();
             if (!second.empty()) {
@@ -1018,7 +1019,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
                              NPersQueue::NErrorCode::BAD_REQUEST, ctx);
                 return;
             }
-            it->second->PartitionGraph = t.PartitionGraph;
+            it->second->SetPartitionGraph(t.PartitionGraph);
         }
     }
 
@@ -1067,7 +1068,8 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
         return;
     }
 
-    auto* partitionNode = jt->second->PartitionGraph->GetPartition(record.GetPartition());
+    auto partitionGraph = jt->second->GetPartitionGraph();
+    auto* partitionNode = partitionGraph->GetPartition(record.GetPartition());
     if (!partitionNode) {
         LOG_DEBUG_S(
             ctx, NKikimrServices::PQ_READ_PROXY,
@@ -1946,8 +1948,8 @@ void TPartitionActor::CheckRelease(const TActorContext& ctx) {
     }
 }
 
-const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents() const {
-    const auto* partition = TopicHolder->PartitionGraph->GetPartition(Partition);
+const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const {
+    const auto* partition = partitionGraph->GetPartition(Partition);
     if (partition) {
         return partition->AllParents;
     }
@@ -1957,7 +1959,9 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents() const
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    const auto& parents = GetParents();
+    // extend the lifetime for PartitionGraph
+    auto partitionGraph = TopicHolder->GetPartitionGraph();
+    const auto& parents = GetParents(partitionGraph);
     if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo> commits;
         for (auto& parent: parents) {

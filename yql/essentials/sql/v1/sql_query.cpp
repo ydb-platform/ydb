@@ -2684,6 +2684,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
+        case TRule_alter_table_action::kAltAlterTableAction23: {
+            // ALTER COLUMN id SET ENCODING(...)
+            const auto& alterRule = node.GetAlt_alter_table_action23().GetRule_alter_table_alter_column_set_encoding1();
+
+            if (!AlterTableAlterColumnSetEncoding(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
         case TRule_alter_table_action::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
@@ -3085,6 +3095,23 @@ bool TSqlQuery::AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_c
         .Pos = std::move(pos),
         .Name = std::move(name),
         .TypeOfChange = TColumnSchema::ETypeOfChange::DropDefault,
+    });
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnSetEncoding(const TRule_alter_table_alter_column_set_encoding& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    TPosition pos(Context().Pos());
+    auto encoding = ColumnEncoding(node.GetRule_encoding5(), *this);
+    if (!encoding) {
+        return false;
+    }
+
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetEncoding,
+        .ColumnEncoding = std::move(encoding),
     });
     return true;
 }

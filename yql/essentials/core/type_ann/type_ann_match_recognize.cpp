@@ -44,9 +44,14 @@ IGraphTransformer::TStatus MatchRecognizeWrapper(const TExprNode::TPtr& input, T
     const auto sortTraits = input->Child(3);
     const auto params = input->Child(4);
     Y_UNUSED(sortTraits);
-    auto status = ConvertToLambda(partitionKeySelector, ctx.Expr, 1, 1);
+    bool isUniversal;
+    auto status = ConvertToLambda(partitionKeySelector, ctx.Expr, isUniversal, 1, 1);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
     auto itemType = GetSeqItemType(source->GetTypeAnn());
     if (!itemType) {
@@ -177,9 +182,14 @@ IGraphTransformer::TStatus MatchRecognizeMeasuresCallableWrapper(const TExprNode
         }
         items.push_back(ctx.Expr.MakeType<TItemExprType>(key->Content(), finishType));
     }
-    const auto status = ConvertToLambda(lambda, ctx.Expr, 1, 1);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 1, 1);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
     if (!UpdateLambdaAllArgumentsTypes(lambda, {ctx.Expr.MakeType<TStructExprType>(items)}, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -241,9 +251,14 @@ IGraphTransformer::TStatus MatchRecognizeMeasuresWrapper(const TExprNode::TPtr& 
     TVector<const TItemExprType*> items;
     for (size_t i = 0; i != names->ChildrenSize(); ++i) {
         auto& lambda = input->ChildRef(FirstLambdaIndex + i);
-        auto status = ConvertToLambda(lambda, ctx.Expr, 2, 2);
+        bool isUniversal;
+        auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 2, 2);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
         if (!UpdateLambdaAllArgumentsTypes(
                 lambda,
@@ -298,9 +313,14 @@ IGraphTransformer::TStatus MatchRecognizeDefinesWrapper(const TExprNode::TPtr& i
     TVector<const TItemExprType*> items;
     for (size_t i = 0; i != names->ChildrenSize(); ++i) {
         auto& lambda = input->ChildRef(FirstLambdaIndex + i);
-        auto status = ConvertToLambda(lambda, ctx.Expr, 3, 3);
+        bool isUniversal;
+        auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 3, 3);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
         if (!UpdateLambdaAllArgumentsTypes(
                 lambda,
@@ -389,9 +409,14 @@ IGraphTransformer::TStatus MatchRecognizeCoreWrapper(const TExprNode::TPtr& inpu
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto status = ConvertToLambda(partitionKeySelector, ctx.Expr, 1, 1);
+    bool isUniversal;
+    auto status = ConvertToLambda(partitionKeySelector, ctx.Expr, isUniversal, 1, 1);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
     if (!UpdateLambdaAllArgumentsTypes(partitionKeySelector, { inputRowType }, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;

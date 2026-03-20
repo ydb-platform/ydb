@@ -186,6 +186,11 @@ protected:
         return *TablesFormat_;
     }
 
+    virtual bool IsTopicCreated() const {
+        Y_ABORT_UNLESS(TopicCreated_);
+        return *TopicCreated_;
+    }
+
     virtual void DoStart() { }
 
     virtual void DoFinish() { }
@@ -639,6 +644,7 @@ private:
         UserCounters_ = std::move(ev->Get()->UserCounters);
         QueueLeader_ = ev->Get()->QueueLeader;
         QuoterResources_ = std::move(ev->Get()->QuoterResources);
+        TopicCreated_ = ev->Get()->TopicCreated;
 
         RLOG_SQS_TRACE("Got configuration. Root url: " << RootUrl_
                         << ", Shards: " << Shards_
@@ -893,6 +899,7 @@ protected:
     TMaybe<bool> IsFifo_;
     TMaybe<ui64> QueueVersion_;
     TMaybe<ui32> TablesFormat_;
+    TMaybe<bool> TopicCreated_;
     TInstant StartTs_;
     TInstant FinishTs_;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsCoreCounters_; // Raw counters interface. Is is not prefered to use them

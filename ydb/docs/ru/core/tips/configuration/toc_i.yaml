@@ -17,3 +17,5 @@ items:
   href: 07_time_deviation_client.md
 - name: "Энергосберегающий режим процессора"
   href: 08_processor_energy_saving_mode.md
+- name: "Память и CPU при совмещении узлов хранения и узлов БД на одном хосте"
+  href: 09_memory-cpu-mixed-hosts.md

@@ -1,0 +1,11 @@
+--- contrib/libs/cxxsupp/builtins/gcc_personality_v0.c	(index)
++++ contrib/libs/cxxsupp/builtins/gcc_personality_v0.c	(working tree)
+@@ -35,7 +35,7 @@ EXCEPTION_DISPOSITION _GCC_specific_handler(PEXCEPTION_RECORD, void *, PCONTEXT,
+ #endif
+ 
+ #if __has_feature(ptrauth_calls)
+-#include <ptrauth.h>
++#error #include <ptrauth.h>
+ 
+ // `__ptrauth_restricted_intptr` is a feature of apple clang that predates
+ // support for direct application of `__ptrauth` to integer types. This

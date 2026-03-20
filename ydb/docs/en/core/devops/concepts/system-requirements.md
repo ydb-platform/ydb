@@ -32,7 +32,9 @@ The disk is also used for [spilling](../../concepts/glossary.md#spilling), a mem
 
 ## Software Configuration {#software}
 
-A {{ ydb-short-name }} server can be run on servers with a Linux operating system, kernel 4.19 and higher, and libc 2.30. For example, Ubuntu 20.04, Debian 11, Fedora 34, or newer releases. {{ ydb-short-name }} uses the [TCMalloc](https://google.github.io/tcmalloc) memory allocator. To make it efficient, [enable](https://google.github.io/tcmalloc/tuning.html#system-level-optimizations) Transparent Huge Pages and Memory overcommitment.
+A {{ ydb-short-name }} server can be run on servers with a Linux operating system, kernel 4.19 and higher, and libc 2.30. For example, Ubuntu 20.04, Debian 11, Fedora 34, or newer releases. For optimal performance, we recommend using more recent Linux kernel versions (6.6 or newer), as they include significant improvements in I/O subsystems, scheduling, and memory management that positively impact database workloads.
+
+{{ ydb-short-name }} uses the [TCMalloc](https://google.github.io/tcmalloc) memory allocator. To make it efficient, [enable](https://google.github.io/tcmalloc/tuning.html#system-level-optimizations) Transparent Huge Pages and Memory overcommitment.
 
 To improve disk and network I/O performance in a trusted environment, you can disable IOMMU by setting the Linux boot parameter `intel_iommu=off` or `amd_iommu=off`. In an untrusted environment, as well as under strict security requirements or with active virtualization use (for example, PCI passthrough and device isolation), disabling IOMMU is not recommended. In such cases, use `intel_iommu=on iommu=pt` or `amd_iommu=on iommu=pt`.
 

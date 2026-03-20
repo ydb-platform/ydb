@@ -162,7 +162,7 @@ struct TImportFromFsSettings : public TOperationRequestSettings<TImportFromFsSet
         // database path where to import data
         std::string Dst;
 
-        // Source path (database object name).
+        // Source path.
         // If the export contains the database objects list, you may specify the database object name,
         // and the FS path will be looked up in the database objects list by the import procedure
         std::string SrcPath = {};

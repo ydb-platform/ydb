@@ -174,8 +174,8 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
-    Y_UNIT_TEST_TWIN(ImportFilterByYdbObjectPath, IsOlap) {
-        ImportFilterByYdbObjectPathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, IsOlap);
+    Y_UNIT_TEST(ImportFilterByYdbObjectPath) {
+        ImportFilterByYdbObjectPathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
 }
 

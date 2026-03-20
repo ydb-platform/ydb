@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/library/ycloud/impl)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 PEERDIR(
     library/cpp/retry

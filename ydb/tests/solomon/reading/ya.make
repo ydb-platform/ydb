@@ -13,6 +13,7 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 

@@ -14,11 +14,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
-<<<<<<< HEAD
-=======
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <unordered_set>
->>>>>>> ee17fbaeb88 (Add all thread consumption metrics (#36170))
 
 #include <util/string/split.h>
 #include <util/system/getpid.h>
@@ -78,25 +75,16 @@ public:
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
         SystemStateInfo.SetPID(GetPID());
-<<<<<<< HEAD
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
+        ctx.Send(SelfId(), new TEvPrivate::TEvUpdateRuntimeStats());
 
         auto utils = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils");
+        ThreadPoolsGroup = utils->GetSubgroup("subsystem", "thread_pools");
         UserTime = utils->GetCounter("Process/UserTime", true);
         SysTime = utils->GetCounter("Process/SystemTime", true);
         MinorPageFaults = utils->GetCounter("Process/MinorPageFaults", true);
         MajorPageFaults = utils->GetCounter("Process/MajorPageFaults", true);
         NumThreads = utils->GetCounter("Process/NumThreads", false);
-=======
-        Send(SelfId(), new TEvPrivate::TEvUpdateThreadPoolCounters());
-        Send(SelfId(), new TEvPrivate::TEvUpdateRuntimeStats());
-
-        auto utils = NKikimr::GetServiceCounters(AppData()->Counters, "utils");
-        ThreadPoolsGroup = utils->GetSubgroup("subsystem", "thread_pools");
-        auto grpc = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "grpc");
-        GrpcRequestBytes = grpc->GetSubgroup("subsystem", "serverStats")->GetCounter("requestBytes", true);
-        GrpcResponseBytes = grpc->GetSubgroup("subsystem", "serverStats")->GetCounter("responseBytes", true);
->>>>>>> ee17fbaeb88 (Add all thread consumption metrics (#36170))
         auto group = utils->GetSubgroup("subsystem", "whiteboard");
         MaxClockSkewWithPeerUsCounter = group->GetCounter("MaxClockSkewWithPeerUs");
         MaxClockSkewPeerIdCounter = group->GetCounter("MaxClockSkewPeerId");
@@ -579,7 +567,6 @@ protected:
         SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
     }
 
-<<<<<<< HEAD
     STRICT_STFUNC(StateFunc,
         HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
@@ -614,45 +601,9 @@ protected:
         HFunc(TEvWhiteboard::TEvBridgeInfoRequest, Handle);
         HFunc(TEvPrivate::TEvSendListNodes, Handle);
         HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
+        hFunc(TEvPrivate::TEvUpdateThreadPoolCounters, Handle);
         HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
     )
-=======
-    STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
-            hFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
-            hFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle);
-            hFunc(TEvWhiteboard::TEvNodeStateDelete, Handle);
-            hFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
-            hFunc(TEvWhiteboard::TEvPDiskStateUpdate, Handle);
-            hFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
-            hFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
-            hFunc(TEvWhiteboard::TEvVDiskStateUpdate, Handle);
-            hFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
-            hFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
-            hFunc(TEvWhiteboard::TEvVDiskStateRequest, Handle);
-            hFunc(TEvWhiteboard::TEvVDiskDropDonors, Handle);
-            hFunc(TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
-            hFunc(TEvWhiteboard::TEvBSGroupStateDelete, Handle);
-            hFunc(TEvWhiteboard::TEvBSGroupStateRequest, Handle);
-            hFunc(TEvWhiteboard::TEvSystemStateUpdate, Handle);
-            hFunc(TEvWhiteboard::TEvMemoryStatsUpdate, Handle);
-            hFunc(TEvWhiteboard::TEvSystemStateAddEndpoint, Handle);
-            hFunc(TEvWhiteboard::TEvSystemStateAddRole, Handle);
-            hFunc(TEvWhiteboard::TEvSystemStateSetTenant, Handle);
-            hFunc(TEvWhiteboard::TEvSystemStateRemoveTenant, Handle);
-            hFunc(TEvWhiteboard::TEvSystemStateRequest, Handle);
-            hFunc(TEvWhiteboard::TEvIntrospectionData, Handle);
-            hFunc(TEvWhiteboard::TEvTabletLookupRequest, Handle);
-            hFunc(TEvWhiteboard::TEvTraceLookupRequest, Handle);
-            hFunc(TEvWhiteboard::TEvTraceRequest, Handle);
-            hFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
-            hFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
-            hFunc(TEvPrivate::TEvUpdateThreadPoolCounters, Handle);
-            hFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
-        }
-    }
->>>>>>> ee17fbaeb88 (Add all thread consumption metrics (#36170))
 
     void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
         auto tabletId(std::make_pair(ev->Get()->Record.GetTabletId(), ev->Get()->Record.GetFollowerId()));
@@ -1260,9 +1211,6 @@ protected:
         return loadAvg;
     }
 
-<<<<<<< HEAD
-    void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr &, const TActorContext &ctx) {
-=======
     TThreadPoolCounters& GetOrCreateThreadPoolCounters(const TString& name) {
         auto& counters = ThreadPoolCounters[name];
         if (!counters.Threads) {
@@ -1327,7 +1275,6 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr&) {
->>>>>>> ee17fbaeb88 (Add all thread consumption metrics (#36170))
         static constexpr int UPDATE_PERIOD_SECONDS = 15;
         static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(UPDATE_PERIOD_SECONDS);
         auto now = TActivationContext::Now();
@@ -1356,21 +1303,6 @@ protected:
             SystemStateInfo.SetNetworkWriteThroughput(SumNetworkWriteThroughput / UPDATE_PERIOD_SECONDS);
             SumNetworkWriteThroughput = 0;
         }
-<<<<<<< HEAD
-        auto threadPools = ThreadsMonitor.GetThreadPools(now);
-        SystemStateInfo.ClearThreads();
-        for (const auto& threadPool : threadPools) {
-            auto* threadInfo = SystemStateInfo.AddThreads();
-            threadInfo->SetName(threadPool.Name);
-            threadInfo->SetThreads(threadPool.Threads);
-            threadInfo->SetSystemUsage(threadPool.SystemUsage);
-            threadInfo->SetUserUsage(threadPool.UserUsage);
-            threadInfo->SetMajorPageFaults(threadPool.MajorPageFaults);
-            threadInfo->SetMinorPageFaults(threadPool.MinorPageFaults);
-            for (const auto& state : threadPool.States) {
-                threadInfo->MutableStates()->emplace(state.first, state.second);
-            }
-=======
         UpdateSystemStateThreads();
         {
             if (SavedGrpcRequestBytes || SavedGrpcResponseBytes) {
@@ -1381,7 +1313,6 @@ protected:
             }
             SavedGrpcRequestBytes = GrpcRequestBytes->Val();
             SavedGrpcResponseBytes = GrpcResponseBytes->Val();
->>>>>>> ee17fbaeb88 (Add all thread consumption metrics (#36170))
         }
         UpdateSystemState();
         ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());

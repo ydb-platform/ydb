@@ -795,6 +795,8 @@ struct TEnv : public TMyEnvBase {
     }
 
     void RestoreBackup(const TString& backupPath, ui32 TestTabletFlags, bool skipChecksumValidation = false) {
+        DryRunRestoreBackup(backupPath, skipChecksumValidation);
+
         Cerr << "...restarting dummy tablet in recovery mode" << Endl;
         RestartTabletInRecoveryMode();
 
@@ -807,6 +809,26 @@ struct TEnv : public TMyEnvBase {
             Cerr << "...restore has error: " << result->Error << Endl;
         }
         UNIT_ASSERT_C(result->Success, "Restore completed with unexpected result, error: " << result->Error);
+        UNIT_ASSERT_C(result->Error.empty(), "Restore completed with unexpected result, warning: " << result->Error);
+
+        Cerr << "...restarting tablet in normal mode" << Endl;
+        RestartTablet(TestTabletFlags);
+    }
+
+    void RestoreBackupExpectWarning(const TString& backupPath, ui32 TestTabletFlags, bool skipChecksumValidation = false) {
+        DryRunRestoreBackupExpectWarning(backupPath, skipChecksumValidation);
+
+        Cerr << "...restarting dummy tablet in recovery mode" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...restoring backup (expecting warning)" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, skipChecksumValidation));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        Cerr << "...restore result: Success=" << result->Success << ", Error=" << result->Error << Endl;
+        UNIT_ASSERT_C(result->Success, "Restore should have succeeded with warning, but failed: " << result->Error);
+        UNIT_ASSERT_C(!result->Error.empty(), "Restore must have a warning");
 
         Cerr << "...restarting tablet in normal mode" << Endl;
         RestartTablet(TestTabletFlags);
@@ -832,6 +854,8 @@ struct TEnv : public TMyEnvBase {
     }
 
     void RestoreLastBackupExpectFail() {
+        DryRunRestoreLastBackupExpectFail();
+
         auto backupPath = GetLastBackupPath();
 
         Cerr << "...restarting dummy tablet in recovery mode" << Endl;
@@ -844,6 +868,48 @@ struct TEnv : public TMyEnvBase {
         auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
         Cerr << "...restore result: Success=" << result->Success << ", Error=" << result->Error << Endl;
         UNIT_ASSERT_C(!result->Success, "Restore should have failed but succeeded");
+    }
+
+    void DryRunRestoreBackup(const TString& backupPath, bool skipChecksumValidation = false) {
+        Cerr << "...restarting dummy tablet in recovery mode (dry-run)" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...dry-run restoring backup" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, skipChecksumValidation, /*dryRun=*/ true));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        UNIT_ASSERT_C(result->Success, "Dry-run restore failed: " << result->Error);
+        UNIT_ASSERT_C(result->Error.empty(), "Dry-run restore completed with warning: " << result->Error);
+    }
+
+    void DryRunRestoreLastBackupExpectFail() {
+        auto backupPath = GetLastBackupPath();
+
+        Cerr << "...restarting dummy tablet in recovery mode (dry-run)" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...dry-run restoring backup (expecting failure)" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, false, /*dryRun=*/ true));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        Cerr << "...dry-run result: Success=" << result->Success << ", Error=" << result->Error << Endl;
+        UNIT_ASSERT_C(!result->Success, "Dry-run restore should have failed but succeeded");
+    }
+
+    void DryRunRestoreBackupExpectWarning(const TString& backupPath, bool skipChecksumValidation = false) {
+        Cerr << "...restarting dummy tablet in recovery mode (dry-run)" << Endl;
+        RestartTabletInRecoveryMode();
+
+        Cerr << "...dry-run restoring backup (expecting warning)" << Endl;
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath, skipChecksumValidation, /*dryRun=*/ true));
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = Env.GrabEdgeEventRethrow<NRecovery::TEvRestoreCompleted>(handle);
+        Cerr << "...dry-run result: Success=" << result->Success << ", Error=" << result->Error << Endl;
+        UNIT_ASSERT_C(result->Success, "Dry-run should have succeeded with warning, but failed: " << result->Error);
+        UNIT_ASSERT_C(!result->Error.empty(), "Dry-run must have a warning");
     }
 }; // TEnv
 
@@ -1585,7 +1651,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             changelogFile.Flush();
         }
 
-        env.RestoreBackup(genDirs.back(), TestTabletFlags);
+        env.RestoreBackupExpectWarning(genDirs.back(), TestTabletFlags, /*skipChecksumValidation=*/ true);
         UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
     }
 
@@ -2471,6 +2537,48 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         UNIT_ASSERT_VALUES_EQUAL(genDirs.size(), 1);
         UNIT_ASSERT_C(nextGenDir.Exists(), "Next generation backup dir must not be deleted after restart");
+    }
+
+    Y_UNIT_TEST(DryRun) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing valid data" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 20);
+        env.WriteValue(3, 30);
+
+        env.WaitChangelogFlush();
+
+        auto backup = env.GetLastBackupPath();
+        auto changelog = backup.Child("changelog.json");
+        TString content = TFileInput(changelog).ReadAll();
+
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+
+        Cerr << "...erasing commit from changelog" << Endl;
+        lines.erase(lines.begin() + 2);
+        WriteFileContent(changelog, JoinSeq("\n", lines));
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(2), 20);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(3), 30);
+        };
+
+        assertState();
+        env.DryRunRestoreBackup(backup,  /*skipChecksumValidation=*/ true);
+        env.RestartTablet(TestTabletFlags);
+        assertState();
     }
 }
 

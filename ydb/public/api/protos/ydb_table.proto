@@ -680,14 +680,11 @@ message ColumnCompression {
     optional int32 compression_level = 2;
 }
 
-// Column value encoding (e.g. dictionary, plain). Empty list means no explicit encoding (use default / remove on alter).
 message ColumnEncoding {
     message Off {
-        // No special encoding (backend: PLAIN).
     }
 
     message Dictionary {
-        // Dictionary encoding for low-cardinality columns.
     }
 
     oneof encoding_settings {
@@ -712,7 +709,6 @@ message ColumnMeta {
         google.protobuf.NullValue empty_default = 7;
     }
     optional ColumnCompression compression = 8;
-    // Column value encoding. Empty = no explicit encoding (default / remove on alter). OFF → PLAIN in backend, DICT → dictionary.
     repeated ColumnEncoding encoding = 9;
 }
 

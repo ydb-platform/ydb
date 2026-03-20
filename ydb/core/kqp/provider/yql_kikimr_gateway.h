@@ -457,8 +457,14 @@ struct TColumnCompression {
 };
 
 struct TColumnEncoding {
-    TString Name;
+    enum class EEncodingType {
+        UNDEFINED = 0,
+        DICTIONARY,
+        PLAIN
+    } Type = EEncodingType::UNDEFINED;
 };
+
+using TEncodingsList = TVector<TColumnEncoding>;
 
 struct TKikimrColumnMetadata {
 
@@ -475,7 +481,7 @@ struct TKikimrColumnMetadata {
     TKikimrPathId DefaultFromSequencePathId;
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
-    TMaybe<TVector<TColumnEncoding>> Encoding;
+    TMaybe<TEncodingsList> Encoding;
 
     TKikimrColumnMetadata() = default;
 
@@ -524,9 +530,19 @@ struct TKikimrColumnMetadata {
         }
 
         for (const auto& encoding : message->GetEncoding()) {
+            if (!Encoding) {
+                Encoding = TEncodingsList{};
+            }
             switch (encoding.GetImplementationCase()) {
-                case 1:
-
+                case NKikimrKqp::TEncoding::kPlain:
+                    Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::PLAIN});
+                    break;
+                case NKikimrKqp::TEncoding::kDictionary:
+                    Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::DICTIONARY});
+                    break;
+                case NKikimrKqp::TEncoding::IMPLEMENTATION_NOT_SET:
+                    Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::UNDEFINED});
+                    break;
             }
         }
     }
@@ -579,8 +595,20 @@ struct TKikimrColumnMetadata {
             }
         }
 
-        if (DictionaryEncoding) {
-            message->SetDictionaryEncoding(true);
+        if (Encoding) {
+            for (const auto& encoding : *Encoding) {
+                auto messageEncoding = message->add_encoding();
+                switch (encoding.Type) {
+                    case TColumnEncoding::EEncodingType::UNDEFINED:
+                        break;
+                    case TColumnEncoding::EEncodingType::DICTIONARY:
+                        messageEncoding->MutableDictionary();
+                        break;
+                    case TColumnEncoding::EEncodingType::PLAIN:
+                        messageEncoding->MutablePlain();
+                        break;
+                }
+            }
         }
     }
 

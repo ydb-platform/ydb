@@ -364,8 +364,8 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             return false;
         }
 
-        if (columnIt->second.DictionaryEncoding) {
-            error = "Dictionary encoding is not supported in row tables";
+        if (!columnIt->second.Encoding->empty()) {
+            error = "Column Encoding is not supported in row tables";
             return false;
         }
     }
@@ -460,7 +460,7 @@ bool FillSerializer(
 }
 
 bool FillAccessor(
-    const TMaybe<TVector<TColumnEncoding>>& from, const std::string& name,
+    const TMaybe<TEncodingsList>& from, const std::string& name,
     NKikimrSchemeOp::TOlapColumnDescription& to,
     TString& error, Ydb::StatusIds::StatusCode& code) {
 
@@ -474,19 +474,19 @@ bool FillAccessor(
         return false;
     }
 
-    const auto& encodingName = (*from)[0].Name;
-    if (encodingName == "DICTIONARY") {
-        to.MutableDataAccessorConstructor()->MutableDictionary();
-        to.MutableDataAccessorConstructor()->SetClassName(encodingName);
-    } else if (encodingName == "PLAIN") {
-        to.MutableDataAccessorConstructor()->MutablePlain();
-        to.MutableDataAccessorConstructor()->SetClassName(encodingName);
-    } else if (encodingName.empty()) {
-        to.MutableDataAccessorConstructor()->SetClassName("__UNDEFINED");
-    } else {
-        code = Ydb::StatusIds::UNSUPPORTED;
-        error = TStringBuilder() << "Column `" << name << "` encoding " << encodingName << " is not supported";
-        return false;
+    const auto& encodingType = (*from)[0].Type;
+    switch (encodingType) {
+        case TColumnEncoding::EEncodingType::UNDEFINED:
+            to.MutableDataAccessorConstructor()->SetClassName("__UNDEFINED");
+            break;
+        case TColumnEncoding::EEncodingType::DICTIONARY:
+            to.MutableDataAccessorConstructor()->MutablePlain();
+            to.MutableDataAccessorConstructor()->SetClassName("DICTIONARY");
+            break;
+        case TColumnEncoding::EEncodingType::PLAIN:
+            to.MutableDataAccessorConstructor()->MutablePlain();
+            to.MutableDataAccessorConstructor()->SetClassName("PLAIN");
+            break;
     }
 
     return true;

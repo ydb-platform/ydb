@@ -1304,16 +1304,6 @@ protected:
             SumNetworkWriteThroughput = 0;
         }
         UpdateSystemStateThreads();
-        {
-            if (SavedGrpcRequestBytes || SavedGrpcResponseBytes) {
-                auto requestBytes = GrpcRequestBytes->Val() - SavedGrpcRequestBytes;
-                auto responseBytes = GrpcResponseBytes->Val() - SavedGrpcResponseBytes;
-                SystemStateInfo.SetGrpcRequestBytes(requestBytes / UPDATE_PERIOD_SECONDS);
-                SystemStateInfo.SetGrpcResponseBytes(responseBytes / UPDATE_PERIOD_SECONDS);
-            }
-            SavedGrpcRequestBytes = GrpcRequestBytes->Val();
-            SavedGrpcResponseBytes = GrpcResponseBytes->Val();
-        }
         UpdateSystemState();
         ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());
     }

@@ -762,6 +762,7 @@ private:
             if (level < Accumulator.size()) {
                 if (NeedAccumulatorCompaction(level).IsCritical()) {
                     if (auto result = GetCompactAccumulatorTask(granule, locksManager, level)) {
+                        Busy = false;
                         return { result };
                     }
                 }
@@ -769,6 +770,7 @@ private:
             if (level < Levels.size()) {
                 if (NeedLevelCompaction(level).IsCritical()) {
                     if (auto result = GetCompactLevelTask(granule, locksManager, level)) {
+                        Busy = false;
                         return { result };
                     }
                 }

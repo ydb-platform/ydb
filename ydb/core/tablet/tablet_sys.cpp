@@ -2190,7 +2190,7 @@ void TTablet::Handle(TEvTablet::TEvCompleteRecoveryBoot::TPtr& ev) {
 
         const TLogoBlobID logid(TabletID(), StateStorageInfo.KnownGeneration, 0, 0, 0, 0);
         TVector<TEvTablet::TLogEntryReference> refs;
-        Register(CreateTabletReqWriteLog(SelfId(), logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticMinLatency, Info.Get()));
+        Register(CreateTabletReqWriteLog(SelfId(), logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticMinLatency, Info.Get(), Relevance));
 
         ReportTabletStateChange(TTabletStateInfo::WriteZeroEntry);
 

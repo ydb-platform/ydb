@@ -496,7 +496,7 @@ class TOptimizerPlanner : public IOptimizerPlanner, private TSettings {
     using TBase = IOptimizerPlanner;
     std::shared_ptr<TCounters> Counters;
     std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo;
-    mutable bool Busy = false;
+    mutable bool LastTaskWasImportant = false;
     size_t MaxPortionPromotion = 100;
     TDuration PromoteTime = TDuration::Seconds(180);
 
@@ -722,7 +722,7 @@ private:
     }
 
     void PromotePortions(const TInstant currentInstant) {
-        if (Busy) {
+        if (LastTaskWasImportant) {
             return;
         }
 
@@ -750,13 +750,13 @@ private:
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
         // Check compactions, top to bottom
-        Busy = true;
+        LastTaskWasImportant = true;
 
         for (size_t level = 0; level < Max(Accumulator.size(), Levels.size()); ++level) {
             if (level < Accumulator.size()) {
                 if (NeedAccumulatorCompaction(level).IsCritical()) {
                     if (auto result = GetCompactAccumulatorTask(granule, locksManager, level)) {
-                        Busy = false;
+                        // keep LastTaskWasImportant true
                         return { result };
                     }
                 }
@@ -764,14 +764,14 @@ private:
             if (level < Levels.size()) {
                 if (NeedLevelCompaction(level).IsCritical()) {
                     if (auto result = GetCompactLevelTask(granule, locksManager, level)) {
-                        Busy = false;
+                        // keep LastTaskWasImportant true
                         return { result };
                     }
                 }
             }
         }
 
-        Busy = false;
+        LastTaskWasImportant = false;
 
         TOptimizationPriority maxPriority = TOptimizationPriority::Zero();
         bool isLevel = false;

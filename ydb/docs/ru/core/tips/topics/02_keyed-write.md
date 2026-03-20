@@ -6,8 +6,6 @@
 
 ## Решение
 
-Решение подробно описано тут: https://logbroker.yandex-team.ru/docs/faq#how-to-preserve-partitioning-for-the-same-key 
-
 ### 1. Используйте пул писателей по количеству партиций и хэш ключа
 
 1. Создайте пул писателей по количеству партиций
@@ -75,6 +73,6 @@ public class ShardedEventService {
 
 В Kafka API все сообщения с одинаковым ключом попадают в одну партицию (при неизменном количестве партиций) и тем самым гарантируется порядок обработки сообщений с одинаковым ключом.
 
-Начало работы с Kafka API: https://logbroker.yandex-team.ru/docs/how_to/using_kafka_api
+Начало работы с Kafka API: [{#T}](../../kafka-api/examples)
 
-Ограничения Kafka API: https://ydb.yandex-team.ru/docs/reference/kafka-api/constraints
+Ограничения Kafka API: [{#T}](../../kafka-api/constraints)

@@ -153,5 +153,5 @@ retryCtx.supplyResult(session -> {
 
 ### Ссылки на документацию
 
-- [Выполнение повторных запросов - {{ ydb-short-name }} SDK](https://ydb.yandex-team.ru/docs/recipes/ydb-sdk/retry)
-- [Обработка временных сбоев](https://ydb.yandex-team.ru/docs/reference/ydb-sdk/error_handling#handling-retryable-errors)
+- [Выполнение повторных запросов - {{ ydb-short-name }} SDK](../../recipes/ydb-sdk/retry)
+- [Обработка временных сбоев](../../reference/ydb-sdk/error_handling#handling-retryable-errors)

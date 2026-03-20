@@ -41,7 +41,7 @@ auto status = client.RetryQuerySync([userId](NYdb::NQuery::TSession session) -> 
     auto result1 = future1.GetValueSync();
     auto result2 = future2.GetValueSync();
 
-    return result2;
+    return result2.GetStatus();
 });
   ```
   {% endcut %}
@@ -60,7 +60,7 @@ auto status1 = client.RetryQuerySync([userId](NYdb::NQuery::TSession session) ->
 // thread 2
 auto status2 = client.RetryQuerySync([userId](NYdb::NQuery::TSession session) -> NYdb::TStatus {
     auto result2 = session.ExecuteQuery(...).GetValueSync();
-    return result2;
+    return result2.GetStatus();
 });
   ```
   {% endcut %}

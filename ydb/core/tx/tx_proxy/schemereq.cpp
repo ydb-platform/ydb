@@ -265,9 +265,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision:
             return *modifyScheme.MutableUpgradeSubDomain()->MutableName();
 
-        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
-            return *modifyScheme.MutableSetColumnConstraintsInitiate()->MutableTableName();
-
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
             Y_ABORT("no implementation for ESchemeOpCreateColumnBuild");
 
@@ -1134,7 +1131,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSysView:
             return false;
         case NKikimrSchemeOp::ESchemeOpChangePathState: {
-        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;

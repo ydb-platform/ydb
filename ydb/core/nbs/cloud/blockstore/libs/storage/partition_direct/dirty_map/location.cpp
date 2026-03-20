@@ -23,6 +23,8 @@ bool IsDDisk(ELocation location)
         case ELocation::HODDisk0:
         case ELocation::HODDisk1:
             return true;
+        case ELocation::Unknown:
+            return false;
     }
 }
 
@@ -40,6 +42,8 @@ bool IsPBuffer(ELocation location)
         case ELocation::DDisk2:
         case ELocation::HODDisk0:
         case ELocation::HODDisk1:
+            return false;
+        case ELocation::Unknown:
             return false;
     }
 }

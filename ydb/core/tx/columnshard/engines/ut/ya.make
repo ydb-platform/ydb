@@ -22,7 +22,7 @@ PEERDIR(
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:16)
 ELSE()
     SIZE(MEDIUM)

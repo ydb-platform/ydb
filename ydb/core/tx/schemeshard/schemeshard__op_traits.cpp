@@ -154,7 +154,6 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
         case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
             return EOperationClass::Other;
 

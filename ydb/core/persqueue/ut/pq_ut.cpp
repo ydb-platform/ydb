@@ -318,7 +318,7 @@ Y_UNIT_TEST(TestPartitionTotalQuota) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
-        tc.Runtime->SetScheduledLimit(1000);
+        tc.Runtime->SetScheduledLimit(10000);
 
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetMaxParallelConsumersPerPartition(1); //total partition quota is equal to quota per consumer. Very low.

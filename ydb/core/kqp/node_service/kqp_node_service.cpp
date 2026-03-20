@@ -185,7 +185,7 @@ private:
             (requester, requester),
             (tasks_count, msg.GetTasks().size()),
             (task_ids, TasksIdsStr(msg.GetTasks())),
-            (trace_id, ev->TraceId.GetHexTraceId()));
+            (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
 
         const auto& poolId = msg.GetPoolId().empty() ? NResourcePool::DEFAULT_POOL_ID : msg.GetPoolId();
         const auto& databaseId = msg.GetDatabaseId();
@@ -241,7 +241,7 @@ private:
                     (tx_id, txId),
                     (tasks_count, requestTaskIds.size()),
                     (executer, executerId),
-                    (trace_id, ev->TraceId.GetHexTraceId()));
+                    (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
             } else {
                 STLOG_D("Creating new request",
                     (node_id, SelfId().NodeId()),
@@ -249,7 +249,7 @@ private:
                     (tasks_count, requestTaskIds.size()),
                     (executer, executerId),
                     (is_local, isLocalRequest),
-                    (trace_id, ev->TraceId.GetHexTraceId()));
+                    (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
                 for (ui64 taskId : requestTaskIds) {
                     request.Tasks.emplace(taskId, std::nullopt);
                 }
@@ -262,7 +262,7 @@ private:
                 (tasks_count, requestTaskIds.size()),
                 (executer, executerId),
                 (is_local, isLocalRequest),
-                (trace_id, ev->TraceId.GetHexTraceId()));
+                (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
             for (ui64 taskId : requestTaskIds) {
                 request.Tasks.emplace(taskId, std::nullopt);
             }
@@ -362,14 +362,14 @@ private:
                     (tx_id, txId),
                     (task_id, taskId),
                     (compute_actor_id, *actorId),
-                    (trace_id, ev->TraceId.GetHexTraceId()));
+                    (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
             } else {
                 STLOG_D("Task finished in an instant",
                     (node_id, SelfId().NodeId()),
                     (tx_id, txId),
                     (task_id, taskId),
                     (compute_actor_id, *actorId),
-                    (trace_id, ev->TraceId.GetHexTraceId()));
+                    (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
             }
         }
 

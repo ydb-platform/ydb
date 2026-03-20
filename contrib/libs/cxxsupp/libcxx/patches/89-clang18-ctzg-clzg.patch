@@ -1,8 +1,8 @@
 diff --git a/include/__bit/countl.h b/include/__bit/countl.h
-index 9499bf9..558fb91 100644
+index 0759140..11f3531 100644
 --- a/include/__bit/countl.h
 +++ b/include/__bit/countl.h
-@@ -18,15 +18,55 @@
+@@ -17,15 +17,55 @@
  #  pragma GCC system_header
  #endif
  
@@ -27,7 +27,7 @@ index 9499bf9..558fb91 100644
 +
  template <class _Tp>
  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 int __countl_zero(_Tp __t) _NOEXCEPT {
-   static_assert(__libcpp_is_unsigned_integer<_Tp>::value, "__countl_zero requires an unsigned integer type");
+   static_assert(__is_unsigned_integer_v<_Tp>, "__countl_zero requires an unsigned integer type");
 +#if __has_builtin(__builtin_clzg)
    return __builtin_clzg(__t, numeric_limits<_Tp>::digits);
 +#else  // __has_builtin(__builtin_clzg)
@@ -59,10 +59,10 @@ index 9499bf9..558fb91 100644
  
  #if _LIBCPP_STD_VER >= 20
 diff --git a/include/__bit/countr.h b/include/__bit/countr.h
-index 7b311b8..51d3126 100644
+index f6c9869..ff85f71 100644
 --- a/include/__bit/countr.h
 +++ b/include/__bit/countr.h
-@@ -18,15 +18,49 @@
+@@ -17,15 +17,49 @@
  #  pragma GCC system_header
  #endif
  
@@ -87,7 +87,7 @@ index 7b311b8..51d3126 100644
 +
  template <class _Tp>
  [[__nodiscard__]] _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __countr_zero(_Tp __t) _NOEXCEPT {
-   static_assert(is_unsigned<_Tp>::value, "__countr_zero only works with unsigned types");
+   static_assert(__is_unsigned_integer_v<_Tp>, "__countr_zero only works with unsigned types");
 +#if __has_builtin(__builtin_ctzg)
    return __builtin_ctzg(__t, numeric_limits<_Tp>::digits);
 +#else  // __has_builtin(__builtin_ctzg)
@@ -113,10 +113,10 @@ index 7b311b8..51d3126 100644
  
  #if _LIBCPP_STD_VER >= 20
 diff --git a/include/__bit/popcount.h b/include/__bit/popcount.h
-index 9ae572d..084361c 100644
+index 8d9ba09..dc56198 100644
 --- a/include/__bit/popcount.h
 +++ b/include/__bit/popcount.h
-@@ -22,10 +22,37 @@ _LIBCPP_PUSH_MACROS
+@@ -21,10 +21,37 @@ _LIBCPP_PUSH_MACROS
  
  _LIBCPP_BEGIN_NAMESPACE_STD
  
@@ -132,7 +132,7 @@ index 9ae572d..084361c 100644
 +
  template <class _Tp>
  [[__nodiscard__]] _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __popcount(_Tp __t) _NOEXCEPT {
-   static_assert(is_unsigned<_Tp>::value, "__popcount only works with unsigned types");
+   static_assert(__is_unsigned_integer_v<_Tp>, "__popcount only works with unsigned types");
 +#  if __has_builtin(__builtin_popcountg)
    return __builtin_popcountg(__t);
 +#  else  // __has_builtin(__builtin_popcountg)

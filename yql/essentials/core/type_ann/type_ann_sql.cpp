@@ -2002,8 +2002,14 @@ IGraphTransformer::TStatus SqlColumnRefWrapper(const TExprNode::TPtr& input, TEx
     }
 
     for (const auto& child : input->Children()) {
-        if (!EnsureAtom(*child, ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(*child, ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
     }
 
@@ -2040,9 +2046,15 @@ IGraphTransformer::TStatus SqlResultItemWrapper(const TExprNode::TPtr& input, TE
     }
 
     auto& lambda = input->ChildRef(2);
-    const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 1 : 0);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 1 : 0);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!hasType) {
@@ -2144,9 +2156,15 @@ IGraphTransformer::TStatus SqlWhereWrapper(const TExprNode::TPtr& input, TExprNo
     }
 
     auto& lambda = input->ChildRef(1);
-    const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 1 : 0);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 1 : 0);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!hasType) {
@@ -2201,9 +2219,15 @@ IGraphTransformer::TStatus SqlSortWrapper(const TExprNode::TPtr& input, TExprNod
     }
 
     auto& lambda = input->ChildRef(1);
-    const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 1 : 0);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 1 : 0);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!hasType) {
@@ -2337,7 +2361,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     for (const auto& x : data.Children()) {
                         auto alias = x->Head().Content();
                         auto type = x->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-                        joinInputs.push_back(TInput{ TString(alias), type, Nothing(), TInput::External, {} });
+                        joinInputs.push_back(TInput{ .Alias=TString(alias), .Type=type, .Order=Nothing(), .Priority=TInput::External, .UsedExternalColumns={} });
                         if (!alias.empty()) {
                             possibleAliases.insert(TString(alias));
                         }
@@ -2940,10 +2964,10 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 return IGraphTransformer::TStatus::Error;
                             }
 
-                            inputs.push_back(TInput{ alias, newStructType, newOrder, TInput::Current, {} });
+                            inputs.push_back(TInput{ .Alias=alias, .Type=newStructType, .Order=newOrder, .Priority=TInput::Current, .UsedExternalColumns={} });
                         }
                         else {
-                            inputs.push_back(TInput{ alias, inputStructType, columnOrder, TInput::Current, {} });
+                            inputs.push_back(TInput{ .Alias=alias, .Type=inputStructType, .Order=columnOrder, .Priority=TInput::Current, .UsedExternalColumns={} });
                         }
                     }
                 }
@@ -3611,7 +3635,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     bool isUniversal;
                     TExprNode::TListType newGroups;
                     TInputs projectionInputs;
-                    projectionInputs.push_back(TInput{ "", outputRowType, Nothing(), TInput::Projection, {} });
+                    projectionInputs.push_back(TInput{ .Alias="", .Type=outputRowType, .Order=Nothing(), .Priority=TInput::Projection, .UsedExternalColumns={} });
                     if (!ValidateGroups(projectionInputs, {}, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "DISTINCT ON", &projectionOrders, GetSetting(options, "result"), nullptr, isYql, repeatedColumnsInUsing, isUniversal)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3650,7 +3674,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     TInputs projectionInputs = joinInputs;
                     // all row columns are visible too, but projection's columns have more priority
                     if (!scanColumnsOnly) {
-                        projectionInputs.push_back(TInput{ "", outputRowType, Nothing(), TInput::Projection, {} });
+                        projectionInputs.push_back(TInput{ .Alias="", .Type=outputRowType, .Order=Nothing(), .Priority=TInput::Projection, .UsedExternalColumns={} });
                     }
 
                     bool hasNewSort = false;
@@ -4302,7 +4326,7 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
         YQL_ENSURE(option);
         const auto& data = option->Tail();
         TInputs projectionInputs;
-        projectionInputs.push_back(TInput{ TString(), resultStructType, resultColumnOrder, TInput::Projection, {} });
+        projectionInputs.push_back(TInput{ .Alias=TString(), .Type=resultStructType, .Order=resultColumnOrder, .Priority=TInput::Projection, .UsedExternalColumns={} });
         TExprNode::TListType newSortTupleItems;
 
         // no effective types yet, scan lambda bodies
@@ -4386,17 +4410,29 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
 
     if (!input->Child(3)->IsCallable("Void")) {
         auto& lambda = input->ChildRef(3);
-        const auto status = ConvertToLambda(lambda, ctx.Expr, (!input->Child(2)->IsCallable("Void") && hasType) ? 2 : 1);
+        bool isUniversal;
+        const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, (!input->Child(2)->IsCallable("Void") && hasType) ? 2 : 1);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
     }
 
     if (!input->Child(4)->IsCallable(sqlSelect)) {
         auto& lambda = input->ChildRef(4);
-        const auto status = ConvertToLambda(lambda, ctx.Expr, 0);
+        bool isUniversal;
+        const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 0);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (hasType) {
@@ -4475,9 +4511,15 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
 
         if (!input->Child(2)->IsCallable("Void")) {
             auto& lambda = input->ChildRef(3);
-            const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 2 : 1);
+            bool isUniversal;
+            const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 2 : 1);
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
 
             auto rowType = input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -4491,7 +4533,6 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
 
             ui32 testExprType;
             bool convertToPg;
-            bool isUniversal;
             if (!ExtractPgType(lambda->GetTypeAnn(), testExprType, convertToPg, lambda->Pos(), ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
             }

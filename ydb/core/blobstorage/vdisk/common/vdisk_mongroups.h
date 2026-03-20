@@ -868,6 +868,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(DefragDiskCost, true);
                 COUNTER_INIT_IF_EXTENDED(InternalDiskCost, true);
                 COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableCtr, false);
+                COUNTER_INIT_IF_EXTENDED(DiskTimeFairShareNs, false);
             }
 
             COUNTER_DEF(UserDiskCost);
@@ -876,6 +877,7 @@ public:                                                                         
             COUNTER_DEF(DefragDiskCost);
             COUNTER_DEF(InternalDiskCost);
             COUNTER_DEF(DiskTimeAvailableCtr);
+            COUNTER_DEF(DiskTimeFairShareNs);
         };
 
         class TScrubGroup : public TBase {

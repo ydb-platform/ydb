@@ -11,8 +11,8 @@ ELSE()
 ENDIF()
 
 SRCS(
-	kqp_cwl.cpp
-	kqp_cwl_qs.cpp
+    kqp_cwl.cpp
+    kqp_cwl_qs.cpp
 )
 
 PEERDIR(

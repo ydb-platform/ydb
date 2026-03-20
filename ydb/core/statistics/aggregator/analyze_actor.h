@@ -15,11 +15,19 @@
 namespace NKikimr::NStat {
 
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
+public:
+    struct TConfig {
+        ui64 MaxTotalScanActorsInFlight = 100;
+        i64 MaxPerNodeScanActorsInFlight = 1;
+    };
+
+private:
     TActorId Parent;
     TString OperationId;
     TString DatabaseName;
     TPathId PathId;
     TVector<ui32> RequestedColumnTags;
+    TConfig Config;
 
     struct TEvPrivate {
         enum EEv {
@@ -136,9 +144,6 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     std::optional<ui32> CountSeq;
     std::vector<TColumnStatEvalTask> InProgressTasks;
 
-    static constexpr ui64 MaxTotalScanActorsInFlight = 100;
-    static constexpr i64 MaxPerNodeScanActorsInFlight = 1;
-
     struct TNodeState {
         ui32 Id = 0;
         i64 TabletsInFlight = 0;
@@ -169,12 +174,14 @@ public:
         TString operationId,
         TString databaseName,
         TPathId pathId,
-        TVector<ui32> columnTags)
+        TVector<ui32> columnTags,
+        const TConfig& config)
     : Parent(parent)
     , OperationId(std::move(operationId))
     , DatabaseName(std::move(databaseName))
     , PathId(std::move(pathId))
     , RequestedColumnTags(std::move(columnTags))
+    , Config(config)
     {}
 
     void Bootstrap();

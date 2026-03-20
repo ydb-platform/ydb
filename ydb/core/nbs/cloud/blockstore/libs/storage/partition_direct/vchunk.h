@@ -44,7 +44,7 @@ public:
 private:
     NWilson::TTraceId SpanTrace();
 
-    void UpdateDirtyMap(TDBGRestoreResponse response);
+    void UpdateDirtyMap(const TDBGRestoreResponse& response);
 
     void DoStart();
 

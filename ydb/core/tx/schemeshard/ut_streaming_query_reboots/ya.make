@@ -6,7 +6,7 @@ SPLIT_FACTOR(60)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:12)
 ELSE()
     SIZE(MEDIUM)

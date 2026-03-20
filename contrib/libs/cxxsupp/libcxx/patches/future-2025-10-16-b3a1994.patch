@@ -1,5 +1,5 @@
 diff --git a/include/__configuration/abi.h b/include/__configuration/abi.h
-index f4df5fe..79dc8c8 100644
+index aaeac79..7fe173a 100644
 --- a/include/__configuration/abi.h
 +++ b/include/__configuration/abi.h
 @@ -30,8 +30,20 @@

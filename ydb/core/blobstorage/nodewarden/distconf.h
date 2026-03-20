@@ -583,13 +583,14 @@ namespace NKikimr::NStorage {
         TActorId StaticNodeSessionId;
         bool ReconnectScheduled = false;
         THashSet<ui32> ConnectedDynamicNodes;
+        ui64 StaticNodeSubscriptionCookie = 0;
 
         // these are used on the dynamic nodes
         void ApplyStaticNodeIds(const std::vector<ui32>& nodeIds);
         void ConnectToStaticNode();
         void HandleReconnect();
-        void OnStaticNodeConnected(ui32 nodeId, TActorId sessionId);
-        void OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId);
+        void OnStaticNodeConnected(ui32 nodeId, TActorId sessionId, ui64 cookie);
+        void OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId, ui64 cookie);
         void Handle(TEvNodeWardenDynamicConfigPush::TPtr ev);
 
         // these are used on the static nodes

@@ -3,11 +3,18 @@
 import functools
 import itertools
 import logging
+import six
+import subprocess
 from abc import ABCMeta, abstractmethod
+from datetime import datetime, timedelta
 from ydb.tests.library.nemesis.remote_execution import execute_command_with_output_on_hosts
 
 
 logger = logging.getLogger()
+
+
+if six.PY2:
+    FileNotFoundError = IOError
 
 
 class SafetyWarden(object):
@@ -227,3 +234,81 @@ class GrepDMesgForPatternsSafetyWarden(AbstractRemoteCommandExecutionSafetyWarde
         super(GrepDMesgForPatternsSafetyWarden, self).__init__(
             name, list_of_hosts, remote_command=remote_command, username=username, split_line_size=lines_after
         )
+
+
+class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
+    """
+    Safety warden that checks for VERIFY failed errors in unified_agent logs.
+
+    Uses unified_agent to search kikimr-start logs for VERIFY failed patterns.
+    Based on logic from ydb/tests/library/stability/utils/collect_errors.py
+
+    This warden runs locally (no SSH) and is designed for agent-side checks.
+
+    Returns ALL VERIFY failed errors as raw violations list.
+    Post-processing (deduplication, counting) should be done in warden_checker.
+    """
+
+    # Lines of context after each VERIFY failed match
+    LINES_AFTER_MATCH = 25
+
+    def __init__(self, hours_back=24):
+        """
+        Args:
+            hours_back: How many hours back to search (default 24)
+        """
+        super(UnifiedAgentVerifyFailedSafetyWarden, self).__init__(
+            'UnifiedAgentVerifyFailedSafetyWarden'
+        )
+        self._hours_back = hours_back
+
+    def list_of_safety_violations(self):
+        """
+        Check unified_agent logs for VERIFY failed errors.
+
+        Returns:
+            List of violation strings, empty if no violations found.
+            Each violation is a full stack trace (up to LINES_AFTER_MATCH lines).
+            Returns ALL errors found, not limited.
+        """
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=self._hours_back)
+
+        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+        verify_pattern = 'VERIFY failed'
+        violations = []
+
+        try:
+            # Get ALL VERIFY failed occurrences with full stack traces
+            # No head limit - collect everything
+            sample_cmd = (
+                "ulimit -n 100500 2>/dev/null; "
+                "unified_agent select -S '{start}' -U '{end}' -s kikimr-start 2>/dev/null | "
+                "grep -i -A {lines} --no-group-separator '{pattern}' | "
+                "sed '/{pattern}/i --'"
+            ).format(start=start_str, end=end_str, lines=self.LINES_AFTER_MATCH, pattern=verify_pattern)
+            sample_result = subprocess.run(
+                sample_cmd, shell=True, capture_output=True, text=True, timeout=1200  # 20 minutes
+            )
+            if sample_result.returncode == 0 and sample_result.stdout.strip():
+                # Split output by grep's "--" separator to get individual errors
+                raw_output = sample_result.stdout.strip()
+                error_blocks = raw_output.split('--\n')
+
+                for block in error_blocks:
+                    if block.strip():
+                        # Add full stack trace as a single violation entry
+                        violations.append(block.strip())
+
+        except subprocess.TimeoutExpired:
+            logger.warning("Timeout while checking unified_agent for VERIFY failed")
+        except ValueError as e:
+            logger.warning("Error parsing unified_agent output: {}".format(e))
+        except FileNotFoundError:
+            logger.warning("unified_agent not found")
+        except Exception as e:
+            logger.warning("Error checking unified_agent: {}".format(e))
+
+        return violations

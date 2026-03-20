@@ -237,6 +237,10 @@ public:
             return false;
         }
 
+        if (!CheckExist_) {
+            return true;
+        }
+
         TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, IsSubquery(), ctx.Scoped));
         if (!inputTables->Init(ctx, Source_.Get())) {
             return false;

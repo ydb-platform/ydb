@@ -27,7 +27,7 @@ void TGRpcOperationService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         requestType,                                          \
         YDB_API_DEFAULT_COUNTER_BLOCK(operation, methodName), \
         auditMode,                                            \
-        EEmptyDatabaseMode::EmptyDatabaseForbidden,           \
+        EEmptyDatabaseMode::EmptyDatabaseAllowed,             \
         COMMON,                                               \
         operationCallClass,                                   \
         GRpcRequestProxyId_,                                  \

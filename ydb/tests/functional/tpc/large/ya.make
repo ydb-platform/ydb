@@ -12,9 +12,7 @@ IF (SANITIZER_TYPE != "memory" AND SANITIZER_TYPE != "thread")
 ENDIF()
 
 SIZE(LARGE)
-TAG(ya:fat)
-
-
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 REQUIREMENTS(ram:16)
 
 ENV(YDB_ENABLE_COLUMN_TABLES="true")

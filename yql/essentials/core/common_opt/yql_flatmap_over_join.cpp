@@ -1763,7 +1763,7 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
                 extraInputPreds[*idx].MainColumn = it->second.Name;
                 AppendEquality(predicate->Pos(), extraInputPreds[*idx], it->second.Name, col, label, ctx);
             } else {
-                eqSetByInput.insert({*idx, {col, 0}});
+                eqSetByInput.insert({*idx, {.Name=col, .UseCount=0}});
             }
         }
     }

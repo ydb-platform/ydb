@@ -3,7 +3,7 @@ import re
 import pytz
 
 from io import IOBase
-from typing import Any, Tuple, Dict, Sequence, Optional, Union, Generator, BinaryIO
+from typing import Any, Literal, Tuple, Dict, Sequence, Optional, Union, Generator, BinaryIO, TYPE_CHECKING
 from datetime import tzinfo
 
 from pytz.exceptions import UnknownTimeZoneError
@@ -17,9 +17,12 @@ from clickhouse_connect.driver.exceptions import StreamClosedError, ProgrammingE
 from clickhouse_connect.driver.options import check_arrow, pd_extended_dtypes
 from clickhouse_connect.driver.context import BaseQueryContext
 
+if TYPE_CHECKING:
+    from clickhouse_connect.datatypes.base import ClickHouseType
+
 logger = logging.getLogger(__name__)
 commands = 'CREATE|ALTER|SYSTEM|GRANT|REVOKE|CHECK|DETACH|ATTACH|DROP|DELETE|KILL|' + \
-           'OPTIMIZE|SET|RENAME|TRUNCATE|USE'
+           'OPTIMIZE|SET|RENAME|TRUNCATE|USE|UPDATE'
 
 limit_re = re.compile(r'\s+LIMIT($|\s)', re.IGNORECASE)
 select_re = re.compile(r'(^|\s)SELECT\s', re.IGNORECASE)
@@ -48,7 +51,7 @@ class QueryContext(BaseQueryContext):
                  max_str_len: Optional[int] = 0,
                  query_tz: Optional[Union[str, tzinfo]] = None,
                  column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                 utc_tz_aware: bool = False,
+                 utc_tz_aware: Union[bool, Literal["schema"]] = False,
                  use_extended_dtypes: Optional[bool] = None,
                  as_pandas: bool = False,
                  streaming: bool = False,
@@ -82,8 +85,10 @@ class QueryContext(BaseQueryContext):
           objects with the selected timezone
         :param column_tzs A dictionary of column names to tzinfo objects (or strings that will be converted to
           tzinfo objects).  The timezone will be applied to datetime objects returned in the query
-        :param utc_tz_aware Force timezone-aware Python datetime objects even when the active timezone is UTC.
-          Defaults to False to preserve the legacy behavior of returning naive UTC timestamps.
+        :param utc_tz_aware Controls timezone-aware behavior for UTC DateTime columns. False (default) returns
+          naive UTC timestamps. True forces timezone-aware UTC datetimes. "schema" returns datetimes that
+          match the server's column definition which means timezone-aware when the column schema defines a timezone
+          (e.g. DateTime('UTC')) and naive for bare DateTime columns.
         """
         super().__init__(settings,
                          query_formats,
@@ -101,6 +106,8 @@ class QueryContext(BaseQueryContext):
         self.server_tz = server_tz
         self.apply_server_tz = apply_server_tz
         self.external_data = external_data
+        if isinstance(utc_tz_aware, str) and utc_tz_aware != "schema":
+            raise ProgrammingError(f'utc_tz_aware must be True, False, or "schema", got "{utc_tz_aware}"')
         self.utc_tz_aware = utc_tz_aware
         if isinstance(query_tz, str):
             try:
@@ -173,6 +180,8 @@ class QueryContext(BaseQueryContext):
             self.column_tz = None
 
     def active_tz(self, datatype_tz: Optional[tzinfo]):
+        if self.utc_tz_aware == "schema":
+            return self.column_tz or datatype_tz
         if self.column_tz:
             active_tz = self.column_tz
         elif datatype_tz:
@@ -204,7 +213,7 @@ class QueryContext(BaseQueryContext):
                      max_str_len: Optional[int] = None,
                      query_tz: Optional[Union[str, tzinfo]] = None,
                      column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                     utc_tz_aware: Optional[bool] = None,
+                     utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                      use_extended_dtypes: Optional[bool] = None,
                      as_pandas: bool = False,
                      streaming: bool = False,
@@ -254,8 +263,8 @@ class QueryResult(Closable):
     def __init__(self,
                  result_set: Matrix = None,
                  block_gen: Generator[Matrix, None, None] = None,
-                 column_names: Tuple = (),
-                 column_types: Tuple = (),
+                 column_names: Tuple[str, ...] = (),
+                 column_types: Tuple['ClickHouseType', ...] = (),
                  column_oriented: bool = False,
                  source: Closable = None,
                  query_id: str = None,
@@ -321,7 +330,7 @@ class QueryResult(Closable):
         return StreamContext(self, self._column_block_stream())
 
     @property
-    def row_block_stream(self):
+    def row_block_stream(self) -> StreamContext:
         return StreamContext(self, self._row_block_stream())
 
     @property
@@ -343,18 +352,18 @@ class QueryResult(Closable):
         return len(self.result_set)
 
     @property
-    def first_item(self):
+    def first_item(self) -> Dict[str, Any]:
         if self.column_oriented:
             return {name: col[0] for name, col in zip(self.column_names, self.result_set)}
         return dict(zip(self.column_names, self.result_set[0]))
 
     @property
-    def first_row(self):
+    def first_row(self) -> Sequence[Any]:
         if self.column_oriented:
             return [col[0] for col in self.result_set]
         return self.result_set[0]
 
-    def close(self):
+    def close(self) -> None:
         if self.source:
             self.source.close()
             self.source = None

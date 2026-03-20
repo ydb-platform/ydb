@@ -159,13 +159,25 @@ protected:
         auto baseRecord = TestProto.GetDDiskTestList(CurrentTest);
 
         switch (baseRecord.Command_case()) {
-        case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskWriteLoad:
-            CurrentTestType = "DDiskWriteLoad";
+        case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad: {
+            CurrentTestType = "DDiskLoad";
+            const auto& cmd = baseRecord.GetDDiskLoad();
+            if (cmd.GetIsReadLoad()) {
+                for (const auto& area : cmd.GetAreas()) {
+                    if (area.GetInitType() == TEvLoadTestRequest::TDDiskLoad::TArea::INIT_NONE) {
+                        Cerr << "Error: read load requires area initialization"
+                             << " (InitType != INIT_NONE) to allocate chunks before reading" << Endl;
+                        ASSERT_YTHROW(false,
+                            "Invalid configuration: read load requires area initialization (InitType != INIT_NONE)");
+                    }
+                }
+            }
             break;
+        }
         default:
             CurrentTestType = "Unknown";
             Cerr << "Unknown load type" << Endl;
-            return;
+            ASSERT_YTHROW(false, "Invalid configuration: unknown load type in TDDiskPerfTestActor");
         }
 
         PendingResults.clear();
@@ -175,13 +187,13 @@ protected:
         for (ui32 d = 0; d < Devices.size(); ++d) {
             auto record = baseRecord;
             switch (record.Command_case()) {
-            case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskWriteLoad: {
-                auto* cfg = record.MutableDDiskWriteLoad();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad: {
+                auto* cfg = record.MutableDDiskLoad();
                 auto* ddiskId = cfg->MutableDDiskId();
                 ddiskId->SetNodeId(1);
                 ddiskId->SetPDiskId(Devices[d].PDiskIdNum);
                 ddiskId->SetDDiskSlotId(Devices[d].DDiskSlotId);
-                ctx.Register(CreateDDiskWriterLoadTest(record.GetDDiskWriteLoad(), ctx.SelfID, Counters, d, d));
+                ctx.Register(CreateDDiskLoadTest(record.GetDDiskLoad(), ctx.SelfID, Counters, d, d));
                 break;
             }
             default:

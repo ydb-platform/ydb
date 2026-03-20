@@ -45,7 +45,7 @@ public:
     bool SetPrimaryView(TContext& ctx, TPosition pos) override {
         Y_UNUSED(ctx);
         Y_UNUSED(pos);
-        View_ = {"", true};
+        View_ = {.ViewName = "", .PrimaryFlag = true};
         return true;
     }
 
@@ -53,7 +53,7 @@ public:
         Y_UNUSED(ctx);
         Y_UNUSED(pos);
         Full_ = Name_.GetRepr();
-        View_ = {view};
+        View_ = {.ViewName = view};
         if (!View_.empty()) {
             Full_ = ":" + View_.ViewName;
         }
@@ -66,7 +66,7 @@ public:
     }
 
     TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override {
-        if (View_ == TViewDescription{"@"}) {
+        if (View_ == TViewDescription{.ViewName = "@"}) {
             auto key = Y("TempTable", Name_.Build());
             return key;
         }

@@ -9,7 +9,7 @@ IF (SANITIZER_TYPE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ENDIF()
 
 PEERDIR(

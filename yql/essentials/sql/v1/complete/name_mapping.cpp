@@ -41,7 +41,7 @@ TCandidate ToCandidate(TKeyword name, TLocalSyntaxContext& local) {
 }
 
 TCandidate ToCandidate(TPragmaName name) {
-    return {ECandidateKind::PragmaName, std::move(name.Identifier)};
+    return {.Kind = ECandidateKind::PragmaName, .Content = std::move(name.Identifier)};
 }
 
 TCandidate ToCandidate(TTypeName name) {
@@ -79,7 +79,7 @@ TCandidate ToCandidate(TFunctionName name) {
 }
 
 TCandidate ToCandidate(THintName name) {
-    return {ECandidateKind::HintName, std::move(name.Identifier)};
+    return {.Kind = ECandidateKind::HintName, .Content = std::move(name.Identifier)};
 }
 
 TCandidate ToCandidate(TFolderName name, TLocalSyntaxContext& local) {
@@ -109,11 +109,11 @@ TCandidate ToCandidate(TTableName name, TLocalSyntaxContext& local) {
     if (!local.IsQuoted.AtRhs) {
         name.Identifier.append('`');
     }
-    return {ECandidateKind::TableName, std::move(name.Identifier)};
+    return {.Kind = ECandidateKind::TableName, .Content = std::move(name.Identifier)};
 }
 
 TCandidate ToCandidate(TClusterName name) {
-    return {ECandidateKind::ClusterName, std::move(name.Identifier)};
+    return {.Kind = ECandidateKind::ClusterName, .Content = std::move(name.Identifier)};
 }
 
 TCandidate ToCandidate(TColumnName name, TLocalSyntaxContext& local) {
@@ -124,18 +124,18 @@ TCandidate ToCandidate(TColumnName name, TLocalSyntaxContext& local) {
         name.Identifier.prepend(ToIdentifier(std::move(name.TableAlias), local));
     }
 
-    return {ECandidateKind::ColumnName, std::move(name.Identifier)};
+    return {.Kind = ECandidateKind::ColumnName, .Content = std::move(name.Identifier)};
 }
 
 TCandidate ToCandidate(TBindingName name) {
     name.Identifier.prepend('$');
-    return {ECandidateKind::BindingName, std::move(name.Identifier)};
+    return {.Kind = ECandidateKind::BindingName, .Content = std::move(name.Identifier)};
 }
 
 TCandidate ToCandidate(TUnknownName name, TLocalSyntaxContext& local) {
     name.Content = ToIdentifier(std::move(name.Content), local);
 
-    return {ECandidateKind::UnknownName, std::move(name.Content)};
+    return {.Kind = ECandidateKind::UnknownName, .Content = std::move(name.Content)};
 }
 
 TCandidate ToCandidate(TGenericName generic, TLocalSyntaxContext& local) {

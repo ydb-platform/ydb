@@ -330,7 +330,7 @@ public:
 
     TString TraceId() const {
         if (QueryState && QueryState->KqpSessionSpan) {
-            return QueryState->KqpSessionSpan.GetTraceId().GetHexTraceId();
+            return QueryState->KqpSessionSpan.GetTraceId().GetHexTraceIdLowerCase();
         }
         return TString();
     }

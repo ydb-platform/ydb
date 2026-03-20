@@ -1158,8 +1158,14 @@ public:
 
                         if (res.Maybe<TResTransientBase>()) {
                             auto resTransient = res.Cast<TResTransientBase>();
-                            if (!EnsureAtom(*resTransient.Ref().Child(TResTransientBase::idx_DelegatedSource), ctx)) {
+                            bool isUniversal;
+                            if (!EnsureAtomOrUniversal(*resTransient.Ref().Child(TResTransientBase::idx_DelegatedSource), ctx, isUniversal)) {
                                 return IGraphTransformer::TStatus::Error;
+                            }
+
+                            if (isUniversal) {
+                                input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+                                return IGraphTransformer::TStatus::Ok;
                             }
 
                             if (!Config_->Types.DataSourceMap.FindPtr(resTransient.DelegatedSource().Value())) {

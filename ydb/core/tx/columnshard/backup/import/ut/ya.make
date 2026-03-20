@@ -6,7 +6,7 @@ SPLIT_FACTOR(60)
 
 IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "memory")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:16)
 ELSE()
     SIZE(MEDIUM)

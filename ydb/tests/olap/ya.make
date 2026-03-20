@@ -26,7 +26,7 @@ PY3TEST()
     REQUIREMENTS(cpu:2)
     IF (SANITIZER_TYPE)
         SIZE(LARGE)
-        TAG(ya:fat)
+        INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     ELSE()
         SIZE(MEDIUM)
     ENDIF()
@@ -51,6 +51,7 @@ RECURSE(
     large
     lib
     load
+    minmax_index
     oom
     s3_import
     scenario

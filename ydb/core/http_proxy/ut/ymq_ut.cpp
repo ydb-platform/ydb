@@ -5,6 +5,9 @@
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 
@@ -22,17 +25,73 @@ using namespace NActors;
 
 Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
+    NYdb::TDriver CreateDriver(ui16 kikimrGrpcPort) {
+        TString endpoint = TStringBuilder() << "localhost:" << kikimrGrpcPort;
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(endpoint)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin")
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+        return NYdb::TDriver(driverConfig);
+    }
+
     Y_UNIT_TEST_F(TestCreateQueue, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        CreateQueue({{"QueueName", "ExampleQueueName"}});
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        {
+            NYdb::NScheme::TSchemeClient schemeClient(driver);
+            auto describe = schemeClient.ListDirectory("/Root/SQS/cloud4/000000000000000101v0").GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+            for (auto& c : describe.GetChildren()) {
+                Cerr << (TStringBuilder() << ">>>>> /Root/SQS/cloud4/000000000000000101v0/" << c.Name << Endl);
+            }
+        }
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl").GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueue_OldImplimentation, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         CreateQueue({{"QueueName", "ExampleQueueName"}});
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndSameParams, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        auto req = NJson::TJsonMap{{"QueueName", "ExampleQueueName"}};
+        CreateQueue(req);
+        CreateQueue(req);
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndSameParams_OldImplimentation, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         auto req = NJson::TJsonMap{{"QueueName", "ExampleQueueName"}};
         CreateQueue(req);
         CreateQueue(req);
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndDifferentParams, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        auto req = NJson::TJsonMap{
+            {"QueueName", "ExampleQueueName"},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
+        };
+        CreateQueue(req);
+
+        req["Attributes"]["MessageRetentionPeriod"] = "61";
+        auto json = CreateQueue(req, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "ValidationError");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndDifferentParams_OldImplimentation, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         auto req = NJson::TJsonMap{
             {"QueueName", "ExampleQueueName"},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
@@ -46,6 +105,17 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        auto json = CreateQueue({
+            {"QueueName", "B@d_queue_name"},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
+        }, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidParameterValue");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName_OldImplimentation, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         auto json = CreateQueue({
             {"QueueName", "B@d_queue_name"},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
@@ -55,18 +125,21 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithEmptyName, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json = CreateQueue({}, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "MissingParameter");
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithWrongBody, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json = CreateQueue({{"wrongField", "foobar"}}, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidArgumentException");
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithWrongAttribute, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName"},
             {"Attributes", NJson::TJsonMap{
@@ -80,6 +153,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithAllAttributes, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
         auto attributes1 = GetQueueAttributes({
             {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
@@ -113,9 +187,27 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         });
         TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
         UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/v4/streamImpl").GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        auto& description = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+        auto& consumer = description.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerName(), "sqs_consumer");
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerType(), NYdb::NTopic::EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDefaultProcessingTimeout(), TDuration::Seconds(3600));
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetEnabled(), false);
+
+        driver.Stop(true);
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithTags, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto tags = NJson::TJsonMap{
             {"key1", "value1"},
             {"key2", "value2"},

@@ -5,9 +5,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(80)
 
 SIZE(LARGE)
-
-TAG(ya:fat)
-
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

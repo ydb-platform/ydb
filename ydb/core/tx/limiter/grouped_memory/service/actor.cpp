@@ -37,7 +37,7 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev) {
         return;
     }
     for (auto&& i : event.GetAllocations()) {
-        LWPROBE(StartTask, *index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetExternalGroupId(), event.GetStageFeaturesIdx().value_or(std::numeric_limits<ui32>::max()), i->GetIdentifier(), i->GetMemory(), event.GetAllocations().size(), LoadQueue.GetLoad(index));
+        LWPROBE(StartTask, *index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetExternalGroupId(), event.GetStageFeaturesIdx().value_or(std::numeric_limits<ui32>::max()), i->GetIdentifier(), i->GetMemory(), event.GetAllocations().size(), LoadQueue.GetLoad(*index));
         Managers[*index]->RegisterAllocation(event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetExternalGroupId(), i,
             event.GetStageFeaturesIdx());
     }
@@ -49,7 +49,7 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishTask::TPtr& ev) 
     if (!index) {
         return;
     }
-    LWPROBE(FinishTask, *index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(index));
+    LWPROBE(FinishTask, *index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(*index));
     Managers[*index]->UnregisterAllocation(event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
 }
 
@@ -59,7 +59,7 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvTaskUpdated::TPtr& ev)
     if (!index) {
         return;
     }
-    LWPROBE(TaskUpdated, *index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(index));
+    LWPROBE(TaskUpdated, *index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(*index));
     Managers[*index]->AllocationUpdated(
         event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
 }

@@ -204,7 +204,8 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvSplitAck"
                                << ", at schemeshard: " << ssId
-                               << ", message: " << ev->Get()->Record.ShortDebugString());
+                               << ", OperationCookie: " << ev->Get()->Record.GetOperationCookie()
+                               << ", TabletId: " << ev->Get()->Record.GetTabletId());
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -244,63 +245,74 @@ public:
         Y_ABORT_UNLESS(tableInfo);
 
         // Replace all Src datashard(s) with Dst datashard(s)
-        TVector<TTableShardInfo> newPartitioning;
         TVector<TShardIdx> newShardsIdx;
         THashSet<TShardIdx> allSrcShardIdxs;
+        // Pre-build the dst partition list in a single pass over txState->Shards.
+        TVector<TTableShardInfo> dstPartitions;
+        const auto now = context.Ctx.Now();
         for (const auto& txShard : txState->Shards) {
-            if (txShard.Operation == TTxState::TransferData)
+            if (txShard.Operation == TTxState::TransferData) {
                 allSrcShardIdxs.insert(txShard.Idx);
+            } else if (txShard.Operation == TTxState::CreateParts) {
+                // TODO: make sure dst are sorted by range end
+                Y_ABORT_UNLESS(context.SS->ShardInfos.contains(txShard.Idx));
+                TTableShardInfo dst(txShard.Idx, txShard.RangeEnd);
+                if (tableInfo->IsTTLEnabled()) {
+                    auto& lag = dst.LastCondEraseLag;
+                    Y_DEBUG_ABORT_UNLESS(!lag.Defined());
+                    lag = now - dst.LastCondErase;
+                    context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
+                }
+                newShardsIdx.push_back(dst.ShardIdx);
+                dstPartitions.push_back(std::move(dst));
+            }
         }
 
-        bool dstAdded = false;
-        const auto now = context.Ctx.Now();
-        for (const auto& shard : tableInfo->GetPartitions()) {
-            if (allSrcShardIdxs.contains(shard.ShardIdx)) {
-                if (auto& lag = shard.LastCondEraseLag) {
-                    context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
-                    lag.Clear();
-                }
-
-                if (dstAdded) {
-                    continue;
-                }
-
-                for (const auto& txShard : txState->Shards) {
-                    if (txShard.Operation != TTxState::CreateParts)
-                        continue;
-
-                    // TODO: make sure dst are sorted by range end
-                    Y_ABORT_UNLESS(context.SS->ShardInfos.contains(txShard.Idx));
-                    TTableShardInfo dst(txShard.Idx, txShard.RangeEnd);
-
-                    if (tableInfo->IsTTLEnabled()) {
-                        auto& lag = dst.LastCondEraseLag;
-                        Y_DEBUG_ABORT_UNLESS(!lag.Defined());
-
-                        lag = now - dst.LastCondErase;
-                        context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
+        // Clear TTL lag counters for src shards (O(k) instead of O(N)).
+        if (tableInfo->IsTTLEnabled()) {
+            for (const TShardIdx& srcIdx : allSrcShardIdxs) {
+                auto it = tableInfo->GetShard2PartitionIdx().find(srcIdx);
+                if (it != tableInfo->GetShard2PartitionIdx().end()) {
+                    if (auto& lag = tableInfo->GetPartitions()[it->second].LastCondEraseLag) {
+                        context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
+                        lag.Clear();
                     }
-
-                    newPartitioning.push_back(dst);
-                    newShardsIdx.push_back(dst.ShardIdx);
                 }
-
-                dstAdded = true;
-            } else {
-                newPartitioning.push_back(shard);
             }
         }
 
         auto oldAggrStats = tableInfo->GetStats().Aggregated;
 
-        // Delete the whole old partitioning and persist the whole new partitioning as the indexes have changed
-        context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo);
-        context.SS->SetPartitioning(tableId, tableInfo, std::move(newPartitioning));
+        // srcFirstIdx must be computed before ApplySplitMerge updates Shard2PartitionIdx.
+        // splitStartIdx is the DB persistence boundary: 0 for a full rewrite (flag off),
+        // srcFirstIdx for a partial rewrite (flag on).  The two MUST be kept separate:
+        // ApplySplitMerge always needs the actual position of the first src shard.
+        const ui64 oldPartitionCount = tableInfo->GetPartitions().size();
+        const ui64 kAdded = dstPartitions.size();
+        ui64 srcFirstIdx = oldPartitionCount; // sentinel — will be overwritten
+        for (const auto& srcIdx : allSrcShardIdxs) {
+            const auto it = tableInfo->GetShard2PartitionIdx().find(srcIdx);
+            if (it != tableInfo->GetShard2PartitionIdx().end()) {
+                srcFirstIdx = Min(srcFirstIdx, it->second);
+            }
+        }
+        const ui64 splitStartIdx = AppData()->FeatureFlags.GetEnableSplitMergePartialPersistence()
+            ? srcFirstIdx
+            : 0;
+
+        context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo, splitStartIdx);
+        context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx);
         if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
             context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
         }
-        context.SS->PersistTablePartitioning(db, tableId, tableInfo);
-        context.SS->PersistTablePartitionStats(db, tableId, tableInfo);
+        context.SS->PersistTablePartitioning(db, tableId, tableInfo, splitStartIdx);
+        context.SS->PersistTablePartitionStats(db, tableId, tableInfo, splitStartIdx);
+
+        // Track partial persistence savings: skipped = unaffected partitions not rewritten,
+        // rewritten = partitions that were deleted and written back.
+        const ui64 newPartitionCount = tableInfo->GetPartitions().size();
+        context.SS->TabletCounters->Cumulative()[COUNTER_SPLIT_MERGE_PARTITIONS_SKIPPED].Increment(splitStartIdx);
+        context.SS->TabletCounters->Cumulative()[COUNTER_SPLIT_MERGE_PARTITIONS_REWRITTEN].Increment(newPartitionCount - splitStartIdx);
 
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_SHARD_ACTIVE_COUNT].Sub(allSrcShardIdxs.size());
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_SHARD_INACTIVE_COUNT].Add(allSrcShardIdxs.size());

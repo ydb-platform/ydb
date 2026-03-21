@@ -771,16 +771,19 @@ private:
     using TPartitionsVec = TVector<TTableShardInfo>;
 
     struct TSortByNextCondErase {
-        using TIterator = TPartitionsVec::iterator;
-
-        bool operator()(TIterator left, TIterator right) const {
-            return left->NextCondErase > right->NextCondErase;
+        bool operator()(
+            const std::pair<TInstant, ui32>& left,
+            const std::pair<TInstant, ui32>& right
+        ) const {
+            return left.first > right.first;
         }
     };
 
     TPartitionsVec Partitions;
     THashMap<TShardIdx, ui64> Shard2PartitionIdx; // shardIdx -> index in Partitions
-    TPriorityQueue<TPartitionsVec::iterator, TVector<TPartitionsVec::iterator>, TSortByNextCondErase> CondEraseSchedule;
+    TPriorityQueue<std::pair<TInstant, ui32>,
+                   TVector<std::pair<TInstant, ui32>>,
+                   TSortByNextCondErase> CondEraseSchedule;
     THashMap<TShardIdx, TActorId> InFlightCondErase; // shard to pipe client
     mutable TMaybe<ui32> TTLColumnId;
     THashSet<TOperationId> SplitOpsInFlight;
@@ -820,14 +823,9 @@ public:
     }
 
     static TTableInfo::TPtr DeepCopy(const TTableInfo& other) {
-        TTableInfo::TPtr copy(new TTableInfo(other));
-        // rebuild conditional erase schedule since it uses iterators
-        copy->CondEraseSchedule.clear();
-        for (ui32 i = 0; i < copy->Partitions.size(); ++i) {
-            copy->CondEraseSchedule.push(copy->Partitions.begin() + i);
-        }
-
-        return copy;
+        // CondEraseSchedule stores ui32 partition indices, which are valid in
+        // the copied Partitions vector without any fixup.
+        return TTableInfo::TPtr(new TTableInfo(other));
     }
 
     struct TCreateAlterDataFeatureFlags {
@@ -932,6 +930,16 @@ public:
 #endif
 
     void SetPartitioning(TVector<TTableShardInfo>&& newPartitioning);
+
+    // Verify internal consistency of partitioning data structures.
+    // O(N) — for temporary post-deploy validation only; remove once stable.
+    void VerifyConsistency() const;
+
+    // In-place split/merge: replaces the contiguous src shard range with dst
+    // shards without rebuilding the full newPartitioning vector.  Avoids O(N)
+    // TString copies that SetPartitioning requires when called from HandleReply.
+    // addedShards is derived internally from dstPartitions.
+    void ApplySplitMerge(TVector<TTableShardInfo>&& dstPartitions, const THashSet<TShardIdx>& removedShards, ui64 splitFirstIdx);
 
     const TVector<TTableShardInfo>& GetPartitions() const {
         return Partitions;
@@ -1208,8 +1216,7 @@ public:
         if (CondEraseSchedule.empty()) {
             return nullptr;
         }
-
-        return CondEraseSchedule.top();
+        return &Partitions[CondEraseSchedule.top().second];
     }
 
     const auto& GetInFlightCondErase() const {
@@ -1234,7 +1241,7 @@ public:
         auto it = FindPartition(shardIdx);
         Y_ENSURE(it != Partitions.end());
 
-        CondEraseSchedule.push(it);
+        CondEraseSchedule.push({it->NextCondErase, (ui32)(it - Partitions.begin())});
         InFlightCondErase.erase(shardIdx);
     }
 

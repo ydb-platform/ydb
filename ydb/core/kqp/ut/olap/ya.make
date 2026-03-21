@@ -30,6 +30,7 @@ SRCS(
     optimizer_ut.cpp
     sparsed_ut.cpp
     statistics_ut.cpp
+    peephole_ut.cpp
     sys_view_ut.cpp
     tiering_ut.cpp
     write_ut.cpp

@@ -118,7 +118,6 @@ private:
     STATEFN(WorkState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleWork);
-            hFunc(TEvKqpNode::TEvFinishKqpTask, HandleWork); // used only for unit tests
             hFunc(TEvKqpNode::TEvCancelKqpTasksRequest, HandleWork);
             hFunc(TEvents::TEvWakeup, HandleWork);
             hFunc(TEvKqp::TEvInitiateShutdownRequest, HandleWork);
@@ -390,29 +389,6 @@ private:
         Send(executerId, reply.Release(), IEventHandle::FlagTrackDelivery, txId);
 
         Counters->NodeServiceProcessTime->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
-    }
-
-    // used only for unit tests
-    void HandleWork(TEvKqpNode::TEvFinishKqpTask::TPtr& ev) {
-        auto& message = *ev->Get();
-        if (auto tasksToAbort = State_->GetTasksByTxId(message.TxId); !tasksToAbort.empty()) {
-            TStringBuilder finalReason;
-            finalReason << "Node service cancelled the task, because of direct request "
-                << ", NodeId: "<< SelfId().NodeId()
-                << ", TxId: " << message.TxId;
-                STLOG_E(finalReason,
-                    (node_id, SelfId().NodeId()));
-
-
-            for (const auto& [taskId, computeActorId]: tasksToAbort) {
-                if (message.TaskId != taskId) {
-                    continue;
-                }
-
-                auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::ABORTED, finalReason);
-                Send(computeActorId, abortEv.release());
-            }
-        }
     }
 
     void HandleWork(TEvKqpNode::TEvCancelKqpTasksRequest::TPtr& ev) {

@@ -2309,9 +2309,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         }
 
         if (format == "csv") {
-            for (const auto& col : params.GetColumnNames()) {
-                readSpec->Settings.csv.file_column_names.emplace_back(col);
-            }
+            const auto& columnNames = params.GetColumnNames();
+            readSpec->Settings.csv.file_column_names.assign(columnNames.begin(), columnNames.end());
         }
 
         if (const auto it = settings.find("data.datetime.formatname"); settings.cend() != it) {

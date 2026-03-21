@@ -1604,7 +1604,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
         auto result = session.ExecuteDataQuery(Q1_(R"(
             DECLARE $items AS Struct<x:Int32,y:Uint32?,z:Struct<a:Int32,b:Int32?,c:Struct<q:Int32,p:Int32>>>;
-            SELECT * FROM AS_TABLE($items);
+            SELECT * FROM AS_TABLE([ $items ]);
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());

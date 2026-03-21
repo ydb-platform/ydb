@@ -295,4 +295,6 @@ message TFeatureFlags {
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
+    // Skip persisting partition rows that are not affected by a split/merge operation.
+    optional bool EnableSplitMergePartialPersistence = 260 [default = true];
 }

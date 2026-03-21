@@ -8,6 +8,7 @@
 #include "log_settings.h"
 #include "scheduler_cookie.h"
 #include "cpu_manager.h"
+#include "subsystem.h"
 
 #include <library/cpp/threading/future/future.h>
 #include <ydb/library/actors/util/ticket_lock.h>
@@ -15,6 +16,8 @@
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
 #include <util/system/mutex.h>
+
+#include <type_traits>
 
 namespace NInterconnect::NRdma {
     class IMemPool;
@@ -183,6 +186,7 @@ namespace NActors {
         TProxyWrapperFactory ProxyWrapperFactory;
         TMutex ProxyCreationLock;
         mutable std::vector<TActorId> DynamicProxies;
+        std::vector<std::unique_ptr<ISubSystem>> SubSystems;
 
         std::atomic_bool StartExecuted = false;
         std::atomic_bool StopExecuted = false;
@@ -334,6 +338,27 @@ namespace NActors {
 
         TVector<IExecutorPool*> GetBasicExecutorPools() const {
             return CpuManager->GetBasicExecutorPools();
+        }
+
+        template<class T>
+        void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {
+            static_assert(std::is_base_of_v<ISubSystem, T>, "T must implement ISubSystem");
+            Y_ABORT_UNLESS(!StartExecuted.load(), "cannot register subsystem after actor system start");
+            const size_t index = TSubSystemRegistry::TItem<T>::Index();
+            if (SubSystems.size() <= index) {
+                SubSystems.resize(index + 1);
+            }
+            SubSystems[index] = std::move(subsystem);
+        }
+
+        template<class T>
+        T* GetSubSystem() const {
+            static_assert(std::is_base_of_v<ISubSystem, T>, "T must implement ISubSystem");
+            const size_t index = TSubSystemRegistry::TItem<T>::Index();
+            if (index >= SubSystems.size()) {
+                return nullptr;
+            }
+            return static_cast<T*>(SubSystems[index].get());
         }
 
         void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;

@@ -1,4 +1,5 @@
 #include "dq_output_consumer.h"
+#include "dq_scatter_bucket_index.h"
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
@@ -1009,6 +1010,101 @@ private:
     std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
+class TDqOutputScatterConsumer : public IDqOutputConsumer {
+public:
+    TDqOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth)
+        : Outputs(std::move(outputs))
+        , OutputWidth(outputWidth)
+        , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
+        , BucketIndex(std::make_shared<TScatterBucketIndex>(static_cast<ui32>(Outputs.size())))
+    {
+        // Scatter consumer requires every output to support LevelChangeCallback.
+        // This is the only mechanism that keeps the bucket index and the fill aggregator
+        // fresh after external Pop() calls. There is no O(N) polling fallback in
+        // GetFillLevel(), so outputs that silently ignore SetLevelChangeCallback will
+        // produce stale routing decisions and may permanently block the task runner.
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (ui32 i = 0; i < Outputs.size(); ++i) {
+            YQL_ENSURE(Outputs[i]->SupportsLevelChangeCallback(),
+                "TDqOutputScatterConsumer: output " << i << " does not support LevelChangeCallback. "
+                "Only implementations that override SupportsLevelChangeCallback() (e.g. TDqOutputChannel) "
+                "may be used with Scatter.");
+            Outputs[i]->SetFillAggregator(Aggregator);
+            // Use weak_ptr so that a channel outliving this consumer (held by the executor)
+            // does not invoke Update() on a destroyed BucketIndex.
+            std::weak_ptr<TScatterBucketIndex> weakIndex = BucketIndex;
+            Outputs[i]->SetLevelChangeCallback([weakIndex, i](EDqFillLevel /*from*/, EDqFillLevel to) {
+                if (auto index = weakIndex.lock()) {
+                    index->Update(i, to);
+                }
+            });
+        }
+    }
+
+    EDqFillLevel GetFillLevel() const override {
+        // MIN semantics via aggregator: O(1).
+        // The aggregator is kept fresh by LevelChangeCallback fired on every level
+        // transition — including those triggered by external Pop() calls on channels.
+        return Aggregator->GetMinFillLevel();
+    }
+
+    void Consume(TUnboxedValue&& value) final {
+        YQL_ENSURE(!OutputWidth.Defined());
+        const ui32 idx = BucketIndex->PickBest();
+        Outputs[idx]->Push(std::move(value));
+        // UpdateFillLevel() triggers the callback which refreshes both the aggregator
+        // and BucketIndex for the level increase caused by Push().
+        BucketIndex->Update(idx, Outputs[idx]->UpdateFillLevel());
+    }
+
+    void WideConsume(TUnboxedValue* values, ui32 count) final {
+        YQL_ENSURE(OutputWidth.Defined() && OutputWidth == count);
+        const ui32 idx = BucketIndex->PickBest();
+        std::copy(values, values + count, Tmp.begin());
+        Outputs[idx]->WidePush(Tmp.data(), count);
+        BucketIndex->Update(idx, Outputs[idx]->UpdateFillLevel());
+    }
+
+    void Consume(NDqProto::TCheckpoint&& checkpoint) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TCheckpoint(checkpoint));
+        }
+    }
+
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
+    void Finish() override {
+        for (auto& output : Outputs) {
+            output->Finish();
+        }
+    }
+
+    void Flush() override {
+        for (auto& output : Outputs) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
+    }
+
+private:
+    TVector<IDqOutput::TPtr> Outputs;
+    const TMaybe<ui32> OutputWidth;
+    TUnboxedValueVector Tmp;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
+    std::shared_ptr<TScatterBucketIndex> BucketIndex;
+};
+
 } // namespace
 
 IDqOutputConsumer::TPtr CreateOutputMultiConsumer(TVector<IDqOutputConsumer::TPtr>&& consumers) {
@@ -1124,6 +1220,10 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth) {
     return MakeIntrusive<TDqOutputBroadcastConsumer>(std::move(outputs), outputWidth);
+}
+
+IDqOutputConsumer::TPtr CreateOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth) {
+    return MakeIntrusive<TDqOutputScatterConsumer>(std::move(outputs), outputWidth);
 }
 
 } // namespace NYql::NDq

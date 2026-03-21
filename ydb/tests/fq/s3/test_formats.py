@@ -230,7 +230,7 @@ Pear,15,33'''
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
         assert (
-            "Unknown format: invalid_type_format. Use one of: csv_with_names, tsv_with_names, json_list, json, raw, json_as_string, json_each_row, parquet"
+            "Unknown format: invalid_type_format. Use one of: csv_with_names, csv, tsv_with_names, json_list, json, raw, json_as_string, json_each_row, parquet"
             in describe_string
         )
 
@@ -589,3 +589,163 @@ Pear,15,33'''
             "couldn\\'t load table metadata: parameter is not supported with type inference: data.datetime.format"
             in describe_string
         )
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_format_no_header(self, kikimr, s3, client, unique_prefix):
+        # csv format: file has no header row; column names and order come from SCHEMA
+        s3_helpers.create_bucket_and_upload_file(
+            "test_no_header.csv", s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data"
+        )
+        kikimr.control_plane.wait_bootstrap(1)
+
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`test_no_header.csv`
+            WITH (
+                format = csv,
+                SCHEMA (
+                    Fruit String NOT NULL,
+                    Price Int32 NOT NULL,
+                    Weight Int32 NOT NULL
+                )
+            );
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        self.validate_result(result_set)
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_format_no_header_project_non_first_alphabetic_column(self, kikimr, s3, client, unique_prefix):
+        # Same file as test_csv_format_no_header (3 columns, no header row).
+        # Request a single column that is not the first in alphabetical order
+        # (Fruit < Price < Weight → Price is the middle column).
+        s3_helpers.create_bucket_and_upload_file(
+            "test_no_header.csv", s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data"
+        )
+        kikimr.control_plane.wait_bootstrap(1)
+
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT Price
+            FROM `{storage_connection_name}`.`test_no_header.csv`
+            WITH (
+                format = csv,
+                SCHEMA (
+                    Fruit String NOT NULL,
+                    Price Int32 NOT NULL,
+                    Weight Int32 NOT NULL
+                )
+            );
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 1
+        assert result_set.columns[0].name == "Price"
+        assert result_set.columns[0].type.type_id == ydb.Type.INT32
+        assert len(result_set.rows) == 3
+        assert result_set.rows[0].items[0].int32_value == 3
+        assert result_set.rows[1].items[0].int32_value == 2
+        assert result_set.rows[2].items[0].int32_value == 15
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_format_schema_order_differs_from_alphabet(self, kikimr, s3, client, unique_prefix):
+        # csv format: columns in file are Fruit,Price,Weight; SCHEMA specifies them in same order.
+        # Columns must be mapped by position (SCHEMA order), not alphabetically.
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+
+        # File columns: Weight,Price,Fruit (reversed order)
+        fruits = '''100,3,Banana
+22,2,Apple
+33,15,Pear'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits_reversed.csv', ContentType='text/plain')
+        kikimr.control_plane.wait_bootstrap(1)
+
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`fruits_reversed.csv`
+            WITH (
+                format = csv,
+                SCHEMA (
+                    Weight Int32 NOT NULL,
+                    Price Int32 NOT NULL,
+                    Fruit String NOT NULL
+                )
+            );
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 3
+        assert result_set.rows[0].items[0].int32_value == 100  # Weight
+        assert result_set.rows[0].items[1].int32_value == 3    # Price
+        assert result_set.rows[0].items[2].bytes_value == b"Banana"  # Fruit
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_format_custom_delimiter(self, kikimr, s3, client, unique_prefix):
+        # csv format with custom delimiter (semicolon)
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+
+        fruits = '''Banana;3;100
+Apple;2;22
+Pear;15;33'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits_semicolon.csv', ContentType='text/plain')
+        kikimr.control_plane.wait_bootstrap(1)
+
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`fruits_semicolon.csv`
+            WITH (
+                format = csv,
+                csv_delimiter = ";",
+                SCHEMA (
+                    Fruit String NOT NULL,
+                    Price Int32 NOT NULL,
+                    Weight Int32 NOT NULL
+                )
+            );
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        self.validate_result(result_set)

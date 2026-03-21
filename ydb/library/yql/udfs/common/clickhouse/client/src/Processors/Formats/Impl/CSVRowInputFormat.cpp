@@ -200,22 +200,14 @@ void CSVRowInputFormat::readPrefix()
     /// Thus, we check if this InputFormat is working with the "real" beginning of the data in case of parallel parsing.
     if (with_names && getCurrentUnitNumber() == 0)
     {
-        /// If file_column_names is provided, use it as a virtual header row without
-        /// reading anything from the file. The string is parsed with the same CSV
-        /// rules (delimiter, quoting) as a real header row would be.
         if (!format_settings.csv.file_column_names.empty())
         {
+            /// Use the provided column names as a virtual header instead of reading from the file.
             column_mapping->read_columns.assign(header.columns(), false);
-            ReadBufferFromString names_buf(format_settings.csv.file_column_names);
-            do
+            for (const auto & column_name : format_settings.csv.file_column_names)
             {
-                String column_name;
-                skipWhitespacesAndTabs(names_buf);
-                readCSVString(column_name, names_buf, format_settings.csv);
-                skipWhitespacesAndTabs(names_buf);
                 addInputColumn(column_name);
             }
-            while (!names_buf.eof() && checkChar(format_settings.csv.delimiter, names_buf));
 
             for (auto read_column : column_mapping->read_columns)
             {
@@ -225,12 +217,11 @@ void CSVRowInputFormat::readPrefix()
                     break;
                 }
             }
-
             for (size_t i = 0; i < column_mapping->read_columns.size(); i++)
             {
                 if (!column_mapping->read_columns[i] && is_required_columns[i])
                 {
-                    throw Exception(String("Column `") + names_by_column_indexes[i] + "` is marked as not null, but was not found in file_columns", ErrorCodes::INCORRECT_DATA);
+                    throw Exception(String("Column `") + names_by_column_indexes[i] + "` is marked as not null, but was not found in the schema", ErrorCodes::INCORRECT_DATA);
                 }
             }
             return;

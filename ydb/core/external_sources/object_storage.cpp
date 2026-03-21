@@ -212,8 +212,8 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
 
             if (key == "csv_delimiter"sv) {
-                if (format != "csv_with_names"sv) {
-                    issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "csv_delimiter should be used only with format csv_with_names"));
+                if (format != "csv_with_names"sv && format != "csv"sv) {
+                    issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "csv_delimiter should be used only with format csv_with_names or csv"));
                 }
                 if (value.size() != 1) {
                     issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "csv_delimiter should contain only one character"));

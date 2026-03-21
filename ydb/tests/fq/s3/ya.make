@@ -28,7 +28,6 @@ TEST_SRCS(
     test_early_finish.py
     test_explicit_partitioning_0.py
     test_explicit_partitioning_1.py
-    test_file_columns.py
     test_format_setting.py
     test_formats.py
     test_inflight.py

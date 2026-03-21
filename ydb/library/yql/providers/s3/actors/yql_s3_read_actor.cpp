@@ -92,8 +92,6 @@
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromFile.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromString.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadHelpers.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/ColumnsWithTypeAndName.h>
 
@@ -2137,19 +2135,6 @@ NDB::FormatSettings::TimestampFormat ToTimestampFormat(const TString& formatName
     return NDB::FormatSettings::TimestampFormat::Unspecified;
 }
 
-void ParseFileColumnsSettingToVirtualHeader(const TString& line, const NDB::FormatSettings::CSV& csvSettings, std::vector<std::string>& out) {
-    out.clear();
-    NDB::ReadBufferFromString buf(line);
-    using namespace NDB;
-    do {
-        String column_name;
-        skipWhitespacesAndTabs(buf);
-        readCSVString(column_name, buf, csvSettings);
-        skipWhitespacesAndTabs(buf);
-        out.emplace_back(std::string(column_name.data(), column_name.size()));
-    } while (!buf.eof() && checkChar(csvSettings.delimiter, buf));
-}
-
 } // anonymous namespace
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
@@ -2373,12 +2358,6 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
-
-        if (format != "csv") {
-            if (const auto it = settings.find("filecolumns"); settings.cend() != it && !it->second.empty()) {
-                ParseFileColumnsSettingToVirtualHeader(it->second, readSpec->Settings.csv, readSpec->Settings.csv.file_column_names);
-            }
-        }
 
         ui64 sizeLimit = std::numeric_limits<ui64>::max();
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it) {

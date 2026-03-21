@@ -780,14 +780,6 @@ public:
                     return true;
                 }
 
-                if (name == "filecolumns"sv) {
-                    TStringBuf unused;
-                    if (!ExtractSettingValue(setting.Tail(), "file_columns"sv, format, "csv_with_names"sv, ctx, unused)) {
-                        return false;
-                    }
-                    return true;
-                }
-
                 if (name == "directories"sv) {
                     if (setting.ChildrenSize() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected no parameters for 'directories' setting"));
@@ -844,7 +836,7 @@ public:
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
                                      { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv, "constraints"sv,
                                         "data.datetime.formatname"sv, "data.datetime.format"sv, "data.timestamp.formatname"sv, "data.timestamp.format"sv, "data.date.format"sv,
-                                        "readmaxbytes"sv, "csvdelimiter"sv, "filecolumns"sv, "directories"sv, "filepattern"sv, "pathpattern"sv, "pathpatternvariant"sv }, validator, ctx))
+                                        "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv, "pathpattern"sv, "pathpatternvariant"sv }, validator, ctx))
             {
                 return TStatus::Error;
             }

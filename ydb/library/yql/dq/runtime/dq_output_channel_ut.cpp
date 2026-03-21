@@ -1,6 +1,7 @@
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
+#include <ydb/library/yql/dq/runtime/dq_scatter_bucket_index.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/dq/runtime/ut/ut_helper.h>
 
@@ -1089,3 +1090,175 @@ Y_UNIT_TEST(BackPressureWithSpillingLoad) {
 }
 
 }
+
+namespace {
+struct TScatterSetup {
+    TVector<IDqOutputChannel::TPtr> Channels;
+    IDqOutputConsumer::TPtr Consumer;
+};
+
+TScatterSetup MakeScatter(TTestContext& ctx, ui32 channelCount, ui32 maxStoredBytes,
+                          TMaybe<ui32> outputWidth = Nothing(), ui32 maxChunkBytes = 0)
+{
+    TDqChannelSettings settings = {
+        .RowType       = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .DstStageId    = 1000,
+        .Level         = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = maxStoredBytes,
+        .MaxChunkBytes  = maxChunkBytes ? maxChunkBytes : maxStoredBytes,
+    };
+
+    TScatterSetup s;
+    TVector<IDqOutput::TPtr> outputs;
+    for (ui32 i = 0; i < channelCount; ++i) {
+        settings.ChannelId = i;
+        s.Channels.emplace_back(CreateDqOutputChannel(settings, Log));
+        outputs.emplace_back(s.Channels.back());
+    }
+    s.Consumer = CreateOutputScatterConsumer(std::move(outputs), outputWidth);
+    return s;
+}
+}
+Y_UNIT_TEST_SUITE(ScatterConsumer) {
+
+Y_UNIT_TEST(DistributesAcrossChannels) {
+    TTestContext ctx;
+
+    constexpr ui32 channelCount = 3;
+    constexpr ui32 rowCount = 30;
+
+    auto [channels, consumer] = MakeScatter(ctx, channelCount, 10000);
+
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    for (ui32 i = 0; i < rowCount; ++i) {
+        ConsumeRow(ctx, ctx.CreateRow(i), consumer);
+    }
+
+    ui64 total = 0;
+    for (auto& ch : channels) {
+        total += ch->GetValuesCount();
+    }
+    UNIT_ASSERT_VALUES_EQUAL(rowCount, total);
+
+    consumer->Finish();
+    for (auto& ch : channels) {
+        UNIT_ASSERT(ch->IsFinished());
+    }
+}
+
+Y_UNIT_TEST(AdaptiveRoutingAvoidsFull) {
+    TTestContext ctx(NARROW_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+
+    constexpr ui32 channelCount = 2;
+    constexpr ui32 hardLimit = 100;
+
+    auto [channels, consumer] = MakeScatter(ctx, channelCount, hardLimit);
+
+    ConsumeRow(ctx, ctx.CreateBigRow(0, hardLimit * 100), consumer);
+    const ui32 fullChannelIdx = channels[0]->UpdateFillLevel() == HardLimit ? 0 : 1;
+    const ui32 freeChannel = 1 - fullChannelIdx;
+    // check min semantics
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    const ui64 fullCountBefore = channels[fullChannelIdx]->GetValuesCount();
+    ConsumeRow(ctx, ctx.CreateRow(1), consumer);
+    UNIT_ASSERT_VALUES_EQUAL(fullCountBefore, channels[fullChannelIdx]->GetValuesCount());
+    UNIT_ASSERT_VALUES_EQUAL(1u, channels[freeChannel]->GetValuesCount());
+
+    // update check
+    TDqSerializedBatch data;
+    UNIT_ASSERT(channels[freeChannel]->PopAll(data));
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+    UNIT_ASSERT(channels[fullChannelIdx]->PopAll(data));
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+}
+
+Y_UNIT_TEST(BlocksOnlyWhenAllChannelsFull) {
+    TTestContext ctx(NARROW_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+
+    constexpr ui32 channelCount = 3;
+
+    auto [channels, consumer] = MakeScatter(ctx, channelCount, 100);
+
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    for (ui32 i = 0; i < channelCount; ++i) {
+        ConsumeRow(ctx, ctx.CreateBigRow(i, 10000), consumer);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
+    // update check
+    TDqSerializedBatch data;
+    UNIT_ASSERT(channels[0]->PopAll(data));
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+}
+
+Y_UNIT_TEST(BucketIndexUpdatedAfterPop) {
+    TTestContext ctx(NARROW_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    constexpr ui32 channelCount = 2;
+    auto [channels, consumer] = MakeScatter(ctx, channelCount, 100);
+
+    for (ui32 i = 0; i < channelCount; ++i) {
+        ConsumeRow(ctx, ctx.CreateBigRow(i, 10000), consumer);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
+
+
+    TDqSerializedBatch data;
+    UNIT_ASSERT(channels[0]->PopAll(data));
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    const ui64 ch1CountBefore = channels[1]->GetValuesCount();
+    ConsumeRow(ctx, ctx.CreateRow(42), consumer);
+    UNIT_ASSERT_VALUES_EQUAL(ch1CountBefore, channels[1]->GetValuesCount());
+    UNIT_ASSERT_VALUES_EQUAL(1u, channels[0]->GetValuesCount());
+}
+
+Y_UNIT_TEST(WideConsumeDistributes) {
+    TTestContext ctx(WIDE_CHANNEL);
+    constexpr ui32 channelCount = 3;
+    constexpr ui32 rowCount = 30;
+    auto [channels, consumer] = MakeScatter(ctx, channelCount, 10000, ctx.Width());
+
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    for (ui32 i = 0; i < rowCount; ++i) {
+        ConsumeRow(ctx, ctx.CreateRow(i), consumer);
+    }
+
+    ui64 total = 0;
+    for (ui32 i = 0; i < channelCount; ++i) {
+        total += channels[i]->GetValuesCount();
+    }
+    UNIT_ASSERT_VALUES_EQUAL(rowCount, total);
+}
+
+Y_UNIT_TEST(BackPressureLoad) {
+    TTestContext ctx(NARROW_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    constexpr ui32 channelCount = 8;
+    constexpr ui32 rowCount = 100'000;
+    auto [channels, consumer] = MakeScatter(ctx, channelCount, 500, Nothing(), 100);
+
+    ui32 blockCount = 0;
+    ui32 channelIndex = 0;
+
+    for (ui32 i = 0; i < rowCount; ++i) {
+        ConsumeRow(ctx, ctx.CreateRow(i), consumer);
+
+        if (consumer->GetFillLevel() == HardLimit) {
+            ++blockCount;
+            while (consumer->GetFillLevel() == HardLimit) {
+                channelIndex = (channelIndex + 1) % channelCount;
+                TDqSerializedBatch data;
+                Y_UNUSED(channels[channelIndex]->Pop(data));
+            }
+            UNIT_ASSERT_VALUES_UNEQUAL(HardLimit, consumer->GetFillLevel());
+        }
+    }
+    UNIT_ASSERT_C(blockCount > 0, "Expected back-pressure to trigger at least once");
+}
+
+}
+

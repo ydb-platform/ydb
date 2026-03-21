@@ -217,8 +217,9 @@ void TDuplicateManager::BuildExclusivePortions() {
         ++it;
         
         if (openIntervals == 0 && ((currentIt->second.Start.size() == 1 && currentIt->second.Finish.size() == 1) || (it == Borders.end() || (it->second.Finish.size() == 1 && it->second.Start.empty())))) {
-            AFL_VERIFY(currentIt->second.Start.size() == 1);
-            ExclusivePortions.insert(currentIt->second.Start.front());
+            if (currentIt->second.Start.size() == 1) {
+                ExclusivePortions.insert(currentIt->second.Start.front());
+            }
         }
 
         openIntervals += currentIt->second.Start.size();

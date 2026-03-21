@@ -64,6 +64,8 @@ namespace NTable {
             }
 
             for (ui32 prefixLen : conf.ByKeyFilterPrefixes) {
+                Y_ENSURE(prefixLen > 0 && prefixLen <= Scheme->Groups[0].ColsKeyData.size(),
+                    "Bloom filter prefix " << prefixLen << " exceeds key column count " << Scheme->Groups[0].ColsKeyData.size());
                 if (MainPageCollectionEdge || SmallPageCollectionEdge || !conf.MaxRows) {
                     ByKeyPrefixes.emplace_back(prefixLen, MakeHolder<NBloom::TQueue>(0.0001));
                 } else {
@@ -363,8 +365,11 @@ namespace NTable {
         {
             KeyState.RowId = Groups[0].Data.GetLastRowId();
 
-            for (auto& [prefixLen, writer] : ByKeyPrefixes) {
-                writer->Add(TArrayRef<const TCell>(KeyState.Key.data(), Min<size_t>(prefixLen, KeyState.Key.size())));
+            if (!ByKeyPrefixes.empty()) {
+                const NBloom::TPrefix prefix(KeyState.Key);
+                for (auto& [prefixLen, writer] : ByKeyPrefixes) {
+                    writer->Add(NBloom::THash::Root(prefix.Get(prefixLen)));
+                }
             }
 
             for (auto& g : Groups) {

@@ -152,13 +152,13 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             ui32 keyCount = tableInfo.KeyColumns.size();
             TVector<ui32> prefixes = tableInfo.ByKeyFilterPrefixes;
             if (delta.GetByKeyFilter()) {
-                if (std::find(prefixes.begin(), prefixes.end(), keyCount) == prefixes.end()) {
-                    prefixes.push_back(keyCount);
-                    Sort(prefixes);
+                auto it = std::lower_bound(prefixes.begin(), prefixes.end(), keyCount);
+                if (it == prefixes.end() || *it != keyCount) {
+                    prefixes.insert(it, keyCount);
                 }
             } else {
-                auto it = std::find(prefixes.begin(), prefixes.end(), keyCount);
-                if (it != prefixes.end()) {
+                auto it = std::lower_bound(prefixes.begin(), prefixes.end(), keyCount);
+                if (it != prefixes.end() && *it == keyCount) {
                     prefixes.erase(it);
                 }
             }
@@ -166,9 +166,12 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         }
 
         if (delta.ByKeyFilterPrefixesSize() > 0) {
+            ui32 keyCount = tableInfo.KeyColumns.size();
             TVector<ui32> prefixes;
             for (auto p : delta.GetByKeyFilterPrefixes()) {
                 if (p > 0) {
+                    Y_ENSURE(p <= keyCount,
+                        "Bloom filter prefix " << p << " exceeds key column count " << keyCount);
                     prefixes.push_back(p);
                 }
             }

@@ -4828,10 +4828,7 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
         for (const auto& [prefixLen, bloom] : partView->ByKeyPrefixes) {
             if (bloom) partPrefixes.push_back(prefixLen);
         }
-        Sort(partPrefixes);
-        auto schemePrefixes = tableInfo.ByKeyFilterPrefixes;
-        Sort(schemePrefixes);
-        if (partPrefixes != schemePrefixes) {
+        if (partPrefixes != tableInfo.ByKeyFilterPrefixes) {
             return true;
         }
     }

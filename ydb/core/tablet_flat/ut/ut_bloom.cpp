@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
     Y_UNIT_TEST(PrefixBloomWithFullKey)
     {
         /* Test that prefix bloom on 1 column and full-key bloom (as prefix=3) coexist.
-           A part is skipped if EITHER bloom says "definitely not". */
+           Only the longest prefix bloom (prefix=3) is used for lookups. */
         TDbExec me;
 
         {
@@ -349,10 +349,10 @@ Y_UNIT_TEST_SUITE(Bloom) {
         const auto rw2 = *me.SchemedCookRow(1).Col("aaa", 200_u64, "x2");
         const auto rw3 = *me.SchemedCookRow(1).Col("bbb", 300_u64, "x3");
 
-        /* Key with same prefix "aaa" but non-existing rest — prefix bloom on col 1 passes,
-           full-key bloom (prefix=3) rejects (different salt+sub combination) */
+        /* Key with same prefix "aaa" but non-existing rest — full-key bloom (prefix=3)
+           rejects (different salt+sub combination) */
         const auto noSamePrefix = *me.SchemedCookRow(1).Col("aaa", 999_u64, "zz");
-        /* Key with different prefix — prefix bloom on col 1 rejects */
+        /* Key with different prefix — full-key bloom (prefix=3) rejects */
         const auto noDiffPrefix = *me.SchemedCookRow(1).Col("aab", 100_u64, "x1");
 
         /* Enable prefix bloom on 1 column and full-key bloom (prefix=3) */
@@ -365,19 +365,20 @@ Y_UNIT_TEST_SUITE(Bloom) {
             auto subset = me->Subset(1, TEpoch::Max(), { }, { });
             UNIT_ASSERT(subset->Flatten.size() == 1);
             UNIT_ASSERT(subset->Flatten[0]->ByKeyPrefixes.size() == 2); /* prefix=1 and prefix=3 */
+            UNIT_ASSERT(subset->Flatten[0]->ByKeyPrefixes[0].first < subset->Flatten[0]->ByKeyPrefixes[1].first);
 
             auto &stats = me.Relax().BackLog().Stats;
 
-            /* noSamePrefix: prefix=1 bloom passes (aaa in bloom), but prefix=3 rejects → Weeded
-               noDiffPrefix: prefix=1 bloom rejects (aab not in bloom) → Weeded
-               Both should be weeded. */
+            /* noSamePrefix: full-key bloom (prefix=3) rejects (aaa,999,zz not in bloom) → Weeded
+               noDiffPrefix: full-key bloom (prefix=3) rejects (aab,100,x1 not in bloom) → Weeded */
             UNIT_ASSERT_VALUES_EQUAL(stats.SelectWeeded, 2);
         }
     }
 
     Y_UNIT_TEST(MultiplePrefixes)
     {
-        /* Test two prefix bloom filters simultaneously: on 1 and 2 PK columns. */
+        /* Test two prefix bloom filters on 1 and 2 PK columns.
+           Only the longest prefix bloom (prefix=2) is used for lookups. */
         TDbExec me;
 
         {
@@ -398,12 +399,12 @@ Y_UNIT_TEST_SUITE(Bloom) {
         const auto rw2 = *me.SchemedCookRow(1).Col("aaa", 200_u64, "x2");
         const auto rw3 = *me.SchemedCookRow(1).Col("bbb", 300_u64, "x3");
 
-        /* Same 1st column "aaa", different 2nd column — passes bloom-on-1, rejected by bloom-on-2 */
+        /* Same 1st column "aaa", different 2nd column — rejected by bloom-on-2 (longest) */
         const auto noPassesFirst = *me.SchemedCookRow(1).Col("aaa", 999_u64, "zz");
-        /* Different 1st column — rejected by bloom-on-1 already */
+        /* Different 1st column — rejected by bloom-on-2 (longest) */
         const auto noDiff = *me.SchemedCookRow(1).Col("aab", 100_u64, "x1");
 
-        me.To(11).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {1, 2}));
+        me.To(11).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {2, 1})); /* deliberately reversed */
         me.To(12).Put(1, rw1, rw2, rw3).Commit().Snap(1).Compact(1);
         me.To(13).Select(1).Has(rw1, rw2, rw3).NoKey(noPassesFirst, noDiff);
 
@@ -411,13 +412,12 @@ Y_UNIT_TEST_SUITE(Bloom) {
             auto subset = me->Subset(1, TEpoch::Max(), { }, { });
             UNIT_ASSERT(subset->Flatten.size() == 1);
             UNIT_ASSERT(subset->Flatten[0]->ByKeyPrefixes.size() == 2);
+            UNIT_ASSERT(subset->Flatten[0]->ByKeyPrefixes[0].first < subset->Flatten[0]->ByKeyPrefixes[1].first);
 
             auto &stats = me.Relax().BackLog().Stats;
 
-            /* noPassesFirst (aaa,999,...): bloom-on-1 passes (aaa exists), but
-               bloom-on-2 rejects (aaa,999 not in bloom) → Weeded.
-               noDiff (aab,...): bloom-on-1 rejects (aab not in bloom) → Weeded.
-               Both should be weeded. */
+            /* noPassesFirst (aaa,999,...): bloom-on-2 rejects (aaa,999 not in bloom) → Weeded.
+               noDiff (aab,...): bloom-on-2 rejects (aab,100 not in bloom) → Weeded. */
             UNIT_ASSERT_VALUES_EQUAL(stats.SelectWeeded, 2);
         }
     }

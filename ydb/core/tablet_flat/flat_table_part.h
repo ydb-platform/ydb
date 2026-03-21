@@ -131,6 +131,9 @@ namespace NTable {
                 "Part has scheme with " << Scheme->Groups.size() << " groups, but " << GroupsCount << " indexes");
             Y_ENSURE(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
                 "Part has " << GroupsCount << " indexes, but " << HistoricGroupsCount << " historic indexes");
+            Y_ENSURE(std::is_sorted(ByKeyPrefixes.begin(), ByKeyPrefixes.end(),
+                [](const auto& a, const auto& b) { return a.first < b.first; }),
+                "ByKeyPrefixes must be sorted by prefix length");
         }
 
         virtual ~TPart() = default;
@@ -144,12 +147,11 @@ namespace NTable {
 
         bool MightHaveKeyPrefix(const NBloom::TPrefix& prefix) const
         {
-            for (const auto& [prefixLen, bloom] : ByKeyPrefixes) {
-                if (!bloom || prefixLen == 0) {
-                    continue;
-                }
-                if (!bloom->MightHave(prefix.Get(Min<ui32>(prefixLen, Scheme->Groups[0].KeyTypes.size())))) {
-                    return false;
+            // ByKeyPrefixes are sorted by prefixLen; pick the longest (most selective) filter
+            for (auto it = ByKeyPrefixes.rbegin(); it != ByKeyPrefixes.rend(); ++it) {
+                const auto& [prefixLen, bloom] = *it;
+                if (bloom && prefixLen > 0) {
+                    return bloom->MightHave(prefix.Get(prefixLen));
                 }
             }
             return true;

@@ -36,8 +36,9 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
 }
 
 TVector<std::shared_ptr<TRegion>> CreateRegions(
+    IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
-    ui64 blockSize,
+    ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     const NProto::TStorageServiceConfig& storageConfig)
 {
@@ -47,6 +48,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     for (size_t i = 0; i < regionsCount; i++) {
         regions[i] = std::make_shared<TRegion>(
             TActorContext::ActorSystem(),
+            partitionDirectService,
             i,
             directBlockGroups,
             storageConfig.GetSyncRequestsBatchSize(),
@@ -63,14 +65,14 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
 TFastPathService::TFastPathService(
     NActors::TActorSystem* actorSystem,
     ui64 tabletId,
-    ui32 generation,
     ui64 blockCount,
-    ui64 blockSize,
+    ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     const NProto::TStorageServiceConfig& storageConfig,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
     , Regions(CreateRegions(
+          this,
           blockCount,
           blockSize,
           std::move(directBlockGroups),
@@ -83,7 +85,6 @@ TFastPathService::TFastPathService(
           tabletId))
 {
     Y_UNUSED(ActorSystem);
-    Y_UNUSED(generation);
 }
 
 NWilson::TTraceId TFastPathService::SpanTrace()
@@ -189,6 +190,11 @@ NThreading::TFuture<TZeroBlocksLocalResponse> TFastPathService::ZeroBlocksLocal(
 void TFastPathService::ReportIOError()
 {
     // TODO: implement
+}
+
+ui64 TFastPathService::GenerateSequenceNumber()
+{
+    return ++SequenceGenerator;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

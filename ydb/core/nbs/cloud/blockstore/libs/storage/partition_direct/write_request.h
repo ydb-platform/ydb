@@ -30,7 +30,8 @@ public:
         NActors::TActorSystem* actorSystem,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TBlockRange64 range,
+        ui64 sequenceNumber,
+        TBlockRange64 vChunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId);
@@ -51,7 +52,7 @@ private:
     NActors::TActorSystem const* ActorSystem;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const TBlockRange64 Range;
+    const TBlockRange64 VChunkRange;
     const TCallContextPtr CallContext;
     const std::shared_ptr<TWriteBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;

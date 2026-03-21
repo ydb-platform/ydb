@@ -23,11 +23,13 @@ namespace {
 
 TVChunk::TVChunk(
     NActors::TActorSystem* actorSystem,
+    IPartitionDirectService* partitionDirectService,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
     TDuration traceSamplePeriod)
     : ActorSystem(actorSystem)
+    , PartitionDirectService(partitionDirectService)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkConfig(vChunkConfig)
@@ -270,6 +272,7 @@ void TVChunk::DoWriteBlocksLocal(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,
+        PartitionDirectService->GenerateSequenceNumber(),
         range,
         std::move(callContext),
         std::move(request),

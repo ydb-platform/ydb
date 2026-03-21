@@ -1,6 +1,7 @@
 #pragma once
 
 #include "direct_block_group.h"
+#include "partition_direct_service.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -15,6 +16,7 @@ class TRegion
 public:
     TRegion(
         NActors::TActorSystem* actorSystem,
+        IPartitionDirectService* partitionDirectService,
         ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,

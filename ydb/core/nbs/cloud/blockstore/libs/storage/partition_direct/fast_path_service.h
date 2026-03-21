@@ -1,5 +1,6 @@
 #pragma once
 
+#include "partition_direct_service.h"
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
@@ -13,12 +14,14 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 class TFastPathService
     : public IStorage
+    , public IPartitionDirectService
     , public std::enable_shared_from_this<TFastPathService>
 {
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TVector<std::shared_ptr<TRegion>> Regions;   // 4 GiB each
 
+    std::atomic<ui64> SequenceGenerator;
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
     TDuration TraceSamplePeriod;
@@ -29,15 +32,15 @@ public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
         ui64 tabletId,
-        ui32 generation,
         ui64 blockCount,
-        ui64 blockSize,
+        ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         const NProto::TStorageServiceConfig& storageConfig,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
 
     ~TFastPathService() override = default;
 
+    // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request) override;
@@ -51,6 +54,9 @@ public:
         std::shared_ptr<TZeroBlocksLocalRequest> request) override;
 
     void ReportIOError() override;
+
+    // IPartitionDirectService implementation
+    ui64 GenerateSequenceNumber() override;
 
 private:
     NWilson::TTraceId SpanTrace();

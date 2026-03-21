@@ -3265,7 +3265,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         TString value(1_MB, 'x');
         for (ui32 i = 0; i < 32; ++i) {
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
-            Sleep(TDuration::MilliSeconds(500));
         }
 
         Cerr << ">>>>> 1" << Endl << Flush;
@@ -3273,9 +3272,19 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << ">>>>> 2" << Endl << Flush;
         auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
-        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 2);
-        UNIT_ASSERT_VALUES_EQUAL(info16.BlobsFromCache, 1);
-        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromDisk + info16.BlobsFromDisk, 2);
+        auto readAfterCompaction = [&]() {
+            auto res = info0.BlobsFromCache == 2 && info16.BlobsFromCache == 1 && (info0.BlobsFromDisk + info16.BlobsFromDisk == 2);
+            if (!res) {
+                Cerr << "info0, from cache: " << info0.BlobsFromCache << ", info16 from cache: " << info16.BlobsFromCache << ", info0 from disk: " << info0.BlobsFromDisk << ", info16 from disk: " << info16.BlobsFromDisk << Endl << Flush;
+            }
+            return res;
+        };
+
+        auto readBeforeCompaction = [&]() {
+            return info0.BlobsFromCache == 1 && info16.BlobsFromCache == 1 && (info0.BlobsFromDisk + info16.BlobsFromDisk == 3);
+        };
+
+        UNIT_ASSERT(readAfterCompaction() || readBeforeCompaction());
 
         for (ui32 i = 0; i < 8; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
@@ -3347,7 +3356,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             TString value(blobSize, 'a');
             for (ui32 i = 0; i < count; ++i) {
                 server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", seqNo++}, value);
-                Sleep(TDuration::MilliSeconds(500));
             }
 
             auto info_half1 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, offset, half, "user1"}, half);

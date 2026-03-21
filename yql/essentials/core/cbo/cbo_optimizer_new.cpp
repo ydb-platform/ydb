@@ -213,6 +213,74 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV2(
     return stats;
 }
 
+double ComputeSelectivityCorrection(
+    const TOptimizerStatistics& leftStats,
+    const TOptimizerStatistics& rightStats,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys
+) {
+    if (leftStats.Type == EStatisticsType::BaseTable && leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
+        // YQL_CLOG(TRACE, CoreDq) << "Histogram-based selectivity correction used";
+        auto lhs = leftJoinKeys[0].AttributeName;
+        auto leftHist = leftStats.ColumnStatistics->Data[lhs].EqWidthHistogramEstimator;
+        auto rhs = rightJoinKeys[0].AttributeName;
+        auto rightHist = rightStats.ColumnStatistics->Data[rhs].EqWidthHistogramEstimator;
+
+        if (leftHist && rightHist) {
+            // Note, leftHist is PK and rightHist is FK
+            auto overlapCard = leftHist->GetOverlappingCardinality(*rightHist);
+            if (!overlapCard.Defined() || overlapCard.GetRef() == 0) {
+                YQL_CLOG(TRACE, CoreDq) << "Skipping selectivity correction: no overlap";
+            } else {
+                // correction = total PK / overlapping PK
+                auto selectivityCorrection = leftStats.Nrows / static_cast<double>(overlapCard.GetRef());
+                // YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard.GetRef();
+                // YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
+                return selectivityCorrection;
+            }
+        }
+    }
+    return 1.0;
+}
+
+double ComputeBothSidesByteSize(double newCardinality,
+    const TOptimizerStatistics& leftStats,
+    const TOptimizerStatistics& rightStats,
+    ui32 commonRightJoinKeys
+) {
+    double lhsRowBytes = leftStats.Nrows ? (leftStats.ByteSize / leftStats.Nrows) : 0;
+    double rhsRowBytes = rightStats.Nrows ? (rightStats.ByteSize / rightStats.Nrows) : 0;
+
+    /* columns with duplicate names are removed */
+    double rhsColBytes = rightStats.Ncols ? (rhsRowBytes / rightStats.Ncols) : 0;
+    double duplicateWidth = commonRightJoinKeys * rhsColBytes;
+
+    double rowWidth = std::max(0.0, lhsRowBytes + rhsRowBytes - duplicateWidth);
+    return rowWidth * newCardinality;
+}
+
+double ComputeOneSideByteSize(double newCardinality,
+    const TOptimizerStatistics& stats
+) {
+    return stats.Nrows ? (stats.ByteSize / stats.Nrows) * newCardinality : 0;
+}
+
+ui32 FindCommonJoinAttributes(
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys
+) {
+    ui32 commonJoinKeys = 0;
+    for (const auto& leftCol : leftJoinKeys) {
+        for (const auto& rightCol : rightJoinKeys) {
+            if (leftCol == rightCol) {
+                commonJoinKeys++;
+                break;
+            }
+        }
+    }
+    return commonJoinKeys;
+}
+
 /**
  * Compute the cost and output cardinality of a join
  *
@@ -229,14 +297,22 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     EJoinAlgoType joinAlgo,
     EJoinKind joinKind,
     TCardinalityHints::TCardinalityHint* maybeHint) const {
-    double newCard{};
+
     EStatisticsType outputType;
     bool leftKeyColumns = false;
     bool rightKeyColumns = false;
+    double cost{};
+    double newCard{};
+    double newByteSize{};
     double selectivity = 1.0;
 
-    bool isAntiOrSemiJoin = (joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly);
+    /* only columns used within a given query */
+    ui32 commonJoinKeys = FindCommonJoinAttributes(leftJoinKeys, rightJoinKeys);
+    ui32 newNCols = std::max<ui32>(0, leftStats.Ncols + rightStats.Ncols - commonJoinKeys);
+
+    bool isAntiOrSemiJoin = (joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::RightSemi || joinKind == EJoinKind::LeftOnly || joinKind == EJoinKind::RightOnly);
     bool isCrossJoin = (joinKind == EJoinKind::Cross);
+    // bool isExclusionJoin = (joinKind == EJoinKind::Exclusion);
 
     /* it doesn't matter for these joins (semi, anti, cross) to be pk join or not. We process them separately */
     bool isRightPKJoin = !isAntiOrSemiJoin && !isCrossJoin && IsPKJoin(rightStats, rightJoinKeys);
@@ -257,33 +333,13 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         switch (joinKind) {
             case EJoinKind::LeftJoin:
                 newCard = leftStats.Nrows;
+                newByteSize = ComputeOneSideByteSize(newCard, leftStats);
                 break;
-            default: {
+            default: { // when left side is FK
                 // YQL_CLOG(TRACE, CoreDq) << "Computing join card with histograms isRightPKJoin";
-
-                if (rightStats.Type == EStatisticsType::BaseTable && leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
-                    // YQL_CLOG(TRACE, CoreDq) << "Histogram used isRightPKJoin";
-
-                    auto lhs = leftJoinKeys[0].AttributeName;
-                    auto leftHist = leftStats.ColumnStatistics->Data[lhs].EqWidthHistogramEstimator;
-                    auto rhs = rightJoinKeys[0].AttributeName;
-                    auto rightHist = rightStats.ColumnStatistics->Data[rhs].EqWidthHistogramEstimator;
-
-                    if (leftHist && rightHist) {
-                        // Note, rightHist is PK and leftHist is FK
-                        auto overlapCard = rightHist->GetOverlappingCardinality(*leftHist);
-                        if (!overlapCard.Defined() || overlapCard.GetRef() == 0) {
-                            YQL_CLOG(TRACE, CoreDq) << "Skipping selectivity correction: no overlap";
-                        } else {
-                            // correction = total PK / overlapping PK
-                            auto selectivityCorrection = static_cast<double>(rightHist->GetNumElements()) / static_cast<double>(overlapCard.GetRef());
-                            // YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard;
-                            // YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
-                            selectivity *= selectivityCorrection;
-                        }
-                    }
-                }
+                selectivity *= ComputeSelectivityCorrection(rightStats, leftStats, rightJoinKeys, leftJoinKeys);
                 newCard = leftStats.Nrows * selectivity;
+                newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
             }
         }
 
@@ -300,33 +356,13 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         switch (joinKind) {
             case EJoinKind::RightJoin:
                 newCard = rightStats.Nrows;
+                newByteSize = ComputeOneSideByteSize(newCard, rightStats);
                 break;
-            default: {
+            default: { // when right side is FK
                 // YQL_CLOG(TRACE, CoreDq) << "Computing join card with histograms isLeftPKJoin";
-
-                if (leftStats.Type == EStatisticsType::BaseTable && leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
-                    // YQL_CLOG(TRACE, CoreDq) << "Histogram used isLeftPKJoin";
-
-                    auto lhs = leftJoinKeys[0].AttributeName;
-                    auto leftHist = leftStats.ColumnStatistics->Data[lhs].EqWidthHistogramEstimator;
-                    auto rhs = rightJoinKeys[0].AttributeName;
-                    auto rightHist = rightStats.ColumnStatistics->Data[rhs].EqWidthHistogramEstimator;
-
-                    if (leftHist && rightHist) {
-                        // Note, leftHist is PK and rightHist is FK
-                        auto overlapCard = leftHist->GetOverlappingCardinality(*rightHist);
-                        if (!overlapCard.Defined() || overlapCard.GetRef() == 0) {
-                            YQL_CLOG(TRACE, CoreDq) << "Skipping selectivity correction: no overlap";
-                        } else {
-                            // correction = total PK / overlapping PK
-                            auto selectivityCorrection = static_cast<double>(leftHist->GetNumElements()) / static_cast<double>(overlapCard.GetRef());
-                            // YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard.GetRef();
-                            // YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
-                            selectivity *= selectivityCorrection;
-                        }
-                    }
-                }
+                selectivity *= ComputeSelectivityCorrection(leftStats, rightStats, leftJoinKeys, rightJoinKeys);
                 newCard = rightStats.Nrows * selectivity;
+                newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
             }
         }
 
@@ -338,26 +374,40 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         }
     } else if (isCrossJoin) {
         newCard = leftStats.Nrows * rightStats.Nrows;
+        newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
         outputType = EStatisticsType::ManyManyJoin;
-    } else if (isAntiOrSemiJoin) {
-        newCard = leftStats.Nrows;
+
+        /* in case of cross join we broadcast the right part to the left */
+        cost += rightStats.Nrows;
+    } 
+    else if (isAntiOrSemiJoin) {
+        if (joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly) {
+            newNCols = leftStats.Ncols;
+            newCard = leftStats.Nrows;
+            newByteSize = ComputeOneSideByteSize(newCard, leftStats);
+        } else {
+            newNCols = rightStats.Ncols;
+            newCard = rightStats.Nrows;
+            newByteSize = ComputeOneSideByteSize(newCard, rightStats);
+        }
         outputType = EStatisticsType::FilteredFactTable;
     } else {
-        std::optional<double> lhsUniqueVals;
-        std::optional<double> rhsUniqueVals;
+        TMaybe<double> lhsUniqueVals;
+        TMaybe<double> rhsUniqueVals;
         if (leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
             auto lhs = leftJoinKeys[0].AttributeName;
-            lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
+            lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals.value();
             auto rhs = rightJoinKeys[0].AttributeName;
-            rhsUniqueVals = rightStats.ColumnStatistics->Data[rhs].NumUniqueVals;
+            rhsUniqueVals = rightStats.ColumnStatistics->Data[rhs].NumUniqueVals.value();
         }
 
-        if (lhsUniqueVals.has_value() && rhsUniqueVals.has_value()) {
-            newCard = leftStats.Nrows * rightStats.Nrows / std::max(*lhsUniqueVals, *rhsUniqueVals);
+        if (lhsUniqueVals.Defined() && rhsUniqueVals.Defined()) {
+            newCard = leftStats.Nrows * rightStats.Nrows / std::max(lhsUniqueVals.GetRef(), rhsUniqueVals.GetRef());
         } else {
             newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
         }
 
+        newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
         outputType = EStatisticsType::ManyManyJoin;
     }
 
@@ -365,16 +415,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         newCard = maybeHint->ApplyHint(newCard);
     }
 
-    int newNCols = leftStats.Ncols + rightStats.Ncols;
-    double lhsBytes = leftStats.Nrows ? (leftStats.ByteSize / leftStats.Nrows) * newCard : 0;
-    double rhsBytes = rightStats.Nrows ? (rightStats.ByteSize / rightStats.Nrows) * newCard : 0;
-    double newByteSize = lhsBytes + rhsBytes;
-
-    double cost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo) + leftStats.Cost + rightStats.Cost;
-
-    if (isCrossJoin /* in case of cross join we broadcast the right part to the left */) {
-        cost += rightStats.Nrows;
-    }
+    double current_cost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo);
+    cost += current_cost + leftStats.Cost + rightStats.Cost;
 
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
                                        leftKeyColumns ? leftStats.KeyColumns : (rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));

@@ -21,7 +21,7 @@ enum class EJoinAlgoType {
     LookupJoinReverse,
     MapJoin,
     GraceJoin,
-    StreamLookupJoin, //Right part can be updated during an operation. Used mainly for joining streams with lookup tables. Currently impplemented in Dq by LookupInputTransform
+    StreamLookupJoin, //Right part can be updated during an operation. Used mainly for joining streams with lookup tables. Currently implemented in Dq by LookupInputTransform
     MergeJoin  // To be used in YT
 };
 

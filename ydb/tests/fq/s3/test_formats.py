@@ -377,6 +377,50 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_with_names_header_missing_not_null_column(self, kikimr, s3, client, unique_prefix):
+        """NOT NULL column from SCHEMA is absent from the file header (CSVRowInputFormat readPrefix)."""
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL="public-read")
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        # Header lists only Fruit and Price; Weight is required by SCHEMA but not in the CSV header row.
+        csv_body = """Fruit,Price
+Banana,3
+Apple,2
+Pear,15
+"""
+        s3_client.put_object(Body=csv_body, Bucket="fbucket", Key="fruits_missing_col.csv", ContentType="text/plain")
+        kikimr.control_plane.wait_bootstrap(1)
+
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`fruits_missing_col.csv`
+            WITH (format=`csv_with_names`, SCHEMA (
+                Fruit String NOT NULL,
+                Price Int NOT NULL,
+                Weight Int NOT NULL
+            ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        describe_string = "{}".format(describe_result)
+        logging.debug("Describe result: {}".format(describe_result))
+        assert "Weight" in describe_string, describe_string
+        assert (
+            "Column `Weight` is marked as not null, but was not found in the csv file" in describe_string
+        ), describe_string
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_no_nullable_column(self, kikimr, s3, client, unique_prefix):
         filename = "test_wrong_type.csv"
         self.create_bucket_and_upload_file(filename, s3, kikimr)

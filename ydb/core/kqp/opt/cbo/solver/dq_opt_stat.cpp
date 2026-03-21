@@ -9,6 +9,7 @@
 
 namespace NYql::NDq {
 using namespace NKikimr::NKqp;
+using TOptimizerStatistics = NKikimr::NKqp::TOptimizerStatistics;
 
 using namespace NNodes;
 
@@ -958,5 +959,53 @@ void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TKqpStatsStore* kq
     }
 }
 
+
+std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats) {
+    if (stats->SortingOrderings.HasState()) {
+        auto newStats = *stats;
+        newStats.SortingOrderings.RemoveState();
+        return std::make_shared<TOptimizerStatistics>(std::move(newStats));
+    } else {
+        return stats;
+    }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
+    if (
+        TDqCnHashShuffle::Match(input.Get()) ||
+        TDqCnBroadcast::Match(input.Get()) ||
+        TDqCnUnionAll::Match(input.Get())
+    ) {
+        return RemoveSorting(stats);
+    } else {
+        return stats;
+    }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveShuffling(const std::shared_ptr<TOptimizerStatistics>& stats) {
+    if (stats->LogicalOrderings.HasState()) {
+        auto newStats = *stats;
+        newStats.LogicalOrderings.RemoveState();
+        return std::make_shared<TOptimizerStatistics>(std::move(newStats));
+    } else {
+        return stats;
+    }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveShuffling(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
+    if (
+        TDqCnMerge::Match(input.Get()) ||
+        TDqCnBroadcast::Match(input.Get()) ||
+        TDqCnUnionAll::Match(input.Get())
+    ) {
+        return RemoveShuffling(stats);
+    } else {
+        return stats;
+    }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveOrderings(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
+    return RemoveSorting(RemoveShuffling(stats, input), input);
+}
 
 } // namespace NYql::NDq {

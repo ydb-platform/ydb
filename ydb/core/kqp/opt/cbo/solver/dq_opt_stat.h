@@ -8,6 +8,7 @@
 
 namespace NYql::NDq {
 using namespace NKikimr::NKqp;
+using TOptimizerStatistics = NKikimr::NKqp::TOptimizerStatistics;
 enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal };
 
 void InferStatisticsForFlatMap(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);

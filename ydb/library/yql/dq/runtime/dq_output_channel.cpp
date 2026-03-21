@@ -89,9 +89,18 @@ public:
             if (Aggregator) {
                 Aggregator->UpdateCount(FillLevel, result);
             }
+            if (LevelChangeCallback) {
+                LevelChangeCallback(FillLevel, result);
+            }
             FillLevel = result;
         }
         return result;
+    }
+
+    bool SupportsLevelChangeCallback() const override { return true; }
+
+    void SetLevelChangeCallback(TLevelChangeCallback callback) override {
+        LevelChangeCallback = std::move(callback);
     }
 
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
@@ -491,6 +500,7 @@ private:
     TMaybe<NDqProto::TWatermark> Watermark;
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
     std::shared_ptr<TDqFillAggregator> Aggregator;
+    TLevelChangeCallback LevelChangeCallback;
     EDqFillLevel FillLevel = NoLimit;
 };
 

@@ -71,6 +71,7 @@ struct TDqFillAggregator {
         }
     }
 
+    // MAX semantics: block if ANY channel is full (used by Map, Broadcast, HashPartition).
     EDqFillLevel GetFillLevel() const {
         if (Counts[static_cast<ui32>(HardLimit)].load()) {
             return HardLimit;
@@ -79,6 +80,18 @@ struct TDqFillAggregator {
             return NoLimit;
         }
         return Counts[static_cast<ui32>(SoftLimit)].load() ? SoftLimit : NoLimit;
+    }
+
+    // MIN semantics: block only when ALL channels are full (used by Scatter).
+    // Inverted priority: if any channel is free, production can continue.
+    EDqFillLevel GetMinFillLevel() const {
+        if (Counts[static_cast<ui32>(NoLimit)].load()) {
+            return NoLimit;
+        }
+        if (Counts[static_cast<ui32>(SoftLimit)].load()) {
+            return SoftLimit;
+        }
+        return HardLimit;
     }
 
     bool IsEarlyFinished() {
@@ -108,9 +121,21 @@ public:
     virtual const TDqOutputStats& GetPushStats() const = 0;
 
     // <| producer methods
+    using TLevelChangeCallback = std::function<void(EDqFillLevel from, EDqFillLevel to)>;
+
     virtual EDqFillLevel GetFillLevel() const = 0;
     virtual EDqFillLevel UpdateFillLevel() = 0;
     virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
+    // Returns true if the implementation stores and calls the callback registered
+    // via SetLevelChangeCallback. TDqOutputScatterConsumer requires this to be true
+    // for every output it manages: it relies on the callback to keep its bucket index
+    // and the fill aggregator fresh after external Pop() calls, and does NOT fall back
+    // to O(N) polling in GetFillLevel().
+    virtual bool SupportsLevelChangeCallback() const { return false; }
+    // Called on every fill level transition. Required by Scatter consumer.
+    // Implementations that override this must also override SupportsLevelChangeCallback()
+    // to return true.
+    virtual void SetLevelChangeCallback(TLevelChangeCallback /*callback*/) {}
     // can throw TDqChannelStorageException
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
     virtual void WidePush(NUdf::TUnboxedValue* values, ui32 count) = 0;

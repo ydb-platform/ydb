@@ -67,12 +67,13 @@ public:
     }
 
 public:
-    class TActivePortions : public IStatsSelector {
+    class TDiskUsedPortions : public IStatsSelector {
     public:
         bool Select(const TPortionClass& portionClass) const override {
-            return portionClass.GetProduced() == NOlap::NPortion::EProduced::INSERTED ||
-                   portionClass.GetProduced() == NOlap::NPortion::EProduced::COMPACTED ||
-                   portionClass.GetProduced() == NOlap::NPortion::EProduced::SPLIT_COMPACTED;
+            return IsIn({NOlap::NPortion::EProduced::INSERTED,
+                    NOlap::NPortion::EProduced::COMPACTED,
+                    NOlap::NPortion::EProduced::SPLIT_COMPACTED,
+                    NOlap::NPortion::EProduced::INACTIVE}, portionClass.GetProduced());
         }
     };
 

@@ -27,7 +27,7 @@ public:
     void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
         Counters.FillTableStats(pathId, tableStats);
 
-        auto activeStats = Counters.GetPortionIndexCounters()->GetTableStats(pathId, TPortionIndexStats::TActivePortions());
+        auto activeStats = Counters.GetPortionIndexCounters()->GetTableStats(pathId, TPortionIndexStats::TDiskUsedPortions());
         FillPortionStats(tableStats, activeStats);
     }
 
@@ -39,7 +39,7 @@ public:
             tableStats.SetHasLoanedParts(Executor->HasLoanedParts());
         }
 
-        auto activeStats = Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TActivePortions());
+        auto activeStats = Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TDiskUsedPortions());
         FillPortionStats(tableStats, activeStats);
     }
 };

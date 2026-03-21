@@ -7,15 +7,16 @@
 
 namespace NKikimr::NKqp {
 
-TMaxTasksGraph::TMaxTasksGraph(size_t maxChannelsCount) {
-    Nodes.emplace_back(maxChannelsCount);
-}
+TMaxTasksGraph::TMaxTasksGraph(size_t maxChannelsCount) : MaxChannelsCount(maxChannelsCount) {}
 
 void TMaxTasksGraph::AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot) {
     Nodes.reserve(resourcesSnapshot.size());
-    Nodes.resize(resourcesSnapshot.size(), Nodes.at(0));
+    Nodes.resize(resourcesSnapshot.size(), {MaxChannelsCount});
 
-    // TODO: does TKqpNodeResources::NodeId matches real nodes?
+    size_t nodeIdx = 0;
+    for (const auto& node : resourcesSnapshot) {
+        Y_ENSURE(NodeIds.emplace(node.GetNodeId(), nodeIdx++).second);
+    }
 }
 
 void TMaxTasksGraph::AddStage(const TStageId& stage, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput) {
@@ -112,10 +113,22 @@ void TMaxTasksGraph::Shrink() {
     }
 
     Tasks = std::move(LastFeasible);
+
+    TasksPerStage.clear();
+    TasksPerStage.resize(Stages.size(), 0);
+    for (size_t stageIdx = 0; stageIdx < Tasks.size(); ++stageIdx) {
+        for (auto tasksPerNode : Tasks.at(stageIdx)) {
+            TasksPerStage.at(stageIdx) += tasksPerNode;
+        }
+    }
 }
 
 size_t TMaxTasksGraph::GetStageTasksCount(const TStageId& stage, TNodeId node) const {
     return Tasks.at(StageIds.at(stage)).at(NodeIds.at(node));
+}
+
+size_t TMaxTasksGraph::GetStageTasksCount(const TStageId& stage) const {
+    return TasksPerStage.at(StageIds.at(stage));
 }
 
 bool TMaxTasksGraph::IsFeasible(double alpha) const {

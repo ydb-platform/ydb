@@ -19,10 +19,33 @@ class TMaxTasksGraph {
     using TNodeId = ui64;
     using TStageId = NYql::NDq::TStageId;
 
+public:
+    using TNodeIdMap = THashMap<TNodeId, TNodeIdx>;
+    using TStageIdMap = THashMap<TStageId, TStageIdx>;
+    using TTasksPerNode = std::vector<size_t>;
+
     enum EStageType : int {
         FIXED, // fixed number of tasks
         COPY,  // copies number of tasks from one of previous stages
         ANY,   // any number of tasks
+    };
+
+    explicit TMaxTasksGraph(size_t maxChannelsCount);
+
+    void AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot);
+    void AddStage(const TStageId& stage, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput = std::nullopt);
+    void AddTasks(const TStageId& stage, TNodeId node, size_t tasksCount);
+    void AddTasks(const TStageId& stage, size_t tasksCount);
+
+    void Shrink(); // TODO: forbid double call - it's not idempotent.
+
+    size_t GetStageTasksCount(const TStageId& stage, TNodeId node) const;
+    size_t GetStageTasksCount(const TStageId& stage) const;
+
+private:
+    struct TNode {
+        size_t MaxChannelsCount;
+        size_t TasksCount = 0;
     };
 
     struct TStage {
@@ -31,27 +54,6 @@ class TMaxTasksGraph {
         TNodeIdx RoundRobin = 0;         // TODO: use real planning strategy.
     };
 
-    struct TNode {
-        size_t MaxChannelsCount;
-        size_t TasksCount = 0;
-    };
-
-public:
-    using TNodeIdMap = THashMap<TNodeId, TNodeIdx>;
-    using TStageIdMap = THashMap<TStageId, TStageIdx>;
-    using TTasksPerNode = std::vector<size_t>;
-
-    explicit TMaxTasksGraph(size_t maxChannelsCount);
-
-    void AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot);
-    void AddStage(const TStageId& stage, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput);
-    void AddTasks(const TStageId& stage, TNodeId node, size_t tasksCount);
-    void AddTasks(const TStageId& stage, size_t tasksCount);
-
-    void Shrink();
-
-    size_t GetStageTasksCount(const TStageId& stage, TNodeId node) const;
-
 private:
     bool IsFeasible(double alpha) const;
     std::vector<TTasksPerNode> ComputeScaledTasks(double alpha) const;
@@ -59,13 +61,15 @@ private:
     size_t CountChannelsOnNode(const std::vector<TTasksPerNode>& distribution, TNodeIdx nodeId) const;
 
 private:
+    const size_t MaxChannelsCount;
+
     TNodeIdMap NodeIds;
     TStageIdMap StageIds;
 
-    std::vector<TNode> Nodes;                 // TNodeIdx  -> TNode
-    std::vector<TStage> Stages;               // TStageIdx -> TStage
-    std::vector<std::list<TStageIdx>> Inputs; // TStageIdx -> inputs
-    std::vector<std::list<TStageIdx>> Outputs;// TStageIdx -> outputs
+    std::vector<TNode> Nodes;                  // TNodeIdx  -> TNode
+    std::vector<TStage> Stages;                // TStageIdx -> TStage
+    std::vector<std::list<TStageIdx>> Inputs;  // TStageIdx -> inputs
+    std::vector<std::list<TStageIdx>> Outputs; // TStageIdx -> outputs
 
     std::vector<TTasksPerNode> Tasks;  // TStageIdx -> TNodeIdx -> Tasks
     std::vector<size_t> TasksPerStage; // TStageIdx -> Tasks

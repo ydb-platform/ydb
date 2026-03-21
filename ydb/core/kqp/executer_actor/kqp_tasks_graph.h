@@ -432,7 +432,7 @@ private:
     void CountScanTasksFromShards(const TStageInfo& stageInfo, bool enableShuffleElimination);
 
     void BuildSysViewScanTasks(TStageInfo& stageInfo);
-    bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
+    void BuildComputeTasks(TStageInfo& stageInfo); // returns true if affected shards count is unknown
     void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
     void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);
     void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);

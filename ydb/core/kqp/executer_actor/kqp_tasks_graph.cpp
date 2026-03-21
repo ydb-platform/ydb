@@ -2007,104 +2007,21 @@ void TKqpTasksGraph::CountComputeTasks(const TStageInfo& stageInfo, const ui32 n
     MaxTasksGraph.AddTasks(stageId, partitionsCount);
 }
 
-bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount) {
-    auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-
-    TTaskType::ECreateReason tasksReason = TTaskType::MINIMUM_COMPUTE;
-    bool unknownAffectedShardCount = false;
-    ui32 partitionsCount = 1;
-    ui32 inputTasks = 0;
-    bool isShuffle = false;
-    bool forceMapTasks = false;
-    ui32 mapConnectionCount = 0;
+void TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo) {
+    const auto& stageId = stageInfo.Id;
+    const auto& stage = stageInfo.Meta.GetStage(stageId);
 
     for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
         const auto& input = stage.GetInputs(inputIndex);
-
-        // Current assumptions:
-        // 1. All stage's inputs, except 1st one, must be a `Broadcast` or `UnionAll`
-        // 2. Stages where 1st input is `Broadcast` are not partitioned.
-        if (inputIndex > 0) {
-            switch (input.GetTypeCase()) {
-                case NKqpProto::TKqpPhyConnection::kBroadcast:
-                case NKqpProto::TKqpPhyConnection::kHashShuffle:
-                case NKqpProto::TKqpPhyConnection::kUnionAll:
-                case NKqpProto::TKqpPhyConnection::kMerge:
-                case NKqpProto::TKqpPhyConnection::kStreamLookup:
-                case NKqpProto::TKqpPhyConnection::kMap:
-                case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
-                case NKqpProto::TKqpPhyConnection::kVectorResolve:
-                case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup:
-                    break;
-                default:
-                    YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl);
-                    // TODO: << this->DebugString());
-            }
-        }
-
-        auto& originStageInfo = GetStageInfo(NYql::NDq::TStageId(stageInfo.Id.TxId, input.GetStageIndex()));
-
-        switch (input.GetTypeCase()) {
-            case NKqpProto::TKqpPhyConnection::kHashShuffle: {
-                inputTasks += originStageInfo.Tasks.size();
-                isShuffle = true;
-                break;
-            }
-            case NKqpProto::TKqpPhyConnection::kStreamLookup: {
-                tasksReason = TTaskType::PREV_STAGE_COMPUTE;
-                partitionsCount = originStageInfo.Tasks.size();
-                unknownAffectedShardCount = true;
-                break;
-            }
-            case NKqpProto::TKqpPhyConnection::kMap: {
-                tasksReason = TTaskType::PREV_STAGE_COMPUTE;
-                partitionsCount = originStageInfo.Tasks.size();
-                forceMapTasks = true;
-                ++mapConnectionCount;
-                break;
-            }
-            case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
-                partitionsCount = std::max<ui64>(partitionsCount, originStageInfo.Tasks.size());
-                break;
-            }
-            case NKqpProto::TKqpPhyConnection::kVectorResolve: {
-                tasksReason = TTaskType::PREV_STAGE_COMPUTE;
-                partitionsCount = originStageInfo.Tasks.size();
-                unknownAffectedShardCount = true;
-                break;
-            }
-            case NKqpProto::TKqpPhyConnection::kSequencer: {
-                tasksReason = TTaskType::PREV_STAGE_COMPUTE;
-                partitionsCount = originStageInfo.Tasks.size();
-                break;
-            }
-            default:
-                break;
-        }
+        GetMeta().UnknownAffectedShardCount |= input.HasStreamLookup() || input.HasVectorResolve();
     }
 
-    Y_ENSURE(mapConnectionCount <= 1, "Only a single map connection is allowed");
-
-    if (isShuffle && !forceMapTasks) {
-        if (stage.GetTaskCount()) {
-            tasksReason = TTaskType::FORCED;
-            partitionsCount = stage.GetTaskCount();
-        } else {
-            auto [newPartitionCount, minTasksReason] = GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount);
-            if (newPartitionCount > partitionsCount) {
-                tasksReason = minTasksReason;
-                partitionsCount = newPartitionCount;
-            }
-        }
-    }
-
-    for (ui32 i = 0; i < partitionsCount; ++i) {
-        auto& task = AddTask(stageInfo, tasksReason);
+    auto tasksCount = MaxTasksGraph.GetStageTasksCount(stageId);
+    for (ui32 i = 0; i < tasksCount; ++i) {
+        auto& task = AddTask(stageInfo, TTaskType::UNKNOWN);
         task.Meta.Type = TTaskMeta::TTaskType::Compute;
         LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
     }
-
-    return unknownAffectedShardCount;
 }
 
 std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetScanTasksPerNode(const TStageInfo& stageInfo, const bool isOlapScan, const ui64 /* nodeId */, bool enableShuffleElimination) const {
@@ -2187,7 +2104,7 @@ void TKqpTasksGraph::CountScanTasksFromShards(const TStageInfo& stageInfo, bool 
                 MaxTasksGraph.AddTasks(stageId, nodeId, std::min<ui32>(shards, maxTasksPerNode));
             }
         } else {
-            // It's ok to create tasks only nodes with shards - to prevent cross-network traffic.
+            // It's ok to create tasks only on nodes with shards - to prevent cross-network traffic.
             for (const auto& [nodeId, _] : nodeShards) {
                 const auto maxTasksPerNode = GetScanTasksPerNode(stageInfo, isOlapScan, nodeId).first;
                 MaxTasksGraph.AddTasks(stageId, nodeId, maxTasksPerNode);
@@ -3299,12 +3216,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
                     BuildSysViewScanTasks(stageInfo); // TODO: remove after switching to SysView source
                 } break;
                 case TStageInfoMeta::COMPUTE_TASKS: {
-                    // TODO: is it possible for shards on node to be greater than resources snapshot?
-                    auto nodesCount = GetMeta().ShardsOnNode.size();
-                    if (!GetMeta().IsScan) {
-                        nodesCount = std::max<ui32>(resourcesSnapshot.size(), nodesCount);
-                    }
-                    GetMeta().UnknownAffectedShardCount |= BuildComputeTasks(stageInfo, nodesCount);
+                    BuildComputeTasks(stageInfo);
                 } break;
                 case TStageInfoMeta::SCAN_TASKS: {
                     BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination(), CollectProfileStats(GetMeta().StatsMode) ? stats : nullptr);

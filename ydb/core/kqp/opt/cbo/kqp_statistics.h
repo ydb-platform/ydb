@@ -51,25 +51,16 @@ using NYql::ColumnStorage;
 using TJoinColumn = NYql::NDq::TJoinColumn;
 
 // -------------------------------------------------------------------------
-// IProviderStatistics — independent copy
+// IProviderStatistics — alias (empty virtual base, shared with NYql to allow
+// derived types like TS3ProviderStatistics to be stored without conversion)
 // -------------------------------------------------------------------------
-class IProviderStatistics {
-public:
-    virtual ~IProviderStatistics() {}
-};
+using IProviderStatistics = NYql::IProviderStatistics;
 
 // -------------------------------------------------------------------------
-// TColumnStatistics — independent copy
+// TColumnStatistics — alias (column stat data crosses YQL/KQP boundary via
+// TypeAnnotationContext, so must be the same type to allow direct assignment)
 // -------------------------------------------------------------------------
-struct TColumnStatistics {
-    std::optional<double> NumUniqueVals;
-    std::optional<double> HyperLogLog;
-    std::shared_ptr<NKikimr::TCountMinSketch> CountMinSketch;
-    std::shared_ptr<NKikimr::TEqWidthHistogramEstimator> EqWidthHistogramEstimator;
-    TString Type;
-
-    TColumnStatistics() {}
-};
+using TColumnStatistics = NYql::TColumnStatistics;
 
 // -------------------------------------------------------------------------
 // TOptimizerStatistics — independent copy
@@ -99,11 +90,9 @@ struct TOptimizerStatistics {
         {}
     };
 
-    struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
-        THashMap<TString, TColumnStatistics> Data;
-        TColumnStatMap() {}
-        explicit TColumnStatMap(THashMap<TString, TColumnStatistics> data) : Data(std::move(data)) {}
-    };
+    // TColumnStatMap — alias so TIntrusivePtr<TColumnStatMap> is assignment-compatible
+    // with TypeAnnotationContext::ColumnStatisticsByTableName entries
+    using TColumnStatMap = NYql::TOptimizerStatistics::TColumnStatMap;
 
     struct TShuffledByColumns : public TSimpleRefCount<TShuffledByColumns> {
         TVector<NYql::NDq::TJoinColumn> Data;

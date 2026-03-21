@@ -241,16 +241,21 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
     auto partScheme = TPartScheme::Parse(*scheme, Rooted);
 
     TVector<std::pair<ui32, TIntrusiveConstPtr<NPage::TBloom>>> byKeyPrefixes;
-    // Convert legacy full-key bloom to a prefix entry
-    if (byKey) {
-        ui32 keyCount = partScheme->Groups[0].KeyTypes.size();
-        byKeyPrefixes.emplace_back(keyCount, new NPage::TBloom(*byKey));
-    }
     for (const auto& meta : ByKeyPrefixMetas) {
         if (meta.PageId != Max<TPageId>()) {
             if (auto* page = getPage(meta.PageId)) {
                 byKeyPrefixes.emplace_back(meta.PrefixColumns, new NPage::TBloom(*page));
             }
+        }
+    }
+    // Convert legacy full-key bloom to a prefix entry.
+    // Skip if the same page is already referenced in ByKeyPrefixMetas (written by new code for compatibility).
+    if (byKey) {
+        bool alreadyPresent = std::any_of(ByKeyPrefixMetas.begin(), ByKeyPrefixMetas.end(),
+            [&](const auto& meta) { return meta.PageId == ByKeyId; });
+        if (!alreadyPresent) {
+            ui32 keyCount = partScheme->Groups[0].KeyTypes.size();
+            byKeyPrefixes.emplace_back(keyCount, new NPage::TBloom(*byKey));
         }
     }
 

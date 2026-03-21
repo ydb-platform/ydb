@@ -248,6 +248,7 @@ public:
     TAlter& SetExecutorLimitInFlyTx(ui32 limitTxInFly);
     TAlter& SetExecutorResourceProfile(const TString &name);
     TAlter& SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPolicy);
+    TAlter& SetByKeyFilter(ui32 tableId, bool enabled);
     TAlter& SetByKeyFilterPrefixes(ui32 tableId, const TVector<ui32>& prefixes);
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);

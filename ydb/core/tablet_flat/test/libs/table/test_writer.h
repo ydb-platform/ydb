@@ -93,17 +93,17 @@ namespace NTest {
             auto partScheme = TPartScheme::Parse(*eggs.Scheme, eggs.Rooted);
 
             TVector<std::pair<ui32, TIntrusiveConstPtr<NPage::TBloom>>> byKeyPrefixes;
-            // Convert legacy full-key bloom to a prefix entry
-            if (eggs.ByKey) {
-                ui32 keyCount = partScheme->Groups[0].KeyTypes.size();
-                byKeyPrefixes.emplace_back(keyCount, new TBloom(*eggs.ByKey));
-            }
             if (root.HasLayout()) {
                 for (const auto& meta : root.GetLayout().GetByKeyPrefixes()) {
                     if (auto *page = Store->GetPage(0, meta.GetPageId())) {
                         byKeyPrefixes.emplace_back(meta.GetPrefixColumns(), new TBloom(*page));
                     }
                 }
+            }
+            // Fall back to legacy ByKey if no ByKeyPrefixes are present (old SST format)
+            if (byKeyPrefixes.empty() && eggs.ByKey) {
+                ui32 keyCount = partScheme->Groups[0].KeyTypes.size();
+                byKeyPrefixes.emplace_back(keyCount, new TBloom(*eggs.ByKey));
             }
 
             return

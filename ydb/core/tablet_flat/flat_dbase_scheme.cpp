@@ -71,6 +71,18 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
                 itTable.second.EraseCacheMinRows,
                 itTable.second.EraseCacheMaxBytes);
 
+        // For backward compatibility: if full-key bloom filter is enabled,
+        // also set legacy ByKeyFilter=true so older versions understand it
+        bool hasFullKeyBloom = std::find(
+            itTable.second.ByKeyFilterPrefixes.begin(),
+            itTable.second.ByKeyFilterPrefixes.end(),
+            itTable.second.KeyColumns.size()
+        ) != itTable.second.ByKeyFilterPrefixes.end();
+
+        if (hasFullKeyBloom) {
+            delta.SetByKeyFilter(table, true);
+        }
+
         // N.B. must be last for compatibility with older versions :(
         delta.SetByKeyFilterPrefixes(table, itTable.second.ByKeyFilterPrefixes);
         delta.SetColdBorrow(table, itTable.second.ColdBorrow);
@@ -337,6 +349,16 @@ TAlter& TAlter::SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPo
     delta.SetDeltaType(TAlterRecord::SetCompactionPolicy);
     delta.SetTableId(tableId);
     newPolicy.Serialize(*delta.MutableCompactionPolicy());
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetByKeyFilter(ui32 tableId, bool enabled)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    delta.SetByKeyFilter(enabled ? 1 : 0);
 
     return ApplyLastRecord();
 }

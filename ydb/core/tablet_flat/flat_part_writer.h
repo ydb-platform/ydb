@@ -712,6 +712,10 @@ namespace NTable {
                 if (Current.Small != Max<TPageId>())
                     lay->SetSmall(Current.Small);
                 for (auto& [prefixLen, pageId] : Current.ByKeyPrefixPages) {
+                    // For backward compatibility: also set legacy ByKey field for full-key bloom filters
+                    if (prefixLen == Scheme->Groups[0].ColsKeyData.size()) {
+                        lay->SetByKey(pageId);
+                    }
                     auto* meta = lay->AddByKeyPrefixes();
                     meta->SetPageId(pageId);
                     meta->SetPrefixColumns(prefixLen);

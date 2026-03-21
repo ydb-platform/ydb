@@ -592,6 +592,40 @@ Y_UNIT_TEST_SUITE(Bloom) {
         }
     }
 
+    Y_UNIT_TEST(SnapshotBackwardCompatibility)
+    {
+        /* Regression test: when snapshot is created with ByKeyFilterPrefixes for full key,
+           GetSnapshot() must also set the legacy ByKeyFilter field.
+           This ensures older versions understand that bloom filtering is active
+           and don't disable it during their own snapshots. */
+        TDbExec me;
+
+        me.To(10).Begin().Apply(*MakeAlter()).Commit();
+
+        /* Enable full-key (2-column) bloom filter using new API */
+        me.To(20).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {2})).Commit();
+
+        /* GetSnapshot() must include both legacy ByKeyFilter and new ByKeyFilterPrefixes */
+        {
+            auto snapshot = me->GetScheme().GetSnapshot();
+            bool foundLegacy = false;
+            bool foundNew = false;
+            for (const auto& delta : snapshot->GetDelta()) {
+                if (delta.GetDeltaType() == NTabletFlatScheme::TAlterRecord::SetTable &&
+                    delta.GetTableId() == 1) {
+                    if (delta.HasByKeyFilter() && delta.GetByKeyFilter() != 0) {
+                        foundLegacy = true;
+                    }
+                    if (delta.ByKeyFilterPrefixesSize() > 0) {
+                        foundNew = true;
+                    }
+                }
+            }
+            UNIT_ASSERT_C(foundLegacy, "GetSnapshot() must set legacy ByKeyFilter for full-key bloom");
+            UNIT_ASSERT_C(foundNew, "GetSnapshot() must set ByKeyFilterPrefixes");
+        }
+    }
+
     Y_UNIT_TEST(Stairs)
     {
         const ui32 Height = 99;

@@ -664,8 +664,9 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_format_schema_order_differs_from_alphabet(self, kikimr, s3, client, unique_prefix):
-        # csv format: columns in file are Fruit,Price,Weight; SCHEMA specifies them in same order.
-        # Columns must be mapped by position (SCHEMA order), not alphabetically.
+        # Physical file columns are Weight,Price,Fruit (first row 100,3,Banana).
+        # SCHEMA lists Weight, Price, Fruit — parser must map by position, not by name
+        # matching alphabetical order. Result column order from API may be sorted by name.
         s3_client = boto3.client(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -704,9 +705,13 @@ Pear,15,33'''
         result_set = data.result.result_set
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
-        assert result_set.rows[0].items[0].int32_value == 100  # Weight
-        assert result_set.rows[0].items[1].int32_value == 3    # Price
-        assert result_set.rows[0].items[2].bytes_value == b"Banana"  # Fruit
+        col = {c.name: i for i, c in enumerate(result_set.columns)}
+        for name in ("Weight", "Price", "Fruit"):
+            assert name in col
+        row0 = result_set.rows[0].items
+        assert row0[col["Weight"]].int32_value == 100
+        assert row0[col["Price"]].int32_value == 3
+        assert row0[col["Fruit"]].bytes_value == b"Banana"
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

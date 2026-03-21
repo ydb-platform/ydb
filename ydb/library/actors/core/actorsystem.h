@@ -7,7 +7,6 @@
 #include "executor_pool.h"
 #include "log_settings.h"
 #include "scheduler_cookie.h"
-#include "cpu_manager.h"
 #include "subsystem.h"
 
 #include <library/cpp/threading/future/future.h>
@@ -316,11 +315,6 @@ namespace NActors {
             return LoggerSettings0.Get();
         }
 
-        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
-        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStats) const;
-
-        THarmonizerStats GetHarmonizerStats() const;
-
         std::optional<ui32> GetPoolThreadsCount(const ui32 poolId) const {
             if (!SystemSetup) {
                 return {};
@@ -328,17 +322,13 @@ namespace NActors {
             return SystemSetup->GetThreadsOptional(poolId);
         }
 
-        auto GetPoolMaxThreadsCount(ui32 poolId) const {
-            return CpuManager->GetExecutorPool(poolId)->GetMaxThreadCount();
-        }
+        float GetPoolMaxThreadsCount(ui32 poolId) const;
 
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));
         }
 
-        TVector<IExecutorPool*> GetBasicExecutorPools() const {
-            return CpuManager->GetBasicExecutorPools();
-        }
+        TVector<IExecutorPool*> GetBasicExecutorPools() const;
 
         template<class T>
         void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {
@@ -360,9 +350,6 @@ namespace NActors {
             }
             return static_cast<T*>(SubSystems[index].get());
         }
-
-        void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
-        void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 
         IRcBufAllocator* GetRcBufAllocator() const {
             return RcBufAllocator;

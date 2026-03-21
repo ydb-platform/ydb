@@ -13,6 +13,7 @@
 #include "log.h"
 #include "probes.h"
 #include "ask.h"
+#include "subsystems/stats.h"
 #include "thread_context.h"
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
@@ -132,6 +133,7 @@ namespace NActors {
         , LoggerSettings0(loggerSettings)
     {
         ServiceMap.Reset(new TServiceMap());
+        RegisterSubSystem(MakeActorSystemStatsSubSystem(*CpuManager));
     }
 
     TActorSystem::~TActorSystem() {
@@ -407,19 +409,6 @@ namespace NActors {
         return ServiceMap->RegisterLocalService(serviceId, actorId);
     }
 
-    void TActorSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
-        CpuManager->GetPoolStats(poolId, poolStats, statsCopy);
-    }
-
-    void TActorSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const {
-        CpuManager->GetPoolStats(poolId, poolStats, statsCopy, sharedStatsCopy);
-    }
-
-    THarmonizerStats TActorSystem::GetHarmonizerStats() const {
-        return CpuManager->GetHarmonizerStats();
-
-    }
-
     void TActorSystem::Start() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start");
         Y_ABORT_UNLESS(!StartExecuted.exchange(true));
@@ -511,12 +500,12 @@ namespace NActors {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: cleaned up");
     }
 
-    void TActorSystem::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {
-        CpuManager->GetExecutorPoolState(poolId, state);
+    float TActorSystem::GetPoolMaxThreadsCount(ui32 poolId) const {
+        return CpuManager->GetExecutorPool(poolId)->GetMaxThreadCount();
     }
 
-    void TActorSystem::GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const {
-        CpuManager->GetExecutorPoolStates(states);
+    TVector<IExecutorPool*> TActorSystem::GetBasicExecutorPools() const {
+        return CpuManager->GetBasicExecutorPools();
     }
 
 }

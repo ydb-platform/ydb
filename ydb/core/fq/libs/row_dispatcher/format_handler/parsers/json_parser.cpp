@@ -153,10 +153,12 @@ public:
         Status = TStatus::Success();
     }
 
-    void ClearParsedRow(ui16 rowId) {
+    bool ClearParsedRow(ui16 rowId) {
         if (ParsedRowsCount > 0 && ParsedRows[ParsedRowsCount - 1] == rowId) {
             --ParsedRowsCount;
+            return true;
         }
+        return false;
     }
 
 private:
@@ -707,8 +709,9 @@ private:
 
     void ClearRowBuffer(ui16 outputRowId) {
         for (size_t columnId = 0; columnId < Columns.size(); ++columnId) {
-            Columns[columnId].ClearParsedRow(outputRowId);
-            ParsedValues[columnId][outputRowId].Clear();
+            if (Columns[columnId].ClearParsedRow(outputRowId)) {
+                ClearObject(ParsedValues[columnId][outputRowId]);
+            }
         }
     }
 

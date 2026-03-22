@@ -991,27 +991,17 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Seal()
         .Build();
 
-    // Check if we need to convert inputs to blocks
-    // For now, assume most inputs are scalar and need conversion to blocks
-    bool needsLeftToBlocks = true;  // TODO: check actual input types
-    bool needsRightToBlocks = true; // TODO: check actual input types
-    bool needsFromBlocks = true;    // TODO: check if output should be scalar
+    leftInput = ctx.Builder(pos)
+        .Callable("WideToBlocks")
+            .Add(0, std::move(leftInput))
+        .Seal()
+        .Build();
 
-    if (needsLeftToBlocks) {
-        leftInput = ctx.Builder(pos)
-            .Callable("WideToBlocks")
-                .Add(0, std::move(leftInput))
-            .Seal()
-            .Build();
-    }
-
-    if (needsRightToBlocks) {
-        rightInput = ctx.Builder(pos)
-            .Callable("WideToBlocks")
-                .Add(0, std::move(rightInput))
-            .Seal()
-            .Build();
-    }
+    rightInput = ctx.Builder(pos)
+        .Callable("WideToBlocks")
+            .Add(0, std::move(rightInput))
+        .Seal()
+        .Build();
 
     auto blockJoinCore = ctx.Builder(pos)
         .Callable("BlockHashJoinCore")
@@ -1026,15 +1016,11 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Seal()
         .Build();
 
-    // Convert blocks back to scalars if needed
-    auto wideResult = std::move(blockJoinCore);
-    if (needsFromBlocks) {
-        wideResult = ctx.Builder(pos)
-            .Callable("WideFromBlocks")
-                .Add(0, std::move(wideResult))
-            .Seal()
-            .Build();
-    }
+    auto wideResult = ctx.Builder(pos)
+        .Callable("WideFromBlocks")
+            .Add(0, std::move(blockJoinCore))
+        .Seal()
+        .Build();
 
     // Wide row layout: [L base][L converted][R base][R converted]
     const ui32 leftBase = itemTypeLeft->GetSize();

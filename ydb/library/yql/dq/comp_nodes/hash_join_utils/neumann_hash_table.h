@@ -446,6 +446,15 @@ class TNeumannHashTable {
         return Buffer_.empty();
     }
 
+    void PrefetchForFind(const ui8 *const row) const {
+        if (Directories_.empty()) {
+            return;
+        }
+        const THash thash = ReadUnaligned<THash>(row);
+        const Hash dirSlot = getDirectorySlot(thash);
+        NYql::PrefetchForRead(&Directories_[dirSlot]);
+    }
+
     void Apply(const ui8 *const row, const ui8 *const overflow,
                std::invocable<const ui8*> auto onMatch) const {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");
@@ -556,3 +565,4 @@ class TNeumannHashTable {
 } // namespace NPackedTuple
 } // namespace NMiniKQL
 } // namespace NKikimr
+

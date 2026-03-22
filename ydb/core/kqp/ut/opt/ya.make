@@ -9,6 +9,7 @@ SIZE(MEDIUM)
 SRCS(
     kqp_agg_ut.cpp
     kqp_extract_predicate_unpack_ut.cpp
+    kqp_peephole_ut.cpp
     kqp_hash_combine_ut.cpp
     kqp_kv_ut.cpp
     kqp_merge_ut.cpp

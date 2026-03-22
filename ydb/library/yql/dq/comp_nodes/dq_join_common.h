@@ -294,19 +294,45 @@ template <typename Source> class TInMemoryHashJoin {
             return EFetchResult::Finish;
         }
 
-        if (FetchedPack_.has_value()) {
+        auto processPackBatched = [&](ui32 startFrom) -> std::optional<ui32> {
+            constexpr size_t kBatch = TTable::kBatchSize;
+            std::array<TSingleTuple, kBatch> batch{};
+            size_t batchLen = 0;
             ui32 idx = 0;
             for (TSingleTuple probeTuple : *FetchedPack_) {
-                if (idx++ < ResumeIndex_) {
+                if (idx++ < startFrom) {
                     continue;
                 }
-                Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
-                    consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
-                });
-                if (isFull()) {
-                    ResumeIndex_ = idx;
-                    return EFetchResult::One;
+                batch[batchLen++] = probeTuple;
+                if (batchLen == kBatch) {
+                    auto iters = Table_.FindBatch(batch, batchLen);
+                    for (size_t b = 0; b < batchLen; ++b) {
+                        while (auto match = Table_.NextMatch(iters[b])) {
+                            consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = *match, .Probe = batch[b]});
+                        }
+                    }
+                    batchLen = 0;
+                    if (isFull()) {
+                        return idx;
+                    }
                 }
+            }
+            if (batchLen > 0) {
+                auto iters = Table_.FindBatch(batch, batchLen);
+                for (size_t b = 0; b < batchLen; ++b) {
+                    while (auto match = Table_.NextMatch(iters[b])) {
+                        consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = *match, .Probe = batch[b]});
+                    }
+                }
+            }
+            return std::nullopt;
+        };
+
+        if (FetchedPack_.has_value()) {
+            auto resume = processPackBatched(ResumeIndex_);
+            if (resume.has_value()) {
+                ResumeIndex_ = *resume;
+                return EFetchResult::One;
             }
             FetchedPack_ = std::nullopt;
             ResumeIndex_ = 0;
@@ -319,16 +345,10 @@ template <typename Source> class TInMemoryHashJoin {
             if (resEnum == EFetchResult::One) {
                 FetchedPack_ = std::move(GetPayload(var));
                 ResumeIndex_ = 0;
-                ui32 idx = 0;
-                for (TSingleTuple probeTuple : *FetchedPack_) {
-                    idx++;
-                    Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
-                        consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
-                    });
-                    if (isFull()) {
-                        ResumeIndex_ = idx;
-                        return EFetchResult::One;
-                    }
+                auto resume = processPackBatched(0);
+                if (resume.has_value()) {
+                    ResumeIndex_ = *resume;
+                    return EFetchResult::One;
                 }
                 FetchedPack_ = std::nullopt;
             }
@@ -549,6 +569,35 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 }
             }
         };
+        auto lookupBatchToTable = [&](TTable& table,
+                                      const std::array<TSingleTuple, TTable::kBatchSize>& batch,
+                                      size_t count) {
+            auto iters = table.FindBatch(batch, count);
+            for (size_t b = 0; b < count; ++b) {
+                bool found = false;
+                while (auto match = table.NextMatch(iters[b])) {
+                    found = true;
+                    if constexpr (Kind == EJoinKind::Inner || Kind == EJoinKind::Left) {
+                        consume(TSides<TSingleTuple>{.Build = *match, .Probe = batch[b]});
+                    }
+                }
+                if constexpr (Kind == EJoinKind::Left) {
+                    if (!found && !Settings_.LeftIsBuild()) {
+                        consume(batch[b]);
+                    }
+                }
+                if constexpr (Kind == EJoinKind::LeftOnly) {
+                    if (!found) {
+                        consume(batch[b]);
+                    }
+                }
+                if constexpr (Kind == EJoinKind::LeftSemi) {
+                    if (found) {
+                        consume(batch[b]);
+                    }
+                }
+            }
+        };
         if (std::get_if<Init>(&State_)) {
             State_ = FetchingBuild{*this};
         } else if (auto* s = std::get_if<FetchingBuild>(&State_)) {
@@ -692,23 +741,52 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
+                constexpr size_t kBatch = TTable::kBatchSize;
+                std::array<TSingleTuple, kBatch> batch{};
+                std::array<int, kBatch> batchBuckets{};
+                std::array<bool, kBatch> batchSpilled{};
+                size_t batchLen = 0;
                 ui32 idx = 0;
                 for (TSingleTuple tuple : *state.FetchedPack) {
                     if (idx++ < state.ResumeIndex) {
                         continue;
                     }
-                    int bucketIndex = Settings.BucketIndex(tuple);
-                    bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
-                    if (thisBucketSpilled) {
-                        state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
-                    } else {
-                        TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
-                        MKQL_ENSURE(thisTable, "sanity check");
-                        lookupToTable(*thisTable, tuple);
+                    batch[batchLen] = tuple;
+                    batchBuckets[batchLen] = Settings.BucketIndex(tuple);
+                    batchSpilled[batchLen] = state.Spiller.IsBucketSpilled(batchBuckets[batchLen]);
+                    batchLen++;
+                    if (batchLen == kBatch) {
+                        for (size_t b = 0; b < kBatch; ++b) {
+                            if (!batchSpilled[b]) {
+                                TTable* t = std::get_if<TTable>(&state.Spiller.GetState().Buckets[batchBuckets[b]]);
+                                if (t && !t->Empty()) {
+                                    t->PrefetchForLookup(batch[b]);
+                                }
+                            }
+                        }
+                        for (size_t b = 0; b < kBatch; ++b) {
+                            if (batchSpilled[b]) {
+                                state.Spiller.AddRow({.Val = batch[b], .Side = ESide::Probe, .BucketIndex = batchBuckets[b]});
+                            } else {
+                                TTable* t = std::get_if<TTable>(&state.Spiller.GetState().Buckets[batchBuckets[b]]);
+                                MKQL_ENSURE(t, "sanity check");
+                                lookupToTable(*t, batch[b]);
+                            }
+                        }
+                        batchLen = 0;
+                        if (isFull()) {
+                            state.ResumeIndex = idx;
+                            return EFetchResult::One;
+                        }
                     }
-                    if (isFull()) {
-                        state.ResumeIndex = idx;
-                        return EFetchResult::One;
+                }
+                for (size_t b = 0; b < batchLen; ++b) {
+                    if (batchSpilled[b]) {
+                        state.Spiller.AddRow({.Val = batch[b], .Side = ESide::Probe, .BucketIndex = batchBuckets[b]});
+                    } else {
+                        TTable* t = std::get_if<TTable>(&state.Spiller.GetState().Buckets[batchBuckets[b]]);
+                        MKQL_ENSURE(t, "sanity check");
+                        lookupToTable(*t, batch[b]);
                     }
                 }
                 state.FetchedPack = std::nullopt;
@@ -767,16 +845,26 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         table->Futures.push_back(Spiller_->Extract(*GetBackOrNull(currentProbe)));
                     }
                     if (table->CurrentProbePack.has_value()) {
+                        constexpr size_t kBatch = TTable::kBatchSize;
+                        std::array<TSingleTuple, kBatch> batch{};
+                        size_t batchLen = 0;
                         ui32 idx = 0;
                         for (TSingleTuple probeTuple : *table->CurrentProbePack) {
                             if (idx++ < table->ProbeResumeIndex) {
                                 continue;
                             }
-                            lookupToTable(table->Table, probeTuple);
-                            if (isFull()) {
-                                table->ProbeResumeIndex = idx;
-                                return EFetchResult::One;
+                            batch[batchLen++] = probeTuple;
+                            if (batchLen == kBatch) {
+                                lookupBatchToTable(table->Table, batch, batchLen);
+                                batchLen = 0;
+                                if (isFull()) {
+                                    table->ProbeResumeIndex = idx;
+                                    return EFetchResult::One;
+                                }
                             }
+                        }
+                        if (batchLen > 0) {
+                            lookupBatchToTable(table->Table, batch, batchLen);
                         }
                         table->CurrentProbePack = std::nullopt;
                         table->ProbeResumeIndex = 0;

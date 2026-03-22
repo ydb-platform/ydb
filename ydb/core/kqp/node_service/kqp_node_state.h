@@ -78,7 +78,7 @@ private:
     struct TBucket {
         TRWMutex Mutex;
         std::set<TNodeRequest::TExpirationInfo> ExpiringRequests; // protected by Mutex
-        THashMap<TActorId /* executerId */, TNodeRequest> Requests;    // protected by Mutex
+        std::unordered_map<TActorId /* executerId */, TNodeRequest> Requests;    // protected by Mutex
         // TODO: is it even possible to have multiple executers to send the same TxId?
     };
     std::array<TBucket, BucketsCount> Buckets;

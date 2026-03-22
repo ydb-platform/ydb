@@ -1589,7 +1589,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                     .AddMember("z")
                         .BeginStruct()
                             .AddMember("a").Int32(1)
-                            .AddMember("b").Int32(2)
+                            .AddMember("b").OptionalInt32(2)
                             .AddMember("c")
                                 .BeginStruct()
                                     .AddMember("q").Int32(1)

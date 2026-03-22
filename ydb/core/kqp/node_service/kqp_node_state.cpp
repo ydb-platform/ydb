@@ -72,23 +72,24 @@ void TNodeState::OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, boo
     auto requestIt = bucket.Requests.find(executerId);
     YQL_ENSURE(requestIt != bucket.Requests.end());
     auto& request = requestIt->second;
+
     if (auto taskIt = request.Tasks.find(taskId); taskIt != request.Tasks.end()) {
         request.Tasks.erase(taskIt);
         request.ExecutionCancelled |= !success;
+    }
 
-        if (request.Tasks.empty()) {
-            bucket.ExpiringRequests.erase(request.GetExpirationInfo());
+    if (request.Tasks.empty()) {
+        bucket.ExpiringRequests.erase(request.GetExpirationInfo());
 
-            if (requestIt->second.Query) {
-                auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
-                removeQueryEvent->QueryId = txId;
-                Y_ENSURE(TlsActivationContext);
-                auto* actorSystem = TlsActivationContext->ActorSystem();
-                actorSystem->Send(MakeKqpSchedulerServiceId(actorSystem->NodeId), removeQueryEvent.Release());
-            }
-
-            bucket.Requests.erase(requestIt);
+        if (requestIt->second.Query) {
+            auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
+            removeQueryEvent->QueryId = txId;
+            Y_ENSURE(TlsActivationContext);
+            auto* actorSystem = TlsActivationContext->ActorSystem();
+            actorSystem->Send(MakeKqpSchedulerServiceId(actorSystem->NodeId), removeQueryEvent.Release());
         }
+
+        bucket.Requests.erase(requestIt);
     }
 }
 

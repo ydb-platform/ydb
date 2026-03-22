@@ -16,7 +16,7 @@ private:
     YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
     YDB_READONLY_DEF(std::optional<TString>, StorageId);
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
-    YDB_READONLY_DEF(NArrow::NAccessor::TRequestedConstructorContainer, AccessorConstructor);
+    YDB_READONLY_DEF(std::optional<NArrow::NAccessor::TRequestedConstructorContainer>, AccessorConstructor);
     YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
 
 public:

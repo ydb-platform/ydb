@@ -54,8 +54,6 @@ public:
         if (formatQuery) {
             TString normalizedFormatQuery = NormalizeWhitespaceInQuery(UnescapeC(formatQuery));
             TString normalizedShowCreateTableQuery = NormalizeWhitespaceInQuery(UnescapeC(showCreateTableQuery));
-            Cerr << "normalizedFormatQuery: " << normalizedFormatQuery << Endl;
-            Cerr << "normalizedShowCreateTableQuery: " << normalizedShowCreateTableQuery << Endl;
             UNIT_ASSERT_STRINGS_EQUAL(normalizedFormatQuery, normalizedShowCreateTableQuery);
         }
 

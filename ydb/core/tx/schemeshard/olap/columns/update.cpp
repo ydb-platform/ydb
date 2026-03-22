@@ -43,10 +43,19 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
         DefaultValue = columnSchema.GetDefaultValue();
     }
     if (columnSchema.HasDataAccessorConstructor()) {
-        if (!AccessorConstructor.DeserializeFromProto(columnSchema.GetDataAccessorConstructor())) {
-            errors.AddError("cannot parse accessor constructor from proto");
-            return false;
+        const auto& dacProto = columnSchema.GetDataAccessorConstructor();
+        if (dacProto.GetClassName() == "__UNDEFINED") {
+            AccessorConstructor.emplace();
+        } else {
+            NArrow::NAccessor::TRequestedConstructorContainer container;
+            if (!container.DeserializeFromProto(dacProto)) {
+                errors.AddError("cannot parse accessor constructor from proto");
+                return false;
+            }
+            AccessorConstructor = std::move(container);
         }
+    } else {
+        AccessorConstructor = std::nullopt;
     }
 
     if (columnSchema.HasColumnFamilyName()) {
@@ -207,6 +216,8 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
     }
     if (AccessorConstructor) {
         *columnSchema.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
+    } else {
+        columnSchema.ClearDataAccessorConstructor();
     }
 
     auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(Type, "");
@@ -225,14 +236,18 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
             return false;
         }
     }
-    if (!!diffColumn.GetAccessorConstructor()) {
-        const auto& accessorContainer = diffColumn.GetAccessorConstructor();
-        auto conclusion = accessorContainer.GetObjectPtr()->BuildConstructor();
-        if (conclusion.IsFail()) {
-            errors.AddError(conclusion.GetErrorMessage());
-            return false;
+    if (diffColumn.GetAccessorConstructor()) {
+        const auto& requested = *diffColumn.GetAccessorConstructor();
+        if (!requested) {
+            AccessorConstructor = NArrow::NAccessor::TConstructorContainer();
+        } else {
+            auto conclusion = requested.GetObjectPtr()->BuildConstructor();
+            if (conclusion.IsFail()) {
+                errors.AddError(conclusion.GetErrorMessage());
+                return false;
+            }
+            AccessorConstructor = conclusion.DetachResult();
         }
-        AccessorConstructor = conclusion.DetachResult();
     }
     if (diffColumn.GetStorageId()) {
         StorageId = *diffColumn.GetStorageId();

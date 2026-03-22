@@ -1414,8 +1414,6 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
     }
 
-    Cerr << "!!! VLAD " << olapColumnDesc.DebugString() << Endl;
-
     if (olapColumnDesc.HasDataAccessorConstructor()) {
         const auto& dataAccessorConstructor = olapColumnDesc.GetDataAccessorConstructor();
         if (dataAccessorConstructor.GetClassName() == "DICTIONARY") {

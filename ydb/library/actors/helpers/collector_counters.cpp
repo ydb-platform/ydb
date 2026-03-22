@@ -1,5 +1,8 @@
 #include "collector_counters.h"
 
+#include <ydb/library/actors/core/mon_stats.h>
+
+
 namespace NActors {
 
 // THistogramCounters

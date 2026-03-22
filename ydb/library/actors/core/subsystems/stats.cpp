@@ -2,6 +2,7 @@
 
 
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/cpu_manager.h>
 #include <ydb/library/actors/core/harmonizer/harmonizer.h>
 
@@ -52,8 +53,8 @@ namespace NActors {
     }
 
     const TActorSystemStatsSubSystem& GetActorSystemStats() {
-        const TActorSystem actorSystem = TlsActivationContext::ActorSystem();
-        auto* subSystem = actorSystem.GetSubSystem<TActorSystemStatsSubSystem>();
+        TActorSystem *actorSystem = TActivationContext::ActorSystem();
+        auto* subSystem = actorSystem->GetSubSystem<TActorSystemStatsSubSystem>();
         Y_ABORT_UNLESS(subSystem, "actor system stats subsystem is not registered");
         return *subSystem;
     }

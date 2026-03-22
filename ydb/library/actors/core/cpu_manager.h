@@ -2,7 +2,6 @@
 
 #include "config.h"
 #include "executor_pool.h"
-#include "mon_stats.h"
 #include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <memory>
 

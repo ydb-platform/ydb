@@ -115,6 +115,7 @@ public:
         }
 
         void StartClientSession() override {
+            std::lock_guard lock(Mutex_);
             Started_ = true;
         }
 

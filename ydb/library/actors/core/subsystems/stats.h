@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/mon_stats.h>
 #include <ydb/library/actors/core/subsystem.h>
 
+#include <util/generic/vector.h>
+
 #include <memory>
 #include <vector>
 

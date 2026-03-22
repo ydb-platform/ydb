@@ -45,13 +45,23 @@ namespace NActors {
     }
 
     template<class T>
-    T* GetSubSystem(const TSubSystems& subsystems) {
+    T* GetSubSystem(TSubSystems& subsystems) {
         static_assert(std::is_base_of_v<ISubSystem, T>, "T must implement ISubSystem");
         const size_t index = TSubSystemRegistry::TItem<T>::Index();
         if (index >= subsystems.size()) {
             return nullptr;
         }
         return static_cast<T*>(subsystems[index].get());
+    }
+
+    template<class T>
+    const T* GetSubSystem(const TSubSystems& subsystems) {
+        static_assert(std::is_base_of_v<ISubSystem, T>, "T must implement ISubSystem");
+        const size_t index = TSubSystemRegistry::TItem<T>::Index();
+        if (index >= subsystems.size()) {
+            return nullptr;
+        }
+        return static_cast<const T*>(subsystems[index].get());
     }
 
 } // namespace NActors

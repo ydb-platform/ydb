@@ -343,7 +343,12 @@ namespace NActors {
         }
 
         template<class T>
-        T* GetSubSystem() const {
+        T* GetSubSystem() {
+            return NActors::GetSubSystem<T>(SubSystems);
+        }
+
+        template<class T>
+        const T* GetSubSystem() const {
             return NActors::GetSubSystem<T>(SubSystems);
         }
 

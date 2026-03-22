@@ -61,7 +61,7 @@ struct TJsonParserBuffer {
         Y_ENSURE(!Finished, "Cannot finish buffer twice");
         Finished = true;
         Values << TString(simdjson::SIMDJSON_PADDING, ' ');
-        return {Values.data(), Values.size()};
+        return {Values.data(), Values.size() - simdjson::SIMDJSON_PADDING};
     }
 
     void Clear() {

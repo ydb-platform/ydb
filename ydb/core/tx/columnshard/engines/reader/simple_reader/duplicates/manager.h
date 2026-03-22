@@ -46,8 +46,7 @@ private:
     std::map<NArrow::TSimpleRow, TBorderInfo> Borders;
     THashSet<ui64> CurrentPortions;
     THashSet<ui64> ProcessedPortions;
-    std::set<NArrow::TSimpleRow> WaitingBorders;
-    std::map<NArrow::TSimpleRow, TIntervalBorder> ReadyBorders;
+    std::map<NArrow::TSimpleRow, ui32> WaitingBorders;
     std::optional<NArrow::TSimpleRow> PreviousBorder;
     
     std::optional<NArrow::TSimpleRow> LastBorder;
@@ -92,7 +91,6 @@ private:
     void Handle(const TEvIntervalConstructionResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
         Counters->OnLeftBorders(-1 * Borders.size());
-        Counters->OnReadyBorders(-1 * ReadyBorders.size());
         Counters->OnWaitingBorders(-1 * WaitingBorders.size());
         AbortAndPassAway("aborted by actor system");
     }

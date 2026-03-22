@@ -122,11 +122,10 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
         }
 
         if (!CurrentPortions.empty()) {
-            int prevSize = WaitingBorders.size();
-            WaitingBorders.emplace(*PreviousBorder);
-            WaitingBorders.emplace(it->first);
-            
-            Counters->OnWaitingBorders( WaitingBorders.size() - prevSize);
+            ui32 prevSize = WaitingBorders.size();
+            ++WaitingBorders[*PreviousBorder];
+            ++WaitingBorders[it->first];
+            Counters->OnWaitingBorders(WaitingBorders.size() - prevSize);
             builders.back().AppendInterval(TIntervalBorder::First(std::make_shared<NArrow::NMerger::TSortableBatchPosition>(PreviousBorder->BuildSortablePosition()), 0), TIntervalBorder::First(std::make_shared<NArrow::NMerger::TSortableBatchPosition>(it->first.BuildSortablePosition()), 0), CurrentPortions);
             CurrentPortions.clear();
         }
@@ -173,26 +172,22 @@ void TDuplicateManager::Handle(const TEvIntervalConstructionResult::TPtr& ev) {
         Merger.AddSource(data, nullptr, NArrow::NMerger::TIterationOrder::Forward(0), portionId);
         FiltersBuilder.AddSource(portionId, Portions->GetPortionVerified(portionId)->GetRecordsCount());
     }
-    ui64 prevSize = ReadyBorders.size();
     for (const auto& interval : ev->Get()->Context.GetIntervals()) {
-        ReadyBorders.insert_or_assign(NArrow::TSimpleRow{interval.GetBegin().GetKey()->MakeRecordBatch(), 0}, interval.GetBegin());
-        ReadyBorders.insert_or_assign(NArrow::TSimpleRow{interval.GetEnd().GetKey()->MakeRecordBatch(), 0}, interval.GetEnd());
+        auto beginKey = NArrow::TSimpleRow{interval.GetBegin().GetKey()->MakeRecordBatch(), 0};
+        auto endKey = NArrow::TSimpleRow{interval.GetEnd().GetKey()->MakeRecordBatch(), 0};
+        auto beginIt = WaitingBorders.find(beginKey);
+        AFL_VERIFY(beginIt != WaitingBorders.end() && beginIt->second > 0);
+        --beginIt->second;
+        auto endIt = WaitingBorders.find(endKey);
+        AFL_VERIFY(endIt != WaitingBorders.end() && endIt->second > 0);
+        --endIt->second;
     }
-    Counters->OnReadyBorders(ReadyBorders.size() - prevSize);
-    auto waitingIt = WaitingBorders.begin();
-    auto readyIt = ReadyBorders.begin();
-    while (waitingIt != WaitingBorders.end() && readyIt != ReadyBorders.end() &&  readyIt->first <= *waitingIt) {
-        if (readyIt->first < *waitingIt) {
-            ReadyBorders.erase(readyIt++);
-            Counters->OnReadyBorders(-1);
-            continue;
-        }
-        Merger.PutControlPoint(*readyIt->second.GetKey(), false);
+    while (!WaitingBorders.empty() && WaitingBorders.begin()->second == 0) {
+        auto it = WaitingBorders.begin();
+        Merger.PutControlPoint(it->first.BuildSortablePosition(), false);
         Merger.DrainToControlPoint(FiltersBuilder, true);
-        WaitingBorders.erase(waitingIt++);
-        ReadyBorders.erase(readyIt++);
+        WaitingBorders.erase(it);
         Counters->OnWaitingBorders(-1);
-        Counters->OnReadyBorders(-1);
     }
     Counters->OnRowsMerged(FiltersBuilder.GetRowsAdded() - PrevRowsAdded, FiltersBuilder.GetRowsSkipped() - PrevRowsSkipped, 0);
     PrevRowsAdded = FiltersBuilder.GetRowsAdded();

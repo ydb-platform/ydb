@@ -2003,36 +2003,6 @@ public:
 
                                     columnBuild->SetNotNull(true);
                                     hasNotNull = true;
-                                } else if (constraint.Name().Value() == "columnEncoding") {
-                                    auto encodingList = constraint.Value().Cast<TExprList>();
-                                    for (size_t i = 0; i < encodingList.Size(); ++i) {
-                                        auto config = encodingList.Item(i).Cast<TExprList>();
-                                        TString name;
-                                        for (size_t j = 0; j < config.Size(); ++j) {
-                                            auto pair = config.Item(j).Cast<TExprList>();
-                                            if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name") {
-                                                name = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
-                                                break;
-                                            }
-                                        }
-                                        if (name == "dict") {
-                                            if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
-                                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "ENCODING(DICT) is disabled."));
-                                                return SyncError();
-                                            }
-                                            if (table.Metadata->Kind != EKikimrTableKind::Olap) {
-                                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), "ENCODING(DICT) is supported only in column tables"));
-                                                return SyncError();
-                                            }
-                                            add_column->add_encoding()->mutable_dictionary();
-                                        } else if (name == "off") {
-                                            add_column->add_encoding()->mutable_off();
-                                        } else {
-                                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                                "Unsupported encoding type"));
-                                            return SyncError();
-                                        }
-                                    }
                                 }
                             }
                         }
@@ -2045,32 +2015,35 @@ public:
                             return SyncError();
                         }
 
-                        if (columnTuple.Size() > 3) {
-                            auto columnItem = columnTuple.Item(3);
-                            if (columnItem.Maybe<TExprList>()) {
+                        for (size_t itemIdx = 3; itemIdx < columnTuple.Size(); ++itemIdx) {
+                            auto columnItem = columnTuple.Item(itemIdx);
+                            if (!columnItem.Maybe<TExprList>()) {
+                                continue;
+                            }
+                            const auto exprs = columnItem.Cast<TExprList>();
+                            if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
+                                if (!ParseCompressionSettings(exprs, add_column, ctx)) {
+                                    return SyncError();
+                                }
+                            } else if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnEncoding") {
+                                if (!ParseEncodingSettings(exprs, add_column, ctx, table.Metadata->Kind)) {
+                                    return SyncError();
+                                }
+                            } else {
+                                auto families = columnItem.Cast<TCoAtomList>();
+                                if (families.Size() > 1) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                        "Unsupported number of families"));
+                                    return SyncError();
+                                }
 
+                                for (auto family : families) {
+                                    add_column->set_family(TString(family.Value()));
+                                }
 
-                                const auto exprs = columnItem.Cast<TExprList>();
-                                if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
-                                    if (!ParseCompressionSettings(exprs, add_column, ctx)) {
-                                        return SyncError();
-                                    }
-                                } else {
-                                    auto families = columnItem.Cast<TCoAtomList>();
-                                    if (families.Size() > 1) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                            "Unsupported number of families"));
-                                        return SyncError();
-                                    }
-
+                                if (columnBuild) {
                                     for (auto family : families) {
-                                        add_column->set_family(TString(family.Value()));
-                                    }
-
-                                    if (columnBuild) {
-                                        for (auto family : families) {
-                                            columnBuild->SetFamily(TString(family.Value()));
-                                        }
+                                        columnBuild->SetFamily(TString(family.Value()));
                                     }
                                 }
                             }
@@ -3838,36 +3811,53 @@ private:
 
     bool ParseEncodingSettings(
         const TExprList& alterColumnList,
-        Ydb::Table::ColumnMeta* alter_columns,
+        Ydb::Table::ColumnMeta* columnDest,
         TExprContext& ctx,
         EKikimrTableKind tableKind)
     {
         auto encodingList = alterColumnList.Item(1).Cast<TExprList>();
-        alter_columns->clear_encoding();
-        for (size_t i = 0; i < encodingList.Size(); ++i) {
-            auto config = encodingList.Item(i).Cast<TExprList>();
-            TString name;
-            for (size_t j = 0; j < config.Size(); ++j) {
-                auto pair = config.Item(j).Cast<TExprList>();
-                if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name") {
-                    name = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
-                    break;
-                }
-            }
-            if (name == "dict") {
-                if (tableKind != EKikimrTableKind::Olap) {
-                    // TODO: tableKind == EKikimrTableKind::Unspecified for ALTER TABLE ... SET ENCODING(DICT)
-                }
-                if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
-                        << "ENCODING(DICT) is disabled."));
-                    return false;
-                }
-                alter_columns->add_encoding()->mutable_dictionary();
-            } else if (name == "off") {
-                alter_columns->add_encoding()->mutable_off();
-            }
+        if (tableKind != EKikimrTableKind::Olap && tableKind != EKikimrTableKind::Unspecified) {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Column Encoding is supported only in column tables"));
+            return false;
         }
+
+        if (encodingList.Empty()) {
+            columnDest->add_encoding();
+            return true;
+        } else if (encodingList.Size() > 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
+        auto config = encodingList.Item(0).Cast<TExprList>();
+        if (config.Size() != 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
+        TString encodingName;
+        auto pair = config.Item(0).Cast<TExprList>();
+        if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name" && encodingName.empty()) {
+            encodingName = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
+        if (encodingName == "dict") {
+            if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                    << "ENCODING(DICT) is disabled."));
+                return false;
+            }
+            columnDest->add_encoding()->mutable_dictionary();
+        } else if (encodingName == "off") {
+            columnDest->add_encoding()->mutable_off();
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+            return false;
+        }
+
         return true;
     }
 

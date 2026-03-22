@@ -464,7 +464,7 @@ struct TColumnEncoding {
     } Type = EEncodingType::UNDEFINED;
 };
 
-using TEncodingsList = TVector<TColumnEncoding>;
+using TColumnEncodingsList = TVector<TColumnEncoding>;
 
 struct TKikimrColumnMetadata {
 
@@ -481,7 +481,7 @@ struct TKikimrColumnMetadata {
     TKikimrPathId DefaultFromSequencePathId;
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
-    TMaybe<TEncodingsList> Encoding;
+    TMaybe<TColumnEncodingsList> Encoding;
 
     TKikimrColumnMetadata() = default;
 
@@ -531,7 +531,7 @@ struct TKikimrColumnMetadata {
 
         for (const auto& encoding : message->GetEncoding()) {
             if (!Encoding) {
-                Encoding = TEncodingsList{};
+                Encoding = TColumnEncodingsList{};
             }
             switch (encoding.GetImplementationCase()) {
                 case NKikimrKqp::TEncoding::kPlain:

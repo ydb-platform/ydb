@@ -364,7 +364,7 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             return false;
         }
 
-        if (!columnIt->second.Encoding->empty()) {
+        if (columnIt->second.Encoding) {
             error = "Column Encoding is not supported in row tables";
             return false;
         }
@@ -460,7 +460,7 @@ bool FillSerializer(
 }
 
 bool FillAccessor(
-    const TMaybe<TEncodingsList>& from, const std::string& name,
+    const TMaybe<TColumnEncodingsList>& from, const std::string& name,
     NKikimrSchemeOp::TOlapColumnDescription& to,
     TString& error, Ydb::StatusIds::StatusCode& code) {
 

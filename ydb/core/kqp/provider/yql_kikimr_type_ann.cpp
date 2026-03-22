@@ -1011,8 +1011,11 @@ private:
     }
 
     bool ParseColumnExtra(const TExprList& columnTuple, TKikimrColumnMetadata& columnMeta, TExprContext& ctx) {
-        auto columnItem = columnTuple.Item(3);
-        if (columnItem.Maybe<TExprList>()) {
+        for (size_t itemId = 3; itemId < columnTuple.Size(); ++itemId) {
+            auto columnItem = columnTuple.Item(itemId);
+            if (!columnItem.Maybe<TExprList>()) {
+                continue;
+            }
             const auto exprs = columnItem.Cast<TExprList>();
             if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
                 columnMeta.Compression = TColumnCompression();
@@ -1028,6 +1031,45 @@ private:
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(columnItem.Pos()), TStringBuilder()
                             << "Only algorithm and level settings supported for column COMPRESSION."));
+                        return false;
+                    }
+                }
+            } else if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnEncoding") {
+                columnMeta.Encoding = TColumnEncodingsList{};
+                auto encodingList = exprs.Item(1).Cast<TExprList>();
+
+                if (encodingList.Empty()) {
+                    columnMeta.Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::UNDEFINED});
+                } else if (encodingList.Size() > 1) {
+                    ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+                    return false;
+                } else {
+                    auto config = encodingList.Item(0).Cast<TExprList>();
+                    if (config.Size() != 1) {
+                        ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+                        return false;
+                    }
+
+                    TString encodingName;
+                    auto pair = config.Item(0).Cast<TExprList>();
+                    if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name" && encodingName.empty()) {
+                        encodingName = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+                        return false;
+                    }
+
+                    if (encodingName == "dict") {
+                        if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                << "ENCODING(DICT) is disabled."));
+                            return false;
+                        }
+                        columnMeta.Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::DICTIONARY});
+                    } else if (encodingName == "off") {
+                        columnMeta.Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::PLAIN});
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
                         return false;
                     }
                 }
@@ -1123,35 +1165,8 @@ private:
                 }
             }
 
-            if (columnTuple.Size() > 3) {
-                if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
-                    return TStatus::Error;
-                }
-                // TODO
-                // columnEncoding may appear as a separate tuple in column desc (query.cpp), not inside columnConstrains
-                // for (size_t idx = 3; idx < columnTuple.Size(); ++idx) {
-                //     auto extra = columnTuple.Item(idx);
-                //     if (auto maybeTuple = extra.Maybe<TCoNameValueTuple>()) {
-                //         auto nameValue = maybeTuple.Cast();
-                //         if (nameValue.Name().Value() == "columnEncoding") {
-                //             auto encodingList = nameValue.Value().Cast<TExprList>();
-                //             for (size_t i = 0; i < encodingList.Size(); ++i) {
-                //                 auto config = encodingList.Item(i).Cast<TExprList>();
-                //                 for (size_t j = 0; j < config.Size(); ++j) {
-                //                     auto pair = config.Item(j).Cast<TExprList>();
-                //                     if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name") {
-                //                         TString encName = TString(pair.Item(1).Cast<TCoAtom>().Value());
-                //                         if (to_lower(encName) == "dict") {
-                //                             columnMeta.DictionaryEncoding = true;
-                //                         }
-                //                         break;
-                //                     }
-                //                 }
-                //             }
-                //             break;
-                //         }
-                //     }
-                // }
+            if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
+                return TStatus::Error;
             }
 
             meta->ColumnOrder.push_back(columnName);
@@ -1756,10 +1771,8 @@ private:
                     columnMeta.TypeInfo = GetColumnTypeInfo(actualType);
                     columnMeta.Type = GetColumnTypeName(actualType, columnMeta.TypeInfo);
 
-                    if (columnTuple.Size() > 3) {
-                        if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
-                            return TStatus::Error;
-                        }
+                    if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
+                        return TStatus::Error;
                     }
                 }
             } else if (name == "dropColumns") {
@@ -1946,9 +1959,48 @@ private:
                             }
                         }
                     } else if (alterColumnAction == "changeEncoding") {
-                        // encodingList = list of encoding configs, e.g. [["DICT"]] or [["OFF"]] or []
-                        auto encodingList = alterColumnList.Item(1).Cast<TExprList>();
-                        (void)encodingList;  // validated at execution
+                        const auto encodingList = alterColumnList.Item(1).Cast<TExprList>();
+                        if (!encodingList.Empty()) {
+                            if (encodingList.Size() > 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
+                                return TStatus::Error;
+                            }
+
+                            auto config = encodingList.Item(0).Cast<TExprList>();
+                            if (config.Size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
+                                return TStatus::Error;
+                            }
+
+                            TString encodingName;
+                            auto pair = config.Item(0).Cast<TExprList>();
+                            if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name" && encodingName.empty()) {
+                                encodingName = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
+                            } else {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
+                                return TStatus::Error;
+                            }
+
+                            if (encodingName == "dict") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                        << " Column: \"" << name << "\". ENCODING(DICT) is disabled."));
+                                    return TStatus::Error;
+                                }
+                            } else if (encodingName != "off") {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
+                                return TStatus::Error;
+                            }
+                        }
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
                                 TStringBuilder() << "Unsupported action to alter column: " << alterColumnAction));

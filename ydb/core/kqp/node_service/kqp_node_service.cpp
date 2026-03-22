@@ -164,6 +164,7 @@ private:
         NHPTimer::STime workHandlerStart = ev->SendTime;
         auto& msg = ev->Get()->Record;
         Counters->NodeServiceStartEventDelivery->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
+        YQL_ENSURE(!msg.GetTasks().empty(), "TEvStartKqpTasksRequest with empty task list");
 
         auto requester = ev->Sender;
 
@@ -222,9 +223,8 @@ private:
             request.Deadline = now + timeout + /* gap */ TDuration::Seconds(5);
         }
 
-        TVector<ui64> requestTaskIds;
         for (const auto& dqTask : msg.GetTasks()) {
-            requestTaskIds.push_back(dqTask.GetId());
+            request.Tasks.emplace(dqTask.GetId(), std::nullopt);
         }
 
         bool cancelled = false;
@@ -237,7 +237,7 @@ private:
         STLOG_D((result ? "Created new request" : "Added tasks to existing request"),
                 (node_id, SelfId().NodeId()),
                 (tx_id, txId),
-                (tasks_count, requestTaskIds.size()),
+                (tasks_count, msg.GetTasks().size()),
                 (executer, executerId),
                 (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
 

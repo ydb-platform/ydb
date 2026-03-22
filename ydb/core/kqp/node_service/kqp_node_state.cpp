@@ -21,6 +21,7 @@ bool TNodeState::AddRequest(TNodeRequest&& request, bool& cancelled) {
         }
         return true;
     } else {
+        YQL_ENSURE(it->second.TxId == request.TxId, "Different TxIds " << it->second.TxId << "," << request.TxId << " from single executer " << executerId);
         it->second.Tasks.merge(request.Tasks);
         YQL_ENSURE(request.Tasks.empty(), "Duplicated taskIds are requested");
         return false;

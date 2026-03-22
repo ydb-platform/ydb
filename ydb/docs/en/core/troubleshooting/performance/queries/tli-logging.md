@@ -1,10 +1,10 @@
 # TLI logging
 
-[Transaction lock invalidation](../../../concepts/glossary.md#tli) (TLI) logging lets you identify which query had its locks broken (the **victim**) and which query broke them (the **breaker**).
+[Transaction locks invalidation](../../../concepts/glossary.md#tli) (TLI) logging lets you identify which query had its locks broken **(the victim)** and which query broke them **(the breaker)**.
 
 ## Enabling logging
 
-To get detailed logs about lock conflicts, set the `INFO` level (numeric value `6`) for the `TLI` component.
+To get detailed [logs](../../../devops/observability/logging.md) about lock conflicts, set the `INFO` level (numeric value `6`) for the `TLI` component.
 
 Add the following to the cluster configuration:
 

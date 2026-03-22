@@ -2642,7 +2642,7 @@ class Cuda(object):
             architectures.append('sm_90a')
 
         if version >= (12, 8):
-            architectures.extend(['sm_100', 'sm_100a', 'sm_120', 'sm_120a'])
+            architectures.extend(['sm_100', 'sm_100a', 'sm_100f', 'sm_120', 'sm_120a', 'sm_120f'])
 
         return ':'.join(architectures)
 
@@ -2717,7 +2717,7 @@ class CuDNN(object):
         return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.10.2', '9.12.0')
 
     def auto_cudnn_version(self):
-        return '9.10.2'
+        return '9.12.0'
 
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():

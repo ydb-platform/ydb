@@ -396,15 +396,30 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         TMaybe<double> rhsUniqueVals;
         if (leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
             auto lhs = leftJoinKeys[0].AttributeName;
-            lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals.value();
             auto rhs = rightJoinKeys[0].AttributeName;
-            rhsUniqueVals = rightStats.ColumnStatistics->Data[rhs].NumUniqueVals.value();
+
+            const auto& leftData = leftStats.ColumnStatistics->Data;
+            const auto& rightData = rightStats.ColumnStatistics->Data;
+
+            auto lhsIt = leftData.find(lhs);
+            auto rhsIt = rightData.find(rhs);
+
+            if (lhsIt != leftData.end() && lhsIt->second.NumUniqueVals) {
+                lhsUniqueVals = lhsIt->second.NumUniqueVals.value();
+            }
+
+            if (rhsIt != rightData.end() && rhsIt->second.NumUniqueVals) {
+                rhsUniqueVals = rhsIt->second.NumUniqueVals.value();
+            }
         }
 
+        double effectiveLeft = leftStats.Nrows * leftStats.Selectivity;
+        double effectiveRight = rightStats.Nrows * rightStats.Selectivity;
         if (lhsUniqueVals.Defined() && rhsUniqueVals.Defined()) {
-            newCard = leftStats.Nrows * rightStats.Nrows / std::max(lhsUniqueVals.GetRef(), rhsUniqueVals.GetRef());
+            newCard = effectiveLeft * effectiveRight / std::max(lhsUniqueVals.GetRef(), rhsUniqueVals.GetRef());
         } else {
-            newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
+            /* for example, join predicate between a column and a scalar aggregate */
+            newCard = 0.2 * effectiveLeft * effectiveRight;
         }
 
         newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);

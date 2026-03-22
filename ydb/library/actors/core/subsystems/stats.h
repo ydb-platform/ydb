@@ -3,6 +3,8 @@
 
 #include "defs.h"
 
+#include <ydb/library/actors/core/harmonizer/harmonizer_stats.h>
+#include <ydb/library/actors/core/mon_stats.h>
 #include <ydb/library/actors/core/subsystem.h>
 
 #include <memory>
@@ -12,10 +14,6 @@
 namespace NActors {
     class TActorSystem;
     class TCpuManager;
-    struct TExecutorPoolStats;
-    struct TExecutorThreadStats;
-    struct TExecutorPoolState;
-    struct THarmonizerStats;
 
     class TActorSystemStatsSubSystem : public ISubSystem {
     public:

@@ -95,8 +95,9 @@ private:
         AbortAndPassAway("aborted by actor system");
     }
 
-    void AbortAndPassAway(const TString&) {
+    void AbortAndPassAway(const TString& error) {
         AbortionFlag->Inc();
+        FiltersBuilder.Abort(error);
         PassAway();
     }
 

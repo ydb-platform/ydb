@@ -55,6 +55,7 @@ public:
     bool NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& constructor);
     void AddSource(const ui64 portionId, ui64 rowsCount);
     void AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor);
+    void Abort(const TString& error);
 };
 
 }

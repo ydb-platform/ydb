@@ -105,4 +105,10 @@ void TFiltersBuilder::AddWaitingPortion(const ui64 portionId, std::shared_ptr<TF
     AFL_VERIFY(WaitingPortions.emplace(portionId, constructor).second);
 }
 
+void TFiltersBuilder::Abort(const TString& error) {
+    for (const auto& [_, constructor] : WaitingPortions) {
+        constructor->Abort(error);
+    }
+}
+
 }

@@ -2,7 +2,7 @@
 
 namespace NKikimr::NKqp {
 
-bool TNodeState::AddRequest(TNodeRequest&& request, bool& cancelled) {
+bool TNodeState::AddRequest(TNodeRequest&& request, bool& cancelled, TActorId& requestQueryManId) {
     auto txId = request.TxId;
     auto executerId = request.ExecuterId;
 
@@ -19,11 +19,13 @@ bool TNodeState::AddRequest(TNodeRequest&& request, bool& cancelled) {
         if (it->second.Deadline) {
             bucket.ExpiringRequests.emplace(std::make_tuple(it->second.Deadline, txId, executerId));
         }
+        requestQueryManId = it->second.QueryManId;
         return true;
     } else {
         YQL_ENSURE(it->second.TxId == request.TxId, "Different TxIds " << it->second.TxId << "," << request.TxId << " from single executer " << executerId);
         it->second.Tasks.merge(request.Tasks);
         YQL_ENSURE(request.Tasks.empty(), "Duplicated taskIds are requested");
+        requestQueryManId = it->second.QueryManId;
         return false;
     }
 }

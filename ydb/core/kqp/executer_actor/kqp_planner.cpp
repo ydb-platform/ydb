@@ -485,7 +485,7 @@ const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
 TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
     auto& task = TasksGraph.GetTask(taskId);
     auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(task, true);
-    NYql::NDq::TComputeRuntimeSettings settings;
+
     if (!TxInfo) {
         double memoryPoolPercent = 100;
         if (UserRequestContext->PoolConfig.has_value()) {
@@ -514,7 +514,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .LockMode = TasksGraph.GetMeta().LockMode,
         .Task = taskDesc,
         .TxInfo = TxInfo,
-        .RuntimeSettings = settings,
+        .ReportStatsSettings = Nothing(),
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
         .SerializedGUCSettings = SerializedGUCSettings,

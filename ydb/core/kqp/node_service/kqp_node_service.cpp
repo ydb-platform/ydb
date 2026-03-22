@@ -1,6 +1,6 @@
 #include "kqp_node_service.h"
-
 #include "kqp_node_state.h"
+#include "kqp_query_cp.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/feature_flags.h>
@@ -166,7 +166,7 @@ private:
         Counters->NodeServiceStartEventDelivery->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
         YQL_ENSURE(!msg.GetTasks().empty(), "TEvStartKqpTasksRequest with empty task list");
 
-        auto requester = ev->Sender;
+        const auto executerId = ev->Sender;
 
         ui64 txId = msg.GetTxId();
         TMaybe<ui64> lockTxId = msg.HasLockTxId()
@@ -182,7 +182,7 @@ private:
         STLOG_D("HandleStartKqpTasksRequest",
             (node_id, SelfId().NodeId()),
             (tx_id, txId),
-            (requester, requester),
+            (requester, executerId),
             (tasks_count, msg.GetTasks().size()),
             (task_ids, TasksIdsStr(msg.GetTasks())),
             (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
@@ -214,8 +214,15 @@ private:
         }
 
         const auto now = TAppData::TimeProvider->Now();
-        const auto executerId = ev->Sender;
-        auto request = TNodeRequest(txId, query, executerId, now);
+
+        auto queryManId = CachedQueryManagerId;
+        if (queryManId) {
+            CachedQueryManagerId = TActorId{};
+        } else {
+            queryManId = Register(CreateKqpQueryManager(State_, CaFactory_));
+        }
+
+        auto request = TNodeRequest(txId, query, executerId, queryManId, now);
         auto& runtimeSettings = msg.GetRuntimeSettings();
         if (runtimeSettings.GetTimeoutMs() > 0) {
             // compute actor should not arm timer since in case of timeout it will receive TEvAbortExecution from Executer
@@ -228,10 +235,15 @@ private:
         }
 
         bool cancelled = false;
-        auto result = State_->AddRequest(std::move(request), cancelled);
-        if (!result && cancelled) {
-            co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR,
-                ev->Cookie, "Request was cancelled");
+        TActorId requestQueryManId = TActorId{};
+        auto result = State_->AddRequest(std::move(request), cancelled, requestQueryManId);
+        if (!result) {
+            if (cancelled) {
+                co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR,
+                    ev->Cookie, "Request was cancelled");
+            } else {
+                CachedQueryManagerId = queryManId;
+            }
         }
 
         STLOG_D((result ? "Created new request" : "Added tasks to existing request"),
@@ -240,7 +252,12 @@ private:
                 (tasks_count, msg.GetTasks().size()),
                 (executer, executerId),
                 (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
-
+/*
+        if (requestQueryManId) {
+            Send(ev->Forward(requestQueryManId));
+            co_return;
+        }
+*/
         NRm::EKqpMemoryPool memoryPool;
         if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN) {
             memoryPool = NRm::EKqpMemoryPool::ScanQuery;
@@ -252,12 +269,6 @@ private:
 
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
-
-        NYql::NDq::TComputeRuntimeSettings runtimeSettingsBase;
-        runtimeSettingsBase.ReportStatsSettings = NYql::NDq::TReportStatsSettings{
-            .MinInterval = runtimeSettings.HasMinStatsSendIntervalMs() ? TDuration::MilliSeconds(runtimeSettings.GetMinStatsSendIntervalMs()) : MinStatInterval,
-            .MaxInterval = runtimeSettings.HasMaxStatsSendIntervalMs() ? TDuration::MilliSeconds(runtimeSettings.GetMaxStatsSendIntervalMs()) : MaxStatInterval,
-        };
 
         TShardsScanningPolicy scanPolicy(Config.GetShardsScanningPolicy());
 
@@ -289,7 +300,7 @@ private:
                 .LockMode = lockMode,
                 .Task = &dqTask,
                 .TxInfo = txInfo,
-                .RuntimeSettings = runtimeSettingsBase,
+                .ReportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings),
                 .TraceId = NWilson::TTraceId(ev->TraceId),
                 .Arena = ev->Get()->Arena,
                 .SerializedGUCSettings = serializedGUCSettings,
@@ -354,7 +365,7 @@ private:
         for (auto&& i : computesByStage) {
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
-                    m.GetMeta(), runtimeSettingsBase, msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
+                    m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
                     scanPolicy, Counters, NWilson::TTraceId(ev->TraceId), cpuLimits));
             }
         }
@@ -634,6 +645,13 @@ private:
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 
+    void PassAway() override {
+        if (CachedQueryManagerId) {
+            Send(CachedQueryManagerId, new NActors::TEvents::TEvPoison());
+        }
+        TBase::PassAway();
+    }
+
 private:
     void ReplyError(ui64 txId, TActorId executer, const NKikimrKqp::TEvStartKqpTasksRequest& request,
         NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
@@ -662,10 +680,19 @@ private:
     std::shared_ptr<TNodeState> State_;
     TIntrusivePtr<TKqpShutdownState> ShutdownState_;
     bool AccountDefaultPoolInScheduler = false;
+    TActorId CachedQueryManagerId;
 };
 
 
 } // anonymous namespace
+
+NYql::NDq::TReportStatsSettings ReportStatsSettingsFromProto(const NYql::NDqProto::TComputeRuntimeSettings& runtimeSettings) {
+    return NYql::NDq::TReportStatsSettings{
+            .MinInterval = runtimeSettings.HasMinStatsSendIntervalMs() ? TDuration::MilliSeconds(runtimeSettings.GetMinStatsSendIntervalMs()) : MinStatInterval,
+            .MaxInterval = runtimeSettings.HasMaxStatsSendIntervalMs() ? TDuration::MilliSeconds(runtimeSettings.GetMaxStatsSendIntervalMs()) : MaxStatInterval,
+    };
+}
+
 
 IActor* CreateKqpNodeService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     std::shared_ptr<NRm::IKqpResourceManager> resourceManager,

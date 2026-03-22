@@ -106,7 +106,7 @@ public:
         const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         NYql::NDqProto::TDqTask* Task;
         TIntrusivePtr<NRm::TTxState> TxInfo;
-        const NYql::NDq::TComputeRuntimeSettings& RuntimeSettings;
+        TMaybe<NYql::NDq::TReportStatsSettings> ReportStatsSettings;
         NWilson::TTraceId TraceId;
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
         const TString& SerializedGUCSettings;

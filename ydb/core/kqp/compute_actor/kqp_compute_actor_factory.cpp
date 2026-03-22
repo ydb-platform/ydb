@@ -169,7 +169,9 @@ public:
             std::move(task),
             limit);
 
-        auto runtimeSettings = args.RuntimeSettings;
+        NYql::NDq::TComputeRuntimeSettings runtimeSettings;
+
+        runtimeSettings.ReportStatsSettings = args.ReportStatsSettings;
         runtimeSettings.ExtraMemoryAllocationPool = args.MemoryPool;
         runtimeSettings.UseSpilling = args.WithSpilling;
         runtimeSettings.StatsMode = args.StatsMode;

@@ -53,6 +53,8 @@ namespace NActors {
         void GetHarmonizerStats(THarmonizerStats &stats) const {
             if (Harmonizer) {
                 return Harmonizer->GetStats(stats);
+            } else {
+                stats = {};
             }
         }
 

@@ -13,6 +13,7 @@ namespace NActors {
 struct TExecutorThreadStats;
 struct TExecutorPoolStats;
 struct THarmonizerStats;
+struct TLogHistogram;
 
 struct THistogramCounters {
     void Init(NMonitoring::TDynamicCounters* group, const TString& baseName, const TString& unit, ui64 maxVal);

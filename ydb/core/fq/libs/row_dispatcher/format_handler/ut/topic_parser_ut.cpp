@@ -604,7 +604,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             GetMessage(FIRST_OFFSET + 1, "\x80"),
             GetMessage(FIRST_OFFSET + 2, R"(})"),
             GetMessage(FIRST_OFFSET + 3, R"(lalala)"),
-            GetMessage(FIRST_OFFSET + 4, R"({"a2": "hello2", "a2": "102"})"),
+            GetMessage(FIRST_OFFSET + 4, R"({"a1": "hello2", "a2": "102"})"),
             GetMessage(FIRST_OFFSET + 5, "\x80"),
         });
     }
@@ -636,8 +636,8 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         Parser->ParseMessages({
             GetMessage(FIRST_OFFSET,     R"({"a1": "hel)"),
             GetMessage(FIRST_OFFSET + 1, R"(lo0", "a2": "100"})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello0", "a2": "100"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a2": "hello2", "a2": "102"})"),
+            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello1", "a2": "101"})"),
+            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello2", "a2": "102"})"),
         });
     }
 }

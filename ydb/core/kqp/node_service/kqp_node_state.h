@@ -37,7 +37,7 @@ struct TNodeRequest : TMoveOnly {
     }
 
     const ui64 TxId = 0;
-    THashMap<ui64 /* taskId */, std::optional<TActorId>> Tasks;
+    std::unordered_map<ui64 /* taskId */, std::optional<TActorId>> Tasks;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     const TActorId ExecuterId;
     const TInstant StartTime;
@@ -50,19 +50,16 @@ class TNodeState {
     static constexpr ui64 BucketsCount = 64;
 
 public:
-    void AddRequest(TNodeRequest&& request);
-    bool HasRequest(ui64 txId) const;
-    bool IsRequestCancelled(ui64 txId, TActorId executerId) const;
-    bool AddTasksToRequest(ui64 txId, TActorId executerId, const TVector<ui64>& taskIds);
-    std::vector<ui64 /* txId */> ClearExpiredRequests();
+    bool AddRequest(TNodeRequest&& request, bool& cancelled);
+    std::vector<TNodeRequest::TExpirationInfo> ClearExpiredRequests();
 
-    bool OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId, TActorId executerId);
-    void OnTaskFinished(ui64 txId, ui64 taskId, bool success);
+    bool OnTaskStarted(ui64 txId, TActorId executerId, ui64 taskId, TActorId computeActorId);
+    void OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, bool success);
 
     // Returns only started tasks
-    std::vector<TNodeRequest::TTaskInfo> GetTasksByTxId(ui64 txId) const;
+    std::vector<TNodeRequest::TTaskInfo> GetTasksByTxId(ui64 txId, TActorId executerId) const;
 
-    void MarkRequestAsCancelled(ui64 txId);
+    void MarkRequestAsCancelled(ui64 txId, TActorId executerId);
     void DumpInfo(TStringStream& str, const TCgiParameters& cgiParams) const;
     bool ValidateComputeActorId(const TString& caId, TActorId& computeActorId) const;
     bool ValidateKqpExecuterId(const TString& exId, TActorId& kqpExecuterId) const;
@@ -81,7 +78,7 @@ private:
     struct TBucket {
         TRWMutex Mutex;
         std::set<TNodeRequest::TExpirationInfo> ExpiringRequests; // protected by Mutex
-        THashMultiMap<ui64 /* txId */, TNodeRequest> Requests;    // protected by Mutex
+        THashMap<TActorId /* executerId */, TNodeRequest> Requests;    // protected by Mutex
         // TODO: is it even possible to have multiple executers to send the same TxId?
     };
     std::array<TBucket, BucketsCount> Buckets;

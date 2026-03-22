@@ -227,46 +227,19 @@ private:
             requestTaskIds.push_back(dqTask.GetId());
         }
 
-        bool isLocalRequest = (ev->Sender.NodeId() == SelfId().NodeId());
+        bool cancelled = false;
+        auto result = State_->AddRequest(std::move(request), cancelled);
+        if (!result && cancelled) {
+            co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR,
+                ev->Cookie, "Request was cancelled");
+        }
 
-        if (State_->HasRequest(txId)) {
-            if (State_->IsRequestCancelled(txId, executerId)) {
-                co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR,
-                    ev->Cookie, "Request was cancelled");
-            }
-            if (isLocalRequest && State_->AddTasksToRequest(txId, executerId, requestTaskIds)) {
-                STLOG_D("Added tasks to existing local request",
-                    (node_id, SelfId().NodeId()),
-                    (tx_id, txId),
-                    (tasks_count, requestTaskIds.size()),
-                    (executer, executerId),
-                    (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
-            } else {
-                STLOG_D("Creating new request",
-                    (node_id, SelfId().NodeId()),
-                    (tx_id, txId),
-                    (tasks_count, requestTaskIds.size()),
-                    (executer, executerId),
-                    (is_local, isLocalRequest),
-                    (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
-                for (ui64 taskId : requestTaskIds) {
-                    request.Tasks.emplace(taskId, std::nullopt);
-                }
-                State_->AddRequest(std::move(request));
-            }
-        } else {
-            STLOG_D("Creating new request",
+        STLOG_D((result ? "Created new request" : "Added tasks to existing local request"),
                 (node_id, SelfId().NodeId()),
                 (tx_id, txId),
                 (tasks_count, requestTaskIds.size()),
                 (executer, executerId),
-                (is_local, isLocalRequest),
                 (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
-            for (ui64 taskId : requestTaskIds) {
-                request.Tasks.emplace(taskId, std::nullopt);
-            }
-            State_->AddRequest(std::move(request));
-        }
 
         NRm::EKqpMemoryPool memoryPool;
         if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN) {
@@ -345,7 +318,7 @@ private:
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
                 ReplyError(txId, executerId, msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
-                TerminateTx(txId, rmResult->GetFailReason());
+                TerminateTx(txId, executerId, rmResult->GetFailReason());
                 co_return;
             }
 
@@ -355,7 +328,7 @@ private:
 
             startedTask->SetTaskId(taskId);
             ActorIdToProto(*actorId, startedTask->MutableActorId());
-            if (State_->OnTaskStarted(txId, taskId, *actorId, executerId)) {
+            if (State_->OnTaskStarted(txId, executerId, taskId, *actorId)) {
                 STLOG_D("Executing task",
                     (node_id, SelfId().NodeId()),
                     (tx_id, txId),
@@ -394,21 +367,22 @@ private:
     void HandleWork(TEvKqpNode::TEvCancelKqpTasksRequest::TPtr& ev) {
         THPTimer timer;
         ui64 txId = ev->Get()->Record.GetTxId();
+        const auto executerId = ev->Sender;
         auto& reason = ev->Get()->Record.GetReason();
 
         STLOG_W("Terminate transaction",
             (node_id, SelfId().NodeId()),
             (tx_id, txId),
             (reason, reason));
-        TerminateTx(txId, reason);
+        TerminateTx(txId, executerId, reason);
 
         Counters->NodeServiceProcessCancelTime->Collect(timer.Passed() * SecToUsec);
     }
 
-    void TerminateTx(ui64 txId, const TString& reason, NYql::NDqProto::StatusIds_StatusCode status = NYql::NDqProto::StatusIds::UNSPECIFIED) {
-        State_->MarkRequestAsCancelled(txId);
+    void TerminateTx(ui64 txId, TActorId executerId, const TString& reason, NYql::NDqProto::StatusIds_StatusCode status = NYql::NDqProto::StatusIds::UNSPECIFIED) {
+        State_->MarkRequestAsCancelled(txId, executerId);
 
-        if (auto tasksToAbort = State_->GetTasksByTxId(txId); !tasksToAbort.empty()) {
+        if (auto tasksToAbort = State_->GetTasksByTxId(txId, executerId); !tasksToAbort.empty()) {
             STLOG_E("Node service cancelled the task, because it " << reason,
                 (node_id, SelfId().NodeId()),
                 (tx_id, txId));
@@ -422,8 +396,8 @@ private:
     void HandleWork(TEvents::TEvWakeup::TPtr& ev) {
         Schedule(TDuration::Seconds(1), ev->Release().Release());
         auto expiredRequests = State_->ClearExpiredRequests();
-        for (auto txId : expiredRequests) {
-            TerminateTx(txId, "reached execution deadline", NYql::NDqProto::StatusIds::TIMEOUT);
+        for (auto info : expiredRequests) {
+            TerminateTx(std::get<ui64>(info), std::get<TActorId>(info), "reached execution deadline", NYql::NDqProto::StatusIds::TIMEOUT);
         }
     }
 
@@ -572,9 +546,10 @@ private:
         switch (ev->Get()->SourceType) {
             case TEvKqpNode::TEvStartKqpTasksResponse::EventType: {
                 ui64 txId = ev->Cookie;
+                const auto executerId = ev->Sender;
                 TStringBuilder reason;
                 reason << "executer lost: " << (int) ev->Get()->Reason;
-                TerminateTx(txId, reason, NYql::NDqProto::StatusIds::ABORTED);
+                TerminateTx(txId, executerId, reason, NYql::NDqProto::StatusIds::ABORTED);
                 break;
             }
 

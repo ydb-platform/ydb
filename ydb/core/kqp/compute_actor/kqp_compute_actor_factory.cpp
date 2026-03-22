@@ -188,13 +188,13 @@ public:
         }
 
         NYql::NDq::IMemoryQuotaManager::TWeakPtr memoryQuotaManager = memoryLimits.MemoryQuotaManager;
-        runtimeSettings.TerminateHandler = [memoryQuotaManager, state=args.State, txId=args.TxId, taskId=args.Task->GetId()]
+        runtimeSettings.TerminateHandler = [memoryQuotaManager, state=args.State, txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
                 if (auto manager = memoryQuotaManager.lock()) {
                     static_cast<TMemoryQuotaManager*>(manager.get())->TerminateHandler(success, issues);
                 }
                 if (state) {
-                    state->OnTaskFinished(txId, taskId, success);
+                    state->OnTaskFinished(txId, executerId, taskId, success);
                 }
             };
 

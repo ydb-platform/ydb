@@ -4,6 +4,8 @@
 
 #include <library/cpp/messagebus/test/helper/fixed_port.h>
 
+#include <util/network/address.h>
+
 using namespace NBus;
 using namespace NBus::NPrivate;
 using namespace NBus::NTest;
@@ -29,6 +31,11 @@ namespace {
             throw 1;
         }
     }
+
+    TString GetLocalAddr(SOCKET sock) {
+        auto addr = NAddr::GetSockAddr(sock);
+        return NAddr::PrintHost(*addr);
+    }
 }
 
 Y_UNIT_TEST_SUITE(Network) {
@@ -42,6 +49,21 @@ Y_UNIT_TEST_SUITE(Network) {
 
         for (TVector<TBindResult>::iterator i = r.begin(); i != r.end(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(i->Addr.GetPort(), GetSockPort(i->Socket->operator SOCKET()));
+            UNIT_ASSERT_VALUES_EQUAL(i == r.begin() ? "0.0.0.0" : "::", GetLocalAddr(i->Socket->operator SOCKET()));
+        }
+    }
+
+    Y_UNIT_TEST(BindOnLoopbackPortConcrete) {
+        if (!IsFixedPortTestAllowed()) {
+            return;
+        }
+
+        TVector<TBindResult> r = BindOnLoopbackPort(FixedPort, false).second;
+        UNIT_ASSERT_VALUES_EQUAL(size_t(2), r.size());
+
+        for (TVector<TBindResult>::iterator i = r.begin(); i != r.end(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(i->Addr.GetPort(), GetSockPort(i->Socket->operator SOCKET()));
+            UNIT_ASSERT_VALUES_EQUAL(i == r.begin() ? "127.0.0.1" : "::1", GetLocalAddr(i->Socket->operator SOCKET()));
         }
     }
 
@@ -52,6 +74,20 @@ Y_UNIT_TEST_SUITE(Network) {
         for (TVector<TBindResult>::iterator i = r.begin(); i != r.end(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(i->Addr.GetPort(), GetSockPort(i->Socket->operator SOCKET()));
             UNIT_ASSERT(i->Addr.GetPort() > 0);
+            UNIT_ASSERT_VALUES_EQUAL(i == r.begin() ? "0.0.0.0" : "::", GetLocalAddr(i->Socket->operator SOCKET()));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(r.at(0).Addr.GetPort(), r.at(1).Addr.GetPort());
+    }
+
+    Y_UNIT_TEST(BindOnLoopbackPortRandom) {
+        TVector<TBindResult> r = BindOnLoopbackPort(0, false).second;
+        UNIT_ASSERT_VALUES_EQUAL(size_t(2), r.size());
+
+        for (TVector<TBindResult>::iterator i = r.begin(); i != r.end(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(i->Addr.GetPort(), GetSockPort(i->Socket->operator SOCKET()));
+            UNIT_ASSERT(i->Addr.GetPort() > 0);
+            UNIT_ASSERT_VALUES_EQUAL(i == r.begin() ? "127.0.0.1" : "::1", GetLocalAddr(i->Socket->operator SOCKET()));
         }
 
         UNIT_ASSERT_VALUES_EQUAL(r.at(0).Addr.GetPort(), r.at(1).Addr.GetPort());

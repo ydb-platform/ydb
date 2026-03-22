@@ -53,14 +53,14 @@ struct TJsonParserBuffer {
 
         NumberValues++;
         MessageOffsets.emplace_back(Values.size());
-        Values << message.GetData();
+        Values += message.GetData();
         Offsets.emplace_back(offset);
     }
 
     std::pair<const char*, size_t> Finish() {
         Y_ENSURE(!Finished, "Cannot finish buffer twice");
         Finished = true;
-        Values << TString(simdjson::SIMDJSON_PADDING, ' ');
+        Values.resize(Values.size() + simdjson::SIMDJSON_PADDING, ' ');
         return {Values.data(), Values.size() - simdjson::SIMDJSON_PADDING};
     }
 
@@ -75,7 +75,7 @@ struct TJsonParserBuffer {
     }
 
 private:
-    TStringBuilder Values = {};
+    TString Values = {};
     const TString LogPrefix = "TJsonParser: Buffer: ";
 };
 

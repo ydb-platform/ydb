@@ -234,7 +234,7 @@ private:
                 ev->Cookie, "Request was cancelled");
         }
 
-        STLOG_D((result ? "Created new request" : "Added tasks to existing local request"),
+        STLOG_D((result ? "Created new request" : "Added tasks to existing request"),
                 (node_id, SelfId().NodeId()),
                 (tx_id, txId),
                 (tasks_count, requestTaskIds.size()),

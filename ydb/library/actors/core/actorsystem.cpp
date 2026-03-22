@@ -133,7 +133,10 @@ namespace NActors {
         , LoggerSettings0(loggerSettings)
     {
         ServiceMap.Reset(new TServiceMap());
-        RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));
+        SubSystems = std::move(SystemSetup->SubSystems);
+        if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
+            RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));
+        }
     }
 
     TActorSystem::~TActorSystem() {

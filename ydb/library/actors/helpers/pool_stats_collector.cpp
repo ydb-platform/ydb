@@ -1,6 +1,7 @@
 #include "pool_stats_collector.h"
 #include "collector_counters.h"
 
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/subsystems/stats.h>
 #include <util/generic/vector.h>
 

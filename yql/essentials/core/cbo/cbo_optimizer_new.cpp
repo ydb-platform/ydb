@@ -243,6 +243,36 @@ double ComputeSelectivityCorrection(
     return 1.0;
 }
 
+std::pair<TMaybe<double>, TMaybe<double>> GetJoinKeyUniqueVals(
+    const TOptimizerStatistics& leftStats,
+    const TOptimizerStatistics& rightStats,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys
+) {
+    TMaybe<double> lhsUniqueVals;
+    TMaybe<double> rhsUniqueVals;
+    if (leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
+        auto lhs = leftJoinKeys[0].AttributeName;
+        auto rhs = rightJoinKeys[0].AttributeName;
+
+        const auto& leftData = leftStats.ColumnStatistics->Data;
+        const auto& rightData = rightStats.ColumnStatistics->Data;
+
+        auto lhsIt = leftData.find(lhs);
+        auto rhsIt = rightData.find(rhs);
+
+        if (lhsIt != leftData.end() && lhsIt->second.NumUniqueVals) {
+            lhsUniqueVals = lhsIt->second.NumUniqueVals.value();
+        }
+
+        if (rhsIt != rightData.end() && rhsIt->second.NumUniqueVals) {
+            rhsUniqueVals = rhsIt->second.NumUniqueVals.value();
+        }
+    }
+
+    return {lhsUniqueVals, rhsUniqueVals};
+}
+
 double ComputeBothSidesByteSize(double newCardinality,
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
@@ -382,41 +412,28 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     } 
     else if (isAntiOrSemiJoin) {
         if (joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly) {
+            leftKeyColumns = true;
             newNCols = leftStats.Ncols;
             newCard = leftStats.Nrows;
             newByteSize = ComputeOneSideByteSize(newCard, leftStats);
         } else {
+            rightKeyColumns = true;
             newNCols = rightStats.Ncols;
             newCard = rightStats.Nrows;
             newByteSize = ComputeOneSideByteSize(newCard, rightStats);
         }
         outputType = EStatisticsType::FilteredFactTable;
     } else {
-        TMaybe<double> lhsUniqueVals;
-        TMaybe<double> rhsUniqueVals;
-        if (leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
-            auto lhs = leftJoinKeys[0].AttributeName;
-            auto rhs = rightJoinKeys[0].AttributeName;
-
-            const auto& leftData = leftStats.ColumnStatistics->Data;
-            const auto& rightData = rightStats.ColumnStatistics->Data;
-
-            auto lhsIt = leftData.find(lhs);
-            auto rhsIt = rightData.find(rhs);
-
-            if (lhsIt != leftData.end() && lhsIt->second.NumUniqueVals) {
-                lhsUniqueVals = lhsIt->second.NumUniqueVals.value();
-            }
-
-            if (rhsIt != rightData.end() && rhsIt->second.NumUniqueVals) {
-                rhsUniqueVals = rhsIt->second.NumUniqueVals.value();
-            }
-        }
+        auto [lhsUniqueVals, rhsUniqueVals] = GetJoinKeyUniqueVals(leftStats, rightStats, leftJoinKeys, rightJoinKeys);
 
         double effectiveLeft = leftStats.Nrows * leftStats.Selectivity;
         double effectiveRight = rightStats.Nrows * rightStats.Selectivity;
         if (lhsUniqueVals.Defined() && rhsUniqueVals.Defined()) {
             newCard = effectiveLeft * effectiveRight / std::max(lhsUniqueVals.GetRef(), rhsUniqueVals.GetRef());
+        } else if (lhsUniqueVals.Defined()) {
+            newCard = effectiveRight * (effectiveLeft / lhsUniqueVals.GetRef());
+        } else if (rhsUniqueVals.Defined()) {
+            newCard = effectiveLeft * (effectiveRight / rhsUniqueVals.GetRef());
         } else {
             /* for example, join predicate between a column and a scalar aggregate */
             newCard = 0.2 * effectiveLeft * effectiveRight;

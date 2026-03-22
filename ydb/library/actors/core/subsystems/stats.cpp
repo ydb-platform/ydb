@@ -40,12 +40,6 @@ namespace NActors {
         return std::make_unique<TActorSystemStatsSubSystem>(cpuManager);
     }
 
-    TActorSystemStatsSubSystem& GetActorSystemStats(TActorSystem& actorSystem) {
-        auto* subSystem = actorSystem.GetSubSystem<TActorSystemStatsSubSystem>();
-        Y_ABORT_UNLESS(subSystem, "actor system stats subsystem is not registered");
-        return *subSystem;
-    }
-
     const TActorSystemStatsSubSystem& GetActorSystemStats(const TActorSystem& actorSystem) {
         auto* subSystem = actorSystem.GetSubSystem<TActorSystemStatsSubSystem>();
         Y_ABORT_UNLESS(subSystem, "actor system stats subsystem is not registered");

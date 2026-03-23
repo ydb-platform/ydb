@@ -740,6 +740,34 @@ TJoinTestData InnerJoinRenamesTestData() {
     return td;
 }
 
+// INNER on join column: left key is Uint64, right key is Optional<Uint64>. A NULL on the right must not match
+// a non-null left key (same row position does not imply match).
+TJoinTestData InnerJoinIntAndOptionalIntKeyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2, 3};
+    TVector<ui64> leftKeys = {10, 20, 30};
+
+    TVector<ui64> rightIds = {1, 2, 3};
+    TVector<std::optional<ui64>> rightKeys = {10, std::nullopt, 30};
+
+    TVector<ui64> expLeftIds = {1, 3};
+    TVector<ui64> expLeftKeys = {10, 30};
+    TVector<ui64> expRightIds = {1, 3};
+    TVector<std::optional<ui64>> expRightKeys = {10, 30};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
 TJoinTestData SpillingTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -905,6 +933,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestMixedKeysPassthrough, BlockJoin) {
         Test(MixedKeysInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinIntAndOptionalIntKey, BlockJoin) {
+        Test(InnerJoinIntAndOptionalIntKeyTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {

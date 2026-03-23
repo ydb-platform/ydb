@@ -272,7 +272,7 @@ message TPartitionConfig {
 
     optional uint64 WriteSpeedInBytesPerSecond = 7 [default = 50000000];
     optional uint64 BurstSize = 8 [default = 50000000];
-    optional uint64 WriteMessageDeduplicationIdPerSecond = 17 [default = 1000];
+    optional uint64 WriteMessageDeduplicationIdPerSecond = 17 [default = 100000];
 
     message TReadQuota {
         optional string ClientId = 1;
@@ -1028,6 +1028,7 @@ message TPartitionOperation {
     optional string ReadSessionId = 10;
     optional bool KafkaTransaction = 11 [default = false];
     optional TKafkaProducerInstanceId KafkaProducerInstanceId = 12;
+    optional bool SkipConflictCheck = 13;
 };
 
 message TWriteId {
@@ -1147,12 +1148,14 @@ message TEvReadingPartitionFinishedRequest {
     optional uint32 PartitionId = 2;
     optional bool ScaleAwareSDK = 3;
     optional bool StartedReadingFromEndOffset = 4;
+    optional NActorsProto.TActorId PipeClient = 5;
 };
 
 // The consumer's reading of the partition is started (from ReadSession)
 message TEvReadingPartitionStartedRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
+    optional NActorsProto.TActorId PipeClient = 3;
 };
 
 message TPartitionScaleParticipants {

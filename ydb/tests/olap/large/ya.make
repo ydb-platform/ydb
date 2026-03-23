@@ -10,8 +10,7 @@ PY3TEST()
     SPLIT_FACTOR(100)
 
     SIZE(LARGE)
-    TAG(ya:fat)
-
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     DEPENDS(
         ydb/apps/ydb
         )

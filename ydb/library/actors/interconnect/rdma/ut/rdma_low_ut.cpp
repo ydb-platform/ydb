@@ -27,7 +27,7 @@ class TCqMode : public TSkipFixtureWithParams<NInterconnect::NRdma::ECqMode> {};
 static NInterconnect::NRdma::TMemRegionPtr AllocSourceRegion(std::shared_ptr<IMemPool> memPool) {
     auto reg = memPool->Alloc(MEM_REG_SZ, IMemPool::EMPTY);
     memset(reg->GetAddr(), 0, MEM_REG_SZ);
-    const char* testString = "-_RMDA_YDB_INTERCONNRCT_-";
+    const char* testString = "-_RDMA_YDB_INTERCONNECT_-";
     strncpy((char*)reg->GetAddr(), testString, MEM_REG_SZ);
     return reg;
 }
@@ -52,9 +52,9 @@ TEST_P(TCqMode, ReadInOneProcessIpV6) {
 }
 
 /*
- * This test cover the sutuation when sender going to reuse memory but has no
+ * This test covers the situation when sender is going to reuse memory but has no
  * information about remote reading in progress.
- * In this case we change QP on the sender to the 'Reset' state and expect reader will fail with read error
+ * In this case we change QP on the sender to the 'Reset' state and expect reader will fail with read error.
  */
 TEST_P(TCqMode, ReadInOneProcessWithQpInterruption) {
     TString addr = "127.0.0.1";
@@ -62,12 +62,12 @@ TEST_P(TCqMode, ReadInOneProcessWithQpInterruption) {
     auto rdma = InitLocalRdmaStuff(addr, GetParam());
 
     THolder<IThreadPool> pool = CreateThreadPool(2, 2);
-    const int intialAttempts = 50000;
+    const int initialAttempts = 50000;
 
-    // Use attempt as timeout to delay to run mem corrupter 
-    int attempt = intialAttempts;
+    // Use attempt as timeout to delay the memory corruptor.
+    int attempt = initialAttempts;
 
-    // bin search works unstable here due to small ammount of time to trigger race
+    // Binary search is unstable here due to the small amount of time to trigger the race.
     while (attempt--) {
         auto reg1 = AllocSourceRegion(rdma->MemPool);
         auto reg2 = rdma->MemPool->Alloc(reg1->GetSize(), 0);
@@ -77,9 +77,9 @@ TEST_P(TCqMode, ReadInOneProcessWithQpInterruption) {
         NThreading::TPromise<void> promise = NThreading::NewPromise<void>();
         NThreading::TFuture<void> done = promise.GetFuture();
 
-        class TMemCorrupter : public IObjectInQueue {
+        class TMemCorruptor : public IObjectInQueue {
         public:
-            TMemCorrupter(char* mem, size_t sz, TQueuePair* qp, int attempt, NThreading::TPromise<void> promise)
+            TMemCorruptor(char* mem, size_t sz, TQueuePair* qp, int attempt, NThreading::TPromise<void> promise)
                 : Mem(mem)
                 , Sz(sz)
                 , Qp(qp)
@@ -87,7 +87,7 @@ TEST_P(TCqMode, ReadInOneProcessWithQpInterruption) {
                 , Promise(std::move(promise))
             {}
             virtual void Process(void*) override {
-                // Delay to get a chanse to triger memset just during the RDMA read.
+                // Delay to get a chance to trigger memset just during the RDMA read.
                 Sleep(TDuration::MicroSeconds(Attempt / 128));
                 Qp->ToErrorState();
                 memset(Mem, 'Q', Sz);
@@ -104,18 +104,18 @@ TEST_P(TCqMode, ReadInOneProcessWithQpInterruption) {
 
         std::function<void()> srcInterruptHook = [&]() noexcept {
             bool added = pool->Add(
-                new TMemCorrupter((char*)reg1->GetAddr(), reg1->GetSize(), rdma->Qp1.get(), attempt, std::move(promise))
+                new TMemCorruptor((char*)reg1->GetAddr(), reg1->GetSize(), rdma->Qp1.get(), attempt, std::move(promise))
             );
             Y_ABORT_UNLESS(added);
         };
 
         auto readResult = ReadOneMemRegion(rdma, rdma->Qp2, reg1->GetAddr(), reg1->GetRKey(rdma->Ctx->GetDeviceIndex()), MEM_REG_SZ, reg2, std::move(srcInterruptHook));
 
-        // Whait until corrupter finished
+        // Wait until corruptor finished.
         done.Wait();
 
         switch (readResult) {
-            case EReadResult::OK: // corrupter fired too late, just check data is ok
+            case EReadResult::OK: // corruptor fired too late, just check data is ok
                 {
                     ASSERT_TRUE(strncmp(expected.data(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
                     // Additional check cq is empty after all this stuff
@@ -124,8 +124,8 @@ TEST_P(TCqMode, ReadInOneProcessWithQpInterruption) {
                     EXPECT_TRUE(stats.Ready == stats.Total);
                 }
                 break;
-            case EReadResult::WRPOST_ERR: // currupter fired too early, increase timeout
-                attempt = std::min(intialAttempts, attempt *= 2);
+            case EReadResult::WRPOST_ERR: // corruptor fired too early, increase timeout
+                attempt = std::min(initialAttempts, attempt *= 2);
                 break;
             case EReadResult::READ_ERR:
                 Cerr << "passed at " << attempt << Endl;
@@ -133,7 +133,7 @@ TEST_P(TCqMode, ReadInOneProcessWithQpInterruption) {
         }
         if (attempt == 0) {
             Cerr << "race was not triggered, restart..." << Endl;
-            attempt = intialAttempts;
+            attempt = initialAttempts;
         }
 
         {

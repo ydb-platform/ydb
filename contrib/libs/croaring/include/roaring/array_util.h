@@ -233,13 +233,13 @@ size_t union_uint32(const uint32_t *set_1, size_t size_1, const uint32_t *set_2,
  */
 uint32_t union_vector16(const uint16_t *__restrict__ set_1, uint32_t size_1,
                         const uint16_t *__restrict__ set_2, uint32_t size_2,
-                        uint16_t *__restrict__ buffer);
+                        uint16_t *buffer);
 /**
  * A fast SSE-based XOR function.
  */
 uint32_t xor_vector16(const uint16_t *__restrict__ array1, uint32_t length1,
                       const uint16_t *__restrict__ array2, uint32_t length2,
-                      uint16_t *__restrict__ output);
+                      uint16_t *output);
 
 /**
  * A fast SSE-based difference function.

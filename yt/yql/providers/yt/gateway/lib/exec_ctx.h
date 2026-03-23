@@ -37,6 +37,7 @@ struct TInputInfo {
     TString Cluster;
     bool Temp = false;
     bool Dynamic = false;
+    bool RLS = false;
     bool Strict = true;
     ui64 Records = 0;
     ui64 DataSize = 0;

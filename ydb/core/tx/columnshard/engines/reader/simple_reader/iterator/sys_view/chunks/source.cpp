@@ -170,7 +170,11 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
             const ui32 entityId = it->GetEntityId();
             if (!accessor) {
                 while (it != records.end() && it->GetEntityId() == entityId) {
-                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
+                    TString data;
+                    if (it->GetMeta().HasAdditionalAccessorData()) {
+                        data = it->GetMeta().GetAdditionalAccessorData()->DebugJson().GetStringRobust();
+                    }
+                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
                     ++it;
                 }
             } else {

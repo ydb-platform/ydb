@@ -368,7 +368,7 @@ namespace NKikimr {
                     NKikimrVDiskData::THugeKeeperHeap protoHeap;
                     heap.SaveToProto(protoHeap);
 
-                    THeap newHeap("vdisk", protoHeap);
+                    THeap newHeap("vdisk", protoHeap, false);
                     newHeap.FinishRecovery();
 
                     TString heap2 = newHeap.ToString();
@@ -468,14 +468,14 @@ namespace NKikimr {
                 if (serializeToProto) {
                     NKikimrVDiskData::THugeKeeperHeap oldProtoHeap;
                     oldHeap.SaveToProto(oldProtoHeap);
-                    THeap fromHeap("vdisk", oldProtoHeap);
+                    THeap fromHeap("vdisk", oldProtoHeap, false);
                     fromHeap.FinishRecovery();
 
                     AllocateScenary(fromHeap, 6u << 20u, arr);
                     NKikimrVDiskData::THugeKeeperHeap fromProtoHeap;
                     fromHeap.SaveToProto(fromProtoHeap);
 
-                    THeap toHeap("vdisk", fromProtoHeap);
+                    THeap toHeap("vdisk", fromProtoHeap, false);
                     toHeap.FinishRecovery();
                     FreeScenary(toHeap, arr);
                 } else {

@@ -37,20 +37,6 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (Map)",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"supplier"
-                                          },
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"nation"
-                                          }
-                                        ]
-                                    },
-                                    {
                                       "op_name":"HashShuffle",
                                       "args":
                                         [
@@ -73,6 +59,20 @@
                                                   "table":"part"
                                                 }
                                               ]
+                                          }
+                                        ]
+                                    },
+                                    {
+                                      "op_name":"InnerJoin (Map)",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"supplier"
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"nation"
                                           }
                                         ]
                                     }

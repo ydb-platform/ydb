@@ -23,6 +23,8 @@ SRCS(
     flat_executor.h
     flat_executor_backup.cpp
     flat_executor_backup.h
+    flat_executor_backup_common.cpp
+    flat_executor_backup_common.h
     flat_executor_bootlogic.cpp
     flat_executor_bootlogic.h
     flat_executor_borrowlogic.cpp

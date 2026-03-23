@@ -179,7 +179,7 @@ TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context) {
     TMaybe<NYql::TQItem> loaded =
         context
             .GetReader()
-            ->Get({FacadeComponent, TranslationLabel})
+            ->Get({.Component = FacadeComponent, .Label = TranslationLabel})
             .GetValueSync();
 
     if (!loaded) {
@@ -403,21 +403,21 @@ TProgram::TProgram(
     }
 
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({GeneralInfoComponent, StartTimeLabel}, TInstant::Now().ToStringLocalUpToSeconds()).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = GeneralInfoComponent, .Label = StartTimeLabel}, TInstant::Now().ToStringLocalUpToSeconds()).GetValueSync();
         NYT::TNode credListNode = NYT::TNode::CreateList();
         Credentials_->ForEach([&](const TString name, const TCredential& cred) {
             credListNode.Add(NYT::TNode()("Name", name)("Category", cred.Category)("Subcategory", cred.Subcategory));
         });
 
         auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, StaticCredentialsLabel}, credList).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = StaticCredentialsLabel}, credList).GetValueSync();
     } else if (QContext_.CaptureMode() == EQPlayerCaptureMode::MetaOnly) {
         Credentials_ = MakeIntrusive<TCredentials>();
         Credentials_->SetUserCredentials({.OauthToken = "REPLAY_OAUTH",
                                           .BlackboxSessionIdCookie = "REPLAY_SESSIONID"});
 
         for (const auto& label : {StaticCredentialsLabel, DynamicCredentialsLabel}) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
+            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = label}).GetValueSync();
             if (item) {
                 auto node = NYT::NodeFromYsonString(item->Value);
                 for (const auto& c : node.AsList()) {
@@ -435,11 +435,11 @@ TProgram::TProgram(
         }
 
         auto userFiles = NYT::NodeToYsonString(userFilesNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, StaticUserFilesLabel}, userFiles).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = StaticUserFilesLabel}, userFiles).GetValueSync();
     } else if (QContext_.CanRead()) {
         SavedUserDataTable_.clear();
         for (const auto& label : {StaticUserFilesLabel, DynamicUserFilesLabel}) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
+            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = label}).GetValueSync();
             if (item) {
                 auto node = NYT::NodeFromYsonString(item->Value);
                 for (const auto& alias : node.AsList()) {
@@ -475,7 +475,7 @@ TProgram::TProgram(
         }
         UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
         if (QContext_.CanRead()) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();
+            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = GatewaysLabel}).GetValueSync();
             if (item) {
                 YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
 
@@ -518,11 +518,11 @@ TProgram::TProgram(
             }
 
             auto data = cleaned.SerializeAsString();
-            QContext_.GetWriter()->Put({FacadeComponent, GatewaysLabel}, data).GetValueSync();
+            QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = GatewaysLabel}, data).GetValueSync();
         }
 
         if (QContext_.CanRead()) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, ParametersLabel}).GetValueSync();
+            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = ParametersLabel}).GetValueSync();
             if (item) {
                 SetParametersYson(item->Value);
             }
@@ -611,7 +611,7 @@ bool TProgram::IsFullCaptureReady() const {
 
 void TProgram::CommitFullCapture() const {
     if (IsFullCaptureReady()) {
-        QContext_.GetWriter()->Put({FacadeComponent, FullCaptureLabel}, "").GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = FullCaptureLabel}, "").GetValueSync();
     }
 }
 
@@ -657,7 +657,7 @@ void TProgram::SetParametersYson(const TString& parameters) {
     }
 
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({FacadeComponent, ParametersLabel}, parameters).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = ParametersLabel}, parameters).GetValueSync();
     }
 }
 
@@ -731,7 +731,7 @@ void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& cr
         }
 
         auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, DynamicCredentialsLabel}, credList).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = DynamicCredentialsLabel}, credList).GetValueSync();
     }
 
     for (const auto& credential : credentials) {
@@ -774,22 +774,22 @@ void TProgram::AddUserDataTable(const TUserDataTable& userDataTable) {
         }
 
         auto userFiles = NYT::NodeToYsonString(userFilesNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, DynamicUserFilesLabel}, userFiles).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = DynamicUserFilesLabel}, userFiles).GetValueSync();
     }
 }
 
 void TProgram::HandleSourceCode() {
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({FacadeComponent, SourceCodeLabel}, SourceCode_).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = SourceCodeLabel}, SourceCode_).GetValueSync();
     } else if (QContext_.CanRead()) {
-        auto loaded = QContext_.GetReader()->Get({FacadeComponent, SourceCodeLabel}).GetValueSync();
+        auto loaded = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = SourceCodeLabel}).GetValueSync();
         Y_ENSURE(loaded.Defined(), "No source code");
         SourceCode_ = loaded->Value;
     }
 }
 
 bool HasFullCapture(const IQReaderPtr& reader) {
-    auto fullCaptureItem = reader->Get({FacadeComponent, FullCaptureLabel}).GetValueSync();
+    auto fullCaptureItem = reader->Get({.Component = FacadeComponent, .Label = FullCaptureLabel}).GetValueSync();
     return fullCaptureItem.Defined();
 }
 
@@ -818,9 +818,9 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         // clang-format on
 
         auto data = NYT::NodeToYsonString(dataNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, TranslationLabel}, data).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = TranslationLabel}, data).GetValueSync();
     } else if (QContext_.CanRead()) {
-        auto loaded = QContext_.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
+        auto loaded = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = TranslationLabel}).GetValueSync();
         if (!loaded) {
             return;
         }
@@ -861,7 +861,7 @@ bool TProgram::CheckParameters() {
 
 bool TProgram::ValidateLangVersion() {
     if (QContext_.CanRead()) {
-        auto loaded = QContext_.GetReader()->Get({FacadeComponent, LangVerLabel}).GetValueSync();
+        auto loaded = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = LangVerLabel}).GetValueSync();
         if (loaded.Defined()) {
             LangVer_ = FromString<TLangVersion>(loaded->Value);
         } else {
@@ -872,7 +872,7 @@ bool TProgram::ValidateLangVersion() {
     }
 
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({FacadeComponent, LangVerLabel}, ToString(LangVer_)).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = LangVerLabel}, ToString(LangVer_)).GetValueSync();
     }
 
     TMaybe<TIssue> issue;
@@ -2131,6 +2131,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->HiddenMode = HiddenMode_;
     typeAnnotationContext->SqlFlags = SqlFlags_;
     typeAnnotationContext->FuzzUntypedLambda = FuzzUntypedLambda_;
+    typeAnnotationContext->FuzzUniversal = FuzzUniversal_;
     for (auto& [alias, provider] : RemoteLayersProviders_) {
         typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
     }

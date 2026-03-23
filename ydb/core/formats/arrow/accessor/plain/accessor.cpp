@@ -18,6 +18,14 @@ std::shared_ptr<arrow::Scalar> TTrivialArray::DoGetMaxScalar() const {
     return NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.second));
 }
 
+TMinMax TTrivialArray::DoGetMinMaxScalars() const {
+    auto minMaxPos = NArrow::FindMinMaxPosition(Array);
+    TMinMax result;
+    result.Min = NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.first));
+    result.Max = NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.second));
+    return result;
+}
+
 ui32 TTrivialArray::DoGetValueRawBytes() const {
     return NArrow::GetArrayDataSize(Array);
 }
@@ -58,7 +66,8 @@ private:
 public:
     TChunkAccessor(const std::shared_ptr<arrow::ChunkedArray>& chunkedArray, std::optional<IChunkedArray::TLocalDataAddress>& result)
         : ChunkedArray(chunkedArray)
-        , Result(&result) {
+        , Result(&result)
+    {
     }
     ui64 GetChunksCount() const {
         return (ui64)ChunkedArray->num_chunks();
@@ -87,6 +96,28 @@ std::optional<ui64> TTrivialChunkedArray::DoGetRawSize() const {
     for (auto&& i : Array->chunks()) {
         result += NArrow::GetArrayDataSize(i);
     }
+    return result;
+}
+
+TMinMax TTrivialChunkedArray::DoGetMinMaxScalars() const {
+    TMinMax result;
+    for (auto&& i : Array->chunks()) {
+        if (!i->length()) {
+            continue;
+        }
+        auto minMaxPos = NArrow::FindMinMaxPosition(i);
+        auto scalarMin = NArrow::TStatusValidator::GetValid(i->GetScalar(minMaxPos.first));
+        auto scalarMax = NArrow::TStatusValidator::GetValid(i->GetScalar(minMaxPos.second));
+
+        if (!result.Max || ScalarCompare(result.Max, scalarMax) < 0) {
+            result.Max = scalarMax;
+        }
+
+        if (!result.Min || ScalarCompare(result.Min, scalarMin) > 0) {
+            result.Min = scalarMin;
+        }
+    }
+
     return result;
 }
 

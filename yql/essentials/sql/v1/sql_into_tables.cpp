@@ -193,7 +193,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             return nullptr;
         }
     } else {
-        table.Keys = BuildTableKey(pos, service, cluster, nameOrAt.second, {nameOrAt.first ? "@" : ""});
+        table.Keys = BuildTableKey(pos, service, cluster, nameOrAt.second, {.ViewName = nameOrAt.first ? "@" : ""});
     }
 
     Ctx_.IncrementMonCounter("sql_insert_clusters", table.Cluster.GetLiteral() ? *table.Cluster.GetLiteral() : "unknown");

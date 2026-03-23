@@ -11,8 +11,16 @@ namespace NKikimr {
 
 namespace NAux {
 
-// Class that incapsulates protobuf options parsing for app counters
-template <const NProtoBuf::EnumDescriptor* AppCountersDesc()>
+/**
+ * The holder for parsed application counter definitions from .proto files.
+ *
+ * @tparam AppCountersDesc The function, which returns the enum description to parse
+ * @tparam ParseSourceCounters Indicates whether to parse the SourceCounters fields
+ */
+template <
+    const NProtoBuf::EnumDescriptor* AppCountersDesc(),
+    bool ParseSourceCounters = false
+>
 struct TAppParsedOpts {
 public:
     const size_t Size;
@@ -22,6 +30,14 @@ protected:
     TVector<TVector<TTabletPercentileCounter::TRangeDef>> Ranges;
     TVector<TTabletPercentileCounter::TRangeDef> AppGlobalRanges;
     TVector<bool> Integral;
+
+    /**
+     * The list of source counters for each enum value.
+     *
+     * @note Each entry is guaranteed to be not empty, if ParseSourceCounters is true.
+     */
+    TVector<TVector<TSourceCounter>> SourceCounters;
+
 public:
     explicit TAppParsedOpts(const size_t diff = 0)
         : Size(AppCountersDesc()->value_count() + diff)
@@ -30,6 +46,11 @@ public:
         NamesStrings.reserve(Size);
         Names.reserve(Size);
         Ranges.reserve(Size);
+        Integral.reserve(Size);
+
+        if constexpr (ParseSourceCounters) {
+            SourceCounters.reserve(Size);
+        }
 
         // Parse protobuf options for enum values for app counters
         for (int i = 0; i < appDesc->value_count(); i++) {
@@ -40,6 +61,14 @@ public:
                 NamesStrings.emplace_back(); // empty name
                 Ranges.emplace_back(); // empty ranges
                 Integral.push_back(false);
+
+                Y_ABORT_UNLESS(
+                    !ParseSourceCounters,
+                    "ParseSourceCounters is set, but the counter '%s' (value %d) is not defined using CounterOpts",
+                    vdesc->full_name().c_str(),
+                    vdesc->number()
+                );
+
                 continue;
             }
             const TCounterOptions& co = vdesc->options().GetExtension(CounterOpts);
@@ -55,6 +84,25 @@ public:
             NamesStrings.emplace_back(nameString);
             Ranges.push_back(ParseRanges(co));
             Integral.push_back(co.GetIntegral());
+
+            if constexpr (ParseSourceCounters) {
+                // Parse SourceCounters but make sure there is always at least one
+                Y_ABORT_UNLESS(
+                    co.SourceCountersSize() != 0,
+                    "ParseSourceCounters is set, but the counter '%s' (value %d) does not define SourceCounters",
+                    vdesc->full_name().c_str(),
+                    vdesc->number()
+                );
+
+                TVector<TSourceCounter> allSourceCounters;
+                allSourceCounters.reserve(co.SourceCountersSize());
+
+                for (const auto& counter : co.GetSourceCounters()) {
+                    allSourceCounters.emplace_back(counter);
+                }
+
+                SourceCounters.emplace_back(std::move(allSourceCounters));
+            }
         }
 
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
@@ -88,6 +136,22 @@ public:
     virtual bool GetIntegral(size_t idx) const {
         Y_ABORT_UNLESS(idx < Size);
         return Integral[idx];
+    }
+
+    /**
+     * Return the source counters for the given enum index.
+     *
+     * @warning This function can be called only if ParseSourceCounters is set.
+     *
+     * @param index The enum index for which to retrieve the source counters
+     *
+     * @return The corresponding source counters
+     */
+    const TVector<TSourceCounter>& GetSourceCounters(size_t index) const {
+        Y_ABORT_UNLESS(ParseSourceCounters);
+        Y_ABORT_UNLESS(index < Size);
+
+        return SourceCounters[index];
     }
 
 protected:
@@ -248,10 +312,21 @@ TParsedOpts<AppCountersDesc, TxCountersDesc, TxTypesDesc>* GetOpts() {
     return Singleton<TParsedOpts<AppCountersDesc, TxCountersDesc, TxTypesDesc>>();
 }
 
-template <const NProtoBuf::EnumDescriptor* AppCountersDesc()>
-TAppParsedOpts<AppCountersDesc>* GetAppOpts() {
+/**
+ * Create the singleton, which holds the parsed options for the given counters enum.
+ *
+ * @tparam AppCountersDesc The function, which returns the enum description to parse
+ * @tparam ParseSourceCounters Indicates whether to parse the SourceCounters fields
+ *
+ * @return The singleton with the parsed options for the given counters enum
+ */
+template <
+    const NProtoBuf::EnumDescriptor* AppCountersDesc(),
+    bool ParseSourceCounters = false
+>
+TAppParsedOpts<AppCountersDesc, ParseSourceCounters>* GetAppOpts() {
     // Use singleton to avoid thread-safety issues and parse enum descriptor once
-    return Singleton<TAppParsedOpts<AppCountersDesc>>();
+    return Singleton<TAppParsedOpts<AppCountersDesc, ParseSourceCounters>>();
 }
 
 template <class T1, class T2>

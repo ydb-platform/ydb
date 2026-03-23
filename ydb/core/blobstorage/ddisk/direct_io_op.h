@@ -21,7 +21,6 @@ namespace NKikimr::NDDisk {
 class TDDiskActor::TDirectIoOpBase : public NPDisk::TUringOperationBase {
 public:
     TDirectIoOpBase(const TActorId& ddiskId,
-                    std::atomic<ui32>& inFlightCount,
                     TCounters& counters,
                     const IEventHandle* ev = nullptr);
 
@@ -33,7 +32,7 @@ public:
 
     // reply should not access raw uring result field – use just status and data if status OK
     virtual void Reply(
-        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept;
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept = 0;
 
     void PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
     void PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
@@ -45,8 +44,12 @@ public:
     ui64 GetCookie() const { return Cookie; }
 
     const TActorId& GetDDiskId() const { return DDiskId; }
+    const TActorId& GetOriginalRequester() const { return OriginalRequester; }
+    const TActorId& GetInterconnectSession() const { return InterconnectSession; }
 
     TRope ExtractData();
+
+    double TimePassed() const;
 
 public:
     // methods to use when we fallback to PDisk instead of direct I/O
@@ -58,8 +61,12 @@ public:
 
     void SetResult(i32 result, TRope&& data);
 
+protected:
+    const TActorId DDiskId;
+    TCounters& Counters; // shared with DDisk actor
+
 private:
-    TActorId DDiskId;
+    NHPTimer::STime StartTs;
 
     TActorId OriginalRequester;
     TActorId InterconnectSession;
@@ -74,10 +81,20 @@ private:
 
     TRcBuf AlignedDataHolder;
     std::optional<TRope> Data;
+};
 
-    // shared with DDisk actor
-    std::atomic<ui32>& InFlightCount;
-    TCounters& Counters;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TDDiskActor::TDDiskIoOp
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class TDDiskActor::TDDiskIoOp final : public TDDiskActor::TDirectIoOpBase {
+public:
+    TDDiskIoOp(const TActorId& ddiskId, TCounters& counters, const IEventHandle* ev = nullptr)
+    : TDirectIoOpBase(ddiskId, counters, ev)
+    {}
+
+    virtual void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -86,8 +103,8 @@ private:
 
 class TDDiskActor::TPersistentBufferPartIoOp final : public TDDiskActor::TDirectIoOpBase {
 public:
-    TPersistentBufferPartIoOp(const TActorId& ddiskId, std::atomic<ui32>& inFlightCount, TCounters& counters)
-        : TDirectIoOpBase(ddiskId, inFlightCount, counters)
+    TPersistentBufferPartIoOp(const TActorId& ddiskId, TCounters& counters)
+        : TDirectIoOpBase(ddiskId, counters)
     {}
 
     virtual void Reply(
@@ -101,15 +118,20 @@ public:
         IsErase = isErase;
     }
 
+    void SetIsRestore(bool isRestore) {
+        IsRestore = isRestore;
+    }
+
 private:
     ui64 PartCookie = 0;
     bool IsErase = false;
+    bool IsRestore = false;
 };
 
 class TDDiskActor::TInternalSyncWriteOp final : public TDDiskActor::TDirectIoOpBase {
 public:
-    TInternalSyncWriteOp(const TActorId& ddiskId, std::atomic<ui32>& inFlightCount, TCounters& counters)
-        : TDirectIoOpBase(ddiskId, inFlightCount, counters)
+    TInternalSyncWriteOp(const TActorId& ddiskId, TCounters& counters)
+        : TDirectIoOpBase(ddiskId, counters)
     {}
 
     virtual void Reply(

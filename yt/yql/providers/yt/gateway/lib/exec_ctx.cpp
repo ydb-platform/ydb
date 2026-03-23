@@ -19,6 +19,7 @@ TInputInfo::TInputInfo(const TString& name, const NYT::TRichYPath& path, bool te
     , Cluster(info.Cluster)
     , Temp(temp)
     , Dynamic(info.Meta->IsDynamic)
+    , RLS(info.Meta->HasRLS)
     , Strict(strict)
     , Records(info.Stat->RecordsCount)
     , DataSize(info.Stat->DataSize)
@@ -151,7 +152,7 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
             }
 
             bool useQLFilter = NYql::HasSetting(section.Settings().Ref(), EYtSettingType::QLFilter);
-            TNodeMap<TString> inputQueries;
+            TNodeMap<TMaybe<TString>> inputQueries;
 
             for (auto path: section.Paths()) {
                 TYtPathInfo pathInfo(path);
@@ -182,11 +183,13 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
                 }
 
                 if (useQLFilter && pathInfo.QLFilter) {
-                    auto& inputQuery = inputQueries[pathInfo.QLFilter.Get()];
-                    if (!inputQuery) {
-                        inputQuery = GenerateInputQuery(pathInfo.QLFilter);
+                    auto queryIter = inputQueries.find(pathInfo.QLFilter.Get());
+                    if (queryIter == inputQueries.end()) {
+                        queryIter = inputQueries.insert({pathInfo.QLFilter.Get(), GenerateInputQuery(pathInfo.QLFilter)}).first;
                     }
-                    richYPath.InputQuery(inputQuery);
+                    if (queryIter->second) {
+                        richYPath.InputQuery(*queryIter->second);
+                    }
                 }
 
                 InputTables_.emplace_back(

@@ -39,15 +39,19 @@ public:
 
 private:
     TNodePtr BuildDataSource() const {
-        return Y("DataSource", Q(Service), Q(Cluster));
+        TNodePtr service = BuildQuotedAtom(Pos_, Service);
+        TNodePtr cluster = BuildQuotedAtom(Pos_, Cluster);
+        return Y("DataSource", std::move(service), std::move(cluster));
     }
 
     TNodePtr BuildKey() const {
+        TNodePtr key = BuildQuotedAtom(Pos_, Key);
+
         if (IsAnonymous) {
-            return Y("TempTable", Q(Key));
+            return Y("TempTable", std::move(key));
         }
 
-        return Y("Key", Q(Y(Q("table"), Y("String", Q(Key)))));
+        return Y("Key", Q(Y(Q("table"), Y("String", std::move(key)))));
     }
 
     TNodePtr Node_;
@@ -124,7 +128,7 @@ private:
                 name = Columns_->at(i);
             }
 
-            columns->Add(Q(std::move(name)));
+            columns->Add(BuildQuotedAtom(Pos_, std::move(name)));
         }
         return columns;
     }
@@ -413,7 +417,8 @@ private:
     }
 
     TNodePtr BuildYqlResultItem(TString name, TNodePtr term) const {
-        return Y("YqlResultItem", Q(std::move(name)), Y("Void"), Y("lambda", Q(Y()), std::move(term)));
+        TNodePtr nameAtom = BuildQuotedAtom(Pos_, std::move(name));
+        return Y("YqlResultItem", std::move(nameAtom), Y("Void"), Y("lambda", Q(Y()), std::move(term)));
     }
 
     TMaybe<TString> ColumnAlias(const TNodePtr& term) const {
@@ -435,9 +440,11 @@ private:
     TMaybe<TNodePtr> BuildFromElement(TContext& ctx, const TYqlSource& source) const {
         const auto build = [this](TNodePtr node, TString name) {
             YQL_ENSURE(!name.empty(), "An empty source name is unsupported");
+
+            TNodePtr nameAtom = BuildQuotedAtom(Pos_, std::move(name));
             return Q(Y(
                 std::move(node),
-                Q(std::move(name)),
+                std::move(nameAtom),
                 Q(Y(/* Columns are passed through SetColumns */))));
         };
 
@@ -653,8 +660,9 @@ public:
 
             if (auto columns = Columns()) {
                 TNodePtr list = Y();
-                for (auto& column : *columns) {
-                    list = L(std::move(list), Q(std::move(column)));
+                for (TString& column : *columns) {
+                    TNodePtr columnAtom = BuildQuotedAtom(Pos_, std::move(column));
+                    list = L(std::move(list), std::move(columnAtom));
                 }
 
                 options->Add(Q(Y(Q("columns"), Q(std::move(list)))));

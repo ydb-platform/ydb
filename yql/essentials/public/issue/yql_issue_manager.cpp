@@ -110,7 +110,11 @@ TIssuePtr TIssueManager::CheckUniqAndLimit(const TIssue& issue) {
 }
 
 void TIssueManager::RaiseIssue(const TIssue& issue) {
-    if (IsMuted_) {
+    if (MuteMode_ == EMuteMode::All) {
+        return;
+    }
+
+    if (issue.GetSeverity() >= TSeverityIds::S_WARNING && MuteMode_ == EMuteMode::Warnings) {
         return;
     }
 
@@ -141,7 +145,7 @@ void TIssueManager::RaiseIssues(const TIssues& issues) {
 }
 
 bool TIssueManager::RaiseWarning(TIssue issue) {
-    if (IsMuted_) {
+    if (MuteMode_ != EMuteMode::None) {
         return true;
     }
 
@@ -241,10 +245,10 @@ void TIssueManager::SetWarningToErrorTreatMessage(const TString& msg) {
     WarningToErrorTreatMessage_ = msg;
 }
 
-void TIssueManager::Mute() {
-    IsMuted_ = true;
+void TIssueManager::Mute(bool onlyWarnings) {
+    MuteMode_ = onlyWarnings ? EMuteMode::Warnings : EMuteMode::All;
 }
 
 void TIssueManager::Unmute() {
-    IsMuted_ = false;
+    MuteMode_ = EMuteMode::None;
 }

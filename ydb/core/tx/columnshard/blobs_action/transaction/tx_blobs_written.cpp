@@ -21,7 +21,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
     ACFL_DEBUG("event", "start_execute");
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
-    const auto minReadSnapshot = Self->GetMinShapshotForNewReads();
+    const auto minReadSnapshot = Self->GetMinSnapshotForNewReads();
 
     for (auto&& writeResult : Pack.GetWriteResults()) {
         const auto& writeMeta = writeResult.GetWriteMeta();

@@ -7,8 +7,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(45)
 
 SIZE(LARGE)
-TAG(ya:fat)
-
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 TEST_SRCS(
     conftest.py
     test_split_merge_by_load.py

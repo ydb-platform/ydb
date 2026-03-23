@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto loadActorAdapter =
             GetLoadActorAdapterActorId(env, partition, edge);
 
-        // Read not writed block
+        // Read not written block
         {
             auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(0);
@@ -185,7 +185,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
                     edge,
                     false);
-            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
             UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
             UNIT_ASSERT(
                 res->Get()->Record.MutableBlocks()->GetBuffers(0) ==
@@ -246,10 +249,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
                     edge,
                     false);
-            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
-            UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
             UNIT_ASSERT_VALUES_EQUAL(
-                res->Get()->Record.MutableBlocks()->GetBuffers(0),
+                1,
+                res->Get()->Record.GetBlocks().BuffersSize());
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.GetBlocks().GetBuffers(0),
                 expectedData);
         }
 

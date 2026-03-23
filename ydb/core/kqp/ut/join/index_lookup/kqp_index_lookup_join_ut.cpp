@@ -223,7 +223,6 @@ public:
     TString Answer;
     size_t RightTableReads = 0;
     size_t LeftTableReads = 7;
-    bool DqReplicate = false;
     bool DoValidateStats = true;
     bool OnlineReadOnly = false;
     NYdb::TParamsBuilder ParamsBuilder;
@@ -257,9 +256,7 @@ public:
             ysonResult = FormatResultSetYson(result.GetResultSet(0));
             Cerr << result.GetStats()->GetAst() << Endl;
             if (DoValidateStats) {
-                ValidateStats(
-                    result,
-                    DqReplicate ? RightTableReads / 2 : RightTableReads, DqReplicate ? LeftTableReads / 2: LeftTableReads);
+                ValidateStats(result, RightTableReads, LeftTableReads);
             }
             CompareYson(Answer, ysonResult);
         }
@@ -282,8 +279,8 @@ public:
     }
 };
 
-void Test(const TString& query, const TString& answer, size_t rightTableReads, size_t leftTableReads = 7, bool dqReplicate = false) {
-    TTester{.Query=query, .Answer=answer, .RightTableReads=rightTableReads, .LeftTableReads=leftTableReads, .DqReplicate=dqReplicate}.Run();
+void Test(const TString& query, const TString& answer, size_t rightTableReads, size_t leftTableReads = 7) {
+    TTester{.Query=query, .Answer=answer, .RightTableReads=rightTableReads, .LeftTableReads=leftTableReads}.Run();
 }
 
 Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
@@ -636,7 +633,7 @@ Y_UNIT_TEST(LeftJoinRightNullFilter) {
             [["Value3"];#];
             [["Value6"];#];
             [["Value7"];#]
-        ])", 8, 14, /* dqReplicate */ true);
+        ])", 4);
 }
 
 Y_UNIT_TEST(LeftJoinSkipNullFilter) {

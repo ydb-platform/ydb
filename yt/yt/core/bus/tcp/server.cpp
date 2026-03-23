@@ -26,6 +26,8 @@
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
+#include <util/datetime/constants.h>
+
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -576,17 +578,32 @@ private:
                 << TErrorAttribute("openssl_error_code", ERR_get_error());
         }
 
-        // Convert ASN1_TIME to time_t
-        struct tm tmExpire;
-        if (!ASN1_TIME_to_tm(notAfter, &tmExpire)) {
-            THROW_ERROR_EXCEPTION("Failed to convert ASN1_TIME to tm structure")
+        // Get current time as ASN1_TIME.
+        time_t currentTime = time(nullptr);
+
+        // Use unique_ptr for automatic cleanup.
+        struct ASN1TimeDeleter {
+            void operator()(ASN1_TIME* p) const
+            {
+                ASN1_TIME_free(p);
+            }
+        };
+        std::unique_ptr<ASN1_TIME, ASN1TimeDeleter> asn1Current(ASN1_TIME_set(nullptr, currentTime));
+
+        if (!asn1Current) {
+            THROW_ERROR_EXCEPTION("Failed to create ASN1_TIME from current time");
+        }
+
+        // Calculate difference in days/seconds.
+        int days = 0;
+        int seconds = 0;
+        if (!ASN1_TIME_diff(&days, &seconds, asn1Current.get(), notAfter)) {
+            THROW_ERROR_EXCEPTION("Failed to calculate time difference")
                 << TErrorAttribute("openssl_error_code", ERR_get_error());
         }
 
-        time_t expirationTime = mktime(&tmExpire);
-        time_t currentTime = time(nullptr);
-
-        return difftime(expirationTime, currentTime);
+        // Convert to seconds.
+        return static_cast<double>(days) * SECONDS_IN_DAY + static_cast<double>(seconds);
     }
 
     void BuildOrchid(IYsonConsumer* consumer) const

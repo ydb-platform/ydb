@@ -262,6 +262,7 @@ message TEvNodeConfigInvokeOnRoot {
         bool SkipConsoleValidation = 2;
         optional bytes UserToken = 6;
         optional string PeerName = 7;
+        bool DryRun = 8;
     }
 
     message TBootstrapCluster {

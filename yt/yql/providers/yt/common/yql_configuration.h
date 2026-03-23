@@ -157,4 +157,6 @@ constexpr ui64 DEFAULT_QUERY_DUMP_FILE_COUNT_PER_OPERATION_LIMIT = 5;
 
 constexpr bool DEFAULT_KEEP_WORLD_DEP_FOR_FILL_OP = false;
 
+constexpr bool DEFAULT_ENABLE_RLS_TABLES_SUPPORT = false;
+
 } // NYql

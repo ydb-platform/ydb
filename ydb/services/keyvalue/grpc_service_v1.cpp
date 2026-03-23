@@ -48,7 +48,7 @@ void TKeyValueGRpcServiceV1::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) 
 #endif
 
 #define SETUP_KV_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, keyvalue, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, keyvalue, auditMode, EEmptyDatabaseMode::EmptyDatabaseForbidden)
 
     SETUP_KV_METHOD(CreateVolume, DoCreateVolumeKeyValue, RLMODE(Rps), KEYVALUE_CREATEVOLUME, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_KV_METHOD(DropVolume, DoDropVolumeKeyValue, RLMODE(Rps), KEYVALUE_DROPVOLUME, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));

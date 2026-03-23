@@ -480,12 +480,12 @@ FROM Input MATCH_RECOGNIZE(
         const auto& patternCallable = FindMatchRecognizeParam(root, "pattern");
         const auto& factor = patternCallable->GetChild(1)->GetChild(1)->GetChild(0)->GetChild(1);
         return NYql::NMatchRecognize::TRowPatternFactor{
-            TString(),                                                     // Primary var or subexpression, not used in this test
-            FromString<uint64_t>(GetAtom(GetQuoted(factor->GetChild(1)))), // QuantityMin
-            FromString<uint64_t>(GetAtom(GetQuoted(factor->GetChild(2)))), // QuantityMax
-            FromString<bool>(GetAtom(GetQuoted(factor->GetChild(3)))),     // Greedy
-            FromString<bool>(GetAtom(GetQuoted(factor->GetChild(4)))),     // Output, not used in this test
-            FromString<bool>(GetAtom(GetQuoted(factor->GetChild(5)))),     // Flag "Unused", not used in this test
+            .Primary = TString(),                                                         // Primary var or subexpression, not used in this test
+            .QuantityMin = FromString<uint64_t>(GetAtom(GetQuoted(factor->GetChild(1)))), // QuantityMin
+            .QuantityMax = FromString<uint64_t>(GetAtom(GetQuoted(factor->GetChild(2)))), // QuantityMax
+            .Greedy = FromString<bool>(GetAtom(GetQuoted(factor->GetChild(3)))),          // Greedy
+            .Output = FromString<bool>(GetAtom(GetQuoted(factor->GetChild(4)))),          // Output, not used in this test
+            .Unused = FromString<bool>(GetAtom(GetQuoted(factor->GetChild(5)))),          // Flag "Unused", not used in this test
         };
     };
     {

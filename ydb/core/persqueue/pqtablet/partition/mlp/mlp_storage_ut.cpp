@@ -2634,7 +2634,7 @@ Y_UNIT_TEST(MarkDLQMoved_unexpected) {
 
 
 Y_UNIT_TEST(NextFromLockedStorage) {
-    TStorage storage(CreateDefaultTimeProvider(), {.KeepMessageOrder = true, .ParentPartitionId = 4});
+    TStorage storage(CreateDefaultTimeProvider(), {.KeepMessageOrder = true, .ParentPartitionId = {4}});
 
     storage.AddMessage(3, true, 5, TInstant::Now());
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
@@ -2663,7 +2663,7 @@ Y_UNIT_TEST(NextFromLockedStorage) {
 }
 
 Y_UNIT_TEST(LockedStorageGeneration) {
-    TStorage storage(CreateDefaultTimeProvider(), {.KeepMessageOrder = true, .ParentPartitionId = 4});
+    TStorage storage(CreateDefaultTimeProvider(), {.KeepMessageOrder = true, .ParentPartitionId = {4}});
 
     storage.AddMessage(3, true, 5, TInstant::Now());
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);

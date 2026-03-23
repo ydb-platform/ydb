@@ -22,6 +22,8 @@ class TStorage {
     static constexpr size_t MAX_PROCESSING_COUNT = 1023;
     static constexpr TDuration VACUUM_INTERVAL = TDuration::Seconds(1);
 
+    struct TParentPartitionExternalLockInfo;
+
 public:
     // The maximum number of messages per flight. If a larger number is required, then you need
     // to increase the number of partitions in the topic.
@@ -130,7 +132,7 @@ public:
         void MoveToSlow(ui64 offset);
         void DeleteFromSlow(ui64 offset);
         void SetPurged();
-        void SetUpdateExternalLockedMessageGroupsId();
+        void SetUpdateExternalLockedMessageGroupsId(ui32 parentPartitionId);
 
         void Compacted(size_t count);
         void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
@@ -146,7 +148,7 @@ public:
         std::vector<ui64> DeletedFromSlowZone;
         size_t CompactedMessages = 0;
         bool Purged = false;
-        bool UpdateExternalLockedMessageGroupsId = false;
+        absl::flat_hash_set<ui32> UpdateExternalLockedMessageGroupsId;
 
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;
@@ -156,7 +158,7 @@ public:
         size_t MinMessages = MIN_MESSAGES;
         size_t MaxMessages = MAX_MESSAGES;
         bool KeepMessageOrder = false;
-        std::optional<ui32> ParentPartitionId;
+        std::vector<ui32> ParentPartitionId; // 0 - root, 1 - merge, 2 - split
     };
 
     explicit TStorage(TIntrusivePtr<ITimeProvider> timeProvider, const TStorageSettings& settings);
@@ -220,7 +222,7 @@ public:
     bool Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool ApplyWAL(const NKikimrPQ::TMLPStorageWAL&);
-    bool SerializeFulllExternalLockedMessageGroupsIdTo(NKikimrPQ::TExternalLockedMessageGroupsId&);
+    void SerializeFullExternalLockedMessageGroupsIdTo(NKikimrPQ::TExternalLockedMessageGroupsId& msg, const TParentPartitionExternalLockInfo& info) const;
 
     const TMetrics& GetMetrics() const;
 
@@ -288,7 +290,7 @@ private:
         ui64 ConsumerGeneration = 0;
         ui64 ConsumerStep = 0;
     };
-    std::optional<TParentPartitionExternalLockInfo> ParentPartitionExternalLockInfo;
+    std::vector<TParentPartitionExternalLockInfo> ParentPartitionExternalLockInfo;
 
     TBatch Batch;
     TMetrics Metrics;

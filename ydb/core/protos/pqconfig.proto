@@ -1491,7 +1491,7 @@ message TMLPStorageSnapshot {
     optional bytes SlowMessages = 7;
     optional bytes DLQMessages = 8;
 
-    optional TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 9;
+    repeated TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 9;
 }
 
 message TMLPStorageWAL {
@@ -1516,7 +1516,7 @@ message TMLPStorageWAL {
     optional bytes AddedToDLQMessages = 14;
     optional uint64 FirstDLQSeqNo = 15;
 
-    optional TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 16;
+    repeated TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 16;
 }
 
 message TMessageDeduplicationIdWAL {

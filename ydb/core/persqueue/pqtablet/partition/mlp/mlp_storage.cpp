@@ -28,9 +28,13 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, const TStorageSett
     , NextVacuumRun(TInstant::Zero())
     , Batch(this)
 {
-    if (KeepMessageOrder && settings.ParentPartitionId.has_value()) {
-        ParentPartitionExternalLockInfo.emplace();
-        ParentPartitionExternalLockInfo->PartitionId = settings.ParentPartitionId.value();
+    Y_ASSERT(settings.ParentPartitionId.size() <= 2);
+    if (KeepMessageOrder) {
+        for (const ui32 parentPartitionId : settings.ParentPartitionId) {
+            ParentPartitionExternalLockInfo.push_back(TParentPartitionExternalLockInfo{
+                .PartitionId = parentPartitionId,
+            });
+        }
     }
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
     Metrics.MessageLocks.Initialize(MLP_LOCKS_RANGES, std::size(MLP_LOCKS_RANGES), true);
@@ -68,9 +72,19 @@ void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDe
 }
 
 NKikimrPQ::EReadWithKeepOrder TStorage::ReadWithKeepOrder() const {
-    NKikimrPQ::EReadWithKeepOrder result = NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL;
-    if (ParentPartitionExternalLockInfo.has_value()) {
-        result = ParentPartitionExternalLockInfo->ReadWithKeepOrder;
+    using enum NKikimrPQ::EReadWithKeepOrder;
+    NKikimrPQ::EReadWithKeepOrder result = READ_WITH_KEEP_ORDER_ALLOW_ALL;
+    for (const auto& parentPartitionExternalLockInfo : ParentPartitionExternalLockInfo) {
+        switch (parentPartitionExternalLockInfo.ReadWithKeepOrder) {
+            case READ_WITH_KEEP_ORDER_BLOCK_ALL:
+            case READ_WITH_KEEP_ORDER_ALLOW_ALL:
+                static_assert(READ_WITH_KEEP_ORDER_BLOCK_ALL < READ_WITH_KEEP_ORDER_ALLOW_ALL);
+                result = std::min(result, parentPartitionExternalLockInfo.ReadWithKeepOrder);
+                break;
+            case READ_WITH_KEEP_ORDER_UNSPECIFIED:
+                AFL_ENSURE(false)("ReadWithKeepOrder", NKikimrPQ::EReadWithKeepOrder_Name(parentPartitionExternalLockInfo.ReadWithKeepOrder));
+                break;
+            }
     }
     return result;
 }
@@ -239,7 +253,9 @@ TStorage::TUpdateExternalLockedMessageGroupsResult TStorage::UpdateExternalLocke
 
 TStorage::TUpdateExternalLockedMessageGroupsResult TStorage::DoUpdateExternalLockedMessageGroupsId(const NKikimrPQ::TExternalLockedMessageGroupsId& record, bool loadState) {
     Y_ASSERT(KeepMessageOrder && "UpdateExternalLockedMessageGroupsId called for non-fifo queue");
-    if (!ParentPartitionExternalLockInfo.has_value() || ParentPartitionExternalLockInfo->PartitionId != record.GetParentPartitionId()) {
+    const ui32 parentPartitionId = record.GetParentPartitionId();
+    TParentPartitionExternalLockInfo* info = FindIfPtr(ParentPartitionExternalLockInfo, [parentPartitionId](const auto& p) { return p.PartitionId == parentPartitionId; });
+    if (!info) {
         Y_VERIFY_DEBUG(false, "UpdateExternalLockedMessageGroupsId for unknown partition");
         return TUpdateExternalLockedMessageGroupsResult{
             .Applied = false,
@@ -247,23 +263,33 @@ TStorage::TUpdateExternalLockedMessageGroupsResult TStorage::DoUpdateExternalLoc
         };
     }
     const auto updateVersion = std::make_tuple(record.GetGeneration(), record.GetConsumerGeneration(), record.GetStep());
-    auto currentVersion = std::tie(ParentPartitionExternalLockInfo->TabletGeneration, ParentPartitionExternalLockInfo->ConsumerGeneration, ParentPartitionExternalLockInfo->ConsumerStep);
+    auto currentVersion = std::tie(info->TabletGeneration, info->ConsumerGeneration, info->ConsumerStep);
     if (updateVersion < currentVersion) {
         Y_VERIFY_DEBUG(!loadState, "%s", (TStringBuilder() << "Loading obsolete state: "
                                                            << "(" << record.GetGeneration() << "," << record.GetConsumerGeneration() << "," << record.GetStep() << ") < "
-                                                           << "(" << ParentPartitionExternalLockInfo->TabletGeneration << "," << ParentPartitionExternalLockInfo->ConsumerGeneration << "," << ParentPartitionExternalLockInfo->ConsumerStep << ")")
+                                                           << "(" << info->TabletGeneration << "," << info->ConsumerGeneration << "," << info->ConsumerStep << ")")
                                              .c_str());
         return TUpdateExternalLockedMessageGroupsResult{
             .Applied = false,
         };
     }
+        if (record.GetMode() == NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_UNSPECIFIED) {
+        Y_VERIFY_DEBUG(false,
+        "Unknown mode; mode: %s, newMode: %s",
+        NKikimrPQ::EReadWithKeepOrder_Name(info->ReadWithKeepOrder).c_str(),
+        NKikimrPQ::EReadWithKeepOrder_Name(record.GetMode()).c_str());
+        return TUpdateExternalLockedMessageGroupsResult{
+            .Applied = false,
+            .Invalid = true,
+        };
+    }
     Y_VERIFY_DEBUG(
-        ParentPartitionExternalLockInfo->ReadWithKeepOrder <= record.GetMode(),
+        info->ReadWithKeepOrder <= record.GetMode(),
         "mode: %s, newMode: %s",
-        NKikimrPQ::EReadWithKeepOrder_Name(ParentPartitionExternalLockInfo->ReadWithKeepOrder).c_str(),
+        NKikimrPQ::EReadWithKeepOrder_Name(info->ReadWithKeepOrder).c_str(),
         NKikimrPQ::EReadWithKeepOrder_Name(record.GetMode()).c_str()
     );
-    if (ParentPartitionExternalLockInfo->ReadWithKeepOrder == record.GetMode() && updateVersion == currentVersion) {
+    if (info->ReadWithKeepOrder == record.GetMode() && updateVersion == currentVersion) {
         return TUpdateExternalLockedMessageGroupsResult{
             .Applied = false,
         };
@@ -274,12 +300,12 @@ TStorage::TUpdateExternalLockedMessageGroupsResult TStorage::DoUpdateExternalLoc
     result.VersionChanged = true;
     currentVersion = updateVersion;
 
-    result.ModeChanged = ParentPartitionExternalLockInfo->ReadWithKeepOrder < record.GetMode();
-    if (ParentPartitionExternalLockInfo->ReadWithKeepOrder <= record.GetMode()) {
-        ParentPartitionExternalLockInfo->ReadWithKeepOrder = record.GetMode();
+    result.ModeChanged = info->ReadWithKeepOrder < record.GetMode();
+    if (info->ReadWithKeepOrder <= record.GetMode()) {
+        info->ReadWithKeepOrder = record.GetMode();
     }
     if (!loadState) {
-        Batch.SetUpdateExternalLockedMessageGroupsId();
+        Batch.SetUpdateExternalLockedMessageGroupsId(parentPartitionId);
     }
     return result;
 }
@@ -1131,8 +1157,8 @@ void TStorage::TBatch::SetPurged() {
     Purged = true;
 }
 
-void TStorage::TBatch::SetUpdateExternalLockedMessageGroupsId() {
-    UpdateExternalLockedMessageGroupsId = true;
+void TStorage::TBatch::SetUpdateExternalLockedMessageGroupsId(ui32 parentPartitionId) {
+    UpdateExternalLockedMessageGroupsId.insert(parentPartitionId);
 }
 
 void TStorage::TBatch::Compacted(size_t count) {
@@ -1154,7 +1180,7 @@ bool TStorage::TBatch::Empty() const {
         && DeletedFromSlowZone.empty()
         && CompactedMessages == 0
         && !Purged
-        && !UpdateExternalLockedMessageGroupsId;
+        && !UpdateExternalLockedMessageGroupsId.empty();
 }
 
 size_t TStorage::TBatch::AddedMessageCount() const {

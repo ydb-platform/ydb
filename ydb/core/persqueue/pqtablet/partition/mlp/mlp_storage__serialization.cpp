@@ -426,8 +426,8 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         }
     }
 
-    if (snapshot.HasExternalLockedMessageGroupsId()) {
-        DoUpdateExternalLockedMessageGroupsId(snapshot.GetExternalLockedMessageGroupsId(), true);
+    for (const auto& externalLockedMessageGroupsId : snapshot.GetExternalLockedMessageGroupsId()) {
+        DoUpdateExternalLockedMessageGroupsId(externalLockedMessageGroupsId, true);
     }
 
     return true;
@@ -604,8 +604,8 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
         }
     }
 
-    if (wal.HasExternalLockedMessageGroupsId()) {
-        DoUpdateExternalLockedMessageGroupsId(wal.GetExternalLockedMessageGroupsId(), true);
+    for (const auto& externalLockedMessageGroupsId : wal.GetExternalLockedMessageGroupsId()) {
+        DoUpdateExternalLockedMessageGroupsId(externalLockedMessageGroupsId, true);
     }
 
     FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
@@ -681,9 +681,11 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         snapshot.SetDLQMessages(std::move(serializer.Buffer));
     }
 
-    if (KeepMessageOrder && ParentPartitionExternalLockInfo.has_value()) {
-        auto* msg = snapshot.MutableExternalLockedMessageGroupsId();
-        SerializeFulllExternalLockedMessageGroupsIdTo(*msg);
+    if (KeepMessageOrder) {
+        for (const auto& info : ParentPartitionExternalLockInfo) {
+            auto* msg = snapshot.AddExternalLockedMessageGroupsId();
+            SerializeFullExternalLockedMessageGroupsIdTo(*msg, info);
+        }
     }
 
     return true;
@@ -798,24 +800,25 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         }
     }
 
-    if (UpdateExternalLockedMessageGroupsId) {
-        auto* msg = wal.MutableExternalLockedMessageGroupsId();
-        Storage->SerializeFulllExternalLockedMessageGroupsIdTo(*msg);
+    if (!UpdateExternalLockedMessageGroupsId.empty()) {
+        for (const auto& info : Storage->ParentPartitionExternalLockInfo) {
+            if (!UpdateExternalLockedMessageGroupsId.contains(info.PartitionId)) {
+                continue;
+            }
+            auto* msg = wal.AddExternalLockedMessageGroupsId();
+            Storage->SerializeFullExternalLockedMessageGroupsIdTo(*msg, info);
+        }
     }
-
     return true;
 }
 
-bool TStorage::SerializeFulllExternalLockedMessageGroupsIdTo(NKikimrPQ::TExternalLockedMessageGroupsId& msg) {
-    if (!KeepMessageOrder || !ParentPartitionExternalLockInfo.has_value()) {
-        return false;
-    }
-    msg.SetParentPartitionId(ParentPartitionExternalLockInfo->PartitionId);
-    msg.SetGeneration(ParentPartitionExternalLockInfo->TabletGeneration);
-    msg.SetConsumerGeneration(ParentPartitionExternalLockInfo->ConsumerGeneration);
-    msg.SetStep(ParentPartitionExternalLockInfo->ConsumerStep);
-    msg.SetMode(ParentPartitionExternalLockInfo->ReadWithKeepOrder);
-    return true;
+void TStorage::SerializeFullExternalLockedMessageGroupsIdTo(NKikimrPQ::TExternalLockedMessageGroupsId& msg, const TParentPartitionExternalLockInfo& info) const {
+    Y_ASSERT(KeepMessageOrder);
+    msg.SetParentPartitionId(info.PartitionId);
+    msg.SetGeneration(info.TabletGeneration);
+    msg.SetConsumerGeneration(info.ConsumerGeneration);
+    msg.SetStep(info.ConsumerStep);
+    msg.SetMode(info.ReadWithKeepOrder);
 }
 
 } // namespace NKikimr::NPQ::NMLP

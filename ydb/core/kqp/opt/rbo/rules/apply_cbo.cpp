@@ -169,7 +169,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& c
             leftKeys,
             rightKeys,
             ConvertToJoinKind(join->JoinKind),
-            EJoinAlgoType::Undefined,
+            NKikimr::NKqp::EJoinAlgoType::Undefined,
             false,
             false,
             false);

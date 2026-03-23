@@ -609,7 +609,7 @@ message TCommitWritesTransaction {
 
 enum ETransactionKind {
     TX_KIND_NONE = 0;
-    TX_KIND_DATA = 1;
+    DEPRECATED_1 = 1; //TX_KIND_DATA
     TX_KIND_SCHEME = 2;
     DEPRECATED_3 = 3; //TX_KIND_BALANCE
     DEPRECATED_4 = 4; //TX_KIND_SNAPSHOT_POLICY

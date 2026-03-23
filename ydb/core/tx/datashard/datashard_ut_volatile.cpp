@@ -2552,10 +2552,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     public:
         TForceVolatileProposeArbiter(TTestActorRuntime& runtime, ui64 arbiterShard)
             : ArbiterShard(arbiterShard)
-            , Observer(runtime.AddObserver<TEvDataShard::TEvProposeTransaction>(
-                [this](auto& ev) {
-                    this->OnEvent(ev);
-                }))
             , ObserverEvWrite(runtime.AddObserver<NKikimr::NEvents::TDataEvents::TEvWrite>(
                 [this](auto& ev) {
                     this->OnEvent(ev);
@@ -2563,72 +2559,10 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         {}
 
         void Remove() {
-            Observer.Remove();
             ObserverEvWrite.Remove();
         }
 
     private:
-        void OnEvent(TEvDataShard::TEvProposeTransaction::TPtr& ev) {
-            auto* msg = ev->Get();
-            int kind = msg->Record.GetTxKind();
-            if (kind != NKikimrTxDataShard::TX_KIND_DATA) {
-                Cerr << "... skipping TEvProposeTransaction with kind " << kind
-                    << " (expected " << int(NKikimrTxDataShard::TX_KIND_DATA) << ")"
-                    << Endl;
-                return;
-            }
-
-            ui32 flags = msg->Record.GetFlags();
-            if (!(flags & TTxFlags::VolatilePrepare)) {
-                Cerr << "... skipping TEvProposeTransaction with flags " << flags
-                    << " (missing VolatilePrepare flag)"
-                    << Endl;
-                return;
-            }
-
-            NKikimrTxDataShard::TDataTransaction tx;
-            bool ok = tx.ParseFromString(msg->Record.GetTxBody());
-            Y_ENSURE(ok, "Failed to parse data transaction");
-            if (!tx.HasKqpTransaction()) {
-                Cerr << "... skipping TEvProposeTransaction without kqp transaction" << Endl;
-                return;
-            }
-
-            auto* kqpTx = tx.MutableKqpTransaction();
-
-            int kqpType = kqpTx->GetType();
-            if (kqpType != NKikimrTxDataShard::KQP_TX_TYPE_DATA) {
-                Cerr << "... skipping TEvProposeTransaction with kqp type " << kqpType
-                    << " (expected " << int(NKikimrTxDataShard::KQP_TX_TYPE_DATA) << ")"
-                    << Endl;
-                return;
-            }
-
-            if (!kqpTx->HasLocks()) {
-                Cerr << "... skipping TEvProposeTransaction without locks" << Endl;
-                return;
-            }
-
-            auto* kqpLocks = kqpTx->MutableLocks();
-            const auto& sendingShards = kqpLocks->GetSendingShards();
-            const auto& receivingShards = kqpLocks->GetReceivingShards();
-
-            if (std::find(sendingShards.begin(), sendingShards.end(), ArbiterShard) == sendingShards.end()) {
-                Cerr << "... skipping TEvProposeTransaction without " << ArbiterShard << " in sending shards" << Endl;
-                return;
-            }
-
-            if (std::find(receivingShards.begin(), receivingShards.end(), ArbiterShard) == receivingShards.end()) {
-                Cerr << "... skipping TEvProposeTransaction without " << ArbiterShard << " in receiving shards" << Endl;
-                return;
-            }
-
-            kqpLocks->SetArbiterShard(ArbiterShard);
-            ok = tx.SerializeToString(msg->Record.MutableTxBody());
-            Y_ENSURE(ok, "Failed to serialize data transaction");
-            ++Modified;
-        }
-
         void OnEvent(NKikimr::NEvents::TDataEvents::TEvWrite::TPtr& ev) {
             auto* msg = ev->Get();
 
@@ -2666,7 +2600,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
     private:
         const ui64 ArbiterShard;
-        TTestActorRuntime::TEventObserverHolder Observer;
         TTestActorRuntime::TEventObserverHolder ObserverEvWrite;
     };
 
@@ -2676,10 +2609,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             : TableId(tableId)
             , Shard(shard)
             , ShardActor(ResolveTablet(runtime, shard))
-            , Observer(runtime.AddObserver<TEvDataShard::TEvProposeTransaction>(
-                [this](auto& ev) {
-                    this->OnEvent(ev);
-                }))
             , ObserverEvWrite(runtime.AddObserver<NKikimr::NEvents::TDataEvents::TEvWrite>(
                 [this](auto& ev) {
                     this->OnEvent(ev);
@@ -2687,67 +2616,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         {}
 
     private:
-        void OnEvent(TEvDataShard::TEvProposeTransaction::TPtr& ev) {
-            if (ev->GetRecipientRewrite() != ShardActor) {
-                return;
-            }
-
-            auto* msg = ev->Get();
-            int kind = msg->Record.GetTxKind();
-            if (kind != NKikimrTxDataShard::TX_KIND_DATA) {
-                Cerr << "... skipping TEvProposeTransaction with kind " << kind
-                    << " (expected " << int(NKikimrTxDataShard::TX_KIND_DATA) << ")"
-                    << Endl;
-                return;
-            }
-
-            ui32 flags = msg->Record.GetFlags();
-            if (!(flags & TTxFlags::VolatilePrepare)) {
-                Cerr << "... skipping TEvProposeTransaction with flags " << flags
-                    << " (missing VolatilePrepare flag)"
-                    << Endl;
-                return;
-            }
-
-            NKikimrTxDataShard::TDataTransaction tx;
-            bool ok = tx.ParseFromString(msg->Record.GetTxBody());
-            Y_ENSURE(ok, "Failed to parse data transaction");
-            if (!tx.HasKqpTransaction()) {
-                Cerr << "... skipping TEvProposeTransaction without kqp transaction" << Endl;
-                return;
-            }
-
-            auto* kqpTx = tx.MutableKqpTransaction();
-
-            int kqpType = kqpTx->GetType();
-            if (kqpType != NKikimrTxDataShard::KQP_TX_TYPE_DATA) {
-                Cerr << "... skipping TEvProposeTransaction with kqp type " << kqpType
-                    << " (expected " << int(NKikimrTxDataShard::KQP_TX_TYPE_DATA) << ")"
-                    << Endl;
-                return;
-            }
-
-            if (!kqpTx->HasLocks()) {
-                Cerr << "... skipping TEvProposeTransaction without locks" << Endl;
-                return;
-            }
-
-            auto* kqpLocks = kqpTx->MutableLocks();
-
-            // We use a lock that should have never existed to simulate a broken lock
-            auto* kqpLock = kqpLocks->AddLocks();
-            kqpLock->SetLockId(msg->Record.GetTxId());
-            kqpLock->SetDataShard(Shard);
-            kqpLock->SetGeneration(1);
-            kqpLock->SetCounter(1);
-            kqpLock->SetSchemeShard(TableId.PathId.OwnerId);
-            kqpLock->SetPathId(TableId.PathId.LocalPathId);
-
-            ok = tx.SerializeToString(msg->Record.MutableTxBody());
-            Y_ENSURE(ok, "Failed to serialize data transaction");
-            ++Modified;
-        }
-
         void OnEvent(NKikimr::NEvents::TDataEvents::TEvWrite::TPtr& ev) {
             if (ev->GetRecipientRewrite() != ShardActor) {
                 return;
@@ -2787,7 +2655,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         const TTableId TableId;
         const ui64 Shard;
         const TActorId ShardActor;
-        TTestActorRuntime::TEventObserverHolder Observer;
         TTestActorRuntime::TEventObserverHolder ObserverEvWrite;
     };
 

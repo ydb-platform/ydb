@@ -23,8 +23,6 @@ namespace NDataShard {
 
 namespace {
 
-const ui32 MaxDatashardReplySize = 48 * 1024 * 1024;  // 48 MB
-
 using namespace NYql;
 
 bool KqpValidateTask(const NYql::NDqProto::TDqTask& task, bool isImmediate, ui64 txId, const TActorContext& ctx, bool& hasPersistentChannels)
@@ -72,17 +70,6 @@ bool KqpValidateTask(const NYql::NDqProto::TDqTask& task, bool isImmediate, ui64
 
 NUdf::EFetchStatus FetchAllOutput(NDq::IDqOutputChannel* channel, NDq::TDqSerializedBatch& buffer) {
     auto result = channel->PopAll(buffer);
-    Y_UNUSED(result);
-
-    if (channel->IsFinished()) {
-        return NUdf::EFetchStatus::Finish;
-    }
-
-    return NUdf::EFetchStatus::Yield;
-}
-
-NUdf::EFetchStatus FetchOutput(NDq::IDqOutputChannel* channel, NDq::TDqSerializedBatch& buffer) {
-    auto result = channel->Pop(buffer);
     Y_UNUSED(result);
 
     if (channel->IsFinished()) {
@@ -418,86 +405,6 @@ void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLock
 NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner)
 {
     return RunKqpTransactionInternal(ctx, txId, /* inReadSets */ nullptr, useGenericReadSets, tasksRunner, /* applyEffects */ false);
-}
-
-THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const TActorContext& ctx, ui64 origin, ui64 txId, const TInputOpData::TInReadSets* inReadSets, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner, const NMiniKQL::TKqpDatashardComputeContext& computeCtx)
-{
-    auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, useGenericReadSets, tasksRunner, /* applyEffects */ true);
-
-    if (computeCtx.HadInconsistentReads()) {
-        return nullptr;
-    }
-
-    if (runStatus == NYql::NDq::ERunStatus::PendingInput && computeCtx.IsTabletNotReady()) {
-        return nullptr;
-    }
-
-    MKQL_ENSURE_S(runStatus == NYql::NDq::ERunStatus::Finished);
-
-    if (computeCtx.HasVolatileReadDependencies()) {
-        return nullptr;
-    }
-
-    auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA, origin, txId, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
-
-    for (auto& [taskId, task] : tasksRunner.GetTasks()) {
-        auto& taskRunner = tasksRunner.GetTaskRunner(task.GetId());
-
-        for (ui32 i = 0; i < task.OutputsSize(); ++i) {
-            for (auto& channel : task.GetOutputs(i).GetChannels()) {
-                auto computeActor = computeCtx.GetTaskOutputChannel(task.GetId(), channel.GetId());
-                if (computeActor) {
-                    size_t seqNo = 1;
-                    auto fetchStatus = NUdf::EFetchStatus::Yield;
-                    while (fetchStatus != NUdf::EFetchStatus::Finish) {
-                        auto dataEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelData>();
-                        dataEv->Record.SetSeqNo(seqNo++);
-                        dataEv->Record.MutableChannelData()->SetChannelId(channel.GetId());
-                        dataEv->Record.SetNoAck(true);
-                        auto outputData = dataEv->Record.MutableChannelData()->MutableData();
-                        NDq::TDqSerializedBatch serialized;
-                        try {
-                            fetchStatus = FetchOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), serialized);
-                        } catch (const NDq::TDqOutputChannelChunkSizeLimitExceeded& ex) {
-                            auto message = TStringBuilder() << "Datashard " << origin << ": " << ex.what();
-                            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, message);
-                            result->SetExecutionError(NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED, message);
-                            break;
-                        }
-                        const size_t outputDataSize = serialized.Size();
-                        *outputData = std::move(serialized.Proto);
-                        outputData->ClearPayloadId();
-                        if (!serialized.Payload.Empty()) {
-                            outputData->SetPayloadId(dataEv->AddPayload(NYql::MakeReadOnlyRope(std::move(serialized.Payload))));
-                        }
-                        dataEv->Record.MutableChannelData()->SetFinished(fetchStatus == NUdf::EFetchStatus::Finish);
-                        if (outputDataSize > MaxDatashardReplySize) {
-                            auto message = TStringBuilder() << "Datashard " << origin
-                                                            << ": reply size limit exceeded (" << outputDataSize << " > "
-                                                            << MaxDatashardReplySize << ")";
-                            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, message);
-                            result->SetExecutionError(NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED, message);
-                            break;
-                        } else {
-                            ctx.Send(computeActor, dataEv.Release());
-                        }
-                    }
-                } else {
-                    NDq::TDqSerializedBatch outputData;
-                    auto fetchStatus = FetchOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
-                    MKQL_ENSURE_S(fetchStatus == NUdf::EFetchStatus::Finish);
-                    MKQL_ENSURE_S(outputData.Proto.GetChunks() == 0);
-                }
-            }
-        }
-    }
-
-    TString replyStr;
-    NKikimrTxDataShard::TKqpReply reply;
-    Y_PROTOBUF_SUPPRESS_NODISCARD reply.SerializeToString(&replyStr);
-
-    result->SetTxResult(replyStr);
-    return result;
 }
 
 void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner* tasksRunner, TSysLocks& sysLocks, ui64 tabletId)

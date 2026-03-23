@@ -27,10 +27,6 @@ void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLock
 
 NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner);
 
-THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const TActorContext& ctx,
-    ui64 tabletId, ui64 txId, const TInputOpData::TInReadSets* inReadSets, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner,
-    const NMiniKQL::TKqpDatashardComputeContext& computeCtx);
-
 void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks,
     bool useGenericReadSets, NKqp::TKqpTasksRunner* tasksRunner, TSysLocks& sysLocks, ui64 tabletId);
 

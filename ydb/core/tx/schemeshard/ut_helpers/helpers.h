@@ -4,11 +4,9 @@
 #include "test_env.h"
 
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/backup.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
-#include <ydb/core/testlib/minikql_compile.h>
 #include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -19,9 +17,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/library/login/login.h>
-
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_node_serialization.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -686,66 +681,6 @@ namespace NSchemeShardUT_Private {
 
     void ChangePasswordHashUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user, const TString& hash);
-
-    // Mimics data query to a single table with multiple partitions
-    class TFakeDataReq {
-    public:
-        TFakeDataReq(TTestActorRuntime& runtime, ui64 txId, const TString& table, const TString& query);
-        ~TFakeDataReq();
-
-        // returns Unknown if plan is required, Error/Complete/Abort otherwise
-        NMiniKQL::IEngineFlat::EStatus Propose(bool immediate, bool& activeZone, ui32 txFlags = NDataShard::TTxFlags::Default);
-
-        // Propose to coordinator
-        void Plan(ui64 coordinatorId);
-
-        TMap<ui64, TVector<NKikimrTxDataShard::TError>> GetErrors() const {
-            return Errors;
-        }
-
-    private:
-        NMiniKQL::TRuntimeNode ProgramText2Bin(const TString& query);
-
-        void FillTableInfo(TMockDbSchemeResolver& dbSchemeResolver) const;
-
-        struct TTablePartitioningInfo {
-            struct TBorder {
-                TSerializedCellVec KeyTuple;
-                bool Inclusive = false;
-                bool Point = false;
-                bool Defined = false;
-                ui64 Datashard = 0;
-            };
-
-            TVector<NScheme::TTypeInfo> KeyColumnTypes;
-            TVector<TBorder> Partitioning;
-
-            std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> ResolveKey(const TTableRange& range) const;
-        };
-
-        void FillTablePartitioningInfo();
-
-        void ResolveKey(TKeyDesc& dbKey) {
-            if (TablePartitioningInfo.Partitioning.empty()) {
-                FillTablePartitioningInfo();
-            }
-
-            dbKey.Partitioning = TablePartitioningInfo.ResolveKey(dbKey.Range);
-            dbKey.Status = TKeyDesc::EStatus::Ok;
-        }
-
-    private:
-        TTestActorRuntime& Runtime;
-        NMiniKQL::TScopedAlloc Alloc{__LOCATION__};
-        NMiniKQL::TTypeEnvironment Env;
-        ui64 TxId;
-        const TString Table;
-        const TString Query;
-        TAutoPtr<NMiniKQL::IEngineFlat> Engine;
-        TVector<ui64> AffectedShards;
-        TMap<ui64, TVector<NKikimrTxDataShard::TError>> Errors;
-        TTablePartitioningInfo TablePartitioningInfo;
-    };
 
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime& runtime, TVector<THolder<IEventHandle>>& suppressed, ui32 type);
     void WaitForSuppressed(TTestActorRuntime& runtime, TVector<THolder<IEventHandle>>& suppressed, ui32 count, TTestActorRuntime::TEventObserver prevObserver);

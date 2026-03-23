@@ -96,8 +96,6 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
 
     TOutputOpData::TResultPtr result = std::move(op->Result());
     if (result) {
-        auto status = result->GetStatus();
-
         result->Record.SetProposeLatency(duration.MilliSeconds());
 
         DataShard.FillExecutionStats(op->GetExecutionProfile(), *result->Record.MutableTxStats());
@@ -107,9 +105,6 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
             DataShard.SendResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId(), op->GetTraceId());
         }
 
-        if (!op->IsImmediate() && !op->IsReadOnly() && op->IsKqpDataTransaction()) {
-            NDataIntegrity::LogIntegrityTrailsFinish<NKikimrTxDataShard::TEvProposeTransactionResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), status);
-        }
     }
 
     Pipeline.RemoveCompletingOp(op);

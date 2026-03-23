@@ -368,7 +368,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
             LocksCache().Locks[lock.LockId] = lock;
     }
     ArtifactFlags = artifactFlags;
-    if (IsDataTx() || IsReadTable()) {
+    if (IsReadTable()) {
         Y_ENSURE(!DataTx);
         BuildDataTx(self, txc, ctx, userSID);
         Y_ENSURE(DataTx->Ready());
@@ -400,7 +400,7 @@ void TActiveTransaction::FillVolatileTxData(TDataShard *self,
 
     UserSID = userSID;
     
-    if (IsDataTx() || IsReadTable()) {
+    if (IsReadTable()) {
         BuildDataTx(self, txc, ctx, userSID);
         Y_ENSURE(DataTx->Ready());
 
@@ -422,7 +422,7 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                        const TString& userSID,
                                                        bool isPropose)
 {
-    Y_ENSURE(IsDataTx() || IsReadTable());
+    Y_ENSURE(IsReadTable());
     if (!DataTx) {
         Y_ENSURE(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
@@ -724,89 +724,13 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
     return ERestoreDataStatus::Ok;
 }
 
-void TActiveTransaction::FinalizeDataTxPlan()
-{
-    Y_ENSURE(IsDataTx());
-    Y_ENSURE(!IsImmediate());
-    Y_ENSURE(!IsKqpScanTransaction());
-
-    TVector<EExecutionUnitKind> plan;
-
-    plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-    if (IsKqpDataTransaction()) {
-        plan.push_back(EExecutionUnitKind::BuildKqpDataTxOutRS);
-        plan.push_back(EExecutionUnitKind::StoreAndSendOutRS);
-        plan.push_back(EExecutionUnitKind::PrepareKqpDataTxInRS);
-        plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
-        plan.push_back(EExecutionUnitKind::BlockFailPoint);
-        plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
-    } else {
-        plan.push_back(EExecutionUnitKind::BuildDataTxOutRS);
-        plan.push_back(EExecutionUnitKind::StoreAndSendOutRS);
-        plan.push_back(EExecutionUnitKind::PrepareDataTxInRS);
-        plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
-        plan.push_back(EExecutionUnitKind::BlockFailPoint);
-        plan.push_back(EExecutionUnitKind::ExecuteDataTx);
-    }
-    plan.push_back(EExecutionUnitKind::CompleteOperation);
-    plan.push_back(EExecutionUnitKind::CompletedOperations);
-
-    RewriteExecutionPlan(plan);
-}
-
-
 void TActiveTransaction::BuildExecutionPlan(bool loaded)
 {
     Y_ENSURE(GetExecutionPlan().empty());
     Y_ENSURE(!IsKqpScanTransaction());
 
     TVector<EExecutionUnitKind> plan;
-    if (IsDataTx()) {
-        if (IsImmediate()) {
-            Y_ENSURE(!loaded);
-            plan.push_back(EExecutionUnitKind::CheckDataTx);
-            plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-            plan.push_back(EExecutionUnitKind::BlockFailPoint);
-            if (IsKqpDataTransaction()) {
-                plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
-            } else {
-                plan.push_back(EExecutionUnitKind::ExecuteDataTx);
-            }
-            plan.push_back(EExecutionUnitKind::FinishPropose);
-            plan.push_back(EExecutionUnitKind::CompletedOperations);
-        } else if (HasVolatilePrepareFlag()) {
-            Y_ENSURE(!loaded);
-            plan.push_back(EExecutionUnitKind::CheckDataTx);
-            plan.push_back(EExecutionUnitKind::StoreDataTx); // note: stores in memory
-            plan.push_back(EExecutionUnitKind::FinishPropose);
-            Y_ENSURE(!GetStep());
-            plan.push_back(EExecutionUnitKind::WaitForPlan);
-            plan.push_back(EExecutionUnitKind::PlanQueue);
-            plan.push_back(EExecutionUnitKind::LoadTxDetails); // note: reloads from memory
-            plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-            Y_ENSURE(IsKqpDataTransaction());
-            // Note: execute will also prepare and send readsets
-            plan.push_back(EExecutionUnitKind::BlockFailPoint);
-            plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
-            // Note: it is important that plan here is the same as regular
-            // distributed tx, since normal tx may decide to commit in a
-            // volatile manner with dependencies, to avoid waiting for
-            // locked keys to resolve.
-            plan.push_back(EExecutionUnitKind::CompleteOperation);
-            plan.push_back(EExecutionUnitKind::CompletedOperations);
-        } else {
-            if (!loaded) {
-                plan.push_back(EExecutionUnitKind::CheckDataTx);
-                plan.push_back(EExecutionUnitKind::StoreDataTx);
-                plan.push_back(EExecutionUnitKind::FinishPropose);
-            }
-            if (!GetStep())
-                plan.push_back(EExecutionUnitKind::WaitForPlan);
-            plan.push_back(EExecutionUnitKind::PlanQueue);
-            plan.push_back(EExecutionUnitKind::LoadTxDetails);
-            plan.push_back(EExecutionUnitKind::FinalizeDataTxPlan);
-        }
-    } else if (IsReadTable()) {
+    if (IsReadTable()) {
         if (IsImmediate()) {
             plan.push_back(EExecutionUnitKind::CheckDataTx);
         } else {

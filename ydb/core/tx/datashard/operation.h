@@ -107,7 +107,6 @@ enum class EOperationKind : ui32 {
     Unknown = 0,
 
     // Values [1, 100) are used to map NKikimrTxDataShard::ETransactionKind.
-    DataTx = NKikimrTxDataShard::ETransactionKind::TX_KIND_DATA,
     SchemeTx = NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME,
     ReadTable = NKikimrTxDataShard::ETransactionKind::TX_KIND_SCAN,
     Snapshot = NKikimrTxDataShard::ETransactionKind::TX_KIND_SNAPSHOT,
@@ -170,7 +169,6 @@ public:
     ////////////////////////////
     EOperationKind GetKind() const { return Kind; }
 
-    bool IsDataTx() const { return Kind == EOperationKind::DataTx; }
     bool IsReadTx() const { return Kind == EOperationKind::ReadTx; }
     bool IsWriteTx() const { return Kind == EOperationKind::WriteTx; }
     bool IsDirectTx() const { return Kind == EOperationKind::DirectTx; }
@@ -310,11 +308,6 @@ public:
     void ResetUsingSnapshotFlag() { ResetFlag(TTxFlags::UsingSnapshot); }
 
     bool IsUsingSnapshot() const { return HasUsingSnapshotFlag(); }
-
-    bool HasKqpDataTransactionFlag() const { return HasFlag(TTxFlags::KqpDataTransaction); }
-    void SetKqpDataTransactionFlag(bool val = true) { SetFlag(TTxFlags::KqpDataTransaction, val); }
-    void ResetKqpDataTransactionFlag() { ResetFlag(TTxFlags::KqpDataTransaction); }
-    bool IsKqpDataTransaction() const { return HasKqpDataTransactionFlag(); }
 
     bool HasKqpAttachedRSFlag() const { return HasFlag(TTxFlags::KqpAttachedRS); }
     void SetKqpAttachedRSFlag(bool val = true) { SetFlag(TTxFlags::KqpAttachedRS, val); }

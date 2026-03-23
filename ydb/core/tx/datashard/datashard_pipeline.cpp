@@ -1213,7 +1213,7 @@ ui64 TPipeline::GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const
 
 ui64 TPipeline::GetDataTxCompleteLag(ui64 timecastStep) const
 {
-    return GetTxCompleteLag(EOperationKind::DataTx, timecastStep);
+    return GetTxCompleteLag(EOperationKind::WriteTx, timecastStep);
 }
 
 ui64 TPipeline::GetScanTxCompleteLag(ui64 timecastStep) const
@@ -1568,8 +1568,11 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         }
 
         tx->SetGlobalWriterFlag();
+    } else if (static_cast<ui32>(tx->GetKind()) == 1) {
+        badRequest("TX_KIND_DATA is no longer supported, use TEvWrite instead");
+        return tx;
     } else {
-        Y_ENSURE(tx->IsReadTable() || tx->IsDataTx());
+        Y_ENSURE(tx->IsReadTable());
         auto dataTx = tx->BuildDataTx(Self, txc, ctx, userSID, true);
         if (dataTx->Ready() && (dataTx->ProgramSize() || dataTx->IsKqpDataTx()))
             dataTx->ExtractKeys(true);
@@ -1595,8 +1598,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             tx->SetReadOnlyFlag();
         if (dataTx->NeedDiagnostics())
             tx->SetNeedDiagnosticsFlag();
-        if (dataTx->IsKqpDataTx())
-            tx->SetKqpDataTransactionFlag();
         if (dataTx->IsKqpScanTx()) {
             tx->SetKqpScanTransactionFlag();
             // TODO: support for extracting keys in kqp scan transaction

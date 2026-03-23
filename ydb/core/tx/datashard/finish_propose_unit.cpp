@@ -174,10 +174,6 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
                     << res->GetStatus() << " errors: " << errors);
     }
 
-    if (op->IsImmediate() && !op->IsReadOnly() && op->IsKqpDataTransaction()) {
-        NDataIntegrity::LogIntegrityTrailsFinish<NKikimrTxDataShard::TEvProposeTransactionResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), res->GetStatus());
-    }
-
     if (res->IsPrepared()) {
         DataShard.IncCounter(COUNTER_PREPARE_SUCCESS_COMPLETE_LATENCY, duration);
     } else {

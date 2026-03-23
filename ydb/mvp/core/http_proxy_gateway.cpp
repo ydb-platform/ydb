@@ -32,7 +32,7 @@ public:
 
         auto forwardedEvent = std::make_unique<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(request);
         forwardedEvent->UserToken = Event->Get()->UserToken;
-        Send(HttpProxyId, forwardedEvent.release());
+        Send(HttpProxyId, forwardedEvent.release(), 0, Event->Cookie);
 
         Become(&THttpProxyGatewayRequestActor::StateWork);
     }
@@ -79,6 +79,12 @@ public:
         CancelSubscriber = std::move(event);
     }
 
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& event) {
+        if (event->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+            PassAway();
+        }
+    }
+
     void Handle(NHttp::TEvHttpProxy::TEvRequestCancelled::TPtr&) {
         if (CancelSubscriber) {
             Send(CancelSubscriber->Sender, new NHttp::TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
@@ -88,6 +94,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(NActors::TEvents::TEvUndelivered, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvSubscribeForCancel, Handle);

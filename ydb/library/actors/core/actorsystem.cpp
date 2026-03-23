@@ -290,6 +290,7 @@ namespace NActors {
                 const TActorId* forwardOnNondelivery = forwardOnNondeliveryRecipient
                     ? &forwardOnNondeliveryRecipient
                     : nullptr;
+                auto traceId = ev->TraceId.Clone();
                 const ui32 activityIndex = ExtractCurrentSenderActivityIndex();
                 const bool collectTrace = SystemSetup->InterconnectCollectSubscriptionStackTrace;
                 const TString eventTypeName = collectTrace
@@ -300,7 +301,7 @@ namespace NActors {
                     : TString();
                 auto wrapped = std::make_unique<IEventHandle>(recipient, sender,
                     new TEvForwardSubscribeSession(ev.release(), activityIndex, eventTypeName, stackTrace),
-                    flags, cookie, forwardOnNondelivery, ev->TraceId.Clone());
+                    flags, cookie, forwardOnNondelivery, std::move(traceId));
                 ev = std::move(wrapped);
             } else {
                 ev->Rewrite(TEvInterconnect::EvForward, recipient);

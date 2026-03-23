@@ -109,24 +109,6 @@ private:
     bool AskSent = false;
 };
 
-inline auto DefaultRetryableErrors() {
-    using EStatus = NYdb::EStatus;
-    return TVector<EStatus>{
-        EStatus::ABORTED,
-        EStatus::UNAVAILABLE,
-        EStatus::OVERLOADED,
-        EStatus::TIMEOUT,
-        EStatus::BAD_SESSION,
-        EStatus::SESSION_EXPIRED,
-        EStatus::CANCELLED,
-        EStatus::UNDETERMINED,
-        EStatus::SESSION_BUSY,
-        EStatus::CLIENT_DISCOVERY_FAILED,
-        EStatus::CLIENT_LIMITS_REACHED,
-    };
-}
-
-
 IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
     return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
 }
@@ -567,6 +549,23 @@ bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TString& secret
 
 namespace {
 // XXX begin duplicated code from replication/util.h
+inline auto DefaultRetryableErrors() {
+    using EStatus = NYdb::EStatus;
+    return TVector<EStatus>{
+        EStatus::ABORTED,
+        EStatus::UNAVAILABLE,
+        EStatus::OVERLOADED,
+        EStatus::TIMEOUT,
+        EStatus::BAD_SESSION,
+        EStatus::SESSION_EXPIRED,
+        EStatus::CANCELLED,
+        EStatus::UNDETERMINED,
+        EStatus::SESSION_BUSY,
+        EStatus::CLIENT_DISCOVERY_FAILED,
+        EStatus::CLIENT_LIMITS_REACHED,
+    };
+}
+
 inline bool IsRetryableError(const NYdb::TStatus status, const TVector<NYdb::EStatus>& retryable) {
     switch (status.GetStatus()) {
     case NYdb::EStatus::CLIENT_UNAUTHENTICATED:

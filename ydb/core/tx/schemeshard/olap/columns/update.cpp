@@ -108,13 +108,6 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         }
     }
 
-    if (columnSchema.HasDataAccessorConstructor()) {
-        if (!AccessorConstructor.DeserializeFromProto(columnSchema.GetDataAccessorConstructor())) {
-            errors.AddError("cannot parse accessor constructor from proto");
-            return false;
-        }
-    }
-
     if (columnSchema.HasTypeId()) {
         errors.AddError(TStringBuilder() << "Cannot set TypeId for column '" << Name << ", use Type");
         return false;
@@ -150,6 +143,21 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         errors.AddError(TStringBuilder() << "Column '" << Name << "': " << arrowTypeStatus.ToString());
         return false;
     }
+
+    if (columnSchema.HasDataAccessorConstructor()) {
+        if (!AccessorConstructor.DeserializeFromProto(columnSchema.GetDataAccessorConstructor())) {
+            errors.AddError("cannot parse accessor constructor from proto");
+            return false;
+        }
+    }
+    if (AccessorConstructor && AccessorConstructor.GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
+        if (!IsAllowedDictionaryType(Type.GetTypeId())) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "DICTIONARY encoding is not supported for type '" << TypeName << "' of column '" << Name << "'");
+            return false;
+        }
+    }
+
     if (columnSchema.HasDefaultValue()) {
         auto conclusion = DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue());
         if (conclusion.IsFail()) {
@@ -262,6 +270,14 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
             Serializer = *diffColumn.GetSerializer();
         } else {
             Serializer = NArrow::NSerialization::TSerializerContainer();
+        }
+    }
+
+    if (AccessorConstructor && AccessorConstructor.GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
+        if (!IsAllowedDictionaryType(Type.GetTypeId())) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "DICTIONARY encoding is not supported for type '" << TypeName << "' of column '" << Name << "'");
+            return false;
         }
     }
 

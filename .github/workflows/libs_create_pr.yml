@@ -16,7 +16,7 @@ jobs:
       run: echo "::set-output name=dtm::$(date +'%y%m%d-%H%M')"
     - name: Sync
       run: |
-        currsha=$(curl --retry 5 --retry-all-errors --retry-delay 10 -s -H "Accept: application/vnd.github.VERSION.sha" https://api.github.com/repos/$REPO/commits/rightlib)
+        currsha=$(curl --retry 5 --retry-all-errors --retry-delay 10 -s --fail -H "Accept: application/vnd.github.VERSION.sha" https://api.github.com/repos/$REPO/commits/rightlib)
         echo "Current rightlib sha: ${currsha}"
         lastsha=$(curl -s https://raw.githubusercontent.com/$REPO/main/ydb/ci/rightlib.txt)
         echo "Last imported rightlib sha: ${lastsha}"

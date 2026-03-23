@@ -109,6 +109,12 @@ class TPreparedBatchData {
 private:
     std::vector<TPreparedColumn> Columns;
     size_t RowsCount = 0;
+    // When set, AssembleToGeneralContainer will slice the assembled result to
+    // this many rows (from offset 0).  Used by the page-aware assembly path
+    // when a chunk straddles the page boundary: the chunk is included in full
+    // so that RowsCount >= pageRange.End, and then the result is sliced back
+    // to exactly pageRange.End rows.
+    std::optional<ui32> SliceRows;
 
 public:
     struct TAssembleOptions {
@@ -157,9 +163,13 @@ public:
         return RowsCount;
     }
 
-    TPreparedBatchData(std::vector<TPreparedColumn>&& columns, const size_t rowsCount)
+    TPreparedBatchData(std::vector<TPreparedColumn>&& columns, const size_t rowsCount,
+        const std::optional<ui32> sliceRows = std::nullopt)
         : Columns(std::move(columns))
-        , RowsCount(rowsCount) {
+        , RowsCount(rowsCount)
+        , SliceRows(sliceRows) {
+        AFL_VERIFY(!SliceRows || *SliceRows <= RowsCount)
+            ("slice_rows", *SliceRows)("rows_count", RowsCount);
     }
 
     TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
@@ -206,7 +216,10 @@ public:
                 TAssembleBlobInfo(RecordsCount, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()));
             return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
         } else {
-            AFL_VERIFY(RecordsCountByChunks == RecordsCount)("by_chunks", RecordsCountByChunks)("expected", RecordsCount);
+            // RecordsCountByChunks may exceed RecordsCount when a chunk straddles a
+            // page boundary (Option B fix): the straddling chunk is included in full
+            // and the assembled result is sliced back to RecordsCount rows afterwards.
+            AFL_VERIFY(RecordsCountByChunks >= RecordsCount)("by_chunks", RecordsCountByChunks)("expected", RecordsCount);
             AFL_VERIFY(DataLoader);
             return TPreparedColumn(std::move(BlobsInfo), DataLoader);
         }

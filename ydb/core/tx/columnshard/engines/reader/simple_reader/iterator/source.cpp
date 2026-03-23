@@ -169,8 +169,11 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
     ui32 nullChunks = 0;
 
     // In streaming mode, only fetch/default chunks with chunkStart < pageEndRow.
-    // PrepareForAssemblePageImpl assembles the prefix [0, pageEndRow) of the portion,
-    // so blobsData must contain entries for exactly those chunks.
+    // PrepareForAssemblePageImpl assembles all chunks whose start row is before
+    // pageEndRow, including any chunk that straddles pageEndRow (chunkStart < pageEndRow
+    // but chunkEnd > pageEndRow).  The straddling chunk is included in full and the
+    // assembled result is sliced back to pageEndRow rows afterwards.
+    // blobsData must therefore contain entries for all chunks with chunkStart < pageEndRow.
     std::optional<ui32> pageEndRow;
     if (IsStreamingMode() && StageResult && !StageResult->GetPagesToResultVerified().empty()) {
         // Use the front page from the deque - this is the current page to fetch
@@ -196,11 +199,10 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             const ui32 chunkStart = currentRowOffset;
             const ui32 chunkEnd = currentRowOffset + c->GetMeta().GetRecordsCount();
 
-            // In streaming mode, PrepareForAssemblePageImpl assembles all chunks with
-            // chunkStart < pageEndRow (i.e. the prefix [0, pageEndRow)).  We must
-            // provide a blobsData entry for every such chunk, so the condition here
-            // mirrors the one in PrepareForAssemblePageImpl: chunkStart < pageEndRow.
-            // Chunks starting at pageEndRow or later are not needed for this page.
+            // In streaming mode, fetch all chunks with chunkStart < pageEndRow.
+            // This includes any chunk that straddles pageEndRow (its start is still
+            // before pageEndRow).  Chunks starting at pageEndRow or later are not
+            // needed for this page and will be fetched for a future page.
             bool chunkNeeded = true;
             if (pageEndRow) {
                 chunkNeeded = (chunkStart < *pageEndRow);

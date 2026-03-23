@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "ddisk_config.h"
 
 #include <ydb/core/base/events.h>
 
@@ -542,6 +543,7 @@ struct TPersistentBufferFormat {
     };
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-        TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+        TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
 } // NKikimr::NDDisk

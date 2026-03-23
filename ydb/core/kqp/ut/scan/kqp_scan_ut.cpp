@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/base/hive.h>
+#include <ydb/core/base/tabletid.h>
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -1788,6 +1790,42 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             )
         )").GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        // Drain node 1 so the shard moves to node 2.
+        // gRPC/session is pinned to node 1, so executer runs on node 1
+        // while the datashard leader is on node 2.
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto firstNodeId = runtime->GetFirstNodeId();
+
+        {
+            auto sender = runtime->AllocateEdgeActor();
+            runtime->SendToPipe(MakeDefaultHiveID(), sender,
+                new TEvHive::TEvDrainNode(firstNodeId), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            runtime->GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));
+        }
+
+        // Wait until the shard leader is on node 2
+        {
+            TDescribeTableSettings describeSettings =
+                TDescribeTableSettings()
+                    .WithTableStatistics(true)
+                    .WithPartitionStatistics(true)
+                    .WithShardNodesInfo(true);
+
+            bool done = false;
+            for (int i = 0; i < 10; i++) {
+                auto res = session.DescribeTable("Root/EmptyTable", describeSettings).ExtractValueSync();
+                UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+                const auto& stats = res.GetTableDescription().GetPartitionStats();
+                if (stats.size() == 1 && stats[0].LeaderNodeId == firstNodeId + 1) {
+                    done = true;
+                    break;
+                }
+                Sleep(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT_C(done, "shard did not move to node 2");
+        }
 
         // Scan query: SELECT * FROM EmptyTable LIMIT 1
         {

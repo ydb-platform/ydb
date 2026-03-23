@@ -22,9 +22,14 @@ NYdb::NTable::TBulkUpsertSettings BulkUpsertSettings(const Ydb::Formats::CsvSett
     return upsertSettings;
 }
 
-Ydb::Formats::CsvSettings CsvSettingsWithHeader(const TString& delimiter = ",", const TString& nullValue = TString(), ui32 skipRows = 0) {
+Ydb::Formats::CsvSettings CsvSettings(
+    const TString& delimiter = ",",
+    const TString& nullValue = TString(),
+    ui32 skipRows = 0,
+    bool header = true)
+{
     Ydb::Formats::CsvSettings csvSettings;
-    csvSettings.set_header(true);
+    csvSettings.set_header(header);
     csvSettings.set_delimiter(delimiter);
     csvSettings.set_skip_rows(skipRows);
     if (!nullValue.empty()) {
@@ -58,7 +63,7 @@ NYdb::NTable::TBulkUpsertResult BulkUpsertCsvLimitRow(NYdb::NTable::TTableClient
         EDataFormat::CSV,
         csv,
         {},
-        BulkUpsertSettings(CsvSettingsWithHeader()))
+        BulkUpsertSettings(CsvSettings()))
         .GetValueSync();
     Cerr << upsert.GetIssues().ToString() << Endl;
     return upsert;
@@ -102,7 +107,7 @@ NYdb::NTable::TBulkUpsertResult BulkUpsertCsvUint8Row(NYdb::NTable::TTableClient
         EDataFormat::CSV,
         csv,
         {},
-        BulkUpsertSettings(CsvSettingsWithHeader()))
+        BulkUpsertSettings(CsvSettings()))
         .GetValueSync();
     Cerr << upsert.GetIssues().ToString() << Endl;
     return upsert;
@@ -234,7 +239,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             EDataFormat::CSV,
             csv,
             {},
-            BulkUpsertSettings(CsvSettingsWithHeader()))
+            BulkUpsertSettings(CsvSettings()))
             .GetValueSync();
         UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
 
@@ -269,7 +274,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             EDataFormat::CSV,
             csv,
             {},
-            BulkUpsertSettings(CsvSettingsWithHeader(",", {}, 2)))
+            BulkUpsertSettings(CsvSettings(",", {}, 2)))
             .GetValueSync();
         UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
 
@@ -301,7 +306,38 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             EDataFormat::CSV,
             csv,
             {},
-            BulkUpsertSettings(CsvSettingsWithHeader("@", {})))
+            BulkUpsertSettings(CsvSettings("@", {})))
+            .GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        NKqp::CompareYson(R"([
+            [[1u];[10]];
+            [[2u];[20]]
+        ])", StreamQueryToYson(client, R"(
+            SELECT Key, Value
+            FROM `/Root/Test`
+            ORDER BY Key;
+        )"));
+    }
+
+    Y_UNIT_TEST(Header) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+
+        CreateTestTable(client);
+
+        TStringBuilder csv;
+        csv << "1,10\n";
+        csv << "2,20\n";
+
+        auto upsert = client.BulkUpsert(
+            "/Root/Test",
+            EDataFormat::CSV,
+            csv,
+            {},
+            BulkUpsertSettings(CsvSettings(",", {}, 0, false)))
             .GetValueSync();
         UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
 
@@ -346,7 +382,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             EDataFormat::CSV,
             csv,
             {},
-            BulkUpsertSettings(CsvSettingsWithHeader(",", "Null")))
+            BulkUpsertSettings(CsvSettings(",", "Null")))
             .GetValueSync();
         UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
 
@@ -392,7 +428,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 EDataFormat::CSV,
                 csv,
                 {},
-                BulkUpsertSettings(CsvSettingsWithHeader()))
+                BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_C(!upsert.IsSuccess(), upsert.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "Missing key columns: Key");
@@ -409,7 +445,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 EDataFormat::CSV,
                 csv,
                 {},
-                BulkUpsertSettings(CsvSettingsWithHeader()))
+                BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_C(!upsert.IsSuccess(), upsert.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "Received NULL value for not null column: Key");
@@ -451,7 +487,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 EDataFormat::CSV,
                 csv,
                 {},
-                BulkUpsertSettings(CsvSettingsWithHeader()))
+                BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT(!upsert.IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "unknown table");
@@ -469,7 +505,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 EDataFormat::CSV,
                 csv,
                 {},
-                BulkUpsertSettings(CsvSettingsWithHeader()))
+                BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT(!upsert.IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "No column 'Timestamp' in source batch");
@@ -507,7 +543,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             EDataFormat::CSV,
             csv,
             {},
-            BulkUpsertSettings(CsvSettingsWithHeader()))
+            BulkUpsertSettings(CsvSettings()))
             .GetValueSync();
         UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
 
@@ -570,7 +606,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             EDataFormat::CSV,
             csv,
             {},
-            BulkUpsertSettings(CsvSettingsWithHeader()))
+            BulkUpsertSettings(CsvSettings()))
             .GetValueSync();
         UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
 
@@ -693,7 +729,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 EDataFormat::CSV,
                 MakeInvalidDataCsv("10000000000000000000000"),
                 {},
-                BulkUpsertSettings(CsvSettingsWithHeader()))
+                BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
         }
@@ -704,7 +740,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 EDataFormat::CSV,
                 MakeInvalidDataCsv("0", "0", "not-a-date"),
                 {},
-                BulkUpsertSettings(CsvSettingsWithHeader()))
+                BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
         }
@@ -715,7 +751,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 EDataFormat::CSV,
                 MakeInvalidDataCsv("0", "0", "1970-01-01", "not-a-datetime"),
                 {},
-                BulkUpsertSettings(CsvSettingsWithHeader()))
+                BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
         }
@@ -726,7 +762,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 EDataFormat::CSV,
                 MakeInvalidDataCsv("0", "0", "1970-01-01", "1970-01-01T00:00:00Z", "not-a-timestamp"),
                 {},
-                BulkUpsertSettings(CsvSettingsWithHeader()))
+                BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
         }
@@ -737,7 +773,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 EDataFormat::CSV,
                 MakeInvalidDataCsv("0", "0", "1970-01-01", "1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z", "", "{}", "{}", "]]]"),
                 {},
-                BulkUpsertSettings(CsvSettingsWithHeader()))
+                BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
         }
@@ -748,7 +784,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 EDataFormat::CSV,
                 MakeInvalidDataCsv("0", "0", "1970-01-01", "1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z", "", "{}", "{}", "{}", "[[[]]]"),
                 {},
-                BulkUpsertSettings(CsvSettingsWithHeader()))
+                BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
         }
@@ -779,7 +815,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             EDataFormat::CSV,
             TString("Key,Value\n"),
             {},
-            BulkUpsertSettings(CsvSettingsWithHeader()))
+            BulkUpsertSettings(CsvSettings()))
             .ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::BAD_REQUEST, status.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(status.GetIssues().ToString(), "Cannot read CSV", status.GetIssues().ToString());

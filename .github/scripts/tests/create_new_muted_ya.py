@@ -897,26 +897,26 @@ def mute_worker(args):
         logging.info(f"Query returned {len(all_data)} test records")
         
         # Use unified aggregation for different periods.
-        aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS for mute.
-    aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS for unmute.
-    aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS for delete.
+        aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS for mute
+        aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS for unmute
+        aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS for delete
     
-    logging.info(f"Aggregated data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
+        logging.info(f"Aggregated data: mute={len(aggregated_for_mute)}, unmute={len(aggregated_for_unmute)}, delete={len(aggregated_for_delete)}")
     
-    if args.mode == 'update_muted_ya':
-        output_path = args.output_folder
-        os.makedirs(output_path, exist_ok=True)
-        logging.info(f"Creating mute files in: {output_path}")
-        apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete)
+        if args.mode == 'update_muted_ya':
+            output_path = args.output_folder
+            os.makedirs(output_path, exist_ok=True)
+            logging.info(f"Creating mute files in: {output_path}")
+            apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, aggregated_for_unmute, aggregated_for_delete)
 
-    elif args.mode == 'create_issues':
-        file_path = args.file_path
-        logging.info(f"Creating issues from file: {file_path}")
+        elif args.mode == 'create_issues':
+            file_path = args.file_path
+            logging.info(f"Creating issues from file: {file_path}")
+            
+            # Reuse already aggregated data for issue creation.
+            create_mute_issues(aggregated_for_mute, file_path, close_issues=args.close_issues)
         
-        # Reuse already aggregated data for issue creation.
-        create_mute_issues(aggregated_for_mute, file_path, close_issues=args.close_issues)
-    
-    logging.info("Mute worker completed successfully")
+        logging.info("Mute worker completed successfully")
 
 
 if __name__ == "__main__":

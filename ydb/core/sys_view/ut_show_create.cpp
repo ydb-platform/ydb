@@ -79,8 +79,6 @@ public:
 
         DropTable(session, tableName);
 
-        Cerr << "ORIG: " << describeResultOrig << Endl;
-        Cerr << "NEW: " << describeResultNew << Endl;
         CompareDescriptions(describeResultOrig, describeResultNew, showCreateTableQuery);
     }
 

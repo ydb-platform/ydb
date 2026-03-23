@@ -8,7 +8,6 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/util/stlog.h>
 
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
@@ -36,13 +35,6 @@ namespace NKqp {
 using namespace NActors;
 
 namespace {
-#define STLOG_C(MESSAGE, ...) STLOG(PRI_CRIT, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
-#define STLOG_E(MESSAGE, ...) STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
-#define STLOG_W(MESSAGE, ...) STLOG(PRI_WARN, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
-#define STLOG_N(MESSAGE, ...) STLOG(PRI_NOTICE, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
-#define STLOG_I(MESSAGE, ...) STLOG(PRI_INFO, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
-#define STLOG_D(MESSAGE, ...) STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
-#define STLOG_T(MESSAGE, ...) STLOG(PRI_TRACE, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
 
 // Min interval between stats send from scan/compute actor to executor
 constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20);
@@ -219,10 +211,10 @@ private:
         if (queryManId) {
             CachedQueryManagerId = TActorId{};
         } else {
-            queryManId = Register(CreateKqpQueryManager(State_, CaFactory_));
+            queryManId = Register(CreateKqpQueryManager(Counters, State_, ResourceManager_, CaFactory_));
         }
 
-        auto request = TNodeRequest(txId, query, executerId, queryManId, now);
+        auto request = TNodeRequest(txId, executerId, query, queryManId, now);
         auto& runtimeSettings = msg.GetRuntimeSettings();
         if (runtimeSettings.GetTimeoutMs() > 0) {
             // compute actor should not arm timer since in case of timeout it will receive TEvAbortExecution from Executer
@@ -252,12 +244,12 @@ private:
                 (tasks_count, msg.GetTasks().size()),
                 (executer, executerId),
                 (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
-/*
+
         if (requestQueryManId) {
             Send(ev->Forward(requestQueryManId));
             co_return;
         }
-*/
+
         NRm::EKqpMemoryPool memoryPool;
         if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN) {
             memoryPool = NRm::EKqpMemoryPool::ScanQuery;
@@ -269,8 +261,6 @@ private:
 
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
-
-        TShardsScanningPolicy scanPolicy(Config.GetShardsScanningPolicy());
 
         NComputeActor::TComputeStagesWithScan computesByStage;
 
@@ -286,7 +276,7 @@ private:
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
             txId, TInstant::Now(), ResourceManager_->GetCounters(),
             poolId, msg.GetMemoryPoolPercent(),
-            msg.GetDatabase(), Config.GetVerboseMemoryLimitException());
+            msg.GetDatabase(), CaFactory_->GetVerboseMemoryLimitException());
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
@@ -366,7 +356,7 @@ private:
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
-                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId), cpuLimits));
+                    CaFactory_->GetShardsScanningPolicy(), Counters, NWilson::TTraceId(ev->TraceId), cpuLimits));
             }
         }
 
@@ -446,6 +436,7 @@ private:
     void HandleShuttingDown(TEvents::TEvWakeup::TPtr& ev) {
         HandleWork(ev);
     }
+
     void HandleShuttingDown(TEvents::TEvPoison::TPtr&) {
         PassAway();
     }
@@ -491,12 +482,12 @@ private:
             FORCE_VALUE(MinMemFreeSize);
 #undef FORCE_VALUE
 
-            STLOG_I("Updated table service config",
+            CaFactory_->ApplyConfig(Config);
+
+            STLOG_I("Updated table service RM config",
                 (node_id, SelfId().NodeId()),
                 (config, Config.DebugString()));
         }
-
-        CaFactory_->ApplyConfig(event.GetConfig().GetTableServiceConfig().GetResourceManager());
 
         if (event.GetConfig().GetTableServiceConfig().HasIteratorReadsRetrySettings()) {
             SetIteratorReadsRetrySettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadsRetrySettings());
@@ -653,7 +644,7 @@ private:
     }
 
 private:
-    void ReplyError(ui64 txId, TActorId executer, const NKikimrKqp::TEvStartKqpTasksRequest& request,
+    void ReplyError(ui64 txId, TActorId executerId, const NKikimrKqp::TEvStartKqpTasksRequest& request,
         NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
     {
         auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
@@ -665,7 +656,7 @@ private:
             resp->SetMessage(message);
             resp->SetRequestId(requestId);
         }
-        Send(executer, ev.Release());
+        Send(executerId, ev.Release());
     }
 
 private:

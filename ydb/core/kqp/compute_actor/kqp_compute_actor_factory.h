@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_compute_actor.h"
+
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -133,6 +135,8 @@ public:
     virtual TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) = 0;
 
     virtual void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) = 0;
+    virtual bool GetVerboseMemoryLimitException() = 0;
+    virtual TShardsScanningPolicy GetShardsScanningPolicy() = 0;
 };
 
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,

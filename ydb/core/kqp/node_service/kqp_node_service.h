@@ -16,12 +16,22 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
+#include <ydb/core/util/stlog.h>
+
 namespace NYql::NDq {
     struct TComputeRuntimeSettings;
     struct TComputeMemoryLimits;
 } // namespace NYql::NDq
 
 namespace NKikimr::NKqp {
+
+#define STLOG_C(MESSAGE, ...) STLOG(PRI_CRIT, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_E(MESSAGE, ...) STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_W(MESSAGE, ...) STLOG(PRI_WARN, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_N(MESSAGE, ...) STLOG(PRI_NOTICE, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_I(MESSAGE, ...) STLOG(PRI_INFO, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_D(MESSAGE, ...) STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_T(MESSAGE, ...) STLOG(PRI_TRACE, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
 
 struct TKqpNodeEvents {
     enum EKqpNodeEvents {

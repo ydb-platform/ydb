@@ -9,9 +9,11 @@ namespace NKikimr::NKqp {
 
 class TKqpQueryManager : public NActors::TActor<TKqpQueryManager> {
 public:
-    TKqpQueryManager(std::shared_ptr<TNodeState>& state, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory)
+    TKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state, std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory)
         : TActor(&TThis::StateFunc)
+        , Counters_(counters)
         , State_(state)
+        , ResourceManager_(resourceManager)
         , CaFactory_(caFactory)
     {
     }
@@ -31,8 +33,9 @@ public:
 
         auto& msg = ev->Get()->Record;
         ui64 txId = msg.GetTxId();
+
         const auto executerId = ev->Sender;
-/*
+
         NRm::EKqpMemoryPool memoryPool;
         if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN) {
             memoryPool = NRm::EKqpMemoryPool::ScanQuery;
@@ -41,19 +44,18 @@ public:
         } else {
             memoryPool = NRm::EKqpMemoryPool::Unspecified;
         }
-*/
+
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
-/*
+        TMaybe<ui64> lockTxId = msg.HasLockTxId()
+            ? TMaybe<ui64>(msg.GetLockTxId())
+            : Nothing();
+        ui32 lockNodeId = msg.GetLockNodeId();
+        TMaybe<NKikimrDataEvents::ELockMode> lockMode = msg.HasLockMode()
+            ? TMaybe<NKikimrDataEvents::ELockMode>(msg.GetLockMode())
+            : Nothing();
+
         auto& runtimeSettings = msg.GetRuntimeSettings();
-
-        NYql::NDq::TComputeRuntimeSettings runtimeSettingsBase;
-        runtimeSettingsBase.ReportStatsSettings = NYql::NDq::TReportStatsSettings{
-            .MinInterval = runtimeSettings.HasMinStatsSendIntervalMs() ? TDuration::MilliSeconds(runtimeSettings.GetMinStatsSendIntervalMs()) : MinStatInterval,
-            .MaxInterval = runtimeSettings.HasMaxStatsSendIntervalMs() ? TDuration::MilliSeconds(runtimeSettings.GetMaxStatsSendIntervalMs()) : MaxStatInterval,
-        };
-
-        TShardsScanningPolicy scanPolicy(Config.GetShardsScanningPolicy());
 
         NComputeActor::TComputeStagesWithScan computesByStage;
 
@@ -66,10 +68,14 @@ public:
             rlPath.ConstructInPlace(runtimeSettings.GetRlPath());
         }
 
+        const auto& poolId = msg.GetPoolId().empty() ? NResourcePool::DEFAULT_POOL_ID : msg.GetPoolId();
+
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
             txId, TInstant::Now(), ResourceManager_->GetCounters(),
             poolId, msg.GetMemoryPoolPercent(),
-            msg.GetDatabase(), Config.GetVerboseMemoryLimitException());
+            msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
+
+        auto query = State_->GetSchedulerQuery(txId, executerId);
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
@@ -83,7 +89,7 @@ public:
                 .LockMode = lockMode,
                 .Task = &dqTask,
                 .TxInfo = txInfo,
-                .RuntimeSettings = runtimeSettingsBase,
+                .ReportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings),
                 .TraceId = NWilson::TTraceId(ev->TraceId),
                 .Arena = ev->Get()->Arena,
                 .SerializedGUCSettings = serializedGUCSettings,
@@ -108,12 +114,34 @@ public:
 
             auto result = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
 
-            // NOTE: keep in mind that a task can start, execute and finish before we reach the end of this method.
-
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
-                ReplyError(txId, executerId, msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
-                TerminateTx(txId, executerId, rmResult->GetFailReason());
-                co_return;
+
+                // ReplyError(txId, executerId, msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
+                auto evResp = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
+                evResp->Record.SetTxId(txId);
+                for (auto& task : msg.GetTasks()) {
+                    auto* resp = evResp->Record.AddNotStartedTasks();
+                    resp->SetTaskId(task.GetId());
+                    resp->SetReason(rmResult->GetStatus());
+                    resp->SetMessage(rmResult->GetFailReason());
+                    resp->SetRequestId(ev->Cookie);
+                }
+                Send(executerId, evResp.Release());
+
+                // TerminateTx(txId, executerId, rmResult->GetFailReason());
+                State_->MarkRequestAsCancelled(txId, executerId);
+
+                if (auto tasksToAbort = State_->GetTasksByTxId(txId, executerId); !tasksToAbort.empty()) {
+                    STLOG_E("Node service cancelled the task, because it " << rmResult->GetFailReason(),
+                        (node_id, SelfId().NodeId()),
+                        (tx_id, txId));
+                    for (const auto& [taskId, computeActorId]: tasksToAbort) {
+                        auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED, rmResult->GetFailReason());
+                        Send(computeActorId, abortEv.release());
+                    }
+                }
+
+                return;
             }
 
             TActorId* actorId = std::get_if<TActorId>(&result);
@@ -148,20 +176,23 @@ public:
         for (auto&& i : computesByStage) {
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
-                    m.GetMeta(), runtimeSettingsBase, msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
-                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId), cpuLimits));
+                    m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
+                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(ev->TraceId), cpuLimits));
             }
         }
-*/
+
         Send(executerId, reply.Release(), IEventHandle::FlagTrackDelivery, txId);
     }
 private:
+    TIntrusivePtr<TKqpCounters> Counters_;
     std::shared_ptr<TNodeState> State_;
+    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
 };
 
-NActors::IActor* CreateKqpQueryManager(std::shared_ptr<TNodeState>& state, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory) {
-    return new TKqpQueryManager(state, caFactory);
+NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
+    std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory) {
+    return new TKqpQueryManager(counters, state, resourceManager, caFactory);
 }
 
 } // namespace NKikimr::NKqp

@@ -47,6 +47,17 @@ std::vector<TNodeRequest::TExpirationInfo> TNodeState::ClearExpiredRequests() {
     return requests;
 }
 
+NScheduler::NHdrf::NDynamic::TQueryPtr TNodeState::GetSchedulerQuery(ui64 txId, TActorId executerId) {
+    const auto& bucket = GetBucketByTxId(txId);
+    TReadGuard guard(bucket.Mutex);
+
+    if (auto requestIt = bucket.Requests.find(executerId); requestIt != bucket.Requests.end()) {
+        return requestIt->second.Query;
+    }
+
+    return nullptr;
+}
+
 bool TNodeState::OnTaskStarted(ui64 txId, TActorId executerId, ui64 taskId, TActorId computeActorId) {
     auto& bucket = GetBucketByTxId(txId);
 

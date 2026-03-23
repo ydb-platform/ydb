@@ -24,10 +24,10 @@ struct TNodeRequest : TMoveOnly {
     // NOTE: in case there are multiple executers for a single txId - separate them by executerId.
     // TODO: is it even possible to have multiple executers to send the same TxId?
 
-    explicit TNodeRequest(ui64 txId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TActorId executerId, TActorId queryManId, TInstant startTime)
+    explicit TNodeRequest(ui64 txId, TActorId executerId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TActorId queryManId, TInstant startTime)
         : TxId(txId)
-        , Query(query)
         , ExecuterId(executerId)
+        , Query(query)
         , QueryManId(queryManId)
         , StartTime(startTime)
     {
@@ -38,11 +38,11 @@ struct TNodeRequest : TMoveOnly {
     }
 
     const ui64 TxId = 0;
-    std::unordered_map<ui64 /* taskId */, std::optional<TActorId>> Tasks;
-    NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     const TActorId ExecuterId;
+    NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     const TActorId QueryManId;
     const TInstant StartTime;
+    std::unordered_map<ui64 /* taskId */, std::optional<TActorId>> Tasks;
 
     TInstant Deadline;
     bool ExecutionCancelled = false;
@@ -54,6 +54,7 @@ class TNodeState {
 public:
     bool AddRequest(TNodeRequest&& request, bool& cancelled, TActorId& requestQueryManId);
     std::vector<TNodeRequest::TExpirationInfo> ClearExpiredRequests();
+    NScheduler::NHdrf::NDynamic::TQueryPtr GetSchedulerQuery(ui64 txId, TActorId executerId);
 
     bool OnTaskStarted(ui64 txId, TActorId executerId, ui64 taskId, TActorId computeActorId);
     void OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, bool success);

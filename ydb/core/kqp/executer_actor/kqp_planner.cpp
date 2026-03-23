@@ -109,7 +109,6 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , BlockTrackingMode(args.BlockTrackingMode)
     , ArrayBufferMinFillPercentage(args.ArrayBufferMinFillPercentage)
     , BufferPageAllocSize(args.BufferPageAllocSize)
-    , VerboseMemoryLimitException(args.VerboseMemoryLimitException)
     , Query(args.Query)
     , CheckpointCoordinatorId(args.CheckpointCoordinator)
     , EnableWatermarks(args.EnableWatermarks)
@@ -494,7 +493,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
         TxInfo = MakeIntrusive<NRm::TTxState>(
             TxId, TInstant::Now(), ResourceManager_->GetCounters(),
-            UserRequestContext->PoolId, memoryPoolPercent, Database, VerboseMemoryLimitException);
+            UserRequestContext->PoolId, memoryPoolPercent, Database, CaFactory_->GetVerboseMemoryLimitException());
     }
 
     if (ArrayBufferMinFillPercentage) {

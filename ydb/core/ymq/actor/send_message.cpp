@@ -35,7 +35,6 @@ public:
     TSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, isBatch ? EAction::SendMessageBatch : EAction::SendMessage, std::move(cb))
         , IsBatch_(isBatch)
-        , EnableSQSMigrationCompatibility_(AppData()->FeatureFlags.GetEnableSQSMigrationCompatibility())
     {
     }
 
@@ -387,7 +386,6 @@ private:
     std::vector<size_t> RequestToReplyIndexMapping_;
 
     const bool IsBatch_;
-    const bool EnableSQSMigrationCompatibility_;
 };
 
 IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

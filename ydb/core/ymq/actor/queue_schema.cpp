@@ -65,7 +65,6 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
     , MaskedToken_(maskedToken)
     , AuthType_(authType)
     , SourceAddress_(sourceAddress)
-    , EnableSQSMigrationTopicCreation_(AppData()->FeatureFlags.GetEnableSQSMigrationTopicCreation())
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 

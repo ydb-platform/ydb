@@ -33,9 +33,34 @@
 
 namespace NKikimr::NSQS {
 
+inline const TFeatureFlags& GetFeatureFlags() {
+    static TFeatureFlags DefaultFeatureFlags;
+    return TlsActivationContext ?
+           AppData()->FeatureFlags
+         : DefaultFeatureFlags;
+}
+
+template <typename TDerived>
+class TActorWithFeatureFlags
+    : public TActorBootstrapped<TDerived>
+{
+public:
+    TActorWithFeatureFlags()
+        : EnableSQSMigrationTopicCreation_(GetFeatureFlags().GetEnableSQSMigrationTopicCreation())
+        , EnableSQSMigrationCompatibility_(GetFeatureFlags().GetEnableSQSMigrationCompatibility())
+        , EnableSQSMigrationFinished_(GetFeatureFlags().GetEnableSQSMigrationFinished())
+    {
+    }
+
+protected:
+    const bool EnableSQSMigrationTopicCreation_;
+    const bool EnableSQSMigrationCompatibility_;
+    const bool EnableSQSMigrationFinished_;
+};
+
 template <typename TDerived>
 class TActionActor
-    : public TActorBootstrapped<TDerived>
+    : public TActorWithFeatureFlags<TDerived>
 {
 public:
     TActionActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, EAction action, THolder<IReplyCallback> cb)

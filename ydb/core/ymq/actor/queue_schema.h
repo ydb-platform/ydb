@@ -1,11 +1,13 @@
 #pragma once
-#include <ydb/core/ymq/actor/cfg/defs.h>
 
+#include "action.h"
 #include "schema.h"
+
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/public/lib/value/value.h>
+#include <ydb/core/ymq/actor/cfg/defs.h>
 #include <ydb/core/ymq/base/queue_attributes.h>
 
 #include <ydb/core/ymq/actor/cloud_events/cloud_events.h>
@@ -18,7 +20,7 @@
 namespace NKikimr::NSQS {
 
 class TCreateQueueSchemaActorV2
-    : public TActorBootstrapped<TCreateQueueSchemaActorV2>
+    : public TActorWithFeatureFlags<TCreateQueueSchemaActorV2>
 {
 public:
      TCreateQueueSchemaActorV2(const TQueuePath& path,
@@ -143,7 +145,6 @@ private:
     const TString MaskedToken_;
     const TString AuthType_;
     const TString SourceAddress_;
-    const bool EnableSQSMigrationTopicCreation_;
 
     ui64 RequiredShardsCount_ = 0;
     ui64 CreatedShardsCount_ = 0;

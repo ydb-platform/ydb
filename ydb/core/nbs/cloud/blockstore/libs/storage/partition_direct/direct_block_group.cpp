@@ -105,10 +105,6 @@ ui64 TDirectBlockGroup::GenerateLsn()
 
 void TDirectBlockGroup::EstablishConnections()
 {
-    if (Initialized) {
-        return;
-    }
-
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this()]   //
         ()
@@ -618,7 +614,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
         [](const TDDiskConnection& c)
         { return c.HostConnection.IsConnected(); });
 
-    if (!Initialized && allDDiskConnected && allPBufferConnected) {
+    if (allDDiskConnected && allPBufferConnected) {
         Initialized = true;
         ConnectionEstablishedPromise.SetValue();
     }

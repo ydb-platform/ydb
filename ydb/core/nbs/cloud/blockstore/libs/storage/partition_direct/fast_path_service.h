@@ -30,7 +30,9 @@ public:
         NActors::TActorSystem* actorSystem,
         ui64 tabletId,
         ui32 generation,
-        TVector<std::shared_ptr<TRegion>> regions,
+        ui64 blockCount,
+        ui64 blockSize,
+        TVector<IDirectBlockGroupPtr> directBlockGroups,
         const NProto::TStorageServiceConfig& storageConfig,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
 

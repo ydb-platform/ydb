@@ -35,6 +35,27 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
     return result;
 }
 
+TVector<std::shared_ptr<TRegion>> CreateRegions(
+    ui64 blockCount,
+    ui64 blockSize,
+    TVector<IDirectBlockGroupPtr> directBlockGroups,
+    const NProto::TStorageServiceConfig& storageConfig)
+{
+    const ui64 regionsCount =
+        AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
+    TVector<std::shared_ptr<TRegion>> regions(regionsCount);
+    for (size_t i = 0; i < regionsCount; i++) {
+        regions[i] = std::make_shared<TRegion>(
+            TActorContext::ActorSystem(),
+            i,
+            directBlockGroups,
+            storageConfig.GetSyncRequestsBatchSize(),
+            TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()));
+    }
+
+    return regions;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -43,11 +64,17 @@ TFastPathService::TFastPathService(
     NActors::TActorSystem* actorSystem,
     ui64 tabletId,
     ui32 generation,
-    TVector<std::shared_ptr<NStorage::NPartitionDirect::TRegion>> regions,
+    ui64 blockCount,
+    ui64 blockSize,
+    TVector<IDirectBlockGroupPtr> directBlockGroups,
     const NProto::TStorageServiceConfig& storageConfig,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
-    , Regions(std::move(regions))
+    , Regions(CreateRegions(
+          blockCount,
+          blockSize,
+          std::move(directBlockGroups),
+          storageConfig))
     , TraceSamplePeriod(
           TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
     , Counters(MakeCountersChain(

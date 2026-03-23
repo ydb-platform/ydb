@@ -14,10 +14,6 @@ TRegion::TRegion(
     TDuration traceSamplePeriod)
     : ActorSystem(actorSystem)
 {
-    for (const auto& directBlockGroup: directBlockGroups) {
-        directBlockGroup->EstablishConnections();
-    }
-
     for (size_t i = 0; i < directBlockGroups.size(); i++) {
         const ui32 vChunkIndex =
             (regionIndex * VChunksPerRegionCount) + static_cast<ui32>(i);

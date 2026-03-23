@@ -113,9 +113,6 @@ private:
         const TPartitionIds& ids);
 
     TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(TPartitionIds ids);
-
-    TVector<std::shared_ptr<TRegion>> CreateRegions(
-        TVector<IDirectBlockGroupPtr> directBlockGroups);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -600,23 +600,11 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     }
 
     // tsan sanitizer error
-    // Y_UNIT_TEST_F(RestartSessionIfQueryStopped, TMockTopicFixture) {
-    //     Init("fake_topic", 1000);
-    //     auto source = BuildSource();
+    #if 0
+    Y_UNIT_TEST_F(RestartSessionIfQueryStopped, TMockTopicFixture) {
+         Init("fake_topic", 1000);
+         auto source = BuildSource();
 
-<<<<<<< HEAD
-    //     StartSession(ReadActorId1, source);
-    //     std::vector<TString> data = { Json1, Json2, Json3 };
-    //     PQWrite(data, 1);
-    //     ExpectNewDataArrived({ReadActorId1});
-    //     ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(2), JsonMessage(3) });
-
-    //     StartSession(ReadActorId2, source, 1);
-    //     std::vector<TString> data2 = { Json1 };
-    //     PQWrite(data2, 1);
-    //     ExpectNewDataArrived({ReadActorId2});
-    //     ExpectMessageBatch(ReadActorId2, { JsonMessage(1)});
-=======
         StartSession(ReadActorId1, source);
         std::vector<TString> data = { Json1, Json2, Json3 };
         PQWrite(data, 1);
@@ -626,26 +614,19 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         std::vector<TString> data2 = { Json1 };
         PQWrite(data2, 1);
         ExpectMessageBatch(ReadActorId2, { JsonMessage(1)});
->>>>>>> e44a95b53bb (YQ-4735  Tests refactoring to unmute test (#28454))
 
-    //     StopSession(ReadActorId2, source);
-    //     Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
-    //     MockReadSession = MockPqGateway->ExtractReadSession(TopicPath);
-    //     MockReadSession->AddStartSessionEvent();
+        StopSession(ReadActorId2, source);
+        Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
+        MockReadSession = MockPqGateway->ExtractReadSession(TopicPath);
+        MockReadSession->AddStartSessionEvent();
 
-<<<<<<< HEAD
-    //     std::vector<TString> data3 = { Json4 };
-    //     PQWrite(data3, 4);
-    //     ExpectNewDataArrived({ReadActorId1});
-    //     ExpectMessageBatch(ReadActorId1, { JsonMessage(4) });
-=======
         std::vector<TString> data3 = { Json4 };
         PQWrite(data3, 4);
         ExpectMessageBatch(ReadActorId1, { JsonMessage(4) });
->>>>>>> e44a95b53bb (YQ-4735  Tests refactoring to unmute test (#28454))
 
-    //     PassAway();
-    // }
+        PassAway();
+    }
+    #endif
 
     Y_UNIT_TEST_F(WrongJson, TRealTopicFixture) {
         const TString topicName = "wrong_json";

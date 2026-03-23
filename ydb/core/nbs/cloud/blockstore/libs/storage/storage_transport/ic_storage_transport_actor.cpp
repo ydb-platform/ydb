@@ -340,11 +340,13 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         "Sent TEvSyncWithPBuffer with requestId# %lu",
         requestId);
 
-    const auto& ddiskId = msg->DDiskId;
     auto request = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(
         msg->Credentials,
-        std::make_tuple(ddiskId.NodeId, ddiskId.PDiskId, ddiskId.DDiskSlotId),
-        msg->DDiskInstanceGuid);
+        std::make_tuple(
+            msg->PBufferId.NodeId,
+            msg->PBufferId.PDiskId,
+            msg->PBufferId.DDiskSlotId),
+        msg->PBufferCredentials.DDiskInstanceGuid);
 
     for (size_t i = 0; i < msg->Selectors.size(); ++i) {
         request->AddSegment(

@@ -16,7 +16,7 @@
 #include <util/generic/serialized_enum.h>
 
 namespace NKikimr::NKqp {
-static void ExecSchemeQuery(TKikimrRunner& kikimr, bool useQueryService, const TString& query) {
+static void ExecQuery(TKikimrRunner& kikimr, bool useQueryService, const TString& query) {
     if (useQueryService) {
         auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
         auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MINMAX,
+        ExecQuery(kikimr, UseQueryService, R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MINMAX,
             FEATURES=`{"column_name" : "level"}`);
         )");
     }
@@ -75,17 +75,17 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`))");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_level, TYPE=MINMAX,
                     FEATURES=`{"column_name" : "level"}`);
                 )");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=MINMAX,
                     FEATURES=`{"column_name" : "resource_id"}`);
                 )");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
         csController->WaitActualization(TDuration::Seconds(10));
         {
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableWithLocalIndexes`
             (
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             ALTER TABLE `/Root/olapTableWithLocalIndexes`
             ADD INDEX idx_bloom LOCAL USING bloom_filter
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 WITH (false_positive_probability = 0.01);
         )");
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             ALTER TABLE `/Root/olapTableWithLocalIndexes`
             ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
@@ -150,12 +150,12 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
         )");
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             ALTER TABLE `/Root/olapTableWithLocalIndexes` DROP INDEX idx_bloom;
         )");
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             ALTER TABLE `/Root/olapTableWithLocalIndexes` DROP INDEX idx_ngram;
         )");
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             ALTER TABLE `/Root/olapTable`
             ADD INDEX idx_bloom LOCAL USING bloom_filter
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 WITH (false_positive_probability = 0.01);
         )");
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             ALTER TABLE `/Root/olapTable`
             ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
@@ -186,8 +186,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
         )");
 
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_bloom;");
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_ngram;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_bloom;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_ngram;");
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect, EUseQueryService) {
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableCreateBloom`
             (
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateBloom` DROP INDEX idx_bloom;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateBloom` DROP INDEX idx_bloom;");
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect, EUseQueryService) {
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableCreateNgram`
             (
@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;");
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomNgramIndexDefaultCaseSensitivePersisted, EUseQueryService) {
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableNgramDefault`
             (
@@ -285,7 +285,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableBloomCaseInsensitive`
             (
@@ -312,16 +312,16 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
         TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
         UNIT_ASSERT_C(!createText.Contains("case_sensitive"),
             "SHOW CREATE should not contain case_sensitive for bloom filter, got: " << createText);
-    }
+}
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
+Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableRenameBloom`
             (
@@ -336,7 +336,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             "ALTER TABLE `/Root/olapTableRenameBloom` RENAME INDEX idx_bloom TO idx_bloom_renamed;");
 
         {
@@ -352,7 +352,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
             UNIT_ASSERT_C(createText.Contains("idx_bloom_renamed"), "SHOW CREATE should contain renamed index idx_bloom_renamed, got: " << createText);
         }
 
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBloom` DROP INDEX idx_bloom_renamed;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBloom` DROP INDEX idx_bloom_renamed;");
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomNgramIndex, EUseQueryService) {
@@ -362,7 +362,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableRenameNgram`
             (
@@ -377,7 +377,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             "ALTER TABLE `/Root/olapTableRenameNgram` RENAME INDEX idx_ngram TO idx_ngram_renamed;");
 
         {
@@ -393,7 +393,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
             UNIT_ASSERT_C(createText.Contains("idx_ngram_renamed"), "SHOW CREATE should contain renamed index idx_ngram_renamed, got: " << createText);
         }
 
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameNgram` DROP INDEX idx_ngram_renamed;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameNgram` DROP INDEX idx_ngram_renamed;");
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomAndBloomNgramIndexes, EUseQueryService) {
@@ -403,7 +403,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableRenameBoth`
             (
@@ -418,9 +418,9 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             "ALTER TABLE `/Root/olapTableRenameBoth` RENAME INDEX idx_bloom TO bloom_renamed;");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             "ALTER TABLE `/Root/olapTableRenameBoth` RENAME INDEX idx_ngram TO ngram_renamed;");
 
         {
@@ -437,8 +437,8 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
             UNIT_ASSERT_C(createText.Contains("ngram_renamed"), "SHOW CREATE should contain ngram_renamed, got: " << createText);
         }
 
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBoth` DROP INDEX bloom_renamed;");
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBoth` DROP INDEX ngram_renamed;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBoth` DROP INDEX bloom_renamed;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableRenameBoth` DROP INDEX ngram_renamed;");
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CheckSchemaChangesDuringTheTime, EUseQueryService) {
@@ -448,7 +448,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableSchemaChanges`
             (
@@ -465,20 +465,20 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
         // Add column without index
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` ADD COLUMN extra Utf8;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` ADD COLUMN extra Utf8;");
 
         // Add column with index
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` ADD COLUMN filtered_col Utf8;");
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` ADD COLUMN filtered_col Utf8;");
+        ExecQuery(kikimr, UseQueryService, R"(
             ALTER TABLE `/Root/olapTableSchemaChanges` ADD INDEX idx_extra_bloom LOCAL USING bloom_filter
                 ON (filtered_col) WITH (false_positive_probability = 0.01);)");
 
         // Drop column without index
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` DROP COLUMN message;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` DROP COLUMN message;");
 
         // Drop index then drop column
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` DROP INDEX idx_extra_bloom;");
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` DROP COLUMN filtered_col;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` DROP INDEX idx_extra_bloom;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableSchemaChanges` DROP COLUMN filtered_col;");
 
         // Verify table is still usable and indexed columns remain
         {
@@ -497,7 +497,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableIndexConflicts`
             (
@@ -566,7 +566,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableNgramDeprecatedSyntax`
             (
@@ -581,7 +581,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
-        ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableNgramDeprecatedSyntax` DROP INDEX idx_ngram;");
+        ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableNgramDeprecatedSyntax` DROP INDEX idx_ngram;");
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalIndexCannotBeUsedInTableView, EUseQueryService) {
@@ -591,7 +591,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
-        ExecSchemeQuery(kikimr, UseQueryService, R"(
+        ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableViewLocalIndex`
             (
@@ -619,11 +619,11 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
 
         TLocalHelper(kikimr).CreateTestOlapTable();
 
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
                     FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "false_positive_probability" : 0.01}`);
                 )");
-        ExecSchemeQuery(kikimr, UseQueryService, TStringBuilder() << R"(
+        ExecQuery(kikimr, UseQueryService, TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapStore/olapTableTest`
             (
@@ -671,17 +671,17 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
         }
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`))");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01}`);
                 )");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.05}`);
                 )");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
         csController->WaitActualization(TDuration::Seconds(10));
         {
@@ -728,23 +728,23 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
             .SetPriority(NActors::NLog::PRI_DEBUG)
             .Initialize();
 
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_ts, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ["timestamp"]}`);
                 )");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_res_id, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['resource_id']}`);
                 )");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_uid, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['uid']}`);
                 )");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_level, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['level']}`);
                 )");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_message, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['message']}`);
                 )");
@@ -854,7 +854,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
         AFL_VERIFY(initCount == 3)("started_value", initCount);
 
         for (ui32 i = 0; i < 10; ++i) {
-            ExecSchemeQuery(kikimr, UseQueryService,
+            ExecQuery(kikimr, UseQueryService,
                 TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
         }
         const ui64 updatesCount = csController->GetActualizationRefreshSchemeCount().Val();
@@ -1454,7 +1454,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.05}`);
                 )");
@@ -1491,11 +1491,11 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, E
             }
         }
 
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01, "bits_storage_type": "BITSET"}`);
                 )");
-        ExecSchemeQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=index_uid);");
     }
 }

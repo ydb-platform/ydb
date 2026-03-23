@@ -77,6 +77,7 @@ struct TIndexDescription {
         double FalsePositiveProbability = 0.1;
         bool CaseSensitive = true;
         // DEPRECATED: old syntax
+        std::optional<ui32> HashesCount;
         std::optional<ui32> FilterSizeBytes;
         std::optional<ui32> RecordsCount;
     };

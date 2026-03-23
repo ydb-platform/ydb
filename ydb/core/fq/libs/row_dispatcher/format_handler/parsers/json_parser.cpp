@@ -54,15 +54,15 @@ struct TJsonParserBuffer {
 
         NumberValues++;
         MessageOffsets.emplace_back(Values.size());
-        Values << message.GetData();
+        Values += message.GetData();
         Offsets.emplace_back(offset);
     }
 
     std::pair<const char*, size_t> Finish() {
         Y_ENSURE(!Finished, "Cannot finish buffer twice");
         Finished = true;
-        Values << TString(simdjson::SIMDJSON_PADDING, ' ');
-        return {Values.data(), Values.size()};
+        Values.resize(Values.size() + simdjson::SIMDJSON_PADDING, ' ');
+        return {Values.data(), Values.size() - simdjson::SIMDJSON_PADDING};
     }
 
     void Clear() {
@@ -76,7 +76,7 @@ struct TJsonParserBuffer {
     }
 
 private:
-    TStringBuilder Values = {};
+    TString Values = {};
     const TString LogPrefix = "TJsonParser: Buffer: ";
 };
 
@@ -117,6 +117,10 @@ public:
         if (Y_UNLIKELY(!SkipErrors && Status.IsFail())) {
             return false;
         }
+        if (ParsedRowsCount > 0 && ParsedRows[ParsedRowsCount - 1] == rowId) {
+            // duplicated key, ignore
+            return true;
+        }
         ParsedRows[ParsedRowsCount++] = rowId;
         bool success = false;
         if (DataSlot != NYql::NUdf::EDataSlot::Json) {
@@ -148,6 +152,14 @@ public:
     void ClearParsedRows() {
         ParsedRowsCount = 0;
         Status = TStatus::Success();
+    }
+
+    bool ClearParsedRow(ui16 rowId) {
+        if (ParsedRowsCount > 0 && ParsedRows[ParsedRowsCount - 1] == rowId) {
+            --ParsedRowsCount;
+            return true;
+        }
+        return false;
     }
 
 private:
@@ -566,8 +578,10 @@ private:
             const size_t columnId = it->second;
             auto& column = Columns[columnId];
             const ui64 offset = Buffer.Offsets[inputRowId];
-            bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), ParsedValues[columnId][state.OutputRowId]);
-            if (NonOptionalColumnsCount && !column.GetIsOptional()) {
+            auto& value = ParsedValues[columnId][state.OutputRowId];
+            bool valueWasSet = bool(value);
+            bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), value);
+            if (NonOptionalColumnsCount && !column.GetIsOptional() && !valueWasSet) {
                 ++parsedNonOptional;
             }
             if (!success) {
@@ -586,6 +600,7 @@ private:
             state.Status = status;
             return EParsingStatus::Finish;
         }
+        LOG_ROW_DISPATCHER_DEBUG("Unbatched parser, skipped " << state.ErrorsCount << ", outputRowId " << state.OutputRowId << ", recovering from " << status.GetErrorMessage());
         ClearRowBuffer(state.OutputRowId);
         if (TryParseOneJson(state)) {
             state.OutputRowId++;
@@ -651,8 +666,10 @@ private:
 
                 const size_t columnId = it->second;
                 auto& column = Columns[columnId];
-                bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), ParsedValues[columnId][state.OutputRowId]);
-                if (NonOptionalColumnsCount && !column.GetIsOptional()) {
+                auto& value = ParsedValues[columnId][state.OutputRowId];
+                bool valueWasSet = bool(value);
+                bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), value);
+                if (NonOptionalColumnsCount && !column.GetIsOptional() && !valueWasSet) {
                     ++parsedNonOptional;
                 }
                 if (Config.SkipErrors && !success) {
@@ -685,7 +702,9 @@ private:
 
     void ClearRowBuffer(ui16 outputRowId) {
         for (size_t columnId = 0; columnId < Columns.size(); ++columnId) {
-            ParsedValues[columnId][outputRowId].Clear();
+            if (Columns[columnId].ClearParsedRow(outputRowId)) {
+                ClearObject(ParsedValues[columnId][outputRowId]);
+            }
         }
     }
 

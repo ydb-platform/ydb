@@ -143,7 +143,7 @@ TICStorageTransport::SyncWithPBuffer(
         std::move(selectors),
         std::move(lsns),
         pbufferConnection.DDiskId,
-        *pbufferConnection.Credentials.DDiskInstanceGuid,
+        pbufferConnection.Credentials,
         span.GetTraceId());
 
     auto future = request->Promise.GetFuture();

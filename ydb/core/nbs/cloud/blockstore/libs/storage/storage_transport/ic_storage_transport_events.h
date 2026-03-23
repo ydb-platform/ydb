@@ -174,8 +174,8 @@ struct TEvTransportPrivate
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         const TVector<NKikimr::NDDisk::TBlockSelector> Selectors;
         const TVector<ui64> Lsns;
-        const NKikimr::NBsController::TDDiskId PersistentBufferDDiskId;
-        const ui64 PersistentBufferDDiskInstanceGuid;
+        const NKikimr::NBsController::TDDiskId PBufferId;
+        const NKikimr::NDDisk::TQueryCredentials PBufferCredentials;
         NWilson::TTraceId TraceId;
         NThreading::TPromise<TResult> Promise =
             NThreading::NewPromise<TResult>();
@@ -185,16 +185,15 @@ struct TEvTransportPrivate
             const NKikimr::NDDisk::TQueryCredentials& credentials,
             TVector<NKikimr::NDDisk::TBlockSelector> selectors,
             TVector<ui64> lsns,
-            const NKikimr::NBsController::TDDiskId& persistentBufferDDiskId,
-            const ui64 persistentBufferDDiskInstanceGuid,
+            const NKikimr::NBsController::TDDiskId& pBufferId,
+            const NKikimr::NDDisk::TQueryCredentials& pBufferCredentials,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selectors(std::move(selectors))
             , Lsns(std::move(lsns))
-            , PersistentBufferDDiskId(persistentBufferDDiskId)
-            , PersistentBufferDDiskInstanceGuid(
-                  persistentBufferDDiskInstanceGuid)
+            , PBufferId(pBufferId)
+            , PBufferCredentials(pBufferCredentials)
             , TraceId(std::move(traceId))
         {}
 

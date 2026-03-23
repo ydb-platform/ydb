@@ -127,6 +127,38 @@ jobs:
                 }
               }
             }
+      - name: update branch if base is behind
+        if: steps.check-ownership-membership.outputs.result == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+
+            const { data: baseRef } = await github.rest.git.getRef({
+                ...context.repo,
+                ref: `heads/${pr.base.ref}`,
+            });
+            const baseTipSha = baseRef.object.sha;
+
+            core.info(`pr.base.sha=${pr.base.sha} base_tip=${baseTipSha}`);
+
+            if (pr.base.sha === baseTipSha) {
+                core.info('Branch is already up to date, skipping update.');
+                return;
+            }
+
+            core.info('Branch is behind base, calling update-branch...');
+            try {
+                await github.rest.pulls.updateBranch({
+                    ...context.repo,
+                    pull_number: pr.number,
+                });
+                core.info('update-branch succeeded');
+            } catch (e) {
+                core.warning(`update-branch failed: ${e.message}`);
+            }
+
       - name: check is mergeable
         id: check-is-mergeable
         if: steps.check-ownership-membership.outputs.result == 'true'

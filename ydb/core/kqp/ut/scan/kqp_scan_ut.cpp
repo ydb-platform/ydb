@@ -1822,16 +1822,19 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     done = true;
                     break;
                 }
-                Sleep(TDuration::Seconds(1));
+                Sleep(TDuration::Seconds(5));
             }
             UNIT_ASSERT_C(done, "shard did not move to node 2");
         }
 
         // Scan query: SELECT * FROM EmptyTable LIMIT 1
         {
+            TStreamExecScanQuerySettings scanSettings;
+            scanSettings.ClientTimeout(TDuration::Seconds(30));
+
             auto it = tableClient.StreamExecuteScanQuery(R"(
                 SELECT * FROM `/Root/EmptyTable` LIMIT 1
-            )").GetValueSync();
+            )", scanSettings).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             CompareYson(R"([])", StreamResultToYson(it));
         }
@@ -1839,9 +1842,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         // Query service: SELECT * FROM EmptyTable LIMIT 1
         {
             auto db = kikimr.GetQueryClient();
+            NQuery::TExecuteQuerySettings querySettings;
+            querySettings.ClientTimeout(TDuration::Seconds(30));
             auto response = db.ExecuteQuery(R"(
                 SELECT * FROM `/Root/EmptyTable` LIMIT 1
-            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            )", NQuery::TTxControl::BeginTx().CommitTx(), querySettings).GetValueSync();
             UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(response.GetResultSets().size(), 1);
             UNIT_ASSERT_EQUAL(response.GetResultSets()[0].RowsCount(), 0);

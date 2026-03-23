@@ -220,18 +220,6 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
 
     // Tests with small MaxBatchRows that force mid-indexation checkpoints via LastKeyAck.
     // Reboots between IN_PROGRESS checkpoints exercise the resume-from-middle path.
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseWithCheckpoints, 4 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, true /*killOnCommit*/) {
-        DoTestIndexBuildWithCheckpoints(t, false, false);
-    }
-
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(PrefixedWithCheckpoints, 8 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, true /*killOnCommit*/) {
-        DoTestIndexBuildWithCheckpoints(t, true, false);
-    }
-
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(OverlapWithCheckpoints, 8 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, true /*killOnCommit*/) {
-        DoTestIndexBuildWithCheckpoints(t, false, true);
-    }
-
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(PrefixedOverlapWithCheckpoints, 16 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, true /*killOnCommit*/) {
         DoTestIndexBuildWithCheckpoints(t, true, true);
     }

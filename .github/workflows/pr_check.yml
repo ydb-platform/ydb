@@ -144,9 +144,21 @@ jobs:
             });
             const baseTipSha = baseRef.object.sha;
 
-            core.info(`pr.base.sha=${pr.base.sha} base_tip=${baseTipSha}`);
+            // Get first parent of merge_commit_sha — that's the base branch
+            // commit used when GitHub last built the test merge.
+            // If it differs from the current tip, base has moved.
+            let mergeBaseParentSha = null;
+            if (pr.merge_commit_sha) {
+                const { data: mergeCommit } = await github.rest.git.getCommit({
+                    ...context.repo,
+                    commit_sha: pr.merge_commit_sha,
+                });
+                mergeBaseParentSha = mergeCommit.parents[0]?.sha ?? null;
+            }
 
-            if (pr.base.sha === baseTipSha) {
+            core.info(`merge_commit_sha=${pr.merge_commit_sha ?? "null"} merge_base_parent=${mergeBaseParentSha ?? "null"} base_tip=${baseTipSha}`);
+
+            if (mergeBaseParentSha && mergeBaseParentSha === baseTipSha) {
                 core.info('Branch is already up to date, skipping update.');
                 return;
             }

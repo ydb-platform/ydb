@@ -208,7 +208,6 @@ public:
 
         if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
             Subscribe(ev->Sender, ev->Cookie);
-            ClearSubscribeOnSessionFlag(ev);
         }
         if (SendPending) {
             const ui16 ch = ev->GetChannel();
@@ -231,7 +230,6 @@ public:
         Subscribe(msg->Event->Sender, msg->Event->Cookie);
 
         TAutoPtr<IEventHandle> forwarded(msg->Event.Release());
-        ClearSubscribeOnSessionFlag(forwarded);
         if (SendPending) {
             const ui16 ch = forwarded->GetChannel();
             Outbox[ch].emplace_back(forwarded.Release());
@@ -300,7 +298,7 @@ public:
             auto fw = std::make_unique<IEventHandle>(
                 SelfId(),
                 ev->Type,
-                ev->Flags & ~IEventHandle::FlagForwardOnNondelivery,
+                ev->Flags & ~(IEventHandle::FlagForwardOnNondelivery | IEventHandle::FlagSubscribeOnSession),
                 ev->Recipient,
                 ev->Sender,
                 ev->ReleaseChainBuffer(),
@@ -353,10 +351,6 @@ public:
         LOG_MOCK("Subscribe actorId# " << actorId << " cookie# " << cookie);
         Subscribers[actorId] = cookie;
         Send(actorId, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, cookie);
-    }
-
-    static void ClearSubscribeOnSessionFlag(TAutoPtr<IEventHandle>& ev) {
-        ev->Flags &= ~IEventHandle::FlagSubscribeOnSession;
     }
 
     void Handle(TEvents::TEvUnsubscribe::TPtr ev) {

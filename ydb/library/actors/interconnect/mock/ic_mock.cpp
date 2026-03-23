@@ -129,7 +129,6 @@ namespace NActors {
                     if (CheckNodeStatus(ev)) {
                         if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
                             Subscribe(ev->Sender, ev->Cookie);
-                            ClearSubscribeOnSessionFlag(ev);
                         }
                         EnqueueForward(std::move(ev));
                     }
@@ -140,9 +139,7 @@ namespace NActors {
                         auto *msg = ev->Get();
                         Y_ABORT_UNLESS(msg->Event);
                         Subscribe(msg->Event->Sender, msg->Event->Cookie);
-                        TAutoPtr<IEventHandle> forwarded(msg->Event.Release());
-                        ClearSubscribeOnSessionFlag(forwarded);
-                        EnqueueForward(std::move(forwarded));
+                        EnqueueForward(TAutoPtr<IEventHandle>(msg->Event.Release()));
                     }
                 }
 
@@ -208,10 +205,6 @@ namespace NActors {
                 void Subscribe(const TActorId& actorId, ui64 cookie) {
                     Subscribers[actorId] = cookie;
                     Send(actorId, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, cookie);
-                }
-
-                static void ClearSubscribeOnSessionFlag(TAutoPtr<IEventHandle>& ev) {
-                    ev->Flags &= ~IEventHandle::FlagSubscribeOnSession;
                 }
 
                 template <typename TEvent>
@@ -323,7 +316,7 @@ namespace NActors {
                         auto fw = std::make_unique<IEventHandle>(
                             session->SelfId(),
                             ev->Type,
-                            ev->Flags & ~IEventHandle::FlagForwardOnNondelivery,
+                            ev->Flags & ~(IEventHandle::FlagForwardOnNondelivery | IEventHandle::FlagSubscribeOnSession),
                             ev->Recipient,
                             ev->Sender,
                             ev->ReleaseChainBuffer(),

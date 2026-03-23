@@ -28,6 +28,8 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/async/wait_for_event.h>
 
+#include <yql/essentials/minikql/aligned_page_pool.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr {
@@ -89,6 +91,7 @@ public:
         if (config.HasWriteActorSettings()) {
             SetWriteActorSettings(config.GetWriteActorSettings());
         }
+        NKikimr::UseDefaultArrowAllocator();
     }
 
     void Bootstrap() {

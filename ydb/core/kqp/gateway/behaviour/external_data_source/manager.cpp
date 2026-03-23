@@ -332,11 +332,11 @@ TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDat
             .Apply([schemeTxState](const auto& future) {
                 auto& value = future.GetValue();
                 if (value.Status != Ydb::StatusIds::SUCCESS) {
-                    return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(value.Status), value.Issues.ToString()));
+                    return TYqlConclusionStatus::Fail(NYql::YqlStatusFromYdbStatus(value.Status), value.Issues.ToString());
                 }
                 auto& desc = *schemeTxState->MutableCreateExternalDataSource();
                 desc.MutableAuth()->MutableIam()->SetResourceId(value.ResourceId);
-                return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
+                return TYqlConclusionStatus::Success();
 
             });
     });

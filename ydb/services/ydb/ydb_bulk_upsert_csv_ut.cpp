@@ -22,10 +22,11 @@ NYdb::NTable::TBulkUpsertSettings BulkUpsertSettings(const Ydb::Formats::CsvSett
     return upsertSettings;
 }
 
-Ydb::Formats::CsvSettings CsvSettingsWithHeader(const TString& delimiter = ",", const TString& nullValue = TString()) {
+Ydb::Formats::CsvSettings CsvSettingsWithHeader(const TString& delimiter = ",", const TString& nullValue = TString(), ui32 skipRows = 0) {
     Ydb::Formats::CsvSettings csvSettings;
     csvSettings.set_header(true);
     csvSettings.set_delimiter(delimiter);
+    csvSettings.set_skip_rows(skipRows);
     if (!nullValue.empty()) {
         csvSettings.set_null_value(nullValue);
     }
@@ -118,6 +119,21 @@ void WaitAndCompareQueryYson(NYdb::NTable::TTableClient& client, const TString& 
     }
 
     NKqp::CompareYson(expectedYson, actualYson);
+}
+
+void CreateTestTable(NYdb::NTable::TTableClient& client) {
+    auto session = client.GetSession().ExtractValueSync().GetSession();
+
+    auto tableBuilder = client.GetTableBuilder();
+    tableBuilder
+        .AddNullableColumn("Key", EPrimitiveType::Uint32)
+        .AddNullableColumn("Value", EPrimitiveType::Int32);
+
+    tableBuilder.SetPrimaryKeyColumns({"Key"});
+    auto result = session.CreateTable("/Root/Test", tableBuilder.Build()).ExtractValueSync();
+
+    UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 }
 
 void Index(NYdb::NTable::EIndexType indexType, bool enableBulkUpsertToAsyncIndexedTables = false) {
@@ -230,6 +246,40 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             SELECT Shard, App, Timestamp, HttpCode, Message, Ratio, Binary, Empty
             FROM `/Root/Logs`
             ORDER BY Shard, App, Timestamp;
+        )"));
+    }
+
+    Y_UNIT_TEST(SkipRows) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+
+        CreateTestTable(client);
+
+        TStringBuilder csv;
+        csv << "ignore,ignore\n";
+        csv << "ignore,ignore\n";
+        csv << "Key,Value\n";
+        csv << "1,10\n";
+        csv << "2,20\n";
+
+        auto upsert = client.BulkUpsert(
+            "/Root/Test",
+            EDataFormat::CSV,
+            csv,
+            {},
+            BulkUpsertSettings(CsvSettingsWithHeader(",", {}, 2)))
+            .GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        NKqp::CompareYson(R"([
+            [[1u];[10]];
+            [[2u];[20]]
+        ])", StreamQueryToYson(client, R"(
+            SELECT Key, Value
+            FROM `/Root/Test`
+            ORDER BY Key;
         )"));
     }
 
@@ -682,5 +732,30 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
     Y_UNIT_TEST(AsyncIndexShouldSucceed) {
         Index(NYdb::NTable::EIndexType::GlobalAsync, true);
+    }
+
+    Y_UNIT_TEST(ZeroRows) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+
+        CreateTestTable(client);
+
+        auto status = client.BulkUpsert(
+            "/Root/Test",
+            EDataFormat::CSV,
+            TString("Key,Value\n"),
+            {},
+            BulkUpsertSettings(CsvSettingsWithHeader()))
+            .ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::BAD_REQUEST, status.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(status.GetIssues().ToString(), "Cannot read CSV", status.GetIssues().ToString());
+
+        NKqp::CompareYson(R"([])", StreamQueryToYson(client, R"(
+            SELECT Key, Value
+            FROM `/Root/Test`
+            ORDER BY Key;
+        )"));
     }
 }

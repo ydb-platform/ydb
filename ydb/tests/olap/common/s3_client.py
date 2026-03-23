@@ -4,7 +4,6 @@ from typing import Tuple, Optional
 
 import boto3
 import library.python.port_manager
-import yatest.common
 from library.recipes import common as recipes_common
 
 

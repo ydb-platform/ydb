@@ -2,7 +2,6 @@
 import abc
 import library.python.port_manager
 import os
-import yatest
 
 
 class KikimrNodePortAllocatorInterface(object):

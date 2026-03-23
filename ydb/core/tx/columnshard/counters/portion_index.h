@@ -11,16 +11,17 @@ public:
     class TPortionClass {
     private:
         YDB_READONLY_DEF(NOlap::NPortion::EProduced, Produced);
+        YDB_READONLY_DEF(bool, IsDefaultTier);
 
     public:
         TPortionClass(const NOlap::TPortionInfo& portion);
 
         bool operator==(const TPortionClass& other) const {
-            return Produced == other.Produced;
+            return Produced == other.Produced && IsDefaultTier == other.IsDefaultTier;
         }
 
         explicit operator size_t() const {
-            return (ui64)Produced;
+            return CombineHashes((ui64)Produced, (ui64)IsDefaultTier);
         }
     };
 
@@ -73,15 +74,8 @@ public:
             return IsIn({NOlap::NPortion::EProduced::INSERTED,
                     NOlap::NPortion::EProduced::COMPACTED,
                     NOlap::NPortion::EProduced::SPLIT_COMPACTED,
-                    NOlap::NPortion::EProduced::INACTIVE}, portionClass.GetProduced());
-        }
-    };
-
-    template <NOlap::NPortion::EProduced Type>
-    class TPortionsByType : public IStatsSelector {
-    public:
-        bool Select(const TPortionClass& portionClass) const override {
-            return portionClass.GetProduced() == Type;
+                    NOlap::NPortion::EProduced::INACTIVE}, portionClass.GetProduced()) 
+                    && portionClass.GetIsDefaultTier();
         }
     };
 };

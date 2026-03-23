@@ -4,8 +4,12 @@
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h> // TODO move to pubcli or common
+#include <ydb/library/kll_median/sketch.h>
+#include <ydb/library/kll_median/windowed_sketch.h>
 
 namespace NKikimr::NPQ {
+
+constexpr size_t KeysSketchPrecision = 100;
 
 using TSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
 
@@ -32,7 +36,7 @@ public:
         Y_UNUSED(config);
     }
 
-    void OnWrite(const TString& sourceId, ui64 size) override {
+    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] const TString& key = "") override {
         Y_UNUSED(sourceId);
         Y_UNUSED(size);
     }
@@ -63,7 +67,7 @@ public:
         Y_UNUSED(config);
     }
 
-    void OnWrite(const TString& sourceId, ui64 size) override {
+    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] const TString& key = "") override {
         auto now = TInstant::Now();
 
         auto it = WrittenBytes.find(sourceId);
@@ -117,11 +121,12 @@ public:
     TAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId)
         : Config(config)
         , PartitionId(partitionId)
+        , KeysSketch(KeysSketchPrecision, 6, TInstant::Now().Seconds(), 60)
     {
         RecreateSumWrittenBytes();
     }
 
-    void OnWrite(const TString& sourceId, ui64 size) override  {
+    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] const TString& key = "") override  {
         auto now = TInstant::Now();
 
         SumWrittenBytes->Update(size, now);
@@ -140,6 +145,10 @@ public:
         counter.Update(size, now);
 
         SourceIdCounter.Use(sourceIdHash, now);
+
+        if (key) {
+            KeysSketch.Add(key, now.Seconds());
+        }
     }
 
     void CleanUp() override {
@@ -269,6 +278,7 @@ private:
     TMaybe<TSlidingWindow> SumWrittenBytes;
     // SourceIdHash -> SlidingWindow
     std::unordered_map<TString, TSlidingWindow> WrittenBytes;
+    NKll::TWindowedKll<TString> KeysSketch;
     TLastCounter SourceIdCounter;
     TInstant LastCleanUp;
 };

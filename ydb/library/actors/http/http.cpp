@@ -101,6 +101,7 @@ size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
             case EParseStage::Method:
                 if (ProcessData(Method, data, ' ', MaxMethodSize)) {
                     if (!IsValidMethod(Method)) {
+                        Method = {};
                         Stage = EParseStage::Error;
                         break;
                     }
@@ -110,6 +111,7 @@ size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
             case EParseStage::URL:
                 if (ProcessData(URL, data, ' ', MaxURLSize)) {
                     if (!IsValidURL(URL)) {
+                        URL = {};
                         Stage = EParseStage::Error;
                         break;
                     }
@@ -119,6 +121,7 @@ size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
             case EParseStage::Protocol:
                 if (ProcessData(Protocol, data, '/', MaxProtocolSize)) {
                     if (!IsValidProtocol(Protocol)) {
+                        Protocol = {};
                         Stage = EParseStage::Error;
                         break;
                     }
@@ -128,6 +131,7 @@ size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
             case EParseStage::Version:
                 if (ProcessData(Version, data, "\r\n", MaxVersionSize)) {
                     if (!IsValidVersion(Version)) {
+                        Version = {};
                         Stage = EParseStage::Error;
                         break;
                     }
@@ -205,6 +209,7 @@ size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
             case EParseStage::Protocol:
                 if (ProcessData(Protocol, data, '/', MaxProtocolSize)) {
                     if (!IsValidProtocol(Protocol)) {
+                        Protocol = {};
                         Stage = EParseStage::Error;
                         break;
                     }
@@ -214,6 +219,7 @@ size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
             case EParseStage::Version:
                 if (ProcessData(Version, data, ' ', MaxVersionSize)) {
                     if (!IsValidVersion(Version)) {
+                        Version = {};
                         Stage = EParseStage::Error;
                         break;
                     }
@@ -223,6 +229,7 @@ size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
             case EParseStage::Status:
                 if (ProcessData(Status, data, ' ', MaxStatusSize)) {
                     if (!IsValidStatus(Status)) {
+                        Status = {};
                         Stage = EParseStage::Error;
                         break;
                     }
@@ -232,6 +239,7 @@ size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
             case EParseStage::Message:
                 if (ProcessData(Message, data, "\r\n", MaxMessageSize)) {
                     if (!IsValidMessage(Message)) {
+                        Message = {};
                         Stage = EParseStage::Error;
                         break;
                     }

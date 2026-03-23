@@ -477,9 +477,6 @@ bool IsReadableContent(TStringBuf contentType) {
     return false;
 }
 
-// RFC 7230: token = 1*tchar
-// tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
-//         "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
 bool IsValidMethod(TStringBuf s) {
     for (unsigned char c : s) {
         if (c < 0x21 || c > 0x7E) {
@@ -489,7 +486,6 @@ bool IsValidMethod(TStringBuf s) {
     return !s.empty();
 }
 
-// URL: printable ASCII (0x21-0x7E), no spaces or control chars
 bool IsValidURL(TStringBuf s) {
     for (unsigned char c : s) {
         if (c < 0x21 || c > 0x7E) {
@@ -499,7 +495,6 @@ bool IsValidURL(TStringBuf s) {
     return !s.empty();
 }
 
-// Protocol: uppercase ASCII letters only (expecting "HTTP")
 bool IsValidProtocol(TStringBuf s) {
     for (unsigned char c : s) {
         if (c < 'A' || c > 'Z') {
@@ -509,7 +504,6 @@ bool IsValidProtocol(TStringBuf s) {
     return !s.empty();
 }
 
-// Version: digits and dots only (expecting "1.0" or "1.1")
 bool IsValidVersion(TStringBuf s) {
     for (unsigned char c : s) {
         if (!std::isdigit(c) && c != '.') {
@@ -519,7 +513,6 @@ bool IsValidVersion(TStringBuf s) {
     return !s.empty();
 }
 
-// Status: digits only (expecting "200", "404", etc.)
 bool IsValidStatus(TStringBuf s) {
     for (unsigned char c : s) {
         if (!std::isdigit(c)) {
@@ -529,7 +522,6 @@ bool IsValidStatus(TStringBuf s) {
     return !s.empty();
 }
 
-// Message: printable ASCII (0x20-0x7E) + tab (0x09)
 bool IsValidMessage(TStringBuf s) {
     for (unsigned char c : s) {
         if (c != '\t' && (c < 0x20 || c > 0x7E)) {
@@ -539,7 +531,6 @@ bool IsValidMessage(TStringBuf s) {
     return true; // empty message is OK
 }
 
-// Header line: printable ASCII (0x20-0x7E) + tab (0x09) per RFC 7230
 bool IsValidHeaderData(TStringBuf s) {
     for (unsigned char c : s) {
         if (c != '\t' && (c < 0x20 || c > 0x7E)) {

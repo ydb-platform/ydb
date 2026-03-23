@@ -55,7 +55,7 @@ public:
                 response = response->Duplicate(Event->Get()->Request, extraHeaders);
             }
 
-            StreamingResponse = !response->TransferEncoding.empty();
+            StreamingResponse = !response->IsDone();
         }
 
         auto forwarded = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(std::move(response));

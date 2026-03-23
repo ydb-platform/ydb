@@ -6,6 +6,8 @@
 #include "openid_connect.h"
 #include "context.h"
 #include <ydb/mvp/core/appdata.h>
+#include <ydb/mvp/core/http_proxy_gateway.h>
+#include <ydb/mvp/core/mvp_log_context.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/library/testlib/service_mocks/session_service_mock.h>
 #include <ydb/library/testlib/service_mocks/profile_service_mock.h>
@@ -20,22 +22,31 @@
 using namespace NMVP::NOIDC;
 using namespace NActors;
 
-const TString ALLOWED_PROXY_HOST {"ydb.viewer.page"};
+namespace {
 
-static TOpenIdConnectSettings BuildBaseSettings(TPortManager& tp, NMvp::EAccessServiceType accessServiceType = NMvp::yandex_v2) {
-    ui16 sessionServicePort = tp.GetPort(8655);
-    ui16 profilePort = tp.GetPort(8766);
+    const TString ALLOWED_PROXY_HOST {"ydb.viewer.page"};
 
-    TOpenIdConnectSettings s;
-    s.AccessServiceType = accessServiceType;
-    s.ClientId = "client_id";
-    s.AuthorizationServerAddress = "https://auth.test.net";
-    s.AllowedProxyHosts = {ALLOWED_PROXY_HOST};
-    s.SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort);
-    s.WhoamiExtendedInfoEndpoint = "localhost:" + ToString(profilePort);
-    s.ClientSecret = "0123456789abcdef";
-    return s;
-}
+    static TOpenIdConnectSettings BuildBaseSettings(TPortManager& tp, NMvp::EAccessServiceType accessServiceType = NMvp::yandex_v2) {
+        ui16 sessionServicePort = tp.GetPort(8655);
+        ui16 profilePort = tp.GetPort(8766);
+
+        TOpenIdConnectSettings s;
+        s.AccessServiceType = accessServiceType;
+        s.ClientId = "client_id";
+        s.AuthorizationServerAddress = "https://auth.test.net";
+        s.AllowedProxyHosts = {ALLOWED_PROXY_HOST};
+        s.SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort);
+        s.WhoamiExtendedInfoEndpoint = "localhost:" + ToString(profilePort);
+        s.ClientSecret = "0123456789abcdef";
+        return s;
+    }
+
+    void AssertHasRequestIdHeader(const NHttp::THeaders& headers) {
+        UNIT_ASSERT(headers.Has(NMVP::REQUEST_ID_HEADER));
+        UNIT_ASSERT(!headers.Get(NMVP::REQUEST_ID_HEADER).empty());
+    }
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(Mvp) {
     void OpenIdConnectRequestWithIamTokenTest(NMvp::EAccessServiceType profile) {
@@ -443,6 +454,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
     public:
         TString GetRedirectUrl(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv) override {
             const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
+            AssertHasRequestIdHeader(headers);
             UNIT_ASSERT(headers.Has("Location"));
             return TString(headers.Get("Location"));
         }
@@ -485,6 +497,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
                 }
             }
             const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
+            AssertHasRequestIdHeader(headers);
             UNIT_ASSERT(!headers.Has("Location"));
             UNIT_ASSERT_STRINGS_EQUAL(errorMessage, "Authorization Required");
             return authUrl;
@@ -523,7 +536,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             UNIT_ASSERT_STRINGS_EQUAL("true", headers.Get(accessControlAllowCredentials));
 
             UNIT_ASSERT(headers.Has(accessControlAllowHeaders));
-            UNIT_ASSERT_STRINGS_EQUAL("Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent", headers.Get(accessControlAllowHeaders));
+            UNIT_ASSERT_STRINGS_EQUAL("Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent,X-Request-Id", headers.Get(accessControlAllowHeaders));
 
             UNIT_ASSERT(headers.Has(accessControlAllowMethods));
             UNIT_ASSERT_STRINGS_EQUAL("OPTIONS,GET,POST,PUT,DELETE", headers.Get(accessControlAllowMethods));
@@ -577,6 +590,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const TString state = urlParameters["state"];
 
         const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
+        AssertHasRequestIdHeader(headers);
         UNIT_ASSERT(headers.Has("Set-Cookie"));
         TStringBuf setCookie = headers.Get("Set-Cookie");
         UNIT_ASSERT_STRING_CONTAINS(setCookie, TOpenIdConnectSettings::YDB_OIDC_COOKIE);
@@ -607,6 +621,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
         const NHttp::THeaders protectedPageHeaders(outgoingResponseEv->Response->Headers);
+        AssertHasRequestIdHeader(protectedPageHeaders);
         UNIT_ASSERT(protectedPageHeaders.Has("Location"));
         redirectStrategy.CheckLocationHeader(protectedPageHeaders.Get("Location"), hostProxy, protectedPage);
         UNIT_ASSERT(protectedPageHeaders.Has("Set-Cookie"));
@@ -687,6 +702,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
         const NHttp::THeaders protectedPageHeaders(outgoingResponseEv->Response->Headers);
+        AssertHasRequestIdHeader(protectedPageHeaders);
         UNIT_ASSERT(protectedPageHeaders.Has("Location"));
         UNIT_ASSERT_STRINGS_EQUAL(protectedPageHeaders.Get("Location"), "/requested/page");
     }
@@ -796,6 +812,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
         const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
+        AssertHasRequestIdHeader(headers);
         UNIT_ASSERT(headers.Has("Location"));
         TStringBuf location = headers.Get("Location");
         UNIT_ASSERT_STRING_CONTAINS(location, "/requested/page");
@@ -1080,6 +1097,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
         const NHttp::THeaders impersonatePageHeaders(outgoingResponseEv->Response->Headers);
+        AssertHasRequestIdHeader(impersonatePageHeaders);
         UNIT_ASSERT(impersonatePageHeaders.Has("Set-Cookie"));
         TStringBuf impersonatedCookie = impersonatePageHeaders.Get("Set-Cookie");
         TString expectedCookie = CreateSecureCookie(CreateNameImpersonatedCookie(settings.ClientId), Base64Encode("impersonation_token"), 43200);
@@ -1117,6 +1135,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
         const NHttp::THeaders impersonatePageHeaders(outgoingResponseEv->Response->Headers);
+        AssertHasRequestIdHeader(impersonatePageHeaders);
         UNIT_ASSERT(!impersonatePageHeaders.Has("Set-Cookie"));
     }
 
@@ -1151,6 +1170,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
         const NHttp::THeaders impersonatePageHeaders(outgoingResponseEv->Response->Headers);
+        AssertHasRequestIdHeader(impersonatePageHeaders);
         UNIT_ASSERT(impersonatePageHeaders.Has("Set-Cookie"));
         TStringBuf impersonatedCookie = impersonatePageHeaders.Get("Set-Cookie");
         TString expectedCookie = ClearSecureCookie(CreateNameImpersonatedCookie(settings.ClientId));
@@ -1262,6 +1282,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "307");
         const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
+        AssertHasRequestIdHeader(headers);
         UNIT_ASSERT(headers.Has("Location"));
         TStringBuf location = headers.Get("Location");
         UNIT_ASSERT_STRINGS_EQUAL(location, protectedPage);

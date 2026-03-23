@@ -7,7 +7,7 @@
 
 namespace NMVP {
 
-constexpr TStringBuf REQUEST_ID_HEADER = "x-request-id";
+constexpr TStringBuf REQUEST_ID_HEADER = "X-Request-Id";
 
 struct TMvpLogContext {
     TString RequestId;
@@ -65,7 +65,7 @@ inline TString GetLogPrefix(const TMvpLogContext* context) {
     if (!context || context->RequestId.empty()) {
         return {};
     }
-    return TStringBuilder() << "request id: " << context->RequestId << ", ";
+    return TStringBuilder() << "X-Request-Id: " << context->RequestId << ", ";
 }
 
 inline TString GetLogPrefix(const NHttp::THttpIncomingRequestPtr& request) {

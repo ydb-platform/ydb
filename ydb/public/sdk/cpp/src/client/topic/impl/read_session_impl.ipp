@@ -237,7 +237,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
     }
 
     deferred.DeferDestroyDecompressionInfos(std::move(infos));
-    accumulator.OnUserRetrievedEvent();
+    deferred.DeferOnUserRetrievedEvent(std::move(accumulator));
 
     swap(ready, NotReady);
 }
@@ -3367,6 +3367,11 @@ void TDeferredActions<UseMigrationProtocol>::DeferSignalWaiter(TWaiter&& waiter)
 }
 
 template<bool UseMigrationProtocol>
+void TDeferredActions<UseMigrationProtocol>::DeferOnUserRetrievedEvent(TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& accumulator) {
+    UserRetrievedEventsInfoAccumulator.push_back(std::move(accumulator));
+}
+
+template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos)
 {
     DecompressionInfos.insert(DecompressionInfos.end(), infos.begin(), infos.end());
@@ -3383,6 +3388,7 @@ void TDeferredActions<UseMigrationProtocol>::DoActions() {
     Reconnect();
     SignalWaiters();
     StartSessions();
+    OnUserRetrievedEvent();
     DestroyDecompressionInfos();
 }
 
@@ -3466,6 +3472,13 @@ template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::SignalWaiters() {
     for (auto& w : Waiters) {
         w.Signal();
+    }
+}
+
+template<bool UseMigrationProtocol>
+void TDeferredActions<UseMigrationProtocol>::OnUserRetrievedEvent() {
+    for (auto& accumulator : UserRetrievedEventsInfoAccumulator) {
+        accumulator.OnUserRetrievedEvent();
     }
 }
 

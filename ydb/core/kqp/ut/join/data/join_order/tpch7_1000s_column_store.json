@@ -15,14 +15,8 @@
                     "args":
                       [
                         {
-                          "op_name":"HashShuffle",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"lineitem"
-                              }
-                            ]
+                          "op_name":"TableFullScan",
+                          "table":"orders"
                         },
                         {
                           "op_name":"HashShuffle",
@@ -38,7 +32,7 @@
                                         [
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"orders"
+                                            "table":"lineitem"
                                           }
                                         ]
                                     },
@@ -48,7 +42,7 @@
                                         [
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"customer"
+                                            "table":"supplier"
                                           },
                                           {
                                             "op_name":"TableFullScan",
@@ -70,7 +64,7 @@
                 [
                   {
                     "op_name":"TableFullScan",
-                    "table":"supplier"
+                    "table":"customer"
                   },
                   {
                     "op_name":"TableFullScan",

@@ -51,10 +51,6 @@
                                                         "args":
                                                           [
                                                             {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"part"
-                                                            },
-                                                            {
                                                               "op_name":"HashShuffle",
                                                               "args":
                                                                 [
@@ -63,6 +59,10 @@
                                                                     "table":"lineitem"
                                                                   }
                                                                 ]
+                                                            },
+                                                            {
+                                                              "op_name":"TableFullScan",
+                                                              "table":"part"
                                                             }
                                                           ]
                                                       }

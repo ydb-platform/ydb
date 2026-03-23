@@ -613,14 +613,15 @@ TMap<TString, TMessageId> ReadAndCommitFIFOExceptLast(
     const TString& topicName,
     const TString& consumer,
     TMap<TString, size_t>& remainingReads,
-    TStringBuf phase
+    TStringBuf phase,
+    int retries
 ) {
 
     TMap<TString, TMessageId> lastMessageOfTheGroup;
     for (int readIteration = 1; ; ++readIteration) {
         {
             TStringBuilder sb;
-            sb << phase << " ReadAndCommitFIFOExceptLast iteration " << readIteration << ":\n";
+            sb << phase << " ReadAndCommitFIFOExceptLast iteration=" << readIteration << ", retries left=" << retries << ":\n";
             for (auto& [g, n] : remainingReads) {
                 sb << "  " << g << ": read=" << n << Endl;
             }
@@ -656,7 +657,11 @@ TMap<TString, TMessageId> ReadAndCommitFIFOExceptLast(
         auto readResult = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL_C(readResult->Status, Ydb::StatusIds::SUCCESS, phase);
         if (readResult->Messages.empty()) {
-            break;
+            if (retries-- <= 0) {
+                break;
+            } else {
+                continue;
+            }
         }
         std::vector<TMessageId> messagesToCommit;
         for (auto& msg : readResult->Messages) {
@@ -712,13 +717,14 @@ TMap<TString, TMessageId> ReadAndCommitFIFO(
     const TString& topicName,
     const TString& consumer,
     const TMap<TString, TReadCommitCount>& operations,
-    TStringBuf phase
+    TStringBuf phase,
+    int retries = 0
 ) {
     TMap<TString, size_t> remainingReads;
     for (const auto& [groupId, op] : operations) {
         remainingReads[groupId] = op.ReadCount;
     }
-    TMap<TString, TMessageId> last = ReadAndCommitFIFOExceptLast(runtime, topicName, consumer, remainingReads, phase);
+    TMap<TString, TMessageId> last = ReadAndCommitFIFOExceptLast(runtime, topicName, consumer, remainingReads, phase, retries);
     for (const auto& [groupId, cnt] : remainingReads) {
         UNIT_ASSERT_VALUES_EQUAL_C(cnt, 0, phase << ": Not enough messages for group " << groupId << "; " << cnt << " more required");
     }
@@ -999,7 +1005,7 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
         }
 
         if (!childOps.empty()) {
-            auto phase8Uncommitted = ReadAndCommitFIFO(runtime, "/Root/topic1", "mlp-consumer", childOps, "phase 8");
+            auto phase8Uncommitted = ReadAndCommitFIFO(runtime, "/Root/topic1", "mlp-consumer", childOps, "phase 8", 1);
             UNIT_ASSERT_C(phase8Uncommitted.empty(),
                 "Phase 8: Expected all child messages to be committed, but "
                 << phase8Uncommitted.size() << " groups have uncommitted messages");

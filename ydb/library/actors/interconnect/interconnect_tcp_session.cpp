@@ -302,7 +302,7 @@ namespace NActors {
             info.StackTrace = stackTrace;
         };
 
-        const auto historyKey = TSubscriberHistoryKey(stackTrace, activityIndex, eventTypeName);
+        auto historyKey = TSubscriberHistoryKey(stackTrace, activityIndex, eventTypeName);
         if (const auto it = SubscriberHistory.find(historyKey); it != SubscriberHistory.end()) {
             ++it->second;
         } else if (SubscriberHistory.size() < MaxSubscriberHistoryEntries) {

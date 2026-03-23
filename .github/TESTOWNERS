@@ -112,6 +112,7 @@
 /ydb/tests/functional/backup_collection @ydb-platform/core
 /ydb/tests/functional/cms @ydb-platform/core
 /ydb/tests/functional/serverless @ydb-platform/core
+/ydb/tests/functional/replication @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/tests/functional/sqs @ydb-platform/Topics

@@ -1,5 +1,11 @@
 name: PR-check
 on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to check mergeability for"
+        required: true
+        type: string
   pull_request_target:
     branches:
       - 'main'
@@ -15,11 +21,11 @@ on:
       - 'reopened'
       - 'labeled'
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}
   cancel-in-progress: true
 jobs:
   check-running-allowed:
-    if: ${{github.event.pull_request.state == 'open' && vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true}}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.pull_request.state == 'open' && vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true) }}
     runs-on: [self-hosted, tiny-worker]
     timeout-minutes: 600
     outputs:
@@ -27,6 +33,7 @@ jobs:
       commit_sha: ${{ steps.check-is-mergeable.outputs.commit_sha }}
     steps:
       - name: Reset integrated status
+        if: github.event_name != 'workflow_dispatch'
         run: |
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
@@ -38,6 +45,10 @@ jobs:
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
+            if (context.eventName === "workflow_dispatch") {
+              return true;
+            }
+
             const labels = context.payload.pull_request.labels;
             const okToTestLabel = labels.find(
               label => label.name == 'ok-to-test'
@@ -84,6 +95,7 @@ jobs:
             return false;
       - name: comment-if-waiting-on-ok
         if: steps.check-ownership-membership.outputs.result == 'false' &&
+            github.event_name != 'workflow_dispatch' &&
             github.event.action == 'opened'
         uses: actions/github-script@v7
         with:
@@ -104,6 +116,7 @@ jobs:
             });
 
       - name: cleanup-test-label
+        if: github.event_name != 'workflow_dispatch'
         uses: actions/github-script@v7
         with:
           script: |
@@ -134,18 +147,25 @@ jobs:
         with:
           result-encoding: string
           script: |
-            let pr = context.payload.pull_request;
+            const prNumber = context.eventName === "workflow_dispatch"
+              ? Number("${{ inputs.pr_number }}")
+              : context.payload.pull_request.number;
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              core.setFailed(`Invalid PR number: ${prNumber}`);
+              return false;
+            }
+
             const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-            const header = `<!-- merge pr=${pr.number} -->\n`;
-            
-            const fail_msg = header + ':red_circle: Unable to merge your PR into the base branch. '
-                + 'Please rebase or merge it with the base branch.'
+            let pr = null;
             
             let result = await github.rest.pulls.get({
                 ...context.repo,
-                pull_number: pr.number
+                pull_number: prNumber
             })
             pr = result.data;
+            const header = `<!-- merge pr=${pr.number} -->\n`;
+            const fail_msg = header + ':red_circle: Unable to merge your PR into the base branch. '
+                + 'Please rebase or merge it with the base branch.'
 
             let i = 0;
             
@@ -154,7 +174,7 @@ jobs:
     
                 result = await github.rest.pulls.get({
                     ...context.repo,
-                    pull_number: pr.number
+                    pull_number: prNumber
                 })
             
                 pr = result.data;
@@ -173,32 +193,36 @@ jobs:
                 return false;
             }
             
-            const { data: comments } = await github.rest.issues.listComments({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo
-            });
-            
-            const commentToUpdate = comments.find(comment => comment.body.startsWith(header));
+            let commentToUpdate = null;
+            if (context.eventName !== "workflow_dispatch") {
+                const { data: comments } = await github.rest.issues.listComments({
+                    issue_number: context.issue.number,
+                    owner: context.repo.owner,
+                    repo: context.repo.repo
+                });
+                commentToUpdate = comments.find(comment => comment.body.startsWith(header));
+            }
             
             if (!pr.mergeable) {
-                let commentParams = {
-                    ...context.repo,
-                    issue_number: context.issue.number,
-                    body: fail_msg
-                };
-            
-                if (commentToUpdate) {
-                    await github.rest.issues.updateComment({
-                        ...commentParams,
-                        comment_id: commentToUpdate.id,
-                    });
-                } else {
-                    await github.rest.issues.createComment({...commentParams});
+                if (context.eventName !== "workflow_dispatch") {
+                    let commentParams = {
+                        ...context.repo,
+                        issue_number: context.issue.number,
+                        body: fail_msg
+                    };
+                
+                    if (commentToUpdate) {
+                        await github.rest.issues.updateComment({
+                            ...commentParams,
+                            comment_id: commentToUpdate.id,
+                        });
+                    } else {
+                        await github.rest.issues.createComment({...commentParams});
+                    }
                 }
                 core.setFailed("Merge conflict detected");
                 return false;
-            } else if (commentToUpdate) {
+            } else if (commentToUpdate && context.eventName !== "workflow_dispatch") {
                 await github.rest.issues.deleteComment({
                     ...context.repo,
                     issue_number: context.issue.number,
@@ -211,7 +235,7 @@ jobs:
   build_and_test:
     needs:
       - check-running-allowed
-    if: needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != ''
+    if: github.event_name != 'workflow_dispatch' && needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != ''
     strategy:
       fail-fast: false
       matrix:
@@ -267,7 +291,7 @@ jobs:
   update_integrated_status:
     runs-on: [self-hosted, tiny-worker]
     needs: build_and_test
-    if: ${{github.event.pull_request.state == 'open'}}
+    if: ${{ github.event_name != 'workflow_dispatch' && github.event.pull_request.state == 'open' }}
     steps:
       - name: Gather required checks results
         shell: bash

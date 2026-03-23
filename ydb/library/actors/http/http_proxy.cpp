@@ -1,5 +1,6 @@
 #include <ydb/library/actors/core/events.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
+#include <cctype>
 #include "http_proxy.h"
 
 namespace NHttp {

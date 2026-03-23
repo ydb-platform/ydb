@@ -303,6 +303,7 @@ public:
         target += maxSource.substr(0, pos);
         source.Skip(pos);
         if (target.size() > maxLen) {
+            target = {};
             Stage = EParseStage::Error;
             return false;
         }

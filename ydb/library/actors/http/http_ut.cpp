@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
 
     Y_UNIT_TEST(BinaryDataInVersion) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatPartialString(request, "GET /test HTTP/1\x02\x031\r\nHost: test\r\n\r\n");
+        EatPartialString(request, "GET /test HTTP/1\x02" "\x03" "1\r\nHost: test\r\n\r\n");
         UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
         UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http version");
     }

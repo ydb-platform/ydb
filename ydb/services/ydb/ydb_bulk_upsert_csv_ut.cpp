@@ -551,7 +551,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_C(!upsert.IsSuccess(), upsert.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "Missing key columns: Key");
+            UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "Missing not null column: Key");
         }
 
         {

@@ -553,10 +553,10 @@ private:
             return true;
         }
 
-        for (const auto& columnName : NotNullColumns) {
+        for (const std::string& columnName : NotNullColumns) {
             auto column = Batch->GetColumnByName(columnName);
             if (!column) {
-                errorMessage = "Missing key columns: " + TString(columnName);
+                errorMessage = "Missing not null column: " + TString(columnName);
                 return false;
             }
 

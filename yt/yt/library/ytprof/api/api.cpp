@@ -66,7 +66,7 @@ TCpuProfilerTagGuard::~TCpuProfilerTagGuard()
     }
 }
 
-TCpuProfilerTagGuard::TCpuProfilerTagGuard(TCpuProfilerTagGuard&& other)
+TCpuProfilerTagGuard::TCpuProfilerTagGuard(TCpuProfilerTagGuard&& other) noexcept
     : TagIndex_(other.TagIndex_)
 {
     other.TagIndex_ = -1;

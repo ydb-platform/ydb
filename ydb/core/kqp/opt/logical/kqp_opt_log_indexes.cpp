@@ -1909,7 +1909,6 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
     }
 
     auto jsonExists = coalesce.Predicate().Maybe<TCoJsonExists>().Cast();
-    Cerr << NCommon::ExprToPrettyString(ctx, jsonExists.Ref()) << Endl;
 
     if (!jsonExists.Json().Maybe<TCoMember>()) {
         return {};
@@ -1919,19 +1918,40 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
         return {};
     }
 
-    auto jsonPath = jsonExists.JsonPath().Maybe<TCoUtf8>().Cast().Literal().StringValue();
-    Cerr << "jsonPath: " << jsonPath << Endl;
+    auto jsonColumnName = jsonExists.Json().Maybe<TCoMember>().Cast().Name().StringValue();
+    auto jsonPathStr = jsonExists.JsonPath().Maybe<TCoUtf8>().Cast().Literal().StringValue();
 
     const auto& variables = jsonExists.Variables().Ref();
     if (!variables.GetTypeAnn() || variables.GetTypeAnn()->GetKind() != ETypeAnnotationKind::EmptyDict) {
         return {};
     }
 
-    TIssue issue{ctx.GetPosition(read.Pos()), "Json index is not supported for now"};
-    SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, issue);
-    ctx.AddError(issue);
+    auto settings = TKqpReadTableFullTextIndexSettings{};
+    settings.SetDefaultOperator(Build<TCoString>(ctx, node.Pos()).Literal().Build("and").Done().Ptr());
+    settings.SetMinimumShouldMatch(Build<TCoString>(ctx, node.Pos()).Literal().Build("").Done().Ptr());
 
-    return {};
+    auto queryExpr = Build<TCoString>(ctx, node.Pos())
+        .Literal()
+        .Build(jsonPathStr)
+        .Done();
+
+    auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonColumnName).Done())
+        .Done();
+
+    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
+        .Table(read.Table())
+        .Index(read.Index())
+        .Columns(read.Columns())
+        .Query<TExprList>().Add(queryExpr).Build()
+        .QueryColumns(searchColumns.Ptr())
+        .Settings(settings.BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TCoFlatMap>(ctx, read.Pos())
+        .Input(newInput)
+        .Lambda(flatMap.Lambda())
+        .Done();
 }
 
 // The index and main table have same number of rows, so we can push a copy of TCoTopSort or TCoTake

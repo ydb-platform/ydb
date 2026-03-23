@@ -3,6 +3,7 @@
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
+using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
@@ -89,15 +90,23 @@ void DoTestAddJsonIndex(const TString& type, bool nullable, bool covered) {
             [["d1"];[10u];"\0\3literal string"];
             [["array data 6"];[15u];"\0\4\0\0\0\0\0\200F@"];
             [["data 2"];[11u];"\0\4\xB0rh\x91\xED|\xBF?"];
+            [["object data 7"];[16u];"\2id"];
             [["object data 7"];[16u];"\2id\0\4\0\0\0\0@\x87\xE4@"];
+            [["object data 7"];[16u];"\5brand"];
             [["object data 7"];[16u];"\5brand\0\3bricks"];
+            [["object data 7"];[16u];"\5parts"];
+            [["object data 7"];[16u];"\5parts\2id"];
             [["object data 7"];[16u];"\5parts\2id\0\4\0\0\0\0\x80\xC3\xDF@"];
             [["object data 7"];[16u];"\5parts\2id\0\4\0\0\0\0\xC0\xC2\xDF@"];
+            [["object data 7"];[16u];"\5parts\4name"];
             [["object data 7"];[16u];"\5parts\4name\0\0031x3"];
             [["object data 7"];[16u];"\5parts\4name\0\0033x5"];
+            [["object data 7"];[16u];"\5parts\5count"];
             [["object data 7"];[16u];"\5parts\5count\0\4\0\0\0\0\0\0\x1C@"];
             [["object data 7"];[16u];"\5parts\5count\0\4\0\0\0\0\0\0001@"];
+            [["object data 7"];[16u];"\5price"];
             [["object data 7"];[16u];"\5price\0\2"];
+            [["object data 7"];[16u];"\npart_count"];
             [["object data 7"];[16u];"\npart_count\0\4\0\0\0\0\0\xE4\x95@"]
         ])", NYdb::FormatResultSetYson(index));
     } else {
@@ -110,18 +119,46 @@ void DoTestAddJsonIndex(const TString& type, bool nullable, bool covered) {
             [[10u];"\0\3literal string"];
             [[15u];"\0\4\0\0\0\0\0\200F@"];
             [[11u];"\0\4\xB0rh\x91\xED|\xBF?"];
+            [[16u];"\2id"];
             [[16u];"\2id\0\4\0\0\0\0@\x87\xE4@"];
+            [[16u];"\5brand"];
             [[16u];"\5brand\0\3bricks"];
+            [[16u];"\5parts"];
+            [[16u];"\5parts\2id"];
             [[16u];"\5parts\2id\0\4\0\0\0\0\x80\xC3\xDF@"];
             [[16u];"\5parts\2id\0\4\0\0\0\0\xC0\xC2\xDF@"];
+            [[16u];"\5parts\4name"];
             [[16u];"\5parts\4name\0\0031x3"];
             [[16u];"\5parts\4name\0\0033x5"];
+            [[16u];"\5parts\5count"];
             [[16u];"\5parts\5count\0\4\0\0\0\0\0\0\x1C@"];
             [[16u];"\5parts\5count\0\4\0\0\0\0\0\0001@"];
+            [[16u];"\5price"];
             [[16u];"\5price\0\2"];
+            [[16u];"\npart_count"];
             [[16u];"\npart_count\0\4\0\0\0\0\0\xE4\x95@"]
         ])", NYdb::FormatResultSetYson(index));
     }
+}
+
+void ValidatePredicate(NQuery::TQueryClient& db, const std::string& table, const std::string& indexTable, const std::string& predicate) {
+    auto query = [&](const std::string& table, const std::string& indexTable, const std::string& predicate) {
+        return std::format(R"sql(
+            SELECT k, v FROM {} {} WHERE {} ORDER BY k;
+        )sql", table, (indexTable.empty() ? "" : "VIEW  " + indexTable), predicate);
+    };
+
+    auto mainResult = db.ExecuteQuery(query(table, "", predicate), TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(mainResult.GetStatus(), EStatus::SUCCESS, mainResult.GetIssues().ToString());
+
+    auto indexResult = db.ExecuteQuery(query(table, indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(indexResult.GetStatus(), EStatus::SUCCESS, indexResult.GetIssues().ToString());
+
+    // Cerr << "MAIN: " << Endl << NYdb::FormatResultSetYson(mainResult.GetResultSet(0)) << Endl;
+    // Cerr << "INDEX: " << Endl << NYdb::FormatResultSetYson(indexResult.GetResultSet(0)) << Endl;
+
+    Cerr << predicate << ", main size: " << mainResult.GetResultSet(0).RowsCount() << ", index size: " << indexResult.GetResultSet(0).RowsCount() << Endl;
+    CompareYson(NYdb::FormatResultSetYson(mainResult.GetResultSet(0)), NYdb::FormatResultSetYson(indexResult.GetResultSet(0)));
 }
 
 Y_UNIT_TEST(AddJsonIndexJson) {
@@ -307,6 +344,162 @@ Y_UNIT_TEST(DisabledFlagRejectCreate) {
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST_QUAD(SelectJsonExists, IsJsonDocument, IsStrict) {
+    auto kikimr = Kikimr();
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+    auto db = kikimr.GetQueryClient();
+
+    const std::string jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+    const auto jsonExists = [&](const std::string& predicate) {
+        return std::format("JSON_EXISTS(v, '{}')", (IsStrict ? "strict " : "lax ") + predicate);
+    };
+
+    {
+        auto query = std::format(R"(
+            CREATE TABLE TestTable (
+                k Uint64,
+                v {0},
+                PRIMARY KEY (k)
+            );
+        )", jsonType);
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        std::vector<std::string> values = {
+            R"(('null'))",
+            R"(('1'))",
+            R"(('true'))",
+            R"(('false'))",
+            R"(('"string"'))",
+            R"(('[]'))",
+            R"(('{}'))",
+            R"(('{"k1": null}'))",
+            R"(('{"k1": 1}'))",
+            R"(('{"k1": true}'))",
+            R"(('{"k1": false}'))",
+            R"(('{"k1": "string"}'))",
+            R"(('{"k1": []}'))",
+            R"(('{"k1": {}}'))",
+            R"(('{"k1": [1, 2, 3]}'))",
+            R"(('{"k1": "string", "k2": "string2"}'))",
+            R"(('[{"k1": "string", "k2": "string2"}, {"k1": "string", "k2": "string2"}]'))",
+            R"(('{"k1": {"k2": {"k3": {"k4": "string"}}}}'))",
+            R"(('{"k1": 0, "k2": -1.5, "k3": "text", "k4": true, "k5": null, "k6": [1, "string", false], "k7": {"k1": "v"}}'))",
+            R"(('{"k1": [{"k1": 10}, {"k1": 20}], "k2": {"k1": 2, "k2": true}}'))",
+            R"(('{"": null}'))",
+            R"(('{"": 1}'))",
+            R"(('{"": true}'))",
+            R"(('{"": false}'))",
+            R"(('{"": "string"}'))",
+            R"(('{"": []}'))",
+            R"(('{"": {}}'))",
+            R"(('{"": [1, 2, 3]}'))",
+            R"(('{"": {"": {"": {"": ["", "string", null, 1, {"": ""}]}}}}'))",
+            R"(('[{"": ""}, {"": ""}, {"": ""}, {"": ""}]'))",
+            R"(('{"k1": [[{"k2": 0}, {"k2": 1}], []]}'))",
+            R"(('[1, [2, [3, [4, []]]]]'))",
+            R"(('["string", {"k1": 1}, [2, 3], 4, null, false]'))",
+            R"(('[[{"k1": 1}], [{"k2": [{"k3": 2}]}]]'))",
+            R"(('{"k1": {"k2": {"k3": [{"k1": "a"}, {"k2": "b"}], "k4": [0, 1.5, -2, null]}}}'))",
+            "NULL"
+        };
+
+        std::string query = R"(
+            UPSERT INTO TestTable (k, v) VALUES
+        )";
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            query += std::format("({}, {}),", i + 1, (values[i] == "NULL" ? "" : jsonType) + values[i]);
+        }
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        auto query = R"(
+            ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (v)
+        )";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    // Any json value existence
+    {
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$"));
+    }
+
+    // Keys existence (with empty keys)
+    {
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}", 1)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}", 2)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}", 3)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}", 4)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}", 5)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}", 6)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}", 7)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}", 8)));
+
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k1.k{}", 1)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k1.k{}", 2)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k1.k{}", 3)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k1.k{}", 4)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k1.k{}", 5)));
+
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}.k{}", 1, 1)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}.k{}", 1, 2)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}.k{}", 1, 3)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}.k{}", 1, 4)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}.k{}", 1, 5)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}.k{}", 2, 1)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}.k{}", 2, 2)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}.k{}", 2, 3)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}.k{}", 2, 4)));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k{}.k{}", 2, 5)));
+
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\""));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\".\"\""));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\".\"\".\"\""));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\".\"\".\"\".\"\""));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\".\"\".\"\".\"\".\"\""));
+
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.*"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2.*"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k1.*"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.*.k1"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.*.*"));
+    }
+
+    // Array elements existence
+    {
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0, 3]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[1 to 3]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[last]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0].k1"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0, 3].k1"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[1 to 3].k1"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[last].k1"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*].k1"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0].*"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*].*"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0, 3]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[1 to 3]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[last]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0 to last]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*[0]"));
+        ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*[*]"));
     }
 }
 

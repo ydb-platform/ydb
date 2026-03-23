@@ -150,11 +150,13 @@ jobs:
           git config --global user.email ydbot@ydb.tech
           git config --local github.token ${{ env.GH_TOKEN }}
 
+          PR_HEAD_SHA=${{ github.event.pull_request.head.sha }}
           BASE_REF=${{ github.event.pull_request.base.ref }}
           PR_NUMBER=${{ github.event.pull_request.number }}
 
           git fetch origin "${BASE_REF}"
-          git merge "origin/${BASE_REF}" --no-edit
+          git checkout -B "pr-${PR_NUMBER}-merge" "origin/${BASE_REF}"
+          git merge "${PR_HEAD_SHA}" --no-ff --no-edit
 
           MERGE_SHA=$(git rev-parse HEAD)
           echo "merge_sha=${MERGE_SHA}" >> $GITHUB_OUTPUT
@@ -169,11 +171,12 @@ jobs:
             const prNumber = context.payload.pull_request.number;
             const header = `<!-- merge pr=${prNumber} -->`;
             const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = `${header}\n:red_circle: Unable to merge your PR into the base branch. Please rebase or merge it with the base branch.\n\n[View failed merge attempt](${runUrl})`;
+            const body = `${header}\n:red_circle: An automated test-merge of this PR into the base branch failed. This may be due to merge conflicts or another error. Please check the workflow logs and resolve any issues (for example by rebasing or merging with the base branch).\n\n[View failed merge attempt](${runUrl})`;
 
-            const { data: comments } = await github.rest.issues.listComments({
+            const comments = await github.paginate(github.rest.issues.listComments, {
               ...context.repo,
               issue_number: prNumber,
+              per_page: 100,
             });
             const existing = comments.find(c => c.body.startsWith(header));
             if (existing) {
@@ -198,9 +201,10 @@ jobs:
           script: |
             const prNumber = context.payload.pull_request.number;
             const header = `<!-- merge pr=${prNumber} -->`;
-            const { data: comments } = await github.rest.issues.listComments({
+            const comments = await github.paginate(github.rest.issues.listComments, {
               ...context.repo,
               issue_number: prNumber,
+              per_page: 100,
             });
             const existing = comments.find(c => c.body.startsWith(header));
             if (existing) {

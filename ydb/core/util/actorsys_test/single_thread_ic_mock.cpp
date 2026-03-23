@@ -222,7 +222,7 @@ public:
         auto *msg = ev->Get();
         Y_ABORT_UNLESS(msg->Event);
 
-        STLOG(PRI_DEBUG, INTERCONNECT_SESSION, STIM02, Prefix << "HandleForwardWithSubscribe", (SelfId, SelfId()),
+        STLOG(PRI_DEBUG, INTERCONNECT_SESSION, STIM05, Prefix << "HandleForwardWithSubscribe", (SelfId, SelfId()),
             (Type, msg->Event->Type), (TypeName, Proxy->Mock->TestActorSystem->GetEventName(msg->Event->Type)),
             (Sender, msg->Event->Sender), (Recipient, msg->Event->Recipient), (Flags, msg->Event->Flags),
             (Cookie, msg->Event->Cookie));

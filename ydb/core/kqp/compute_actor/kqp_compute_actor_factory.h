@@ -99,6 +99,8 @@ public:
 struct IKqpNodeComputeActorFactory {
     virtual ~IKqpNodeComputeActorFactory() = default;
 
+    std::atomic<bool> AccountDefaultPoolInScheduler = false;
+
 public:
     struct TCreateArgs {
         const NActors::TActorId& ExecuterId;

@@ -33,6 +33,8 @@ namespace NKikimr::NKqp {
 #define STLOG_D(MESSAGE, ...) STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
 #define STLOG_T(MESSAGE, ...) STLOG(PRI_TRACE, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
 
+static constexpr double SecToUsec = 1e6;
+
 struct TKqpNodeEvents {
     enum EKqpNodeEvents {
         EvStartKqpTasksRequest = EventSpaceBegin(TKikimrEvents::ES_KQP) + 320,

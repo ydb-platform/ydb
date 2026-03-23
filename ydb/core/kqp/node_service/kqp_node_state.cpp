@@ -2,32 +2,45 @@
 
 namespace NKikimr::NKqp {
 
-bool TNodeState::AddRequest(TNodeRequest&& request, bool& cancelled, TActorId& requestQueryManId) {
-    auto txId = request.TxId;
-    auto executerId = request.ExecuterId;
-
-    auto& bucket = GetBucketByTxId(txId);
-
+bool TNodeState::AddRequest(TActorId executerId, TActorId queryManId, bool& cancelled, TActorId& requestQueryManId) {
+    auto& bucket = GetBucketByExecuterId(executerId);
     TWriteGuard guard(bucket.Mutex);
-    const auto& [it, inserted] = bucket.Requests.try_emplace(executerId, std::move(request));
 
+    const auto& [it, inserted] = bucket.Requests.try_emplace(executerId, queryManId);
     if (inserted) {
+        requestQueryManId = queryManId;
+    } else {
         if (it->second.ExecutionCancelled) {
             cancelled = true;
+        }
+        requestQueryManId = it->second.QueryManId;
+    }
+    return inserted;
+}
+
+bool TNodeState::UpdateRequest(TActorId executerId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TInstant startTime, TInstant deadline, std::vector<ui64>& tasks, ui64& taskCount) {
+    auto& bucket = GetBucketByExecuterId(executerId);
+    TWriteGuard guard(bucket.Mutex);
+
+    if (auto requestIt = bucket.Requests.find(executerId); requestIt != bucket.Requests.end()) {
+        if (requestIt->second.ExecutionCancelled) {
             return false;
         }
-        if (it->second.Deadline) {
-            bucket.ExpiringRequests.emplace(std::make_tuple(it->second.Deadline, txId, executerId));
+        requestIt->second.Query = query;
+        requestIt->second.StartTime = startTime;
+        requestIt->second.Deadline = deadline;
+        if (deadline) {
+            bucket.ExpiringRequests.emplace(std::make_tuple(deadline, 0, executerId));
         }
-        requestQueryManId = it->second.QueryManId;
+        for(auto taskId : tasks) {
+            const auto& [it, inserted] = requestIt->second.Tasks.try_emplace(taskId, std::nullopt);
+            YQL_ENSURE(inserted, "Duplicated taskIds are requested");
+        }
+        taskCount = requestIt->second.Tasks.size();
         return true;
-    } else {
-        YQL_ENSURE(it->second.TxId == request.TxId, "Different TxIds " << it->second.TxId << "," << request.TxId << " from single executer " << executerId);
-        it->second.Tasks.merge(request.Tasks);
-        YQL_ENSURE(request.Tasks.empty(), "Duplicated taskIds are requested");
-        requestQueryManId = it->second.QueryManId;
-        return false;
     }
+
+    return false;
 }
 
 std::vector<TNodeRequest::TExpirationInfo> TNodeState::ClearExpiredRequests() {
@@ -47,19 +60,8 @@ std::vector<TNodeRequest::TExpirationInfo> TNodeState::ClearExpiredRequests() {
     return requests;
 }
 
-NScheduler::NHdrf::NDynamic::TQueryPtr TNodeState::GetSchedulerQuery(ui64 txId, TActorId executerId) {
-    const auto& bucket = GetBucketByTxId(txId);
-    TReadGuard guard(bucket.Mutex);
-
-    if (auto requestIt = bucket.Requests.find(executerId); requestIt != bucket.Requests.end()) {
-        return requestIt->second.Query;
-    }
-
-    return nullptr;
-}
-
-bool TNodeState::OnTaskStarted(ui64 txId, TActorId executerId, ui64 taskId, TActorId computeActorId) {
-    auto& bucket = GetBucketByTxId(txId);
+bool TNodeState::OnTaskStarted(TActorId executerId, ui64 taskId, TActorId computeActorId) {
+    auto& bucket = GetBucketByExecuterId(executerId);
 
     TWriteGuard guard(bucket.Mutex);
 
@@ -79,7 +81,7 @@ bool TNodeState::OnTaskStarted(ui64 txId, TActorId executerId, ui64 taskId, TAct
 }
 
 void TNodeState::OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, bool success) {
-    auto& bucket = GetBucketByTxId(txId);
+    auto& bucket = GetBucketByExecuterId(executerId);
 
     TWriteGuard guard(bucket.Mutex);
     auto requestIt = bucket.Requests.find(executerId);
@@ -101,15 +103,18 @@ void TNodeState::OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, boo
             auto* actorSystem = TlsActivationContext->ActorSystem();
             actorSystem->Send(MakeKqpSchedulerServiceId(actorSystem->NodeId), removeQueryEvent.Release());
         }
-
+        if (requestIt->second.QueryManId) {
+            auto* actorSystem = TlsActivationContext->ActorSystem();
+            actorSystem->Send(requestIt->second.QueryManId, new NActors::TEvents::TEvPoison());
+        }
         bucket.Requests.erase(requestIt);
     }
 }
 
-std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByTxId(ui64 txId, TActorId executerId) const {
+std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByExecuterId(TActorId executerId) const {
     std::vector<TNodeRequest::TTaskInfo> tasks;
 
-    const auto& bucket = GetBucketByTxId(txId);
+    const auto& bucket = GetBucketByExecuterId(executerId);
     TReadGuard guard(bucket.Mutex);
 
     if (auto requestIt = bucket.Requests.find(executerId); requestIt != bucket.Requests.end()) {
@@ -123,8 +128,8 @@ std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByTxId(ui64 txId, TActo
     return tasks;
 }
 
-void TNodeState::MarkRequestAsCancelled(ui64 txId, TActorId executerId) {
-    auto& bucket = GetBucketByTxId(txId);
+void TNodeState::MarkRequestAsCancelled(TActorId executerId) {
+    auto& bucket = GetBucketByExecuterId(executerId);
     TWriteGuard guard(bucket.Mutex);
 
     if (auto requestIt = bucket.Requests.find(executerId); requestIt != bucket.Requests.end()) {

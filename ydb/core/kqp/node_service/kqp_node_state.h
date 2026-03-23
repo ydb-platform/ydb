@@ -33,15 +33,17 @@ struct TNodeRequest : TMoveOnly {
     {
     }
 
+    explicit TNodeRequest(TActorId queryManId) : QueryManId(queryManId) {}
+
     TExpirationInfo GetExpirationInfo() const {
         return std::make_tuple(Deadline, TxId, ExecuterId);
     }
 
-    const ui64 TxId = 0;
-    const TActorId ExecuterId;
+    ui64 TxId = 0;
+    TActorId ExecuterId;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     const TActorId QueryManId;
-    const TInstant StartTime;
+    TInstant StartTime;
     std::unordered_map<ui64 /* taskId */, std::optional<TActorId>> Tasks;
 
     TInstant Deadline;
@@ -52,28 +54,28 @@ class TNodeState {
     static constexpr ui64 BucketsCount = 64;
 
 public:
-    bool AddRequest(TNodeRequest&& request, bool& cancelled, TActorId& requestQueryManId);
+    bool AddRequest(TActorId executerId, TActorId queryManId, bool& cancelled, TActorId& requestQueryManId);
+    bool UpdateRequest(TActorId executerId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TInstant startTime, TInstant deadline, std::vector<ui64>& tasks, ui64& taskCount);
     std::vector<TNodeRequest::TExpirationInfo> ClearExpiredRequests();
-    NScheduler::NHdrf::NDynamic::TQueryPtr GetSchedulerQuery(ui64 txId, TActorId executerId);
 
-    bool OnTaskStarted(ui64 txId, TActorId executerId, ui64 taskId, TActorId computeActorId);
+    bool OnTaskStarted(TActorId executerId, ui64 taskId, TActorId computeActorId);
     void OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, bool success);
 
     // Returns only started tasks
-    std::vector<TNodeRequest::TTaskInfo> GetTasksByTxId(ui64 txId, TActorId executerId) const;
+    std::vector<TNodeRequest::TTaskInfo> GetTasksByExecuterId(TActorId executerId) const;
 
-    void MarkRequestAsCancelled(ui64 txId, TActorId executerId);
+    void MarkRequestAsCancelled(TActorId executerId);
     void DumpInfo(TStringStream& str, const TCgiParameters& cgiParams) const;
     bool ValidateComputeActorId(const TString& caId, TActorId& computeActorId) const;
     bool ValidateKqpExecuterId(const TString& exId, TActorId& kqpExecuterId) const;
 
 private:
-    inline auto& GetBucketByTxId(ui64 txId) {
-        return Buckets.at(txId % Buckets.size());
+    inline auto& GetBucketByExecuterId(TActorId executerId) {
+        return Buckets.at(executerId.Hash() % Buckets.size());
     }
 
-    inline const auto& GetBucketByTxId(ui64 txId) const {
-        return Buckets.at(txId % Buckets.size());
+    inline const auto& GetBucketByExecuterId(TActorId executerId) const {
+        return Buckets.at(executerId.Hash() % Buckets.size());
     }
 
 private:

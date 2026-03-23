@@ -518,13 +518,17 @@ Y_UNIT_TEST(HtmlApp_BadPartition) {
     HtmlApp("mlp-consumer", 13, "Tablet info");
 }
 
-static size_t WaitForPartitionCount(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, size_t expectedCount, size_t maxRetries = 30) {
+}
+
+Y_UNIT_TEST_SUITE(TMLPConsumerFIFOWithSplit) {
+
+static size_t WaitForPartitionCount(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, size_t expectedCount, size_t maxRetries = 300) {
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
     size_t partitionCount = 0;
     for (size_t i = 0; i < maxRetries; ++i) {
-        Sleep(TDuration::Seconds(1));
+        Sleep(TDuration::MilliSeconds(100));
         auto describeResult = client.DescribeTopic(topicName).GetValueSync();
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
 
@@ -1033,7 +1037,7 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
 
 // Case 1: All written messages committed before split.
 // Expected: child messages for all groups (A, B, C) are immediately available.
-Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_AllCommittedBeforeSplit) {
+Y_UNIT_TEST(Order_AllCommittedBeforeSplit) {
     PartitionSplitWithMessageGroupOrdering({
         {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 3,}}},
         {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
@@ -1045,7 +1049,7 @@ Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_AllCommittedBeforeSplit) {
 
 // Case 2: None of the written messages committed before split.
 // Expected: child messages for all groups are blocked until parent messages are committed.
-Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_NoneCommittedBeforeSplit) {
+Y_UNIT_TEST(Order_NoneCommittedBeforeSplit) {
     PartitionSplitWithMessageGroupOrdering({
         {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 0,}}},
         {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 0,}}},
@@ -1058,7 +1062,7 @@ Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_NoneCommittedBeforeSplit) {
 // Case 3: All messages of group-A and group-B committed before split.
 //         None of group-C committed before split.
 // Expected: child messages for A and B available; C blocked until parent committed.
-Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_GroupAB_CommittedBeforeSplit) {
+Y_UNIT_TEST(Order_GroupAB_CommittedBeforeSplit) {
     PartitionSplitWithMessageGroupOrdering({
         {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 3,}}},
         {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
@@ -1070,7 +1074,7 @@ Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_GroupAB_CommittedBeforeSplit)
 
 // Case 4: One message of each group committed before split.
 // Expected: child messages for all groups are available (partial commit unblocks).
-Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_OnePerGroupCommittedBeforeSplit) {
+Y_UNIT_TEST(Order_OnePerGroupCommittedBeforeSplit) {
     PartitionSplitWithMessageGroupOrdering({
         {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 1,}}},
         {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 1,}}},
@@ -1083,7 +1087,7 @@ Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_OnePerGroupCommittedBeforeSpl
 // Case 5: All messages of group-A and group-B committed before split.
 //         One message of group-C committed before split.
 // Expected: child messages for all groups are available.
-Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_GroupAB_OneCCommittedBeforeSplit) {
+Y_UNIT_TEST(Order_GroupAB_OneCCommittedBeforeSplit) {
     PartitionSplitWithMessageGroupOrdering({
         {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 3,}}},
         {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
@@ -1093,7 +1097,7 @@ Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_GroupAB_OneCCommittedBeforeSp
     });
 }
 
-Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_GroupBC_OneACommittedBeforeSplit) {
+Y_UNIT_TEST(Order_GroupBC_OneACommittedBeforeSplit) {
     PartitionSplitWithMessageGroupOrdering({
         {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 1,}}},
         {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
@@ -1104,7 +1108,7 @@ Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_GroupBC_OneACommittedBeforeSp
 }
 
 // Sanity check: minimal test with two groups, one message each before and after split.
-Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_TwoGroups_Minimal) {
+Y_UNIT_TEST(Order_TwoGroups_Minimal) {
     PartitionSplitWithMessageGroupOrdering({
         {"group-A", {.SizeBeforeSplit = 1, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 1,}}},
         {"group-B", {.SizeBeforeSplit = 1, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 1,}}},
@@ -1112,7 +1116,7 @@ Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_TwoGroups_Minimal) {
 }
 
 // Sanity check: two groups before split, one new group only after split.
-Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_NewGroupAfterSplit) {
+Y_UNIT_TEST(Order_NewGroupAfterSplit) {
     PartitionSplitWithMessageGroupOrdering({
         {"group-A", {.SizeBeforeSplit = 1, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 1,}}},
         {"group-B", {.SizeBeforeSplit = 1, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 1,}}},
@@ -1121,27 +1125,26 @@ Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_NewGroupAfterSplit) {
 }
 
 // Sanity check: single group, uncommitted before split.
-Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_SingleGroup_Uncommitted) {
+Y_UNIT_TEST(Order_SingleGroup_Uncommitted) {
     PartitionSplitWithMessageGroupOrdering({
         {"group-A", {.SizeBeforeSplit = 1, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 1, .CommitLast = false}}},
     });
 }
 
 // Sanity check: single group, committed before split.
-Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_SingleGroup_Committed) {
+Y_UNIT_TEST(Order_SingleGroup_Committed) {
     PartitionSplitWithMessageGroupOrdering({
         {"group-A", {.SizeBeforeSplit = 1, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 1, .CommitLast = true}}},
     });
 }
 
 // Sanity check: single group before split, new group after split, committed before split.
-Y_UNIT_TEST(PartitionSplitWithMessageGroupOrdering_UnrelatedGroup_Committed) {
+Y_UNIT_TEST(Order_UnrelatedGroup_Committed) {
     PartitionSplitWithMessageGroupOrdering({
         {"group-A", {.SizeBeforeSplit = 1, .SizeAfterSplit = 0, .ReadBeforeSplit = {.ReadCount = 1, .CommitLast = true}}},
         {"group-B", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
     });
 }
-
 
 }
 

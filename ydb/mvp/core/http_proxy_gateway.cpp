@@ -14,6 +14,7 @@ class THttpProxyGatewayRequestActor : public NActors::TActorBootstrapped<THttpPr
     const NHttp::THttpIncomingRequestPtr OriginalRequest;
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
+    NHttp::THttpOutgoingResponsePtr ForwardedResponse;
     bool RequestCancelled = false;
     bool StreamingResponse = false;
 
@@ -50,14 +51,37 @@ public:
         if (response) {
             BLOG_D(GetLogPrefix(Event->Get()->Request) << "Outgoing HTTP response: " << response->Status << ' ' << response->Message);
 
+            const bool responseWasDone = response->IsDone();
+            NHttp::THeadersBuilder extraHeaders;
             TString requestId = GetRequestId(Event->Get()->Request);
             if (!requestId.empty()) {
-                NHttp::THeadersBuilder extraHeaders;
                 extraHeaders.Set(REQUEST_ID_HEADER, requestId);
+            }
+
+            if (responseWasDone) {
                 response = response->Duplicate(OriginalRequest, extraHeaders);
+                if (response && !response->IsDone()) {
+                    response->Finish();
+                }
+            } else {
+                NHttp::THeadersBuilder headers(response->Headers);
+                for (const auto& [key, value] : extraHeaders.Headers) {
+                    if (value) {
+                        headers.Set(key, value);
+                    } else {
+                        headers.Erase(key);
+                    }
+                }
+
+                auto forwardedResponse = OriginalRequest->CreateIncompleteResponse(response->Status, response->Message, headers);
+                forwardedResponse->FinishHeader();
+                response = std::move(forwardedResponse);
             }
 
             StreamingResponse = !response->IsDone();
+            if (StreamingResponse) {
+                ForwardedResponse = response;
+            }
         }
 
         auto forwarded = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(std::move(response));
@@ -78,7 +102,16 @@ public:
         bool isFinished = false;
         if (event->Get()->DataChunk) {
             isFinished = event->Get()->DataChunk->IsEndOfData();
-            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(std::move(event->Get()->DataChunk)), 0, Event->Cookie);
+            NHttp::THttpOutgoingDataChunkPtr forwardedDataChunk;
+            if (ForwardedResponse) {
+                forwardedDataChunk = ForwardedResponse->CreateDataChunk(event->Get()->DataChunk->AsString());
+                if (isFinished) {
+                    forwardedDataChunk->SetEndOfData();
+                }
+            } else {
+                forwardedDataChunk = std::move(event->Get()->DataChunk);
+            }
+            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(std::move(forwardedDataChunk)), 0, Event->Cookie);
         } else {
             isFinished = true;
             Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(event->Get()->Error), 0, Event->Cookie);

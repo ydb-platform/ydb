@@ -140,12 +140,18 @@ jobs:
             const fail_msg = header + ':red_circle: Unable to merge your PR into the base branch. '
                 + 'Please rebase or merge it with the base branch.'
             
+            let result = await github.rest.pulls.get({
+                ...context.repo,
+                pull_number: pr.number
+            })
+            pr = result.data;
+
             let i = 0;
             
             while (pr.mergeable == null && i < 60) {
                 console.log("get pull-request status");
     
-                let result = await github.rest.pulls.get({
+                result = await github.rest.pulls.get({
                     ...context.repo,
                     pull_number: pr.number
                 })

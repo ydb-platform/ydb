@@ -23,13 +23,6 @@ constexpr bool PrintCallableTimes = false;
 constexpr ui32 MaxChildrenForFuzzing = 100;
 
 THashSet<TStringBuf> FuzzUntypedExcludes = {
-    "S3ReadObject!",
-    "S3ParseSettings",
-    "DqCnMerge",
-    "DqJoin",
-    "DqPhyMapJoin",
-    "DqPhyCrossJoin",
-    "DqPhyJoinDict",
 };
 
 // IO funcs will be skipped during partial typecheck

@@ -26,6 +26,7 @@ static const TVector<TSecretSettingsNames> EDS_SECRETS_SETTINGS = {
     TSecretSettingsNames("service_account_secret"),
     TSecretSettingsNames("aws_access_key_id_secret"),
     TSecretSettingsNames("aws_secret_access_key_secret"),
+    TSecretSettingsNames("initial_token_secret"),
 };
 
 static const TVector<TSecretSettingsNames> REPLICATION_AND_TRANSFER_SECRETS_SETTINGS = {

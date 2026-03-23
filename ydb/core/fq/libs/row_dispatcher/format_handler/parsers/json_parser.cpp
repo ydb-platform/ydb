@@ -608,6 +608,7 @@ private:
             state.Status = status;
             return EParsingStatus::Finish;
         }
+        LOG_ROW_DISPATCHER_DEBUG("Unbatched parser, skipped " << state.ErrorsCount << ", outputRowId " << state.OutputRowId << ", recovering from " << status.GetErrorMessage());
         ClearRowBuffer(state.OutputRowId);
         if (TryParseOneJson(state)) {
             state.OutputRowId++;

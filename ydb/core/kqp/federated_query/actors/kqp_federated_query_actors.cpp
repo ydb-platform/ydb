@@ -615,6 +615,7 @@ public:
 private:
     STRICT_STFUNC(StateWait,
         hFunc(NActors::TEvents::TEvWakeup, Handle)
+        sFunc(NActors::TEvents::TEvPoison, PassAway)
     )
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
@@ -648,6 +649,7 @@ private:
                     } else {
                         promise.SetValue(
                                 TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
+                        actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
                     }
                     return;
                 }
@@ -668,6 +670,7 @@ private:
                             } else {
                                 promise.SetValue(
                                         TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
+                                actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
                             }
                             return;
                         }
@@ -680,11 +683,13 @@ private:
                             if (k == "cloud_id") {
                                 LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " Resolved ResourceId=" << v);
                                 promise.SetValue(TString{v});
+                                actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
                                 return;
                             }
                         }
                         LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " cloud_id not found");
                         promise.SetValue(TString(""));
+                        actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
                     });
         });
     }

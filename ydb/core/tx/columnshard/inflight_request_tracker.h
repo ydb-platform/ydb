@@ -93,12 +93,26 @@ private:
     NOlap::TSelectInfo::TStats SelectStatsDelta;
 
 public:
-    std::optional<NOlap::TSnapshot> GetSnapshotToClean() const {
+    std::optional<NOlap::TSnapshot> GetOldestLiveSnapshot() const {
         if (SnapshotsLive.empty()) {
             return std::nullopt;
         } else {
             return SnapshotsLive.begin()->first;
         }
+    }
+
+    std::vector<NOlap::TSnapshot> GetLiveSnapshots(const NOlap::TSnapshot until) const {
+        std::vector<NOlap::TSnapshot> result;
+        for (auto&& [snapshot, _] : SnapshotsLive) {
+            if (snapshot >= until) break;
+
+            result.push_back(snapshot);
+        }
+        return result;
+    }
+
+    bool HasLiveSnapshot(const NOlap::TSnapshot& snapshot) const {
+        return SnapshotsLive.contains(snapshot);
     }
 
     bool LoadFromDatabase(NTable::TDatabase& db);

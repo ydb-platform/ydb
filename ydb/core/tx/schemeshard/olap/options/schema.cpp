@@ -3,7 +3,9 @@
 namespace NKikimr::NSchemeShard {
 
 bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate, IErrorCollector& /*errors*/) {
-    SchemeNeedActualization = schemaUpdate.GetSchemeNeedActualization();
+    if (schemaUpdate.GetSchemeNeedActualizationSpecified()) {
+        SchemeNeedActualization = schemaUpdate.GetSchemeNeedActualization();
+    }
     if (!!schemaUpdate.GetScanReaderPolicyName()) {
         ScanReaderPolicyName = *schemaUpdate.GetScanReaderPolicyName();
     }

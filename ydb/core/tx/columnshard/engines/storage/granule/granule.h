@@ -148,7 +148,6 @@ private:
     void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter,
         NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard, const bool onLoad = false);
     void OnAdditiveSummaryChange() const;
-    YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 
     TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
         if (!portion) {
@@ -281,10 +280,6 @@ public:
 
     NArrow::NMerger::TIntervalPositions GetBucketPositions() const {
         return OptimizerPlanner->GetBucketPositions();
-    }
-
-    void OnStartCompaction() {
-        LastCompactionInstant = TMonotonic::Now();
     }
 
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;

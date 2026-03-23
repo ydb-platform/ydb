@@ -1418,7 +1418,7 @@ message AlterTopicRequest {
     }
 
     // Enable content-based deduplication for the topic.
-    bool set_content_based_deduplication = 17;
+    optional bool set_content_based_deduplication = 17;
 }
 
 // Update topic response sent from server to client.

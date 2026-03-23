@@ -40,6 +40,7 @@ namespace NKikimr::NSqsTopic::V1 {
                     return std::unexpected(std::format("Invalid DelaySeconds"));
                 }
                 result.ReceiveMessageDelay = TDuration::Seconds(*delay);
+                config.SetDefaultDelayMessageTimeMs(static_cast<ui64>(*delay) * 1000);
             } else if (key == "ReceiveMessageWaitTimeSeconds") {
                 TMaybe<ui32> waitTime = TryFromString<ui32>(value);
                 if (!waitTime) {
@@ -144,7 +145,7 @@ namespace NKikimr::NSqsTopic::V1 {
         }
         if (newConfig.ReceiveMessageDelay.Defined()) {
             ui64 newSeconds = newConfig.ReceiveMessageDelay->Seconds();
-            ui64 existingSeconds = static_cast<ui64>(existingConfig.GetPartitionConfig().GetLifetimeSeconds());
+            ui64 existingSeconds = existingConsumer.GetDefaultDelayMessageTimeMs() / 1000;
             if (existingSeconds != newSeconds) {
                 return std::unexpected(std::format(
                     "ReceiveMessageDelay mismatch: new value is {} seconds, existing value is {} seconds",

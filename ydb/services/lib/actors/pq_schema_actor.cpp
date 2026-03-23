@@ -1366,7 +1366,9 @@ namespace NKikimr::NGRpcProxy::V1 {
                 partConfig->SetStorageLimitBytes(request.set_retention_storage_mb() * 1024 * 1024);
         }
 
-        pqTabletConfig->SetContentBasedDeduplication(request.set_content_based_deduplication());
+        if (request.has_set_content_based_deduplication()) {
+            pqTabletConfig->SetContentBasedDeduplication(request.set_content_based_deduplication());
+        }
 
         if (request.has_alter_partitioning_settings()) {
             const auto& settings = request.alter_partitioning_settings();

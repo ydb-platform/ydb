@@ -65,7 +65,6 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
     , MaskedToken_(maskedToken)
     , AuthType_(authType)
     , SourceAddress_(sourceAddress)
-    , EnableSQSMigrationTopicCreation_(AppData()->FeatureFlags.GetEnableSQSMigrationTopicCreation())
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 
@@ -614,7 +613,7 @@ void TCreateQueueSchemaActorV2::Step() {
             } else {
                 if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
                     CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
-                } else if (EnableSQSMigrationTopicCreation_) {
+                } else if (FeatureFlags_.EnableSQSMigrationTopicCreation_) {
                     CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
                 } else {
                     CurrentCreationStep_ = ECreateComponentsStep::Commit;
@@ -643,7 +642,7 @@ void TCreateQueueSchemaActorV2::Step() {
         case ECreateComponentsStep::DiscoverLeaderTabletId: {
             if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
                 CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
-            } else if (EnableSQSMigrationTopicCreation_) {
+            } else if (FeatureFlags_.EnableSQSMigrationTopicCreation_) {
                 CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
             } else {
                 CurrentCreationStep_ = ECreateComponentsStep::Commit;
@@ -651,7 +650,7 @@ void TCreateQueueSchemaActorV2::Step() {
             break;
         }
         case ECreateComponentsStep::AddQuoterResource: {
-            if (EnableSQSMigrationTopicCreation_) {
+            if (FeatureFlags_.EnableSQSMigrationTopicCreation_) {
                 CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
             } else {
                 CurrentCreationStep_ = ECreateComponentsStep::Commit;
@@ -1135,7 +1134,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
             .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
             .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
-            .Bool("TOPIC_CREATED", EnableSQSMigrationTopicCreation_);
+            .Bool("TOPIC_CREATED", FeatureFlags_.EnableSQSMigrationTopicCreation_);
     } else {
         TParameters(trans->MutableParams()->MutableProto())
             .Utf8("NAME", QueuePath_.QueueName)
@@ -1163,7 +1162,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
             .Utf8("USER_NAME", QueuePath_.UserName)
             .Utf8("TAGS", TagsJson_)
-            .Bool("TOPIC_CREATED", EnableSQSMigrationTopicCreation_);
+            .Bool("TOPIC_CREATED", FeatureFlags_.EnableSQSMigrationTopicCreation_);
     }
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));

@@ -8,6 +8,8 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <cmath>
+
 using namespace NYdb;
 
 using namespace NYdb;
@@ -629,23 +631,6 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             UNIT_ASSERT(!upsert.IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "No column 'Timestamp' in source batch");
         }
-
-        // Wrong type
-        {
-            TStringBuilder csv;
-            csv << "Shard,App,Message,Ratio\n";
-            csv << "42,app_,message,ratio\n";
-
-            auto upsert = client.BulkUpsert(
-                "/Root/Logs",
-                EDataFormat::CSV,
-                csv,
-                {},
-                BulkUpsertSettings(CsvSettings()))
-                .GetValueSync();
-            UNIT_ASSERT(!upsert.IsSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "Cannot read CSV: Invalid: In CSV column #3: Row #2: The string 'ratio' is not a valid decimal number");
-        }
     }
 
     Y_UNIT_TEST(DecimalPK) {
@@ -774,6 +759,83 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         )"));
     }
 
+    Y_UNIT_TEST(FloatsParsing) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Int32)
+                .AddNullableColumn("Value_Double", EPrimitiveType::Double)
+                .AddNonNullableColumn("Value_Decimal", TDecimalType(35, 10));
+
+            tableBuilder.SetPrimaryKeyColumns({"Key"});
+            auto result = session.CreateTable("/Root/Floats", tableBuilder.Build()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        TStringBuilder csv;
+        csv << "Key,Value_Double,Value_Decimal\n";
+        csv << "1,1.175494351e-38,1.123456789e-1\n";
+        csv << "2,3.402823466e+38,1.123456789e+15\n";
+        csv << "3,-inf,3\n";
+        csv << "4,inf,4\n";
+        csv << "5,nan,5\n";
+
+        auto upsert = client.BulkUpsert(
+            "/Root/Floats",
+            EDataFormat::CSV,
+            csv,
+            {},
+            BulkUpsertSettings(CsvSettings()))
+            .GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        NKqp::CompareYson(R"([
+            [[1];[1.175494351e-38];"0.1123456789"];
+            [[2];[3.402823466e+38];"1123456789000000"]
+        ])", StreamQueryToYson(client, R"(
+            SELECT Key, Value_Double, Value_Decimal
+            FROM `/Root/Floats`
+            WHERE Key <= 2 -- infinity has problems with parsing to yson
+            ORDER BY Key;
+        )"));
+
+        auto read = [&](int key) -> double {
+            TStringBuilder query;
+            query << "SELECT Value_Double FROM `/Root/Floats` WHERE Key = " << key;
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto part = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_C(part.IsSuccess(), part.GetIssues().ToString());
+            auto rs = part.ExtractResultSet();
+            UNIT_ASSERT_VALUES_EQUAL(rs.ColumnsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 1);
+            TResultSetParser rsp(rs);
+            UNIT_ASSERT(rsp.TryNextRow());
+            auto od = rsp.ColumnParser(0).GetOptionalDouble();
+            UNIT_ASSERT(od);
+            return *od;
+        };
+
+        const double v3 = read(3);
+        UNIT_ASSERT_C(std::isinf(v3), v3);
+        UNIT_ASSERT_C(v3 < 0.0, v3);
+
+        const double v4 = read(4);
+        UNIT_ASSERT_C(std::isinf(v4), v4);
+        UNIT_ASSERT_C(v4 > 0.0, v4);
+
+        const double v5 = read(5);
+        UNIT_ASSERT_C(std::isnan(v5), v5);
+    }
+
     Y_UNIT_TEST(Limits) {
         TKikimrWithGrpcAndRootSchema server;
         auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
@@ -868,6 +930,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Cannot read CSV: Invalid: In CSV column #1: Row #2: Error converting '10000000000000000000000' to decimal128(22, 9): precision not supported by type");
         }
 
         {
@@ -879,6 +942,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Cannot read CSV: Invalid: In CSV column #3: Row #2: CSV conversion error to timestamp[s]: invalid value 'not-a-date'");
         }
 
         {
@@ -890,6 +954,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Cannot read CSV: Invalid: In CSV column #4: Row #2: CSV conversion error to timestamp[s]: invalid value 'not-a-datetime'");
         }
 
         {
@@ -901,6 +966,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Cannot read CSV: Invalid: In CSV column #5: Row #2: CSV conversion error to timestamp[us]: invalid value 'not-a-timestamp'");
         }
 
         {
@@ -912,6 +978,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Invalid JSON for JsonDocument provided: UNEXPECTED_ERROR: Unexpected error, consider reporting this problem as you may have found a bug in simdjson");
         }
 
         {
@@ -923,6 +990,43 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Invalid DyNumber string representation");
+        }
+
+        {
+            auto res = client.BulkUpsert(
+                "/Root/TestInvalidData",
+                EDataFormat::CSV,
+                MakeInvalidDataCsv("0", "not decimal"),
+                {},
+                BulkUpsertSettings(CsvSettings()))
+                .GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Cannot read CSV: Invalid: In CSV column #2: Row #2: The string 'not decimal' is not a valid decimal number");
+        }
+
+        {
+            auto res = client.BulkUpsert(
+                "/Root/TestInvalidData",
+                EDataFormat::CSV,
+                MakeInvalidDataCsv("123456789012345678901234567890.1234567890123"),
+                {},
+                BulkUpsertSettings(CsvSettings()))
+                .GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Cannot read CSV: Invalid: In CSV column #1: Row #2: Error converting '123456789012345678901234567890.1234567890123' to decimal128(22, 9): precision not supported by type");
+        }
+
+        {
+            auto res = client.BulkUpsert(
+                "/Root/TestInvalidData",
+                EDataFormat::CSV,
+                MakeInvalidDataCsv("0", "0", "1970-01-02", "1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z", "\xff"),
+                {},
+                BulkUpsertSettings(CsvSettings()))
+                .GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Cannot read CSV: Invalid: In CSV column #3: Row #2: The string 'ratio' is not a valid decimal number");
         }
     }
 

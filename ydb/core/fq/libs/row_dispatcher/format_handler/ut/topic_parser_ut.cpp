@@ -670,8 +670,6 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             GetMessage(FIRST_OFFSET + 2, R"({"a2": "102"})")
         });
     }
-<<<<<<< HEAD
-=======
 
     Y_UNIT_TEST_F(SkipErrors1JsonIn2Messages, TJsonParserFixtureSkipErrors) {
         ExpectedBatches = 1;
@@ -686,7 +684,6 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello2", "a2": "102"})"),
         });
     }
->>>>>>> 0fd16c04485 (rd: properly handle duplicated json keys (#36360))
 }
 
 Y_UNIT_TEST_SUITE(TestRawParser) {

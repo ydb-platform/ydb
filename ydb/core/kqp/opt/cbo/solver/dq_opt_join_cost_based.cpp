@@ -673,7 +673,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     bool allRowStorage = std::any_of(
         rels.begin(),
         rels.end(),
-        [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats.StorageType==NYql::EStorageType::RowStorage; });
+        [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats.StorageType==EStorageType::RowStorage; });
 
     if (optLevel == 2 && allRowStorage) {
         return node;

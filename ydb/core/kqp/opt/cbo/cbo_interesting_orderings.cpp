@@ -15,6 +15,14 @@
 
 namespace NKikimr::NKqp {
 
+bool TJoinColumn::operator==(const TJoinColumn& other) const {
+    return RelName == other.RelName && AttributeName == other.AttributeName;
+}
+
+size_t TJoinColumn::THashFunction::operator()(const TJoinColumn& c) const {
+    return THash<TString>{}(c.RelName) ^ THash<TString>{}(c.AttributeName);
+}
+
 bool operator<(const TJoinColumn& c1, const TJoinColumn& c2) {
     if (c1.RelName < c2.RelName) {
         return true;

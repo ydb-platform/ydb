@@ -22,9 +22,8 @@ namespace NYql { struct TExprContext; }
 
 namespace NKikimr::NKqp {
 
-// TShufflingOrderingsByJoinLabels — stays as alias (FSM independence is next step)
-// (already imported from kqp_statistics.h)
-// TJoinColumn / EJoinAlgoType / AllJoinAlgos already imported via cbo_interesting_orderings.h
+using NYql::EJoinAlgoType;
+using NYql::AllJoinAlgos;
 
 enum EOptimizerNodeKind: ui32 {
     RelNodeType,

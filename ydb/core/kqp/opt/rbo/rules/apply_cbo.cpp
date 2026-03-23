@@ -9,7 +9,8 @@
 #include <typeinfo>
 
 namespace {
-using namespace NYql::NDq;
+using namespace NYql;
+using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 

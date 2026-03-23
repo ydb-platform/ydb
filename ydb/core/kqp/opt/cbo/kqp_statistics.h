@@ -10,8 +10,7 @@
 // TTypeAnnotationContext::StatisticsMap, allowing KQP optimizer passes to
 // own their stats without modifying the shared YQL annotation context.
 
-#include <yql/essentials/core/yql_statistics.h>
-#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
+#include "cbo_interesting_orderings.h"
 
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
@@ -28,39 +27,78 @@
 #include <optional>
 #include <iostream>
 
+// YQL statistics included only for boundary conversion function signatures.
+// The fields of NKikimr::NKqp::TOptimizerStatistics use independent KQP types.
+#include <yql/essentials/core/yql_statistics.h>
+
+// Forward-declare TExprNode used by TKqpStatsStore.
 namespace NYql { class TExprNode; }
 
 namespace NKikimr::NKqp {
 
-// Statistics-type enums — aliased (same underlying type, no ambiguity)
-using EStatisticsType = NYql::EStatisticsType;
-using EStorageType    = NYql::EStorageType;
+// -------------------------------------------------------------------------
+// Statistics-type enums — independent copies (same integer values as NYql)
+// -------------------------------------------------------------------------
+enum EStatisticsType : ui32 {
+    BaseTable,
+    FilteredFactTable,
+    ManyManyJoin
+};
 
-// TShufflingOrderingsByJoinLabels — stays as alias (FSM independence is next step)
-using TShufflingOrderingsByJoinLabels = NYql::TShufflingOrderingsByJoinLabels;
-
-// Enum value aliases (unscoped enums need explicit import)
-using NYql::BaseTable;
-using NYql::FilteredFactTable;
-using NYql::ManyManyJoin;
-using NYql::NA;
-using NYql::RowStorage;
-using NYql::ColumnStorage;
-
-// Join-column type alias (used in TOptimizerStatistics nested structs)
-using TJoinColumn = NYql::NDq::TJoinColumn;
+enum EStorageType : ui32 {
+    NA,
+    RowStorage,
+    ColumnStorage
+};
 
 // -------------------------------------------------------------------------
-// IProviderStatistics — alias (empty virtual base, shared with NYql to allow
-// derived types like TS3ProviderStatistics to be stored without conversion)
+// IProviderStatistics — independent base
 // -------------------------------------------------------------------------
-using IProviderStatistics = NYql::IProviderStatistics;
+class IProviderStatistics {
+public:
+    virtual ~IProviderStatistics() {}
+};
 
 // -------------------------------------------------------------------------
-// TColumnStatistics — alias (column stat data crosses YQL/KQP boundary via
-// TypeAnnotationContext, so must be the same type to allow direct assignment)
+// TColumnStatistics — independent copy
 // -------------------------------------------------------------------------
-using TColumnStatistics = NYql::TColumnStatistics;
+struct TColumnStatistics {
+    std::optional<double> NumUniqueVals;
+    std::optional<double> HyperLogLog;
+    std::shared_ptr<NKikimr::TCountMinSketch> CountMinSketch;
+    std::shared_ptr<NKikimr::TEqWidthHistogramEstimator> EqWidthHistogramEstimator;
+    TString Type;
+
+    TColumnStatistics() {}
+};
+
+// -------------------------------------------------------------------------
+// TShufflingOrderingsByJoinLabels — independent copy
+// -------------------------------------------------------------------------
+class TShufflingOrderingsByJoinLabels {
+public:
+    void Add(TVector<TString> joinLabels, TOrderingsStateMachine::TLogicalOrderings shufflings) {
+        std::sort(joinLabels.begin(), joinLabels.end());
+        Entries_.emplace_back(std::move(joinLabels), std::move(shufflings));
+    }
+
+    TMaybe<TOrderingsStateMachine::TLogicalOrderings> GetShufflingOrderigsByJoinLabels(
+        TVector<TString> searchingLabels
+    ) {
+        std::sort(searchingLabels.begin(), searchingLabels.end());
+        for (const auto& [joinLabels, shufflings] : Entries_) {
+            if (searchingLabels == joinLabels) {
+                return shufflings;
+            }
+        }
+        return Nothing();
+    }
+
+    TString ToString() const;
+
+private:
+    TVector<std::pair<TVector<TString>, TOrderingsStateMachine::TLogicalOrderings>> Entries_;
+};
 
 // -------------------------------------------------------------------------
 // TOptimizerStatistics — independent copy
@@ -70,11 +108,11 @@ struct TOptimizerStatistics {
         TVector<TString> Data;
         explicit TKeyColumns(TVector<TString> data) : Data(std::move(data)) {}
 
-        TVector<NYql::NDq::TJoinColumn> ToJoinColumns(const TString& alias) {
-            TVector<NYql::NDq::TJoinColumn> columns;
+        TVector<TJoinColumn> ToJoinColumns(const TString& alias) {
+            TVector<TJoinColumn> columns;
             columns.reserve(Data.size());
             for (const auto& column : Data) {
-                columns.push_back(NYql::NDq::TJoinColumn(alias, column));
+                columns.push_back(TJoinColumn(alias, column));
             }
             return columns;
         }
@@ -90,13 +128,15 @@ struct TOptimizerStatistics {
         {}
     };
 
-    // TColumnStatMap — alias so TIntrusivePtr<TColumnStatMap> is assignment-compatible
-    // with TypeAnnotationContext::ColumnStatisticsByTableName entries
-    using TColumnStatMap = NYql::TOptimizerStatistics::TColumnStatMap;
+    struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
+        THashMap<TString, TColumnStatistics> Data;
+        TColumnStatMap() {}
+        explicit TColumnStatMap(THashMap<TString, TColumnStatistics> data) : Data(std::move(data)) {}
+    };
 
     struct TShuffledByColumns : public TSimpleRefCount<TShuffledByColumns> {
-        TVector<NYql::NDq::TJoinColumn> Data;
-        explicit TShuffledByColumns(TVector<NYql::NDq::TJoinColumn> data) : Data(std::move(data)) {}
+        TVector<TJoinColumn> Data;
+        explicit TShuffledByColumns(TVector<TJoinColumn> data) : Data(std::move(data)) {}
         TString ToString() {
             TString result;
             for (const auto& column : Data) {
@@ -128,11 +168,11 @@ struct TOptimizerStatistics {
 
     TString SourceTableName;
     TSimpleSharedPtr<THashSet<TString>> Aliases;
-    TIntrusivePtr<NYql::NDq::TTableAliasMap> TableAliases;
+    TIntrusivePtr<TTableAliasMap> TableAliases;
 
-    NYql::NDq::TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
-    NYql::NDq::TOrderingsStateMachine::TLogicalOrderings SortingOrderings;
-    NYql::NDq::TOrderingsStateMachine::TLogicalOrderings ReversedSortingOrderings;
+    TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
+    TOrderingsStateMachine::TLogicalOrderings SortingOrderings;
+    TOrderingsStateMachine::TLogicalOrderings ReversedSortingOrderings;
 
     std::optional<std::size_t> ShuffleOrderingIdx;
     std::int64_t SortingOrderingIdx = -1;
@@ -166,6 +206,19 @@ struct TOptimizerStatistics {
     TString ToString() const;
 };
 
+// -------------------------------------------------------------------------
+// Boundary conversion for TColumnStatistics / TColumnStatMap
+// (used at boundary with TypeAnnotationContext)
+// -------------------------------------------------------------------------
+TColumnStatistics FromYqlColumnStat(const NYql::TColumnStatistics& s);
+NYql::TColumnStatistics ToYqlColumnStat(const TColumnStatistics& s);
+
+TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> FromYqlColumnStatMap(
+    const TIntrusivePtr<NYql::TOptimizerStatistics::TColumnStatMap>& m);
+
+TIntrusivePtr<NYql::TOptimizerStatistics::TColumnStatMap> ToYqlColumnStatMap(
+    const TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>& m);
+
 std::shared_ptr<TOptimizerStatistics> OverrideStatistics(
     const TOptimizerStatistics& s,
     const TStringBuf& tablePath,
@@ -173,13 +226,6 @@ std::shared_ptr<TOptimizerStatistics> OverrideStatistics(
 
 // -------------------------------------------------------------------------
 // TKqpStatsStore — KQP-owned per-node statistics map.
-//
-// Stores optimizer statistics for expression nodes, keyed by UniqueId().
-// This is a parallel store to TTypeAnnotationContext::StatisticsMap, allowing
-// KQP to own its stats without touching the shared YQL annotation context.
-//
-// Interface mirrors TTypeAnnotationContext::GetStats / SetStats so that
-// call-site changes are mechanical.
 // -------------------------------------------------------------------------
 class TKqpStatsStore {
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> Map_;
@@ -187,6 +233,12 @@ public:
     bool ContainsStats(const NYql::TExprNode* input) const;
     std::shared_ptr<TOptimizerStatistics> GetStats(const NYql::TExprNode* input) const;
     void SetStats(const NYql::TExprNode* input, std::shared_ptr<TOptimizerStatistics> stats);
+
+    // KQP-owned FSMs: built alongside the YQL TypeCtx FSMs from the same data,
+    // but typed as NKikimr::NKqp::TOrderingsStateMachine so KQP stats can hold
+    // NKikimr::NKqp::TOrderingsStateMachine::TLogicalOrderings without boundary conversion.
+    TSimpleSharedPtr<TOrderingsStateMachine> ShufflingsFSM;
+    TSimpleSharedPtr<TOrderingsStateMachine> SortingsFSM;
 };
 
 } // namespace NKikimr::NKqp

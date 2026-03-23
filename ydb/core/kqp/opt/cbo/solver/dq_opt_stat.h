@@ -6,37 +6,40 @@
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
 
-namespace NYql::NDq {
-using namespace NKikimr::NKqp;
-using TOptimizerStatistics = NKikimr::NKqp::TOptimizerStatistics;
+namespace NKikimr::NKqp {
+
+using namespace NYql::NNodes;
+using NYql::TExprNode;
+using NYql::TTypeAnnotationContext;
+
 enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal };
 
-void InferStatisticsForFlatMap(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForFilter(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForExtendBase(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats, NYql::TTypeAnnotationContext* typeCtx);
-void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats, NYql::TTypeAnnotationContext* typeCtx);
-void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void PropagateStatisticsToStageArguments(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForStage(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForDqSource(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForDqMerge(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats, const NKikimr::NKqp::IProviderContext& ctx, NKikimr::NKqp::TOptimizerHints hints = {}, NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr);
-void InferStatisticsForMapJoin(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats, const NKikimr::NKqp::IProviderContext& ctx, NKikimr::NKqp::TOptimizerHints hints = {});
-void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats, const NKikimr::NKqp::IProviderContext& ctx, NKikimr::NKqp::TOptimizerHints hints = {});
-void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForAsList(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForAsStruct(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForTopBase(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats, NYql::TTypeAnnotationContext* typeCtx);
-void InferStatisticsForSortBase(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats, NYql::TTypeAnnotationContext* typeCtx);
-bool InferStatisticsForListParam(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
-void InferStatisticsForUnionAll(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats);
+void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForFilter(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void PropagateStatisticsToStageArguments(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForStage(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForDqSource(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForDqMerge(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, const IProviderContext& ctx, TOptimizerHints hints = {}, TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr);
+void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, const IProviderContext& ctx, TOptimizerHints hints = {});
+void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, const IProviderContext& ctx, TOptimizerHints hints = {});
+void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForAsList(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForTopBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForSortBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
+bool InferStatisticsForListParam(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForUnionAll(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 
 template <typename TAggregationCallable>
-void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats, NYql::TTypeAnnotationContext* typeCtx);
-extern template void InferStatisticsForAggregationCallable<NNodes::TCoShuffleByKeys>(const TExprNode::TPtr& input, NKikimr::NKqp::TKqpStatsStore* kqpStats, NYql::TTypeAnnotationContext* typeCtx);
+void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
+extern template void InferStatisticsForAggregationCallable<TCoShuffleByKeys>(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
 
 
 std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats);
@@ -52,10 +55,10 @@ struct TOrderingInfo {
     TVector<TJoinColumn> Ordering{};
 };
 
-TOrderingInfo GetTopBaseSortingOrderingInfo(const NNodes::TCoTopBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
-TOrderingInfo GetSortBaseSortingOrderingInfo(const NNodes::TCoSortBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
-TOrderingInfo GetAggregationBaseShuffleOrderingInfo(const NNodes::TCoAggregateBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& shufflingsFSM, TTableAliasMap*);
-TVector<TJoinColumn> GetKeySelectorOrdering(const NNodes::TCoLambda& keySelector);
+TOrderingInfo GetTopBaseSortingOrderingInfo(const TCoTopBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
+TOrderingInfo GetSortBaseSortingOrderingInfo(const TCoSortBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
+TOrderingInfo GetAggregationBaseShuffleOrderingInfo(const TCoAggregateBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& shufflingsFSM, TTableAliasMap*);
+TVector<TJoinColumn> GetKeySelectorOrdering(const TCoLambda& keySelector);
 
 class TPredicateSelectivityComputer {
 public:
@@ -66,20 +69,20 @@ public:
                 EInequality
             };
 
-            TColumnStatisticsUsedMember(NNodes::TCoMember member, ui32 predicateType)
+            TColumnStatisticsUsedMember(TCoMember member, ui32 predicateType)
                 : Member(std::move(member))
                 , PredicateType(predicateType)
             {}
 
-            NNodes::TCoMember Member;
+            TCoMember Member;
             ui32 PredicateType;
         };
 
-        void AddEquality(const NNodes::TCoMember& member) {
+        void AddEquality(const TCoMember& member) {
             Data.emplace_back(std::move(member), TColumnStatisticsUsedMember::EEquality);
         }
 
-        void AddInequality(const NNodes::TCoMember& member) {
+        void AddInequality(const TCoMember& member) {
             Data.emplace_back(std::move(member), TColumnStatisticsUsedMember::EInequality);
         }
 
@@ -99,44 +102,44 @@ public:
         , CollectConstantMembers(collectConstantMembers)
     {}
 
-    double Compute(const NNodes::TExprBase& input);
+    double Compute(const TExprBase& input);
 
     TColumnStatisticsUsedMembers GetColumnStatsUsedMembers() {
         Y_ENSURE(CollectColumnsStatUsedMembers);
         return ColumnStatsUsedMembers;
     }
 
-    TVector<std::pair<NNodes::TCoMember, NNodes::TCoMember>> GetMemberEqualities() {
+    TVector<std::pair<TCoMember, TCoMember>> GetMemberEqualities() {
         return MemberEqualities;
     }
 
-    TVector<NNodes::TCoMember> GetConstantMembers() {
+    TVector<TCoMember> GetConstantMembers() {
         return ConstantMembers;
     }
 
 protected:
     double ComputeImpl(
-        const NNodes::TExprBase& input,
+        const TExprBase& input,
         bool underNot,
         bool collectConstantMembers
     );
 
     double ComputeEqualitySelectivity(
-        const NYql::NNodes::TExprBase& left,
-        const NYql::NNodes::TExprBase& right,
+        const TExprBase& left,
+        const TExprBase& right,
         bool collectConstantMembers
     );
 
     double ComputeInequalitySelectivity(
-        const NYql::NNodes::TExprBase& left,
-        const NYql::NNodes::TExprBase& right,
+        const TExprBase& left,
+        const TExprBase& right,
         EInequalityPredicateType predicate,
         bool collectConstantMembers
     );
 
     double ComputeComparisonSelectivity(
-        const NYql::NNodes::TExprBase& left,
-        const NYql::NNodes::TExprBase& right
+        const TExprBase& left,
+        const TExprBase& right
     );
 
 private:
@@ -146,28 +149,25 @@ private:
     TColumnStatisticsUsedMembers ColumnStatsUsedMembers{};
 
     bool CollectMemberEqualities = false;
-    TVector<std::pair<NNodes::TCoMember, NNodes::TCoMember>> MemberEqualities{};
+    TVector<std::pair<TCoMember, TCoMember>> MemberEqualities{};
 
     bool CollectConstantMembers = false;
-    TVector<NNodes::TCoMember> ConstantMembers{};
+    TVector<TCoMember> ConstantMembers{};
 };
 
-bool NeedCalc(NNodes::TExprBase node);
-// Returns true if the expression is already a fully-evaluated literal
-// (TCoDataCtor, TCoNothing, or TCoJust wrapping a literal) and
-// does not need further evaluation via EvaluateExpr.
-bool IsLiteralDataExpr(NNodes::TExprBase node);
+bool NeedCalc(TExprBase node);
+bool IsLiteralDataExpr(TExprBase node);
 bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs = true);
 bool IsConstantExprWithParams(const TExprNode::TPtr& input);
 
-NKikimr::NKqp::TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, NKikimr::NKqp::TCardinalityHints& hints);
-NKikimr::NKqp::TCardinalityHints::TCardinalityHint* FindBytesHint(TVector<TString>& labels, NKikimr::NKqp::TCardinalityHints& hints);
+TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, TCardinalityHints& hints);
+TCardinalityHints::TCardinalityHint* FindBytesHint(TVector<TString>& labels, TCardinalityHints& hints);
 std::shared_ptr<TOptimizerStatistics> ApplyBytesHints(std::shared_ptr<TOptimizerStatistics>& inputStats,
     TVector<TString>& labels,
-    NKikimr::NKqp::TCardinalityHints hints);
+    TCardinalityHints hints);
 std::shared_ptr<TOptimizerStatistics> ApplyRowsHints(
     std::shared_ptr<TOptimizerStatistics>& inputStats,
     TVector<TString>& labels,
-    NKikimr::NKqp::TCardinalityHints hints);
+    TCardinalityHints hints);
 
-} // namespace NYql::NDq {
+} // namespace NKikimr::NKqp

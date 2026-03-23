@@ -182,7 +182,7 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
         TCoFlatMapBase::Match(input.Get()) && IsPredicateFlatMap(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body().Ref())
     ) {
         std::shared_ptr<TOptimizerStatistics> dummyStats = nullptr;
-        auto computer = NDq::TPredicateSelectivityComputer(dummyStats, true);
+        auto computer = TPredicateSelectivityComputer(dummyStats, true);
 
         if (TCoFilterBase::Match(input.Get())) {
             computer.Compute(TExprBase(input).Cast<TCoFilterBase>().Lambda().Body());
@@ -196,7 +196,7 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
         for (const auto& item: columnStatsUsedMembers.Data) {
             if (auto maybeTableAndColumn = GetTableAndColumnNames(item.Member)) {
                 const auto& [table, column] = *maybeTableAndColumn;
-                using TColumnStatisticsUsedMember = NDq::TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
+                using TColumnStatisticsUsedMember = TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
                 switch (item.PredicateType) {
                 case TColumnStatisticsUsedMember::EEquality:
                     CMColumnsByTableName[table].insert(std::move(column));

@@ -906,6 +906,8 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
     const NKikimr::NKqp::TKqpStatsStore* kqpStats
 )
 {
+    Y_UNUSED(typeCtx);
+
     if (!ruleEnabled) {
         return node;
     }
@@ -924,7 +926,7 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
     auto inputStats = kqpStats ? kqpStats->GetStats(unionAll.Output().Raw()) : nullptr;
     auto sortedByOrderingIdx = inputStats ? inputStats->SortingOrderings.GetInitOrderingIdx() : -1;
 
-    if (!inputStats || !typeCtx.SortingsFSM || sortedByOrderingIdx == -1) {
+    if (!inputStats || !kqpStats->SortingsFSM || sortedByOrderingIdx == -1) {
         return node;
     }
 
@@ -989,7 +991,7 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
 
     auto builder = Build<TDqSortColumnList>(ctx, node.Pos());
 
-    auto& fdStorage = typeCtx.SortingsFSM->FDStorage;
+    auto& fdStorage = kqpStats->SortingsFSM->FDStorage;
     Y_ENSURE(sortedByOrderingIdx >= 0);
     auto sortedBy = fdStorage.GetInterestingSortingByOrderingIdx(sortedByOrderingIdx);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1013,7 +1015,7 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
 
         TString columnDir;
         switch (dir) {
-            using enum TOrdering::TItem::EDirection;
+            using enum NKikimr::NKqp::TOrdering::TItem::EDirection;
             case EAscending: { columnDir = TTopSortSettings::AscendingSort; break; }
             case EDescending: { columnDir = TTopSortSettings::DescendingSort; break; }
             case ENone: { return node; }

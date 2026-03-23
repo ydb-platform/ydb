@@ -278,7 +278,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
                 .Build()
             .JoinAlgo(joinAlgo);
 
-    auto getShuffleByExprListFromSettings = [&](const TVector<NKikimr::NKqp::TJoinColumn>& shuffleBy) -> TExprNode::TListType {
+    auto getShuffleByExprListFromSettings = [&](const TVector<NYql::NDq::TJoinColumn>& shuffleBy) -> TExprNode::TListType {
         TExprNode::TListType shuffleByExprList;
 
         for (const auto& column: shuffleBy) {

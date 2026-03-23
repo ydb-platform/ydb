@@ -1,4 +1,5 @@
 #include "kqp_plan_conversion_utils.h"
+#include "kqp_rbo_utils.h"
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -7,6 +8,76 @@ namespace NKqp {
 
 using namespace NYql;
 using namespace NNodes;
+
+using DependencyPairType = std::pair<TInfoUnit, const TTypeAnnotationNode*>;
+/**
+ * Computes dependent variables and updates the plan
+ */
+TVector<DependencyPairType> ComputeDependentVariables(TIntrusivePtr<IOperator> op, TPlanProps* props) {
+
+    TVector<DependencyPairType> subplanDependencies;
+
+    // Iterate over just the operator of the current plan/subplan
+    auto it = TOpIterator(op, nullptr);
+    for(; it != TOpIterator(nullptr); it++) {
+        auto currOp = (*it).Current;
+        auto subplanIUs = currOp->GetSubplanIUs(*props);
+
+        // If the current operator contains references to subplans:
+        // - Compute dependent variables of the subplan
+        // - Update the subplan list of dependent variables
+        // - Filter out variables that have into units that don't match current ius (these are inner dependencies)
+        // - Add new dependencies to the AddDepencies operator below the current, or create one if it doesn't exit
+        // - Return the full list of dependecies
+
+        if (subplanIUs.size()) {
+            auto unaryOp = CastOperator<IUnaryOperator>(currOp);
+
+            TVector<DependencyPairType> allOpDependencies;
+
+            for (const auto & subplanVar : subplanIUs) {
+                auto & subplanEntry = props->Subplans.PlanMap.at(subplanVar);
+                auto opDependencies = ComputeDependentVariables(CastOperator<IOperator>(subplanEntry.Plan), props);
+                if (opDependencies.size()) {
+                    for (const auto & [iu, type] : opDependencies) {
+                        subplanEntry.DependentIUs.push_back(iu);
+                    }
+                    AddUnique<DependencyPairType>(opDependencies, allOpDependencies);
+                }
+            }
+
+            auto outputIUs = unaryOp->GetInput()->GetOutputIUs();
+            TVector<DependencyPairType> filteredOpDependencies;
+            for (const auto & d : allOpDependencies) {
+                if (std::find(outputIUs.begin(), outputIUs.end(), d.first) == outputIUs.end()) {
+                    filteredOpDependencies.push_back(d);
+                }
+            }
+
+            if (filteredOpDependencies.size()) {
+                if (unaryOp->GetInput()->Kind != EOperator::AddDependencies) {
+                    auto addDeps = MakeIntrusive<TOpAddDependencies>(unaryOp->GetInput(), unaryOp->Pos, filteredOpDependencies);
+                    unaryOp->SetInput(addDeps);
+                } else {
+                    auto addDeps = CastOperator<TOpAddDependencies>(unaryOp->GetInput());
+                    auto depPairs = addDeps->GetDependencyPairs();
+                    AddUnique<DependencyPairType>(filteredOpDependencies, depPairs);
+                    addDeps->SetDependencyPairs(depPairs);
+                }
+            }
+
+            AddUnique<DependencyPairType>(filteredOpDependencies, subplanDependencies);
+        }
+
+        if (currOp->Kind == EOperator::AddDependencies) {
+            auto addDeps = CastOperator<TOpAddDependencies>(currOp);
+            auto depPairs = addDeps->GetDependencyPairs();
+            AddUnique<DependencyPairType>(depPairs, subplanDependencies);
+        }
+    }
+
+    return subplanDependencies;
+}
 
 TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
     auto lambda = TCoLambda(node);
@@ -83,6 +154,9 @@ TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
             exprRef.get().PlanProps = &(opRoot->PlanProps);
         }
     }
+
+    // For subplans, we need to compute dependent variables correctly
+    ComputeDependentVariables(opRoot, &opRoot->PlanProps);
 
    return opRoot;
 }

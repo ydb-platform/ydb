@@ -50,10 +50,11 @@ void ISourcesCollection::OnPageCreated() {
 }
 
 void ISourcesCollection::OnPageSent() {
-    // Only decrement if there are pages in flight (streaming mode)
-    if (PagesInFlightCount.Val() > 0) {
-        PagesInFlightCount.Dec();
-    }
+    // PagesInFlightCount must be > 0 here: OnPageSent is only called from
+    // OnSentDataFromInterval when sourceAddress.IsStreamingPage() is true,
+    // which is set only when OnPageCreated() was called for this page.
+    // TPositiveControlInteger::Dec() will AFL_VERIFY on underflow.
+    PagesInFlightCount.Dec();
     NYDBTest::TControllers::GetColumnShardController()->OnPageSent(PagesInFlightCount.Val());
 }
 

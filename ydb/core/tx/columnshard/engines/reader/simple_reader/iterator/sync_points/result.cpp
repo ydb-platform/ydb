@@ -52,7 +52,9 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
             if (isStreamingMode) {
                 // Always set address in streaming mode so OnSentDataFromInterval fires
                 // for every page (needed to keep PagesInFlightCount balanced).
-                partialSourceAddress = TPartialSourceAddress(source->GetSourceIdx(), GetPointIndex());
+                // IsStreamingPage=true tells OnSentDataFromInterval to call OnPageSent(),
+                // which must be paired with this OnPageCreated() call.
+                partialSourceAddress = TPartialSourceAddress(source->GetSourceIdx(), GetPointIndex(), /*streamingPage=*/true);
                 Collection->OnPageCreated();
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_created")
                     ("source_idx", source->GetSourceIdx())("pages_in_flight", Collection->GetPagesInFlightCount());

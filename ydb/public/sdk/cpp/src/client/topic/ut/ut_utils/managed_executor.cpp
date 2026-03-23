@@ -1,12 +1,8 @@
 #include "managed_executor.h"
 
-<<<<<<< HEAD:ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/managed_executor.cpp
-namespace NYdb::NTopic::NTests {
-=======
 #include <util/random/random.h>
 
-namespace NYdb::inline Dev::NTopic::NTests {
->>>>>>> 771638ae94f (YQ-5187 fixed hanging in PQ read session (#36220)):ydb/public/sdk/cpp/tests/integration/topic/utils/managed_executor.cpp
+namespace NYdb::NTopic::NTests {
 
 TManagedExecutor::TManagedExecutor(TExecutorPtr executor) :
     Executor{std::move(executor)}

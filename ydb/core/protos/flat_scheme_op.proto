@@ -801,6 +801,19 @@ message TColumnTableSchemaDiff {
 }
 
 message TColumnTableRequestedOptions {
+    // Options that can be reset to their defaults (the field is cleared in the stored schema,
+    // so the columnshard falls back to its config). Value names are the user-facing names
+    // for ALTER OBJECT ... SET (ACTION=RESET_OPTIONS, NAME=...).
+    enum EOption {
+        SCHEME_NEED_ACTUALIZATION = 1;
+        COMPACTION_PLANNER = 2;
+        METADATA_MEMORY_MANAGER = 3;
+        SCAN_READER_POLICY_NAME = 4;
+        DEDUPLICATION_ENABLED = 5;
+        INSERT_OPTIONS = 6;
+        CACHE_BLOBS_AFTER_WRITE = 7;
+    }
+
     optional bool SchemeNeedActualization = 1 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
@@ -808,6 +821,7 @@ message TColumnTableRequestedOptions {
     optional TInsertOptions InsertOptions = 6;
     optional bool DeduplicationEnabled = 7;
     optional bool CacheBlobsAfterWrite = 8 [default = false];
+    repeated EOption ResetOptions = 9;
 }
 
 message TAlterColumnTableSchema {

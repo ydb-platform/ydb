@@ -7,7 +7,7 @@ namespace NKikimr::NKqp {
 namespace {
 
 template <class T>
-TConclusionStatus ExtractInsertOption(
+TConclusionStatus ExtractOption(
     NYql::TObjectSettingsImpl::TFeaturesExtractor& features, const TString& featureId, std::optional<T>& target) {
     if (auto rawValue = features.Extract(featureId)) {
         T parsed;
@@ -22,27 +22,25 @@ TConclusionStatus ExtractInsertOption(
 }   // namespace
 
 TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) {
-    auto value = features.Extract<bool>("SCHEME_NEED_ACTUALIZATION", false);
-    if (!value) {
-        return TConclusionStatus::Fail("Incorrect value for SCHEME_NEED_ACTUALIZATION: cannot parse as boolean");
+    if (auto status = ExtractOption(features, "SCHEME_NEED_ACTUALIZATION", SchemeNeedActualization); status.IsFail()) {
+        return status;
     }
-    SchemeNeedActualization = *value;
     ScanReaderPolicyName = features.Extract<TString>("SCAN_READER_POLICY_NAME");
     if (ScanReaderPolicyName) {
         if (*ScanReaderPolicyName != "PLAIN" && *ScanReaderPolicyName != "SIMPLE" && *ScanReaderPolicyName != "TRIVIAL") {
             return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE', 'TRIVIAL']");
         }
     }
-    if (auto status = ExtractInsertOption(features, "DEDUPLICATION_ENABLED", DeduplicationEnabled); status.IsFail()) {
+    if (auto status = ExtractOption(features, "DEDUPLICATION_ENABLED", DeduplicationEnabled); status.IsFail()) {
         return status;
     }
-    if (auto status = ExtractInsertOption(features, "CACHE_BLOBS_AFTER_WRITE", CacheBlobsAfterWrite); status.IsFail()) {
+    if (auto status = ExtractOption(features, "CACHE_BLOBS_AFTER_WRITE", CacheBlobsAfterWrite); status.IsFail()) {
         return status;
     }
-    if (auto status = ExtractInsertOption(features, "INSERT_OPTIONS.BUILD_INDEXES_ENABLED", InsertOptionsBuildIndexesEnabled); status.IsFail()) {
+    if (auto status = ExtractOption(features, "INSERT_OPTIONS.BUILD_INDEXES_ENABLED", InsertOptionsBuildIndexesEnabled); status.IsFail()) {
         return status;
     }
-    if (auto status = ExtractInsertOption(features, "INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES", InsertOptionsBuildIndexesMinBlobBytes);
+    if (auto status = ExtractOption(features, "INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES", InsertOptionsBuildIndexesMinBlobBytes);
         status.IsFail()) {
         return status;
     }
@@ -86,7 +84,9 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
 }
 
 void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
-    schemaData.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
+    if (SchemeNeedActualization) {
+        schemaData.MutableOptions()->SetSchemeNeedActualization(*SchemeNeedActualization);
+    }
     if (ScanReaderPolicyName) {
         schemaData.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
     }

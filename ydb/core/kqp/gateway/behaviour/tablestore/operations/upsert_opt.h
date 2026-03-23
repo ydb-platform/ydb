@@ -12,7 +12,7 @@ private:
 
     static inline const auto Registrator = TFactory::TRegistrator<TUpsertOptionsOperation>(GetTypeName());
 private:
-    bool SchemeNeedActualization = false;
+    std::optional<bool> SchemeNeedActualization;
     std::optional<TString> ScanReaderPolicyName;
     std::optional<bool> DeduplicationEnabled;
     std::optional<bool> CacheBlobsAfterWrite;

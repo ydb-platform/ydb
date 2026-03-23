@@ -7,11 +7,17 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <util/string/builder.h>
+
 namespace NKikimr::NSchemeShard {
 
 class TOlapOptionsUpdate {
+public:
+    using TRequestedOptions = NKikimrSchemeOp::TColumnTableRequestedOptions;
+    using EOption = TRequestedOptions::EOption;
+
 private:
-    YDB_ACCESSOR(bool, SchemeNeedActualization, false);
+    YDB_ACCESSOR_DEF(std::optional<bool>, SchemeNeedActualization);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
     YDB_ACCESSOR_DEF(std::optional<bool>, DeduplicationEnabled);
     YDB_ACCESSOR_DEF(std::optional<bool>, CacheBlobsAfterWrite);
@@ -19,9 +25,36 @@ private:
     YDB_ACCESSOR_DEF(std::optional<ui64>, InsertOptionsBuildIndexesMinBlobBytes);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
+    YDB_READONLY_DEF(std::set<EOption>, ResetOptions);
+
+    bool IsOptionSet(const EOption option) const {
+        switch (option) {
+            case TRequestedOptions::SCHEME_NEED_ACTUALIZATION:
+                return !!SchemeNeedActualization;
+            case TRequestedOptions::COMPACTION_PLANNER:
+                return CompactionPlannerConstructor.HasObject();
+            case TRequestedOptions::METADATA_MEMORY_MANAGER:
+                return MetadataManagerConstructor.HasObject();
+            case TRequestedOptions::SCAN_READER_POLICY_NAME:
+                return !!ScanReaderPolicyName;
+            case TRequestedOptions::DEDUPLICATION_ENABLED:
+                return !!DeduplicationEnabled;
+            case TRequestedOptions::INSERT_OPTIONS:
+                return !!InsertOptionsBuildIndexesEnabled || !!InsertOptionsBuildIndexesMinBlobBytes;
+            case TRequestedOptions::CACHE_BLOBS_AFTER_WRITE:
+                return !!CacheBlobsAfterWrite;
+        }
+        return false;
+    }
+
 public:
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
-        SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
+        if (!alterRequest.HasOptions()) {
+            return true;
+        }
+        if (alterRequest.GetOptions().HasSchemeNeedActualization()) {
+            SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
+        }
         if (alterRequest.GetOptions().HasScanReaderPolicyName()) {
             ScanReaderPolicyName = alterRequest.GetOptions().GetScanReaderPolicyName();
         }
@@ -56,10 +89,25 @@ public:
                 InsertOptionsBuildIndexesMinBlobBytes = optionsProto.GetBuildIndexesMinBlobBytes();
             }
         }
+        for (const auto rawOption : alterRequest.GetOptions().GetResetOptions()) {
+            if (!TRequestedOptions::EOption_IsValid(rawOption)) {
+                errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "unknown option to reset: " << rawOption);
+                return false;
+            }
+            const auto option = static_cast<EOption>(rawOption);
+            if (IsOptionSet(option)) {
+                errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                    << "option " << TRequestedOptions::EOption_Name(option) << " is both set and reset");
+                return false;
+            }
+            ResetOptions.emplace(option);
+        }
         return true;
     }
     void SerializeToProto(NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest) const {
-        alterRequest.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
+        if (SchemeNeedActualization) {
+            alterRequest.MutableOptions()->SetSchemeNeedActualization(*SchemeNeedActualization);
+        }
         if (ScanReaderPolicyName) {
             alterRequest.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
         }
@@ -83,6 +131,9 @@ public:
             if (InsertOptionsBuildIndexesMinBlobBytes) {
                 options.SetBuildIndexesMinBlobBytes(*InsertOptionsBuildIndexesMinBlobBytes);
             }
+        }
+        for (const auto option : ResetOptions) {
+            alterRequest.MutableOptions()->AddResetOptions(option);
         }
     }
 };

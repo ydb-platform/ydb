@@ -1534,6 +1534,101 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {NKikimrScheme::StatusSchemeError});
     }
 
+    Y_UNIT_TEST(ResetSchemaOptions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        auto describeOptions = [&]() {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTable");
+            return descr.GetPathDescription().GetColumnTableDescription().GetSchema().GetOptions();
+        };
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                Options {
+                    SchemeNeedActualization: true
+                    ScanReaderPolicyName: "SIMPLE"
+                    DeduplicationEnabled: false
+                    CacheBlobsAfterWrite: true
+                    InsertOptions { BuildIndexesEnabled: true BuildIndexesMinBlobBytes: 1024 }
+                    CompactionPlannerConstructor { ClassName: "tiling" Tiling { } }
+                    MetadataManagerConstructor { ClassName: "local_db" LocalDB { } }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto options = describeOptions();
+            UNIT_ASSERT(options.GetSchemeNeedActualization());
+            UNIT_ASSERT_VALUES_EQUAL(options.GetScanReaderPolicyName(), "SIMPLE");
+            UNIT_ASSERT(options.HasDeduplicationEnabled());
+            UNIT_ASSERT(!options.GetDeduplicationEnabled());
+            UNIT_ASSERT(options.GetCacheBlobsAfterWrite());
+            UNIT_ASSERT(options.GetInsertOptions().GetBuildIndexesEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(options.GetInsertOptions().GetBuildIndexesMinBlobBytes(), 1024u);
+            UNIT_ASSERT(options.HasCompactionPlannerConstructor());
+            UNIT_ASSERT(options.HasMetadataManagerConstructor());
+        }
+
+        // an alter that does not mention an option keeps its value
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { Options { ScanReaderPolicyName: "PLAIN" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto options = describeOptions();
+            UNIT_ASSERT(options.GetSchemeNeedActualization());
+            UNIT_ASSERT_VALUES_EQUAL(options.GetScanReaderPolicyName(), "PLAIN");
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { Options { ResetOptions: SCHEME_NEED_ACTUALIZATION ResetOptions: DEDUPLICATION_ENABLED } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto options = describeOptions();
+            UNIT_ASSERT(!options.GetSchemeNeedActualization());
+            UNIT_ASSERT(!options.HasDeduplicationEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(options.GetScanReaderPolicyName(), "PLAIN");
+            UNIT_ASSERT(options.HasCompactionPlannerConstructor());
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                Options {
+                    ResetOptions: SCAN_READER_POLICY_NAME
+                    ResetOptions: INSERT_OPTIONS
+                    ResetOptions: COMPACTION_PLANNER
+                    ResetOptions: METADATA_MEMORY_MANAGER
+                    ResetOptions: CACHE_BLOBS_AFTER_WRITE
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto options = describeOptions();
+            UNIT_ASSERT(!options.HasScanReaderPolicyName());
+            UNIT_ASSERT(!options.HasInsertOptions());
+            UNIT_ASSERT(!options.HasCompactionPlannerConstructor());
+            UNIT_ASSERT(!options.HasMetadataManagerConstructor());
+            UNIT_ASSERT(!options.HasCacheBlobsAfterWrite());
+        }
+
+        // setting and resetting the same option in one request is rejected
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { Options { ScanReaderPolicyName: "SIMPLE" ResetOptions: SCAN_READER_POLICY_NAME } }
+        )", {NKikimrScheme::StatusInvalidParameter, NKikimrScheme::StatusSchemeError});
+    }
+
     Y_UNIT_TEST(AlterTtl) {
         TTestBasicRuntime runtime;
         TTestEnvOptions options;

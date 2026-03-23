@@ -513,7 +513,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
         }
 
         case NKikimrSchemeOp::TAuth::kIam: {
-            if (authDescription.GetIam().GetResourceId()) {
+            if (authDescription.GetIam().HasResourceId()) {
                 return NThreading::MakeFuture(TEvDescribeSecretsResponse::TDescription({}));
             }
             const TString& initialTokenId = authDescription.GetIam().GetInitialTokenSecretName();

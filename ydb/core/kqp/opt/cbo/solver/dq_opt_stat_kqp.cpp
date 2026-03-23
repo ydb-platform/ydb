@@ -11,9 +11,11 @@
 
 #include "util/string/join.h"
 
-namespace NYql::NDq {
-using namespace NKikimr::NKqp;
-using namespace NNodes;
+namespace NKikimr::NKqp {
+
+using namespace NYql;
+using namespace NYql::NNodes;
+using namespace NYql::NDq;
 
 namespace {
 
@@ -67,88 +69,6 @@ TVector<TString> UnionLabels(TVector<TString>& leftLabels, TVector<TString>& rig
 }
 
 } // namespace
-
-NKikimr::NKqp::TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, NKikimr::NKqp::TCardinalityHints& hints) {
-    THashSet<TString> labelsSet;
-    labelsSet.insert(labels.begin(), labels.end());
-
-    for (auto& h : hints.Hints) {
-        THashSet<TString> hintLabels;
-        hintLabels.insert(h.JoinLabels.begin(), h.JoinLabels.end());
-        if (labelsSet == hintLabels) {
-            return &h;
-        }
-    }
-    return nullptr;
-}
-
-NKikimr::NKqp::TCardinalityHints::TCardinalityHint* FindBytesHint(TVector<TString>& labels, NKikimr::NKqp::TCardinalityHints& hints) {
-    THashSet<TString> labelsSet;
-    labelsSet.insert(labels.begin(), labels.end());
-
-    for (auto& h : hints.Hints) {
-        THashSet<TString> hintLabels;
-        hintLabels.insert(h.JoinLabels.begin(), h.JoinLabels.end());
-        if (labelsSet == hintLabels) {
-            return &h;
-        }
-    }
-    return nullptr;
-}
-
-std::shared_ptr<TOptimizerStatistics> ApplyRowsHints(
-    std::shared_ptr<TOptimizerStatistics>& inputStats,
-    TVector<TString>& labels,
-    NKikimr::NKqp::TCardinalityHints hints
-) {
-    if (labels.size() != 1) {
-        return inputStats;
-    }
-
-    for (auto h : hints.Hints) {
-        if (h.JoinLabels.size() == 1 && h.JoinLabels == labels) {
-            auto outputStats = std::make_shared<TOptimizerStatistics>(
-                inputStats->Type,
-                h.ApplyHint(inputStats->Nrows),
-                inputStats->Ncols,
-                inputStats->ByteSize,
-                inputStats->Cost,
-                inputStats->KeyColumns,
-                inputStats->ColumnStatistics,
-                inputStats->StorageType);
-            outputStats->Labels = inputStats->Labels;
-            return outputStats;
-        }
-    }
-    return inputStats;
-}
-
-std::shared_ptr<TOptimizerStatistics> ApplyBytesHints(
-    std::shared_ptr<TOptimizerStatistics>& inputStats,
-    TVector<TString>& labels,
-    NKikimr::NKqp::TCardinalityHints hints
-) {
-    if (labels.size() != 1) {
-        return inputStats;
-    }
-
-    for (auto h : hints.Hints) {
-        if (h.JoinLabels.size() == 1 && h.JoinLabels == labels) {
-            auto outputStats = std::make_shared<TOptimizerStatistics>(
-                inputStats->Type,
-                inputStats->Nrows,
-                inputStats->Ncols,
-                h.ApplyHint(inputStats->ByteSize),
-                inputStats->Cost,
-                inputStats->KeyColumns,
-                inputStats->ColumnStatistics,
-                inputStats->StorageType);
-            outputStats->Labels = inputStats->Labels;
-            return outputStats;
-        }
-    }
-    return inputStats;
-}
 
 void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, const NKikimr::NKqp::IProviderContext& ctx, NKikimr::NKqp::TOptimizerHints hints) {
 
@@ -214,7 +134,7 @@ void InferStatisticsForGraceJoin(
     TKqpStatsStore* kqpStats,
     const NKikimr::NKqp::IProviderContext& ctx,
     NKikimr::NKqp::TOptimizerHints hints,
-    NYql::TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
 ) {
     auto inputNode = TExprBase(input);
     auto join = inputNode.Cast<TCoGraceJoinCore>();
@@ -370,4 +290,4 @@ void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TKqpStatsStore* 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for DqJoin: " << resStats->ToString();
 }
 
-} // namespace NYql::NDq
+} // namespace NKikimr::NKqp

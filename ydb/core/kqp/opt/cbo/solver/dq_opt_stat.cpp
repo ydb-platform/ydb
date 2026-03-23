@@ -7,13 +7,85 @@
 
 #include "util/string/join.h"
 
-namespace NYql::NDq {
-using namespace NKikimr::NKqp;
-using TOptimizerStatistics = NKikimr::NKqp::TOptimizerStatistics;
+namespace NKikimr::NKqp {
 
-using namespace NNodes;
+using namespace NYql::NNodes;
 
 namespace {
+    THashSet<TString> ConstantFoldingWhiteList = {
+        "Concat", "Just", "Optional", "SafeCast", "AsList", "Size",
+        "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "=="};
+
+    THashSet<TString> PgConstantFoldingWhiteList = {
+        "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
+
+    TVector<TString> UdfBlackList = {
+        "RandomNumber", "Random", "RandomUuid", "Now",
+        "CurrentUtcDate", "CurrentUtcDatetime", "CurrentUtcTimestamp"};
+
+    bool IsConstantUdf(const TExprNode::TPtr& input, bool withParams = false);
+    bool IsConstantExprPg(const TExprNode::TPtr& input);
+    bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input);
+
+    bool IsConstantUdf(const TExprNode::TPtr& input, bool withParams) {
+        if (!TCoApply::Match(input.Get())) {
+            return false;
+        }
+        if (input->ChildrenSize() != 2) {
+            return false;
+        }
+        if (input->Child(0)->IsCallable("Udf")) {
+            auto udf = TCoUdf(input->Child(0));
+            auto udfName = udf.MethodName().StringValue();
+            for (auto blck : UdfBlackList) {
+                if (udfName.find(blck) != TString::npos) {
+                    return false;
+                }
+            }
+            if (withParams) {
+                return IsConstantExprWithParams(input->Child(1));
+            } else {
+                return IsConstantExpr(input->Child(1));
+            }
+        }
+        return false;
+    }
+
+    bool IsConstantExprPg(const TExprNode::TPtr& input) {
+        if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
+            if (input->IsCallable("PgConst")) {
+                return true;
+            }
+        }
+        if (TMaybeNode<TCoAtom>(input)) {
+            return true;
+        }
+        if (input->IsCallable(PgConstantFoldingWhiteList) || input->IsList()) {
+            for (size_t i = 0; i < input->ChildrenSize(); i++) {
+                auto callableInput = input->Child(i);
+                if (callableInput->IsLambda() && !IsConstantExprPg(callableInput->Child(1))) {
+                    return false;
+                }
+                if (!callableInput->IsCallable("PgType") && !IsConstantExprPg(callableInput)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input) {
+        if (!TCoFlatMap::Match(input.Get())) {
+            return false;
+        }
+        if (auto maybeApply = TMaybeNode<TCoApply>(input->Child(0))) {
+            auto apply = maybeApply.Cast();
+            return IsConstantUdf(apply.Callable().Ptr());
+        }
+        return false;
+    }
+
     TString RemoveAliases(TString attributeName) {
         if (auto idx = attributeName.find('.'); idx != TString::npos) {
             return attributeName.substr(idx+1);
@@ -522,7 +594,7 @@ void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TKqpStatsSt
     kqpStats->SetStats( input.Get(), inputStats );
 }
 
-void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* /*typeCtx*/) {
     auto inputNode = TExprBase(input);
     auto unionAll = inputNode.Cast<TCoExtendBase>();
 
@@ -535,8 +607,8 @@ void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TKqpStatsStore* 
         }
     }
 
-    if (typeCtx && typeCtx->OrderingsFSM) {
-        stats->LogicalOrderings = typeCtx->OrderingsFSM->CreateState();
+    if (kqpStats && kqpStats->ShufflingsFSM) {
+        stats->LogicalOrderings = kqpStats->ShufflingsFSM->CreateState();
     }
     kqpStats->SetStats( input.Get(), std::move(stats) );
 }
@@ -545,7 +617,7 @@ void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TKqpStatsStore* 
  * Infer statistics and costs for AggregateCombine
  * We just return the input statistics.
 */
-void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* /*typeCtx*/) {
 
     auto inputNode = TExprBase(input);
     auto agg = inputNode.Cast<TCoAggregateBase>();
@@ -561,11 +633,11 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStor
     aggStats->TableAliases = inputStats->TableAliases;
     aggStats->Aliases = inputStats->Aliases;
 
-    TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM = typeCtx ? typeCtx->OrderingsFSM : nullptr;
-    auto orderingInfo = GetAggregationBaseShuffleOrderingInfo(agg, orderingsFSM, inputStats->TableAliases.Get());
+    TSimpleSharedPtr<TOrderingsStateMachine> shufflingsFSM = kqpStats ? kqpStats->ShufflingsFSM : nullptr;
+    auto orderingInfo = GetAggregationBaseShuffleOrderingInfo(agg, shufflingsFSM, inputStats->TableAliases.Get());
     aggStats->ShufflingOrderingIdx = orderingInfo.OrderingIdx;
-    if (orderingsFSM) {
-        aggStats->LogicalOrderings = orderingsFSM->CreateState(orderingInfo.OrderingIdx);
+    if (shufflingsFSM) {
+        aggStats->LogicalOrderings = shufflingsFSM->CreateState(orderingInfo.OrderingIdx);
     }
 
     TVector<TString> strKeys;
@@ -822,7 +894,7 @@ void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TKqpStatsStore* kq
     kqpStats->SetStats(inputNode.Raw(), std::move(stats));
 }
 
-void InferStatisticsForTopBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForTopBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* /*typeCtx*/) {
     auto inputNode = TExprBase(input);
     auto topBase = inputNode.Cast<TCoTopBase>();
 
@@ -832,7 +904,7 @@ void InferStatisticsForTopBase(const TExprNode::TPtr& input, TKqpStatsStore* kqp
     }
 
     auto topStats = std::make_shared<TOptimizerStatistics>(*inputStats);
-    TSimpleSharedPtr<TOrderingsStateMachine> sortingsFSM = typeCtx ? typeCtx->SortingsFSM : nullptr;
+    TSimpleSharedPtr<TOrderingsStateMachine> sortingsFSM = kqpStats ? kqpStats->SortingsFSM : nullptr;
     auto orderingInfo = GetTopBaseSortingOrderingInfo(topBase, sortingsFSM, topStats->TableAliases.Get());
     if (
         sortingsFSM &&
@@ -852,7 +924,7 @@ void InferStatisticsForTopBase(const TExprNode::TPtr& input, TKqpStatsStore* kqp
     kqpStats->SetStats(inputNode.Raw(), std::move(topStats));
 }
 
-void InferStatisticsForSortBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForSortBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* /*typeCtx*/) {
     auto inputNode = TExprBase(input);
     auto sortBase = inputNode.Cast<TCoSortBase>();
 
@@ -861,7 +933,7 @@ void InferStatisticsForSortBase(const TExprNode::TPtr& input, TKqpStatsStore* kq
         return;
     }
     auto topStats = std::make_shared<TOptimizerStatistics>(*inputStats);
-    TSimpleSharedPtr<TOrderingsStateMachine> sortingsFSM = typeCtx ? typeCtx->SortingsFSM : nullptr;
+    TSimpleSharedPtr<TOrderingsStateMachine> sortingsFSM = kqpStats ? kqpStats->SortingsFSM : nullptr;
     auto orderingInfo = GetSortBaseSortingOrderingInfo(sortBase, sortingsFSM, topStats->TableAliases.Get());
     if (sortingsFSM && !topStats->SortingOrderings.ContainsSorting(orderingInfo.OrderingIdx)) {
         topStats->SortingOrderings = sortingsFSM->CreateState(orderingInfo.OrderingIdx);
@@ -878,7 +950,7 @@ void InferStatisticsForSortBase(const TExprNode::TPtr& input, TKqpStatsStore* kq
 }
 
 template <typename TAggregationCallable>
-void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* /*typeCtx*/) {
     auto inputNode = TExprBase(input);
     auto aggr = inputNode.Cast<TAggregationCallable>();
 
@@ -889,7 +961,7 @@ void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TKqpSta
 
     TOptimizerStatistics aggStats = *inputStats;
 
-    TSimpleSharedPtr<TOrderingsStateMachine> shufflingsFSM = typeCtx ? typeCtx->OrderingsFSM : nullptr;
+    TSimpleSharedPtr<TOrderingsStateMachine> shufflingsFSM = kqpStats ? kqpStats->ShufflingsFSM : nullptr;
     if (shufflingsFSM) {
         auto shuffling = TShuffling(GetKeySelectorOrdering(aggr.KeySelectorLambda()));
         std::int64_t orderingIdx = shufflingsFSM->FDStorage.FindShuffling(shuffling, inputStats->TableAliases.Get());
@@ -1008,4 +1080,214 @@ std::shared_ptr<TOptimizerStatistics> RemoveOrderings(const std::shared_ptr<TOpt
     return RemoveSorting(RemoveShuffling(stats, input), input);
 }
 
-} // namespace NYql::NDq {
+bool NeedCalc(TExprBase node) {
+    auto type = node.Ref().GetTypeAnn();
+    if (type->IsSingleton()) {
+        return false;
+    }
+    if (type->GetKind() == NYql::ETypeAnnotationKind::Optional) {
+        if (node.Maybe<TCoNothing>()) {
+            return false;
+        }
+        if (auto maybeJust = node.Maybe<TCoJust>()) {
+            return NeedCalc(maybeJust.Cast().Input());
+        }
+        return true;
+    }
+    if (type->GetKind() == NYql::ETypeAnnotationKind::Tuple) {
+        if (auto maybeTuple = node.Maybe<TExprList>()) {
+            return AnyOf(maybeTuple.Cast(), [](const auto& item) { return NeedCalc(item); });
+        }
+        return true;
+    }
+    if (type->GetKind() == NYql::ETypeAnnotationKind::List) {
+        if (node.Maybe<TCoList>()) {
+            YQL_ENSURE(node.Ref().ChildrenSize() == 1, "Should be rewritten to AsList");
+            return false;
+        }
+        if (auto maybeAsList = node.Maybe<TCoAsList>()) {
+            return AnyOf(maybeAsList.Cast().Args(), [](const auto& item) { return NeedCalc(TExprBase(item)); });
+        }
+        return true;
+    }
+    YQL_ENSURE(type->GetKind() == NYql::ETypeAnnotationKind::Data,
+                "Object of type " << *type << " should not be considered for calculation");
+    return !node.Maybe<TCoDataCtor>();
+}
+
+bool IsLiteralDataExpr(TExprBase node) {
+    auto type = node.Ref().GetTypeAnn();
+    if (type->IsSingleton()) {
+        return false;
+    }
+    if (node.Maybe<TCoDataCtor>()) {
+        return true;
+    }
+    if (node.Maybe<TCoNothing>()) {
+        return true;
+    }
+    if (auto maybeJust = node.Maybe<TCoJust>()) {
+        return IsLiteralDataExpr(maybeJust.Cast().Input());
+    }
+    if (node.Maybe<TCoPgConst>()) {
+        return true;
+    }
+    return false;
+}
+
+bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
+    if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
+        return IsConstantExprPg(input);
+    }
+    if (!NYql::IsDataOrOptionalOfData(input->GetTypeAnn())) {
+        return false;
+    }
+    if (!NeedCalc(TExprBase(input))) {
+        return true;
+    } else if (input->IsCallable(ConstantFoldingWhiteList)) {
+        for (size_t i = 0; i < input->ChildrenSize(); i++) {
+            auto callableInput = input->Child(i);
+            if (callableInput->GetTypeAnn()->GetKind() != NYql::ETypeAnnotationKind::Type && !IsConstantExpr(callableInput)) {
+                return false;
+            }
+        }
+        return true;
+    } else if (foldUdfs && ((TCoApply::Match(input.Get()) && IsConstantUdf(input)) || IsSuitableToFoldFlatMap(input))) {
+        return true;
+    }
+    return false;
+}
+
+bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
+    if (input->IsCallable("Parameter")) {
+        return true;
+    }
+    if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
+        return IsConstantExprPg(input);
+    }
+    if (!NYql::IsDataOrOptionalOfData(input->GetTypeAnn())) {
+        return false;
+    }
+    if (!NeedCalc(TExprBase(input))) {
+        return true;
+    } else if (input->IsCallable(ConstantFoldingWhiteList)) {
+        for (size_t i = 0; i < input->ChildrenSize(); i++) {
+            auto callableInput = input->Child(i);
+            if (callableInput->GetTypeAnn()->GetKind() != NYql::ETypeAnnotationKind::Type && !IsConstantExprWithParams(callableInput)) {
+                return false;
+            }
+        }
+        return true;
+    } else if (TCoApply::Match(input.Get()) && IsConstantUdf(input, true)) {
+        return true;
+    }
+    return false;
+}
+
+TVector<TJoinColumn> GetKeySelectorOrdering(const TCoLambda& keySelector) {
+    TVector<TJoinColumn> ordering;
+    if (auto body = keySelector.Body().template Maybe<TCoMember>()) {
+        ordering.push_back(TJoinColumn::FromString(body.Cast().Name().StringValue()));
+    } else if (auto body = keySelector.Body().template Maybe<TExprList>()) {
+        for (size_t i = 0; i < body.Cast().Size(); ++i) {
+            auto item = body.Cast().Item(i);
+            auto collectMember = [&ordering](auto&& self, const TExprBase& item) -> void {
+                if (auto member = item.Maybe<TCoMember>()) {
+                    ordering.push_back(TJoinColumn::FromString(member.Cast().Name().StringValue()));
+                }
+                if (auto coalesce = item.Maybe<TCoCoalesce>()) {
+                    self(self, TExprBase(coalesce.Cast().Predicate()));
+                }
+            };
+            collectMember(collectMember, item);
+        }
+    }
+    return ordering;
+}
+
+TOrderingInfo GetAggregationBaseShuffleOrderingInfo(
+    const TCoAggregateBase& aggregationBase,
+    const TSimpleSharedPtr<TOrderingsStateMachine>& shufflingsFSM,
+    TTableAliasMap* tableAlias
+) {
+    TVector<TJoinColumn> ordering;
+    ordering.reserve(aggregationBase.Keys().Size());
+    for (const auto& key: aggregationBase.Keys()) {
+        TString aggregationKey = key.StringValue();
+        ordering.emplace_back(TJoinColumn::FromString(aggregationKey));
+    }
+
+    std::int64_t orderingIdx = -1;
+    if (shufflingsFSM) {
+        auto shuffling = TShuffling(ordering);
+        orderingIdx = shufflingsFSM->FDStorage.FindShuffling(shuffling, tableAlias);
+    }
+
+    return TOrderingInfo{
+        .OrderingIdx = orderingIdx,
+        .Ordering = std::move(ordering)
+    };
+}
+
+template <typename TSortCallable>
+TOrderingInfo GetSortingOrderingInfoImpl(
+    const TSortCallable& sortCallable,
+    const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
+    TTableAliasMap* tableAlias
+) {
+    const auto& keySelector = sortCallable.KeySelectorLambda();
+    TVector<TJoinColumn> sorting = GetKeySelectorOrdering(keySelector);
+
+    auto getDirection = [] (TExprBase expr) {
+        if (!expr.Maybe<TCoBool>()) {
+            return TOrdering::TItem::EDirection::ENone;
+        }
+        if (!FromString<bool>(expr.Cast<TCoBool>().Literal().Value())) {
+            return TOrdering::TItem::EDirection::EDescending;
+        }
+        return TOrdering::TItem::EDirection::EAscending;
+    };
+
+    std::vector<TOrdering::TItem::EDirection> directions;
+    const auto& sortDirections = sortCallable.SortDirections();
+    if (auto maybeList = sortDirections.template Maybe<TExprList>()) {
+        for (const auto& expr : maybeList.Cast()) {
+            directions.push_back(getDirection(expr));
+        }
+    } else if (auto maybeBool = sortDirections.template Maybe<TCoBool>()) {
+        directions.push_back(getDirection(TExprBase(maybeBool.Cast())));
+    }
+
+    if (directions.empty()) {
+        return TOrderingInfo();
+    }
+
+    std::int64_t orderingIdx = -1;
+    if (sortingsFSM) {
+        orderingIdx = sortingsFSM->FDStorage.FindSorting(TSorting(sorting, directions), tableAlias);
+    }
+
+    return TOrderingInfo{
+        .OrderingIdx = orderingIdx,
+        .Directions = std::move(directions),
+        .Ordering = std::move(sorting)
+    };
+}
+
+TOrderingInfo GetSortBaseSortingOrderingInfo(
+    const TCoSortBase& sort,
+    const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
+    TTableAliasMap* tableAlias
+) {
+    return GetSortingOrderingInfoImpl(sort, sortingsFSM, tableAlias);
+}
+
+TOrderingInfo GetTopBaseSortingOrderingInfo(
+    const TCoTopBase& topBase,
+    const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
+    TTableAliasMap* tableAlias
+) {
+    return GetSortingOrderingInfoImpl(topBase, sortingsFSM, tableAlias);
+}
+
+} // namespace NKikimr::NKqp

@@ -1,5 +1,6 @@
 #include "kqp_statistics.h"
 
+#include <yql/essentials/core/yql_statistics.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -9,6 +10,76 @@
 #include <sstream>
 
 namespace NKikimr::NKqp {
+
+// -------------------------------------------------------------------------
+// TShufflingOrderingsByJoinLabels
+// -------------------------------------------------------------------------
+
+TString TShufflingOrderingsByJoinLabels::ToString() const {
+    TString result;
+    for (const auto& [joinLabels, _] : Entries_) {
+        result += "[";
+        for (const auto& label : joinLabels) {
+            result += label + ", ";
+        }
+        if (!joinLabels.empty()) {
+            result.pop_back();
+            result.pop_back();
+        }
+        result += "] ";
+    }
+    return result;
+}
+
+// -------------------------------------------------------------------------
+// TColumnStatistics / TColumnStatMap boundary conversions
+// -------------------------------------------------------------------------
+
+TColumnStatistics FromYqlColumnStat(const NYql::TColumnStatistics& s) {
+    TColumnStatistics r;
+    r.NumUniqueVals = s.NumUniqueVals;
+    r.HyperLogLog = s.HyperLogLog;
+    r.CountMinSketch = s.CountMinSketch;
+    r.EqWidthHistogramEstimator = s.EqWidthHistogramEstimator;
+    r.Type = s.Type;
+    return r;
+}
+
+NYql::TColumnStatistics ToYqlColumnStat(const TColumnStatistics& s) {
+    NYql::TColumnStatistics r;
+    r.NumUniqueVals = s.NumUniqueVals;
+    r.HyperLogLog = s.HyperLogLog;
+    r.CountMinSketch = s.CountMinSketch;
+    r.EqWidthHistogramEstimator = s.EqWidthHistogramEstimator;
+    r.Type = s.Type;
+    return r;
+}
+
+TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> FromYqlColumnStatMap(
+    const TIntrusivePtr<NYql::TOptimizerStatistics::TColumnStatMap>& m)
+{
+    if (!m) {
+        return nullptr;
+    }
+    auto result = MakeIntrusive<TOptimizerStatistics::TColumnStatMap>();
+    for (const auto& [name, stat] : m->Data) {
+        result->Data[name] = FromYqlColumnStat(stat);
+    }
+    return result;
+}
+
+TIntrusivePtr<NYql::TOptimizerStatistics::TColumnStatMap> ToYqlColumnStatMap(
+    const TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>& m)
+{
+    if (!m) {
+        return nullptr;
+    }
+    auto result = MakeIntrusive<NYql::TOptimizerStatistics::TColumnStatMap>();
+    for (const auto& [name, stat] : m->Data) {
+        result->Data[name] = ToYqlColumnStat(stat);
+    }
+    return result;
+}
 
 // -------------------------------------------------------------------------
 // TKqpStatsStore

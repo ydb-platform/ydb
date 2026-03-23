@@ -4,6 +4,7 @@
 #include <yql/essentials/core/yql_cost_function.h>
 #include <yql/essentials/core/yql_join.h>
 #include <ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h>
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 
 #include <ydb/core/kqp/opt/cbo/solver/dq_opt_join_cost_based.h>
 
@@ -19,6 +20,17 @@ namespace NKikimr::NKqp {
 using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NYql::NDq;
+
+// Dual-inheritance wrapper: stored as NKikimr::NKqp::IProviderStatistics,
+// but dynamic_cast<NYql::TS3ProviderStatistics*> still works.
+struct TKqpS3ProviderStatistics
+    : public NKikimr::NKqp::IProviderStatistics
+    , public NYql::TS3ProviderStatistics
+{
+    TKqpS3ProviderStatistics() = default;
+    explicit TKqpS3ProviderStatistics(const NYql::TS3ProviderStatistics& s3)
+        : NYql::TS3ProviderStatistics(s3) {}
+};
 
 /**
  * Compute statistics and cost for read table
@@ -159,7 +171,7 @@ void InferStatisticsForKqpTable(
     auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
     auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, byteSize, 0.0, keyColumns);
     if (typeCtx->ColumnStatisticsByTableName.contains(path.StringValue())) {
-        stats->ColumnStatistics = typeCtx->ColumnStatisticsByTableName[path.StringValue()];
+        stats->ColumnStatistics = FromYqlColumnStatMap(typeCtx->ColumnStatisticsByTableName[path.StringValue()]);
     }
     if (kqpCtx.Config->OptOverrideStatistics.Get()) {
         stats = OverrideStatistics(*stats, path.Value(), kqpCtx.GetOverrideStatistics());
@@ -203,18 +215,18 @@ void InferStatisticsForKqpTable(
     stats->TableAliases->AddMapping(path.StringValue(), path.StringValue());
     stats->SourceTableName = path.StringValue();
 
-    auto& orderingsFSM = typeCtx->OrderingsFSM;
-    if (orderingsFSM && stats && stats->ShuffledByColumns) {
+    auto& shufflingsFSM = kqpStats->ShufflingsFSM;
+    if (shufflingsFSM && stats && stats->ShuffledByColumns) {
         auto shuffledBy = stats->ShuffledByColumns->Data;
         for (auto& column: shuffledBy) {
             column.RelName = alias;
         }
         auto shuffling = TShuffling(shuffledBy);
-        std::int64_t orderingIdx = orderingsFSM->FDStorage.FindShuffling(shuffling, nullptr);
-        stats->LogicalOrderings = orderingsFSM->CreateState(orderingIdx);
+        std::int64_t orderingIdx = shufflingsFSM->FDStorage.FindShuffling(shuffling, nullptr);
+        stats->LogicalOrderings = shufflingsFSM->CreateState(orderingIdx);
     }
 
-    auto& sortingsFSM = typeCtx->SortingsFSM;
+    auto& sortingsFSM = kqpStats->SortingsFSM;
     if (sortingsFSM && stats && stats->KeyColumns && stats->StorageType == EStorageType::RowStorage) {
         const TVector<TString>& keyColumns = stats->KeyColumns->Data;
 
@@ -406,7 +418,7 @@ void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotation
 
 void InferStatisticsForReadTableIndexRanges(
     const TExprNode::TPtr& input,
-    TTypeAnnotationContext* typeCtx,
+    TTypeAnnotationContext* /*typeCtx*/,
     const TKqpOptimizeContext& kqpCtx,
     TKqpStatsStore* kqpStats
 ) {
@@ -439,11 +451,11 @@ void InferStatisticsForReadTableIndexRanges(
         inputStats->StorageType
     );
 
-    if (typeCtx->SortingsFSM) {
+    if (kqpStats->SortingsFSM) {
         auto sortedBy = indexColumnsPtr->ToJoinColumns(alias);
         auto sorting = TSorting(sortedBy, GetAscDirections(sortedBy.size()));
-        std::int64_t orderingIdx = typeCtx->SortingsFSM->FDStorage.FindSorting(sorting);
-        stats->SortingOrderings = typeCtx->SortingsFSM->CreateState(orderingIdx);
+        std::int64_t orderingIdx = kqpStats->SortingsFSM->FDStorage.FindSorting(sorting);
+        stats->SortingOrderings = kqpStats->SortingsFSM->CreateState(orderingIdx);
     }
 
     stats->ShuffledByColumns = inputStats->ShuffledByColumns;
@@ -804,7 +816,7 @@ void InferStatisticsForDqSourceWrap(
                     stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>());
                 }
                 if (!stats->Specific) {
-                    stats->Specific = std::make_shared<TS3ProviderStatistics>();
+                    stats->Specific = std::make_shared<TKqpS3ProviderStatistics>();
                 }
 
                 const TS3ProviderStatistics* specific = dynamic_cast<const TS3ProviderStatistics*>((stats->Specific.get()));
@@ -821,7 +833,7 @@ void InferStatisticsForDqSourceWrap(
                     if (dbStats.contains(path)) {
                         YQL_CLOG(TRACE, CoreDq) << "Override statistics for s3 data source " << path;
                         stats = OverrideStatistics(*stats, path, kqpCtx.GetOverrideStatistics());
-                        auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
+                        auto newSpecific = std::make_shared<TKqpS3ProviderStatistics>(*specific);
                         newSpecific->OverrideApplied = true;
                         stats->Specific = newSpecific;
                         specific = newSpecific.get();
@@ -833,7 +845,7 @@ void InferStatisticsForDqSourceWrap(
 
                 auto rowType = wrapBase.Cast().RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 if (specific->FullRawRowAvgSize == 0.0) {
-                    auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
+                    auto newSpecific = std::make_shared<TKqpS3ProviderStatistics>(*specific);
                     stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, newSpecific);
                     newSpecific->FullRawRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, false);
                     newSpecific->FullDecodedRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, true);
@@ -849,7 +861,7 @@ void InferStatisticsForDqSourceWrap(
                 }
 
                 if (stats->Ncols == 0 || stats->Ncols > static_cast<int>(rowType->GetSize()) || stats->Nrows == 0 || stats->ByteSize == 0.0 || stats->Cost == 0.0) {
-                    auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
+                    auto newSpecific = std::make_shared<TKqpS3ProviderStatistics>(*specific);
 
                     stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, newSpecific);
 
@@ -918,6 +930,62 @@ TString TableAliasToString(TTableAliasMap* tableAlias) {
     return "";
 }
 
+// Build a YQL FDStorage that mirrors the KQP FDStorage.
+// Orderings are added in the same sequence so interesting-ordering indices match.
+static NYql::NDq::TFDStorage ConvertToYqlFDStorage(const TFDStorage& kqpFDS) {
+    NYql::NDq::TFDStorage yqlFDS;
+    const auto& cols = kqpFDS.GetColumns();
+
+    auto toYqlCol = [&cols](std::size_t idx) {
+        const auto& c = cols[idx];
+        return NYql::NDq::TJoinColumn(c.RelName, c.AttributeName);
+    };
+
+    for (const auto& fd : kqpFDS.FDs) {
+        if (fd.IsConstant()) {
+            yqlFDS.AddConstant(toYqlCol(fd.ConsequentItem), fd.AlwaysActive);
+        } else if (fd.IsEquivalence()) {
+            yqlFDS.AddEquivalence(
+                toYqlCol(fd.AntecedentItems[0]),
+                toYqlCol(fd.ConsequentItem),
+                fd.AlwaysActive
+            );
+        } else {
+            TVector<NYql::NDq::TJoinColumn> antecedents;
+            antecedents.reserve(fd.AntecedentItems.size());
+            for (auto i : fd.AntecedentItems) {
+                antecedents.push_back(toYqlCol(i));
+            }
+            yqlFDS.AddImplication(antecedents, toYqlCol(fd.ConsequentItem), fd.AlwaysActive);
+        }
+    }
+
+    for (const auto& ordering : kqpFDS.InterestingOrderings) {
+        std::vector<NYql::NDq::TJoinColumn> yqlCols;
+        yqlCols.reserve(ordering.Items.size());
+        for (auto i : ordering.Items) {
+            yqlCols.push_back(toYqlCol(i));
+        }
+        if (ordering.Type == TOrdering::EShuffle) {
+            NYql::NDq::TShuffling shuffling(std::move(yqlCols));
+            if (ordering.IsNatural) {
+                shuffling.SetNatural();
+            }
+            yqlFDS.AddShuffling(shuffling);
+        } else {
+            std::vector<NYql::NDq::TOrdering::TItem::EDirection> dirs;
+            dirs.reserve(ordering.Directions.size());
+            for (auto d : ordering.Directions) {
+                dirs.push_back(static_cast<NYql::NDq::TOrdering::TItem::EDirection>(d));
+            }
+            NYql::NDq::TSorting sorting(std::move(yqlCols), std::move(dirs));
+            yqlFDS.AddSorting(sorting);
+        }
+    }
+
+    return yqlFDS;
+}
+
 class TInterestingOrderingsFSMBuilder {
 public:
     TInterestingOrderingsFSMBuilder(
@@ -928,9 +996,7 @@ public:
     {}
 
 public:
-    std::tuple<TSimpleSharedPtr<TOrderingsStateMachine>, TSimpleSharedPtr<TOrderingsStateMachine>> Build(
-        const TExprNode::TPtr& node
-    ) {
+    void Build(const TExprNode::TPtr& node) {
         YQL_CLOG(TRACE, CoreDq) << "Building Orderings FSM";
 
         VisitExpr(
@@ -943,12 +1009,24 @@ public:
 
         YQL_CLOG(TRACE, CoreDq) << InterestingOrderingsCollector.FDStorage.ToString();
 
-        auto shufflingsFsm = MakeSimpleShared<TOrderingsStateMachine>(InterestingOrderingsCollector.FDStorage, TOrdering::EType::EShuffle);
-        auto sortingsFsm = MakeSimpleShared<TOrderingsStateMachine>(std::move(InterestingOrderingsCollector.FDStorage), TOrdering::EType::ESorting);
+        // Build YQL FDStorage mirror before moving the KQP FDStorage.
+        auto yqlFDStorage = ConvertToYqlFDStorage(InterestingOrderingsCollector.FDStorage);
 
-        LogReport(shufflingsFsm, sortingsFsm);
+        // Build KQP FSMs and store in KqpStats.
+        auto& kqpStats = *InterestingOrderingsCollector.KqpStats;
+        kqpStats.ShufflingsFSM = MakeSimpleShared<TOrderingsStateMachine>(
+            InterestingOrderingsCollector.FDStorage, TOrdering::EType::EShuffle);
+        kqpStats.SortingsFSM = MakeSimpleShared<TOrderingsStateMachine>(
+            std::move(InterestingOrderingsCollector.FDStorage), TOrdering::EType::ESorting);
 
-        return std::make_tuple(std::move(shufflingsFsm), std::move(sortingsFsm));
+        LogReport(kqpStats.ShufflingsFSM, kqpStats.SortingsFSM);
+
+        // Build YQL FSMs and store in TypeCtx (used by shared YQL infrastructure).
+        auto& typeCtx = InterestingOrderingsCollector.TypeCtx;
+        typeCtx.OrderingsFSM = MakeSimpleShared<NYql::NDq::TOrderingsStateMachine>(
+            yqlFDStorage, NYql::NDq::TOrdering::EType::EShuffle);
+        typeCtx.SortingsFSM = MakeSimpleShared<NYql::NDq::TOrderingsStateMachine>(
+            std::move(yqlFDStorage), NYql::NDq::TOrdering::EType::ESorting);
     }
 
 private:
@@ -1237,12 +1315,12 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(
         return IGraphTransformer::TStatus::Ok;
     }
 
-    if (!TypeCtx->OrderingsFSM) {
+    if (!KqpStats->ShufflingsFSM) {
         TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
         /* ^ we have to propogate statistics to work with aliases */
 
         auto fsmBuilder = TInterestingOrderingsFSMBuilder(*TypeCtx, KqpStats);
-        std::tie(TypeCtx->OrderingsFSM, TypeCtx->SortingsFSM) = fsmBuilder.Build(input);
+        fsmBuilder.Build(input);
     }
 
     TxStats.clear();

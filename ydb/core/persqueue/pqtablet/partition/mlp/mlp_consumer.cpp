@@ -2,6 +2,7 @@
 #include "mlp_storage.h"
 
 #include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
@@ -1072,13 +1073,7 @@ void TConsumerActor::NotifyPQRB(bool force) {
 }
 
 const NKikimrPQ::TPQTabletConfig::TPartition& TConsumerActor::GetPartitionConfig(ui32 partitionId) const {
-    const NKikimrPQ::TPQTabletConfig::TPartition* configPtr = nullptr;
-    for (const auto& partition : TopicConfig.GetAllPartitions()) {
-        if (partition.GetPartitionId() == partitionId) {
-            configPtr = &partition;
-            break;
-        }
-    }
+    const NKikimrPQ::TPQTabletConfig::TPartition* configPtr = NPQ::GetPartitionConfigFromAllPartitions(TopicConfig, partitionId);
     AFL_ENSURE(configPtr != nullptr)("partitionId", partitionId)("selfPartitionId", PartitionId);
     return *configPtr;
 }

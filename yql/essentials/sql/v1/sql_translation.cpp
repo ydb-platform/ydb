@@ -5384,17 +5384,6 @@ bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDef
     return true;
 }
 
-bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TString& paramName) {
-    if (!NamedNodeImpl(node, paramName, *this)) {
-        return false;
-    }
-    auto named = GetNamedNode(paramName);
-    if (!named) {
-        return false;
-    }
-    return true;
-}
-
 bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value& node, TDeferredAtom& result) {
     // object_feature_value: id_or_type | bind_parameter | STRING_VALUE | bool_value;
     switch (node.Alt_case()) {
@@ -5559,25 +5548,25 @@ bool TSqlTranslation::StoreSecretInheritPermissions(
     TSqlExpression sqlExpr(*this);
     TNodePtr exprNode = Unwrap(sqlExpr.Build(value.GetRule_expr1()));
     if (!exprNode) {
-        Error() << "Unsupported type for parameter: " << key << ". Bool was expected";
         return false;
     }
-    if (exprNode->IsLiteral() && exprNode->GetLiteralType() == "Bool") {
-        bool boolVal = false;
-        if (TryFromString<bool>(exprNode->GetLiteralValue(), boolVal)) {
-            secretParams.InheritPermissions = TDeferredAtom(Ctx_.Pos(), boolVal ? "1" : "0");
-            return true;
-        }
+    bool boolVal = false;
+    if (!exprNode->IsLiteral() ||
+        exprNode->GetLiteralType() != "Bool" ||
+        !TryFromString<bool>(exprNode->GetLiteralValue(), boolVal)) {
+        Ctx_.Error(Ctx_.Pos()) << "Unsupported value for parameter: " << key << ". Bool was expected";
+        return false;
     }
-    Ctx_.Error(Ctx_.Pos()) << "Unsupported type for parameter: " << key << ". Bool was expected";
-    return false;
+
+    secretParams.InheritPermissions = TDeferredAtom(Ctx_.Pos(), boolVal ? "1" : "0");
+    return true;
 }
 
 bool TSqlTranslation::StoreSecretValue(
     const TRule_secret_setting_value& value,
     const TString& key,
     TSecretParameters& secretParams) {
-    if (secretParams.Value || secretParams.ValueExpr) {
+    if (secretParams.Value) {
         Error() << "Duplicate parameter: " << key;
         return false;
     }
@@ -5585,18 +5574,17 @@ bool TSqlTranslation::StoreSecretValue(
     TSqlExpression sqlExpr(*this);
     TNodePtr exprNode = Unwrap(sqlExpr.Build(value.GetRule_expr1()));
     if (!exprNode) {
-        Error() << "Unsupported type for parameter: " << key << ". String (or named expression with type String) was expected";
         return false;
     }
-    if (exprNode->IsLiteral() && exprNode->GetLiteralType() == "String") {
+    if (exprNode->IsLiteral() && exprNode->GetLiteralType() != "String") {
+        Ctx_.Error(Ctx_.Pos()) << "Unsupported type for parameter: " << key << ". String was expected";
+        return false;
+    }
+    if (exprNode->IsLiteral()) {
         secretParams.Value = TDeferredAtom(Ctx_.Pos(), exprNode->GetLiteralValue());
-        return true;
+    } else {
+        secretParams.Value = exprNode;
     }
-    if (exprNode->IsLiteral() && exprNode->GetLiteralType() == "Bool") {
-        Ctx_.Error(Ctx_.Pos()) << "Unsupported type for parameter: " << key << ". String (or named expression with type String) was expected";
-        return false;
-    }
-    secretParams.ValueExpr = exprNode;
     return true;
 }
 

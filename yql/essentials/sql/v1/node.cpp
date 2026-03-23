@@ -3696,8 +3696,8 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
 }
 
 bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode) {
-    if (!Value && !ValueExpr) {
-        ctx.Error(stmBeginPos) << "parameter VALUE must be set";
+    if (!Value) {
+        ctx.Error(stmBeginPos) << "Parameter VALUE must be set";
         return false;
     }
     if (mode == EOperationMode::Alter) {

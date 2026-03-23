@@ -4431,11 +4431,20 @@ private:
         auto options = Y();
         options = L(options, Q(Y(Q("mode"), Q(GetMode()))));
         if (Params_.Value) {
-            options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"), Params_.Value->Build())));
+            std::visit([&](const auto& value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, TDeferredAtom>) {
+                    if (value.HasNode()) {
+                        options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"), value.Build())));
+                    } else {
+                        options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"))));
+                    }
+                } else if constexpr (std::is_same_v<T, TNodePtr>) {
+                    options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value_expr"), value)));
+                }
+            }, *Params_.Value);
         }
-        if (Params_.ValueExpr) {
-            options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value_expr"), *Params_.ValueExpr)));
-        }
+
         if (Params_.InheritPermissions) {
             if (Params_.InheritPermissions->HasNode()) {
                 options = L(options, Q(Y(BuildQuotedAtom(Pos_, "inherit_permissions"), Params_.InheritPermissions->Build())));

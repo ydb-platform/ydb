@@ -1421,8 +1421,8 @@ public:
         Alter,
     };
 
-    TMaybe<TDeferredAtom> Value;
-    TMaybe<TNodePtr> ValueExpr;
+    TMaybe<std::variant<TDeferredAtom, TNodePtr>> Value;
+
     TMaybe<TDeferredAtom> InheritPermissions;
 
 public:

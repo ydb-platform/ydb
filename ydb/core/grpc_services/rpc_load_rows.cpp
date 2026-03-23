@@ -604,6 +604,7 @@ private:
             }
             if (!validationStatus.ok()) {
                 errorMessage = TStringBuilder() << "Invalid UTF-8 data in column " << columnName << ": " << validationStatus.message();
+                return false;
             }
         }
 

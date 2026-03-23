@@ -248,6 +248,19 @@ SRCS(
     schemeshard_restore_incremental__list.cpp
     schemeshard_bg_tasks__list.cpp
     schemeshard_billing_helpers.cpp
+<<<<<<< HEAD
+    schemeshard_build_index_common.cpp
+=======
+    schemeshard_build_index.cpp
+    schemeshard_build_index_helpers.cpp
+    schemeshard_build_index__cancel.cpp
+    schemeshard_build_index__create.cpp
+    schemeshard_build_index__forget.cpp
+    schemeshard_build_index__get.cpp
+    schemeshard_build_index__list.cpp
+    schemeshard_build_index__progress.cpp
+    schemeshard_build_index_tx_base.cpp
+>>>>>>> 8a8c269ef16 (init states in __progress)
     schemeshard_cdc_stream_common.cpp
     schemeshard_cdc_stream_scan.cpp
     schemeshard_continuous_backup_cleaner.cpp

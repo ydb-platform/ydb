@@ -1,5 +1,8 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
+
 #include <ydb/library/conclusion/status.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
@@ -31,20 +34,26 @@ public:
         return MinFilterSizeBytes <= value && value <= MaxFilterSizeBytes;
     }
 
+    static ui32 CalcHashesCount(const double falsePositiveProbability) {
+        return std::max<ui32>(1, static_cast<ui32>(-std::log(falsePositiveProbability) / std::log(2.0)));
+    }
+
     static TString GetHashesCountIntervalString();
     static TString GetFilterSizeBytesIntervalString();
     static TString GetNGrammSizeIntervalString();
     static TString GetRecordsCountIntervalString();
 
-    static TConclusionStatus ValidateParams(double falsePositiveProbability, ui32 nGrammSize, ui32 hashesCount) {
+    static TConclusionStatus ValidateParams(const double falsePositiveProbability, const ui32 nGrammSize) {
         if (falsePositiveProbability <= 0 || falsePositiveProbability >= 1) {
             return TConclusionStatus::Fail("FalsePositiveProbability have to be in interval (0, 1)");
         }
         if (!CheckNGrammSize(nGrammSize)) {
             return TConclusionStatus::Fail("ngramm_size have to be in bloom ngramm filter in interval " + GetNGrammSizeIntervalString());
         }
+        const ui32 hashesCount = CalcHashesCount(falsePositiveProbability);
         if (!CheckHashesCount(hashesCount)) {
-            return TConclusionStatus::Fail("hashes_count have to be in bloom ngramm filter in interval " + GetHashesCountIntervalString());
+            return TConclusionStatus::Fail(
+                "false_positive_probability have to produce hashes_count in interval " + GetHashesCountIntervalString());
         }
         return TConclusionStatus::Success();
     }

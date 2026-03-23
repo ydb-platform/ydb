@@ -72,12 +72,10 @@ struct TKikimrQueryLimits {
 struct TIndexDescription {
     struct TLocalBloomFilterDescription {
         std::optional<double> FalsePositiveProbability;
-        bool CaseSensitive = true;
     };
 
     struct TLocalBloomNgramFilterDescription {
         ui32 NgramSize = 3;
-        ui32 HashesCount = 2;
         double FalsePositiveProbability = 0.1;
         bool CaseSensitive = true;
         // DEPRECATED: old syntax
@@ -357,7 +355,7 @@ void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription
 void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterDescription& desc,
     const TString& name, const TString& value, TString& error);
 
-double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes, ui32 recordsCount, ui32 hashesCount);
+double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes, ui32 recordsCount);
 
 struct TColumnFamily {
     TString Name;

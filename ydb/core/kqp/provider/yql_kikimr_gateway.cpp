@@ -50,13 +50,13 @@ static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t ind
 }
 
 // DEPRECATED: old syntax
-double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes, ui32 recordsCount, ui32 hashesCount) {
+double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes, ui32 recordsCount) {
     const double m = static_cast<double>(filterSizeBytes) * 8;
     const double n = static_cast<double>(recordsCount);
-    const double k = static_cast<double>(hashesCount);
-    if (m <= 0 || n <= 0 || k <= 0) {
+    if (m <= 0 || n <= 0) {
         return 0.1;
     }
+    const double k = std::max(1.0, (m / n) * std::log(2.0));
 
     const double fpp = std::pow(1.0 - std::exp(-k * n / m), k);
     if (fpp <= 0.0 || !std::isfinite(fpp)) {
@@ -490,17 +490,6 @@ void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription
         return;
     }
 
-    if (name == "case_sensitive") {
-        bool boolValue = true;
-        if (!TryFromString<bool>(value, boolValue)) {
-            error = TStringBuilder() << "Invalid case_sensitive value: " << value;
-            return;
-        }
-
-        desc.CaseSensitive = boolValue;
-        return;
-    }
-
     error = TStringBuilder() << "Unknown index setting: " << name;
     return;
 }
@@ -527,18 +516,7 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
 
         desc.FalsePositiveProbability = fpValue;
         return;
-    }
-
-    if (name == "hashes_count") {
-        ui32 uiValue = 0;
-        if (!TryFromString<ui32>(value, uiValue)) {
-            error = TStringBuilder() << "Invalid hashes_count value: " << value;
-            return;
-        }
-
-        desc.HashesCount = uiValue;
-        return;
-    }
+    }  
 
     if (name == "case_sensitive") {
         bool boolValue = true;
@@ -552,6 +530,10 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
     }
 
     // DEPRECATED: old syntax
+    if (name == "hashes_count") {
+        error = "hashes_count is not supported for bloom ngram filter and is calculated automatically";
+        return;
+    }
     if (name == "filter_size_bytes") {
         ui32 uiValue = 0;
         if (!TryFromString<ui32>(value, uiValue)) {

@@ -2038,7 +2038,7 @@ Y_UNIT_TEST(TableColumnUpsertIndex) {
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=count_min_sketch_index, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Col2']}`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_ngramm_filter_index, TYPE=BLOOM_NGRAMM_FILTER,
-                FEATURES=`{"column_name" : "Col3", "ngramm_size" : 3, "hashes_count" : 2,
+                FEATURES=`{"column_name" : "Col3", "ngramm_size" : 3,
                         "false_positive_probability" : 0.01, "case_sensitive" : false,
                         "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
             ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_filter_index, TYPE=BLOOM_FILTER,
@@ -2062,9 +2062,9 @@ Y_UNIT_TEST(TableColumnUpsertIndex) {
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = count_min_sketch_index, TYPE = COUNT_MIN_SKETCH, FEATURES = `{"column_names":["Col2"]}`);
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"false_positive_probability":0.01,"case_sensitive":false,"ngramm_size":3,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"\\\"b.c.d\\\""},"hashes_count":2,"bits_storage_type":"SIMPLE_STRING","column_name":"Col3"}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"false_positive_probability":0.01,"case_sensitive":false,"ngramm_size":3,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"\\\"b.c.d\\\""},"bits_storage_type":"SIMPLE_STRING","column_name":"Col3"}`);
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_filter_index, TYPE = BLOOM_FILTER, FEATURES = `{"false_positive_probability":0.01,"case_sensitive":true,"data_extractor":{"class_name":"DEFAULT"},"bits_storage_type":"BITSET","column_name":"Col2"}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_filter_index, TYPE = BLOOM_FILTER, FEATURES = `{"false_positive_probability":0.01,"data_extractor":{"class_name":"DEFAULT"},"bits_storage_type":"BITSET","column_name":"Col2"}`);
         )"
     );
 }
@@ -2092,7 +2092,7 @@ Y_UNIT_TEST(TableColumnAlterObject) {
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=count_min_sketch_index, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Col2']}`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_ngramm_filter_index, TYPE=BLOOM_NGRAMM_FILTER,
-                FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2,
+                FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3,
                         "false_positive_probability" : 0.01, "case_sensitive" : true,
                         "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : "a"}}`);
             ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_filter_index, TYPE=BLOOM_FILTER,
@@ -2129,9 +2129,9 @@ Y_UNIT_TEST(TableColumnAlterObject) {
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = count_min_sketch_index, TYPE = COUNT_MIN_SKETCH, FEATURES = `{"column_names":["Col2"]}`);
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"false_positive_probability":0.01,"case_sensitive":true,"ngramm_size":3,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"a"},"hashes_count":2,"bits_storage_type":"SIMPLE_STRING","column_name":"Col2"}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"false_positive_probability":0.01,"case_sensitive":true,"ngramm_size":3,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"a"},"bits_storage_type":"SIMPLE_STRING","column_name":"Col2"}`);
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_filter_index, TYPE = BLOOM_FILTER, FEATURES = `{"false_positive_probability":0.01,"case_sensitive":true,"data_extractor":{"class_name":"DEFAULT"},"bits_storage_type":"SIMPLE_STRING","column_name":"Col2"}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_filter_index, TYPE = BLOOM_FILTER, FEATURES = `{"false_positive_probability":0.01,"data_extractor":{"class_name":"DEFAULT"},"bits_storage_type":"SIMPLE_STRING","column_name":"Col2"}`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_live_duration":"180.000000s","class_name":"Zero","expected_blobs_size":2048000},{"class_name":"Zero","expected_blobs_size":2048000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
         )"

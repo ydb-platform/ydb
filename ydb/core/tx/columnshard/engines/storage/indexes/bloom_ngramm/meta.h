@@ -20,15 +20,16 @@ private:
     bool CaseSensitive = NDefaults::CaseSensitive;
     ui32 NGrammSize = NDefaults::NGrammSize;
     double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
-    ui32 HashesCount = NDefaults::HashesCount;
+    ui32 HashesCount = 0;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
     void Initialize() {
         AFL_VERIFY(!ResultSchema);
         std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("", arrow::boolean()) };
         ResultSchema = std::make_shared<arrow::Schema>(fields);
         AFL_VERIFY(FalsePositiveProbability > 0 && FalsePositiveProbability < 1);
-        AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
         AFL_VERIFY(TConstants::CheckNGrammSize(NGrammSize));
+        HashesCount = TConstants::CalcHashesCount(FalsePositiveProbability);
+        AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
     }
 
     virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
@@ -78,10 +79,8 @@ protected:
 
         NGrammSize = bFilter.GetNGrammSize();
         FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
-        HashesCount = bFilter.GetHashesCount();
-
         {
-            auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize, HashesCount);
+            auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize);
             if (conclusion.IsFail()) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
                 return false;
@@ -102,7 +101,6 @@ protected:
         AFL_VERIFY(TConstants::CheckNGrammSize(NGrammSize));
         filterProto->SetNGrammSize(NGrammSize);
         filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
-        filterProto->SetHashesCount(HashesCount);
         filterProto->SetColumnId(GetColumnId());
         filterProto->SetCaseSensitive(CaseSensitive);
         *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
@@ -114,13 +112,12 @@ protected:
 public:
     TIndexMeta() = default;
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionIndex, const ui32 columnId,
-        const TReadDataExtractorContainer& dataExtractor, const double falsePositiveProbability, const ui32 hashesCount, const ui32 nGrammSize,
+        const TReadDataExtractorContainer& dataExtractor, const double falsePositiveProbability, const ui32 nGrammSize,
         const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor, const bool caseSensitive)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionIndex, dataExtractor, bitsStorageConstructor)
         , CaseSensitive(caseSensitive)
         , NGrammSize(nGrammSize)
         , FalsePositiveProbability(falsePositiveProbability)
-        , HashesCount(hashesCount)
     {
         Initialize();
     }

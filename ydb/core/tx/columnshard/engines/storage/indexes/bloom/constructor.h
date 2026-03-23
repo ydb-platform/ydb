@@ -17,7 +17,6 @@ public:
 
 private:
     double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
-    bool CaseSensitive = NDefaults::CaseSensitive;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexConstructor>(GetClassNameStatic());
 
 protected:

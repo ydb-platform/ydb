@@ -2454,21 +2454,16 @@ public:
                                 if (localBloomFilterDesc.FalsePositiveProbability) {
                                     proto->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
                                 }
-
-                                proto->set_case_sensitive(localBloomFilterDesc.CaseSensitive);
                             }
 
                             if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {
                                 auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
                                 proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize);
-                                proto->set_hashes_count(localBloomNgramFilterDesc.HashesCount);
                                 proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive);
                                 // DEPRECATED: old syntax
                                 double fpp = (localBloomNgramFilterDesc.FilterSizeBytes && localBloomNgramFilterDesc.RecordsCount)
                                     ? ComputeFalsePositiveProbabilityFromDeprecatedParams(
-                                        *localBloomNgramFilterDesc.FilterSizeBytes,
-                                        *localBloomNgramFilterDesc.RecordsCount,
-                                        localBloomNgramFilterDesc.HashesCount)
+                                        *localBloomNgramFilterDesc.FilterSizeBytes, *localBloomNgramFilterDesc.RecordsCount)
                                     : localBloomNgramFilterDesc.FalsePositiveProbability;
                                 proto->set_false_positive_probability(fpp);
                             }

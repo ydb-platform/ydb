@@ -723,10 +723,8 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         const double falsePositiveProbability = settings.has_false_positive_probability()
             ? settings.false_positive_probability()
             : NDefaults::FalsePositiveProbability;
-        const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : NDefaults::CaseSensitive;
         Stream << " WITH ("
                << NJsonKeys::FalsePositiveProbability << "=" << falsePositiveProbability
-               << ", " << NJsonKeys::CaseSensitive << "=" << (caseSensitive ? "true" : "false")
                << ")";
     }
 
@@ -735,7 +733,6 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : NDefaults::CaseSensitive;
         Stream << " WITH ("
                << NJsonKeys::NGrammSize << "=" << settings.ngram_size()
-               << ", " << NJsonKeys::HashesCount << "=" << settings.hashes_count()
                << ", " << NJsonKeys::FalsePositiveProbability << "=" << settings.false_positive_probability()
                << ", " << NJsonKeys::CaseSensitive << "=" << (caseSensitive ? "true" : "false")
                << ")";
@@ -1780,10 +1777,6 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
                 json[NJsonKeys::FalsePositiveProbability] = bloomFilter.GetFalsePositiveProbability();
             }
 
-            if (bloomFilter.HasCaseSensitive()) {
-                json[NJsonKeys::CaseSensitive] = bloomFilter.GetCaseSensitive();
-            }
-
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
             break;
         }
@@ -1855,10 +1848,6 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
 
             if (bloomNGrammFilter.HasNGrammSize()) {
                 json[NJsonKeys::NGrammSize] = bloomNGrammFilter.GetNGrammSize();
-            }
-
-            if (bloomNGrammFilter.HasHashesCount()) {
-                json[NJsonKeys::HashesCount] = bloomNGrammFilter.GetHashesCount();
             }
 
             if (bloomNGrammFilter.HasFalsePositiveProbability()) {

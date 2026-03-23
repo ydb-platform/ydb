@@ -540,8 +540,6 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 if (settings.FalsePositiveProbability) {
                     bloom->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
                 }
-
-                bloom->SetCaseSensitive(settings.CaseSensitive);
                 break;
             }
             case TIndexDescription::EType::LocalBloomNgramFilter: {
@@ -566,12 +564,11 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
 
                 ngram->SetColumnId(columnIdIt->second);
                 ngram->SetNGrammSize(settings.NgramSize);
-                ngram->SetHashesCount(settings.HashesCount);
                 ngram->SetCaseSensitive(settings.CaseSensitive);
                 // DEPRECATED: old syntax
                 double fpp = (settings.FilterSizeBytes && settings.RecordsCount)
                     ? NYql::ComputeFalsePositiveProbabilityFromDeprecatedParams(
-                        *settings.FilterSizeBytes, *settings.RecordsCount, settings.HashesCount)
+                        *settings.FilterSizeBytes, *settings.RecordsCount)
                     : settings.FalsePositiveProbability;
                 ngram->SetFalsePositiveProbability(fpp);
                 break;

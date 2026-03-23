@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             ALTER TABLE `/Root/olapTableWithLocalIndexes`
             ADD INDEX idx_bloom LOCAL USING bloom_filter
                 ON (resource_id)
-                WITH (false_positive_probability = 0.01, case_sensitive = false);
+                WITH (false_positive_probability = 0.01);
         )");
 
         ExecSchemeQuery(kikimr, UseQueryService, R"(
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             ALTER TABLE `/Root/olapTableWithLocalIndexes`
             ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
                 ON (resource_id)
-                WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01, case_sensitive = true);
+                WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
         )");
 
         ExecSchemeQuery(kikimr, UseQueryService, R"(
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             ALTER TABLE `/Root/olapTable`
             ADD INDEX idx_bloom LOCAL USING bloom_filter
                 ON (uid)
-                WITH (false_positive_probability = 0.01, case_sensitive = false);
+                WITH (false_positive_probability = 0.01);
         )");
 
         ExecSchemeQuery(kikimr, UseQueryService, R"(
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             ALTER TABLE `/Root/olapTable`
             ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
                 ON (resource_id)
-                WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01, case_sensitive = true);
+                WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
         )");
 
         ExecSchemeQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_bloom;");
@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter
                     ON (resource_id)
-                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01, case_sensitive = true)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter
                     ON (resource_id)
-                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_C(hasDefault, "SHOW CREATE should contain case_sensitive default true, got: " << createText);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexCaseSensitiveFalsePersisted, EUseQueryService) {
+Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomIndexHasNoCaseSensitiveInShowCreate, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_bloom LOCAL USING bloom_filter
                     ON (resource_id)
-                    WITH (false_positive_probability = 0.01, case_sensitive = false)
+                    WITH (false_positive_probability = 0.01)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -310,10 +310,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         NYdb::TResultSetParser parser(showResult.GetResultSet(0));
         UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
         TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
-        bool hasCaseSensitiveFalse = createText.Contains("case_sensitive=false") ||
-            createText.Contains("\"case_sensitive\":false") ||
-            createText.Contains("\\\"case_sensitive\\\":false");
-        UNIT_ASSERT_C(hasCaseSensitiveFalse, "SHOW CREATE should contain bloom case_sensitive=false, got: " << createText);
+        UNIT_ASSERT_C(!createText.Contains("case_sensitive"),
+            "SHOW CREATE should not contain case_sensitive for bloom filter, got: " << createText);
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
@@ -374,7 +372,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter
                     ON (resource_id)
-                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -415,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (resource_id)
-                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -461,7 +459,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (resource_id)
-                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -509,7 +507,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (resource_id)
-                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -578,7 +576,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter
                     ON (resource_id)
-                    WITH (ngram_size = 3, hashes_count = 2, filter_size_bytes = 512, records_count = 1024, case_sensitive = true)
+                    WITH (ngram_size = 3, filter_size_bytes = 512, records_count = 1024, case_sensitive = true)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -602,7 +600,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 uid Utf8 NOT NULL,
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (resource_id)
-                    WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -623,7 +621,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         ExecSchemeQuery(kikimr, UseQueryService,
             R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
-                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "false_positive_probability" : 0.01}`);
+                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "false_positive_probability" : 0.01}`);
                 )");
         ExecSchemeQuery(kikimr, UseQueryService, TStringBuilder() << R"(
             --!syntax_v1
@@ -958,7 +956,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 auto alterQuery = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
-                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "false_positive_probability" : 0.01}`);
+                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "false_positive_probability" : 0.01}`);
                 )";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -1166,7 +1164,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     ALTER OBJECT `/Root/olapTable`
                     (TYPE TABLE)
                     SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_checkIndexesColumn, TYPE=BLOOM_NGRAMM_FILTER,
-                        FEATURES=`{"column_name" : "checkIndexesColumn", "ngramm_size" : 3, "hashes_count" : 2, "false_positive_probability" : 0.01,
+                        FEATURES=`{"column_name" : "checkIndexesColumn", "ngramm_size" : 3, "false_positive_probability" : 0.01,
                                     "case_sensitive" : false,
                                     "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
                     )";
@@ -1422,7 +1420,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     }
 
     TString scriptDifferentIndexesConfig = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_resource_id, TYPE=BLOOM_NGRAMM_FILTER,
-        FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "hashes_count" : $$1|5|8$$, "false_positive_probability" : $$0.01|0.05|0.1$$,
+        FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "false_positive_probability" : $$0.01|0.05|0.1$$,
                    "case_sensitive": $$false|true$$,
                    "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "$$SIMPLE_STRING|BITSET$$"}`);
     )";
@@ -1435,7 +1433,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     }
 
     TString scriptDifferentIndexesConfigIlike = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_resource_id, TYPE=BLOOM_NGRAMM_FILTER,
-        FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "hashes_count" : $$1|5|8$$, "false_positive_probability" : $$0.01|0.05|0.1$$,
+        FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "false_positive_probability" : $$0.01|0.05|0.1$$,
                    "case_sensitive": $$false$$,
                    "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "$$SIMPLE_STRING|BITSET$$"}`);
     )";

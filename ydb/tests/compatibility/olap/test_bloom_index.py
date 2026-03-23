@@ -76,7 +76,7 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
                     ALTER TABLE `{table_name}`
                     ADD INDEX `{self.index_ngram_name}` LOCAL USING bloom_ngram_filter
                         ON ({column})
-                        WITH (ngram_size = 3, hashes_count = 2, false_positive_probability = 0.01, case_sensitive = true);
+                        WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
                     """
                 )
         else:
@@ -84,7 +84,7 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
             stmt = (
                 f'ALTER OBJECT `{path}` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME={self.index_ngram_name}, '
                 f'TYPE=BLOOM_NGRAMM_FILTER, FEATURES=`{{"column_name": "{column}", "ngramm_size": 3, '
-                f'"hashes_count": 2, "false_positive_probability": 0.01, "case_sensitive": true}}`);'
+                f'"false_positive_probability": 0.01, "case_sensitive": true}}`);'
             )
 
             with ydb.SessionPool(self.driver, size=1) as pool:

@@ -20,12 +20,12 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
 
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId, GetDataExtractor(), FalsePositiveProbability, HashesCount, NGrammSize,
+        GetInheritPortionStorage().value_or(false), columnId, GetDataExtractor(), FalsePositiveProbability, NGrammSize,
         TBase::GetBitsStorageConstructor(), CaseSensitive);
 }
 
 TConclusionStatus TIndexConstructor::ValidateValues() const {
-    if (auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize, HashesCount); conclusion.IsFail()) {
+    if (auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize); conclusion.IsFail()) {
         return conclusion;
     }
     if (!ColumnName) {
@@ -53,10 +53,7 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
     NGrammSize = jsonInfo[NJsonKeys::NGrammSize].GetUInteger();
 
     if (jsonInfo.Has(NJsonKeys::HashesCount)) {
-        if (!jsonInfo[NJsonKeys::HashesCount].IsUInteger()) {
-            return TConclusionStatus::Fail("hashes_count have to be in bloom ngramm filter features as uint field");
-        }
-        HashesCount = jsonInfo[NJsonKeys::HashesCount].GetUInteger();
+        return TConclusionStatus::Fail("hashes_count is not supported for bloom ngramm filter and is calculated automatically");
     }
 
     if (jsonInfo.Has(NJsonKeys::CaseSensitive)) {
@@ -90,7 +87,6 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
     }
     NGrammSize = bFilter.GetNGrammSize();
     FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
-    HashesCount = bFilter.GetHashesCount();
     ColumnName = bFilter.GetColumnName();
 
     if (!DataExtractor.DeserializeFromProto(bFilter.GetDataExtractor())) {
@@ -106,7 +102,6 @@ void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested&
     filterProto->SetColumnName(GetColumnName());
     filterProto->SetCaseSensitive(CaseSensitive);
     filterProto->SetNGrammSize(NGrammSize);
-    filterProto->SetHashesCount(HashesCount);
     filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
     *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
 }

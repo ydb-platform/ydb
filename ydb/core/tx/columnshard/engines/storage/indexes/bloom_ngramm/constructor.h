@@ -17,7 +17,6 @@ public:
 
 private:
     ui32 NGrammSize = NDefaults::NGrammSize;
-    ui32 HashesCount = NDefaults::HashesCount;
     double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
     bool CaseSensitive = NDefaults::CaseSensitive;
     static inline auto Registrator = TFactory::TRegistrator<TIndexConstructor>(GetClassNameStatic());

@@ -16,7 +16,7 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     }
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId, FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(), CaseSensitive,
+        GetInheritPortionStorage().value_or(false), columnId, FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(),
         TBase::GetBitsStorageConstructor());
 }
 
@@ -35,18 +35,12 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const N
             return conclusion;
         }
     }
+
     if (!jsonInfo[NJsonKeys::FalsePositiveProbability].IsDouble()) {
         return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field");
     }
+
     FalsePositiveProbability = jsonInfo[NJsonKeys::FalsePositiveProbability].GetDouble();
-
-    if (jsonInfo.Has(NJsonKeys::CaseSensitive)) {
-        if (!jsonInfo[NJsonKeys::CaseSensitive].IsBoolean()) {
-            return TConclusionStatus::Fail("case_sensitive have to be in bloom filter features as boolean field");
-        }
-        CaseSensitive = jsonInfo[NJsonKeys::CaseSensitive].GetBoolean();
-    }
-
     return ValidateValues();
 }
 
@@ -56,18 +50,17 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
         return TConclusionStatus::Fail(errorMessage);
     }
+    
     auto& bFilter = proto.GetBloomFilter();
+    
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
         if (conclusion.IsFail()) {
             return conclusion;
         }
     }
+    
     FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
-    if (bFilter.HasCaseSensitive()) {
-        CaseSensitive = bFilter.GetCaseSensitive();
-    }
-
     return ValidateValues();
 }
 
@@ -75,7 +68,6 @@ void TBloomIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexReque
     auto* filterProto = proto.MutableBloomFilter();
     TBase::SerializeToProtoImpl(*filterProto);
     filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
-    filterProto->SetCaseSensitive(CaseSensitive);
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

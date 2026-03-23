@@ -1039,12 +1039,13 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
     LOG_D("Handle TEvents::TEvWakeup " << ev->Get()->Tag);
+    if (ev->Get()->Tag == EWakeUpTag::UpdateChildPartitions) {
+        UpdateLockedGroupsIdInChildPartitions(false);
+        return;
+    }
     UpdateMetrics();
     NotifyPQRB();
     Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
-    if (ev->Get()->Tag == EWakeUpTag::UpdateChildPartitions) {
-        UpdateLockedGroupsIdInChildPartitions(false);
-    }
 }
 
 void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {

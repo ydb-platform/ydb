@@ -36,7 +36,7 @@ void THandlerSessionCreateYandex::RequestSessionToken(const TString& code) {
 }
 
 void THandlerSessionCreateYandex::ProcessSessionToken(const NJson::TJsonValue& jsonValue) {
-    const NJson::TJsonValue* jsonAccessToken, jsonExpiresIn;
+    const NJson::TJsonValue* jsonAccessToken;
     if (!jsonValue.GetValuePointer("access_token", &jsonAccessToken)) {
         return ReplyBadRequestAndPassAway("Wrong OIDC provider response: access_token not found");
     }
@@ -69,7 +69,7 @@ void THandlerSessionCreateYandex::ProcessSessionToken(const NJson::TJsonValue& j
 }
 
 void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessionResponse::TPtr event) {
-    BLOG_D("SessionService.Create(): OK");
+    BLOG_D("rid=" << GetRequestIdForLogs(Request) << " SessionService.Create(): OK");
     auto response = event->Get()->Response;
     NHttp::THeadersBuilder responseHeaders;
     for (const auto& cookie : response.Getset_cookie_header()) {
@@ -79,14 +79,13 @@ void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessi
 }
 
 void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr event) {
-    BLOG_D("SessionService.Create(): " << event->Get()->Status);
+    BLOG_D("rid=" << GetRequestIdForLogs(Request) << " SessionService.Create(): " << event->Get()->Status);
     if (event->Get()->Status == "400") {
         RetryRequestToProtectedResourceAndDie();
     } else {
         NHttp::THeadersBuilder responseHeaders;
-        responseHeaders.Set("Content-Type", "text/plain");
         SetCORS(Request, &responseHeaders);
-        ReplyAndPassAway(Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details));
+        ReplyAndPassAway(Request->CreateResponse(event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details));
     }
 }
 

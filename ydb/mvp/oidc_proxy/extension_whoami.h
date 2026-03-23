@@ -6,25 +6,28 @@
 
 namespace NMVP::NOIDC {
 
+struct TWhoamiContext {
+    TString RequestIdForLogs;
+    TString AuthHeader;
+    TDuration Timeout;
+};
+
 class TExtensionWhoamiWorker : public NActors::TActorBootstrapped<TExtensionWhoamiWorker> {
     using TBase = IExtension;
     using TProfileService = nebius::iam::v1::ProfileService;
 
-    const TString AuthHeader;
-
+    const TWhoamiContext WhoamiContext;
     const TOpenIdConnectSettings Settings;
     TIntrusivePtr<TExtensionContext> Context;
     NYdbGrpc::IQueueClientContextPtr RequestContext;
 
     std::optional<TEvPrivate::TEvGetProfileResponse::TPtr> IamResponse;
     std::optional<TEvPrivate::TEvErrorResponse::TPtr> IamError;
-    TDuration Timeout;
 
 public:
-    TExtensionWhoamiWorker(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout)
-        : AuthHeader(authHeader)
+    TExtensionWhoamiWorker(const TOpenIdConnectSettings& settings, const TWhoamiContext& whoamiContext)
+        : WhoamiContext(whoamiContext)
         , Settings(settings)
-        , Timeout(timeout)
     {}
     void Bootstrap();
     void Handle(TEvPrivate::TEvExtensionRequest::TPtr event);
@@ -50,10 +53,16 @@ private:
 
 class TExtensionWhoami : public IExtension {
 private:
-    NActors::TActorId WhoamiHandlerId;
+    const TOpenIdConnectSettings Settings;
+    const TString AuthHeader;
+    const TDuration Timeout;
 
 public:
-    TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout);
+    TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout)
+        : Settings(settings)
+        , AuthHeader(authHeader)
+        , Timeout(timeout)
+    {}
     void Execute(TIntrusivePtr<TExtensionContext> ctx) override;
 };
 

@@ -22,22 +22,23 @@ void TExtensionWhoamiWorker::Bootstrap() {
     };
 
     NYdbGrpc::TCallMeta meta;
-    SetHeader(meta, "authorization", AuthHeader);
-    meta.Timeout = NYdb::TDeadline::SafeDurationCast(Timeout);
+    SetHeader(meta, "authorization", WhoamiContext.AuthHeader);
+    meta.Timeout = NYdb::TDeadline::SafeDurationCast(WhoamiContext.Timeout);
 
     connection->DoRequest(request, std::move(responseCb), &nebius::iam::v1::ProfileService::Stub::AsyncGet, meta, RequestContext.get());
     Become(&TExtensionWhoamiWorker::StateWork);
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvGetProfileResponse::TPtr event) {
-    BLOG_D("Whoami Extension Info: OK");
+    BLOG_D("rid=" << WhoamiContext.RequestIdForLogs << " Whoami Extension Info: OK");
     IamResponse = std::move(event);
     RequestContext.reset();
     ApplyIfReady();
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvErrorResponse::TPtr event) {
-    BLOG_D("Whoami Extension Info " << event->Get()->Status << ": " << event->Get()->Message << ", " << event->Get()->Details);
+    BLOG_D("rid=" << WhoamiContext.RequestIdForLogs
+        << " Whoami Extension Info " << event->Get()->Status << ": " << event->Get()->Message << ", " << event->Get()->Details);
     IamError = std::move(event);
     RequestContext.reset();
     ApplyIfReady();
@@ -122,7 +123,7 @@ void TExtensionWhoamiWorker::ApplyExtension() {
         if (!error) {
             error = "Can not process request to protected resource";
         }
-        BLOG_D("Incoming client error for protected resource: " << error);
+        BLOG_D("rid=" << GetRequestIdForLogs(params.Request) << " Incoming client error for protected resource: " << error);
         SetExtendedError(errorJson, "Ydb", "ClientError", error);
     }
 
@@ -154,7 +155,7 @@ void TExtensionWhoamiWorker::ApplyExtension() {
 
     if (!json.Has(ORIGINAL_USER_TOKEN)) {
         TStringBuf tail;
-        if (TStringBuf(AuthHeader).AfterPrefix(IAM_TOKEN_SCHEME, tail)) {
+        if (TStringBuf(WhoamiContext.AuthHeader).AfterPrefix(IAM_TOKEN_SCHEME, tail)) {
             json[ORIGINAL_USER_TOKEN] = tail;
         }
     }
@@ -176,13 +177,15 @@ void TExtensionWhoamiWorker::PassAway() {
     NActors::TActorBootstrapped<TExtensionWhoamiWorker>::PassAway();
 }
 
-TExtensionWhoami::TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout)
-{
-    WhoamiHandlerId = NActors::TActivationContext::ActorSystem()->Register(new TExtensionWhoamiWorker(settings, authHeader, timeout));
-}
-
 void TExtensionWhoami::Execute(TIntrusivePtr<TExtensionContext> ctx) {
-    NActors::TActivationContext::ActorSystem()->Send(WhoamiHandlerId, new TEvPrivate::TEvExtensionRequest(std::move(ctx)));
+    const TWhoamiContext whoamiContext{
+        .RequestIdForLogs = GetRequestIdForLogs(ctx->Params.Request),
+        .AuthHeader = AuthHeader,
+        .Timeout = Timeout,
+    };
+    const NActors::TActorId whoamiHandlerId =
+        NActors::TActivationContext::ActorSystem()->Register(new TExtensionWhoamiWorker(Settings, whoamiContext));
+    NActors::TActivationContext::ActorSystem()->Send(whoamiHandlerId, new TEvPrivate::TEvExtensionRequest(std::move(ctx)));
 }
 
 } // NMVP::NOIDC

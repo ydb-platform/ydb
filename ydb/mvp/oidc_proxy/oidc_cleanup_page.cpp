@@ -17,7 +17,7 @@ THandlerCleanup::THandlerCleanup(const NActors::TActorId& sender,
 {}
 
 void THandlerCleanup::Bootstrap() {
-    BLOG_D("Clear cookie: (" << CookieName << ")");
+    BLOG_D("rid=" << GetRequestIdForLogs(Request) << " Clear cookie");
 
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", ClearSecureCookie(CookieName));

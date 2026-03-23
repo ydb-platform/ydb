@@ -26,6 +26,23 @@ NHttp::THttpOutgoingResponsePtr CreateResponseForAjaxRequest(const NHttp::THttpI
     return request->CreateResponse("401", "Unauthorized", headers, body);
 }
 
+TString ExtractQueryParam(TStringBuf uri, TStringBuf name) {
+    const size_t queryPos = uri.find('?');
+    if (queryPos == TStringBuf::npos || queryPos + 1 >= uri.size()) {
+        return {};
+    }
+    TStringBuf query = uri.SubStr(queryPos + 1);
+    TStringBuf token;
+    while (query.NextTok('&', token)) {
+        const size_t eqPos = token.find('=');
+        const TStringBuf key = eqPos == TStringBuf::npos ? token : token.SubStr(0, eqPos);
+        if (key == name) {
+            return eqPos == TStringBuf::npos ? TString() : TString(token.SubStr(eqPos + 1));
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 TRestoreOidcContextResult::TRestoreOidcContextResult(const TStatus& status, const TContext& context)
@@ -248,18 +265,14 @@ TString DecodeToken(const TStringBuf& cookie) {
     try {
         Base64StrictDecode(cookie, token);
     } catch (std::exception& e) {
-        BLOG_D("Base64Decode " << NKikimr::MaskTicket(cookie) << " cookie: " << e.what());
+        BLOG_D("Cookie decode failed: " << e.what());
         token.clear();
     }
     return token;
 }
 
 TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) {
-    TStringBuf cookieValue = cookies.Get(cookieName);
-    if (!cookieValue.Empty()) {
-        BLOG_D("Using cookie (" << cookieName << ": " << NKikimr::MaskTicket(cookieValue) << ")");
-    }
-    return cookieValue;
+    return cookies.Get(cookieName);
 }
 
 TString GetAddressWithoutPort(const TString& address) {
@@ -289,6 +302,21 @@ TString GenerateRandomBase64(size_t byteNumber) {
     TString bytes = TString::Uninitialized(byteNumber);
     NKikimr::SafeEntropyPoolRead(bytes.Detach(), bytes.size());
     return Base64EncodeUrlNoPadding(bytes);
+}
+
+TString GetRequestIdForLogs(const NHttp::THttpIncomingRequestPtr& request) {
+    if (!request) {
+        return "-";
+    }
+    NHttp::THeaders headers(request->Headers);
+    TString rid(headers.Get("X-Request-Id"));
+    if (rid.empty()) {
+        rid = ExtractQueryParam(request->GetURI(), "dbg");
+    }
+    if (rid.empty()) {
+        rid = "-";
+    }
+    return rid;
 }
 
 // Append request address to X-Forwarded-For header

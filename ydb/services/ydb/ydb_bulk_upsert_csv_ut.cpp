@@ -38,6 +38,21 @@ Ydb::Formats::CsvSettings CsvSettings(
     return csvSettings;
 }
 
+void CreateStringTestTable(NYdb::NTable::TTableClient& client) {
+    auto session = client.GetSession().ExtractValueSync().GetSession();
+
+    auto tableBuilder = client.GetTableBuilder();
+    tableBuilder
+        .AddNullableColumn("Key", EPrimitiveType::Uint32)
+        .AddNullableColumn("Value", EPrimitiveType::Utf8);
+
+    tableBuilder.SetPrimaryKeyColumns({"Key"});
+    auto result = session.CreateTable("/Root/StringTest", tableBuilder.Build()).ExtractValueSync();
+
+    UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+}
+
 TString StreamQueryToYson(NYdb::NTable::TTableClient& client, const TString& query) {
     auto it = client.StreamExecuteScanQuery(query).GetValueSync();
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -351,6 +366,110 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         )"));
     }
 
+    Y_UNIT_TEST(QuotingDisabled) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+
+        CreateStringTestTable(client);
+
+        TStringBuilder csv;
+        csv << "Key,Value\n";
+        csv << "1,\"text\"\n";
+        csv << "2,'text'\n";
+
+        auto settings = CsvSettings();
+        settings.mutable_quoting()->set_disabled(true);
+
+        auto upsert = client.BulkUpsert(
+            "/Root/StringTest",
+            EDataFormat::CSV,
+            csv,
+            {},
+            BulkUpsertSettings(settings))
+            .GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        NKqp::CompareYson(R"([
+            [[1u];["\"text\""]];
+            [[2u];["'text'"]]
+        ])", StreamQueryToYson(client, R"(
+            SELECT Key, Value
+            FROM `/Root/StringTest`
+            ORDER BY Key;
+        )"));
+    }
+
+    Y_UNIT_TEST(QuoteChar) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+
+        CreateStringTestTable(client);
+
+        TStringBuilder csv;
+        csv << "Key,Value\n";
+        csv << "1,*hello,world*\n";
+
+        auto settings = CsvSettings();
+        settings.mutable_quoting()->set_quote_char("*");
+
+        auto upsert = client.BulkUpsert(
+            "/Root/StringTest",
+            EDataFormat::CSV,
+            csv,
+            {},
+            BulkUpsertSettings(settings))
+            .GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        NKqp::CompareYson(R"([
+            [[1u];["hello,world"]]
+        ])", StreamQueryToYson(client, R"(
+            SELECT Key, Value
+            FROM `/Root/StringTest`
+            ORDER BY Key;
+        )"));
+    }
+
+    Y_UNIT_TEST(DoubleQuoteDisabled) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+
+        CreateStringTestTable(client);
+
+        TStringBuilder csv;
+        csv << "Key,Value\n";
+        csv << "1,\"ab\"\"cd\"\n";
+        csv << "2,|\"abcd\"|\n";
+
+        auto settings = CsvSettings();
+        settings.mutable_quoting()->set_quote_char("|");
+        settings.mutable_quoting()->set_double_quote_disabled(true);
+
+        auto upsert = client.BulkUpsert(
+            "/Root/StringTest",
+            EDataFormat::CSV,
+            csv,
+            {},
+            BulkUpsertSettings(settings))
+            .GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        NKqp::CompareYson(R"([
+            [[1u];["\"ab\"\"cd\""]];
+            [[2u];["\"abcd\""]]
+        ])", StreamQueryToYson(client, R"(
+            SELECT Key, Value
+            FROM `/Root/StringTest`
+            ORDER BY Key;
+        )"));
+    }
+
     Y_UNIT_TEST(NullValueSetting) {
         TKikimrWithGrpcAndRootSchema server;
         auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
@@ -466,7 +585,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 .AddNullableColumn("App", EPrimitiveType::Utf8)
                 .AddNullableColumn("Timestamp", EPrimitiveType::Int64)
                 .AddNullableColumn("Message", EPrimitiveType::Utf8)
-                .AddNullableColumn("Ratio", EPrimitiveType::Double);
+                .AddNullableColumn("Ratio", TDecimalType(35, 10));
             tableBuilder.SetPrimaryKeyColumns({"Shard", "App", "Timestamp"});
             NYdb::NTable::TCreateTableSettings tableSettings;
             tableSettings.PartitioningPolicy(NYdb::NTable::TPartitioningPolicy().UniformPartitions(32));
@@ -510,6 +629,23 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             UNIT_ASSERT(!upsert.IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "No column 'Timestamp' in source batch");
         }
+
+        // Wrong type
+        {
+            TStringBuilder csv;
+            csv << "Shard,App,Message,Ratio\n";
+            csv << "42,app_,message,ratio\n";
+
+            auto upsert = client.BulkUpsert(
+                "/Root/Logs",
+                EDataFormat::CSV,
+                csv,
+                {},
+                BulkUpsertSettings(CsvSettings()))
+                .GetValueSync();
+            UNIT_ASSERT(!upsert.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "Cannot read CSV: Invalid: In CSV column #3: Row #2: The string 'ratio' is not a valid decimal number");
+        }
     }
 
     Y_UNIT_TEST(DecimalPK) {
@@ -536,7 +672,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
         TStringBuilder csv;
         csv << "Key_Decimal22,Key_Decimal35,Value_Decimal22,Value_Decimal35\n";
-        csv << "1.1,555555555555555.55,2.2,666666666666666.66\n";
+        csv << "1.1,555555555555555.55,10,666666666666666.66\n";
 
         auto upsert = client.BulkUpsert(
             "/Root/Decimal",
@@ -548,7 +684,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
 
         NKqp::CompareYson(R"([
-            [["1.1"];"555555555555555.55";["2.2"];["666666666666666.66"]]
+            [["1.1"];"555555555555555.55";["10"];["666666666666666.66"]]
         ])", StreamQueryToYson(client, R"(
             SELECT
                 CAST(Key_Decimal22 AS String),

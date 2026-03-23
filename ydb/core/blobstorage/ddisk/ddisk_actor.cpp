@@ -142,7 +142,7 @@ namespace {
     }
 
     void TDDiskActor::Bootstrap() {
-        WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor());
+        WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
         Become(&TThis::StateFunc);
         STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
         InitPDiskInterface();
@@ -227,6 +227,7 @@ namespace {
             hFunc(TEvents::TEvWakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)
 
+            case TEvReadThenWritePersistentBuffers::EventType:
             case TEvWritePersistentBuffers::EventType: {
                 TActivationContext::Forward(ev, WritePersistentBuffersActor);
                 break;

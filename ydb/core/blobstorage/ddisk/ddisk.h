@@ -35,6 +35,7 @@ namespace NKikimr::NDDisk {
             EvListPersistentBufferResult,
             EvWritePersistentBuffers,
             EvWritePersistentBuffersResult,
+            EvReadThenWritePersistentBuffers,
         };
     };
 
@@ -192,6 +193,7 @@ struct TPersistentBufferFormat {
     struct TEvErasePersistentBufferResult;
     struct TEvListPersistentBuffer;
     struct TEvListPersistentBufferResult;
+    struct TEvReadThenWritePersistentBuffers;
 
     DECLARE_DDISK_EVENT(Connect) {
         using TResult = TEvConnectResult;
@@ -320,6 +322,27 @@ struct TPersistentBufferFormat {
         }
     };
 
+    DECLARE_DDISK_EVENT(ReadThenWritePersistentBuffers) {
+        using TResult = TEvWritePersistentBuffersResult;
+
+        TEvReadThenWritePersistentBuffers() = default;
+
+        TEvReadThenWritePersistentBuffers(const TQueryCredentials& creds, ui64 lsn, ui32 generation,
+                const std::vector<std::tuple<ui32, ui32, ui32>>& persistentBufferIds,
+                ui32 replyTimeoutMicroseconds) {
+            creds.Serialize(Record.MutableCredentials());
+            Record.SetLsn(lsn);
+            Record.SetGeneration(generation);
+            Record.SetReplyTimeoutMicroseconds(replyTimeoutMicroseconds);
+            for (auto id : persistentBufferIds) {
+                auto* pbId = Record.AddPersistentBufferIds();
+                pbId->SetNodeId(std::get<0>(id));
+                pbId->SetPDiskId(std::get<1>(id));
+                pbId->SetDDiskSlotId(std::get<2>(id));
+            }
+        }
+    };
+
     DECLARE_DDISK_EVENT(WritePersistentBuffers) {
         using TResult = TEvWritePersistentBuffersResult;
 
@@ -362,12 +385,16 @@ struct TPersistentBufferFormat {
 
         TEvReadPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt,
+                ui64 vChunkIndex = 0, ui32 offsetInBytes = 0, ui32 sizeInBytes = 0,
                 TRope data = {}) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
             if (data) {
+                Record.SetVChunkIndex(vChunkIndex);
+                Record.SetOffsetInBytes(offsetInBytes);
+                Record.SetSizeInBytes(sizeInBytes);
                 TReadResult(AddPayload(std::move(data))).Serialize(Record.MutableReadResult());
             }
         }

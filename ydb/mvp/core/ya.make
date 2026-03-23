@@ -11,6 +11,7 @@ SRCS(
     core_ydbc.cpp
     cracked_page.cpp
     filter.cpp
+    http_proxy_gateway.cpp
     mapper.cpp
     merger.cpp
     mvp_mem_profiler.cpp

@@ -52,7 +52,6 @@ void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuild
     if (origin.empty()) {
         origin = "*";
     }
-    SetRequestIdHeader(request, headers);
     headers->Set("Access-Control-Allow-Origin", origin);
     headers->Set("Access-Control-Allow-Credentials", "true");
     headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent,x-request-id");

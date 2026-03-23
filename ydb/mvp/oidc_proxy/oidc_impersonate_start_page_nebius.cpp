@@ -141,10 +141,7 @@ TImpersonateStartPageHandler::TImpersonateStartPageHandler(const NActors::TActor
 {}
 
 void TImpersonateStartPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
-    NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
-    EnsureRequestIdHeader(request);
-    BLOG_D(GetLogPrefix(request) << "Incoming OIDC request: " << request->Method << ' ' << request->URL);
-    Register(new THandlerImpersonateStart(event->Sender, request, HttpProxyId, Settings));
+    Register(new THandlerImpersonateStart(event->Sender, event->Get()->Request, HttpProxyId, Settings));
 }
 
 } // NMVP::NOIDC

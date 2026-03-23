@@ -72,7 +72,6 @@ void THandlerSessionServiceCheckNebius::HandleExchange(NHttp::TEvHttpProxy::TEvH
     // don't know what to do, just forward response
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Parse(response->Headers);
-    SetRequestIdHeader(Request, &responseHeaders);
     ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
 }
 

@@ -39,7 +39,6 @@ void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvErrorResponse::TPt
     } else {
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
-        SetRequestIdHeader(Request, &responseHeaders);
         return ReplyAndPassAway(Request->CreateResponse(event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details));
     }
 }

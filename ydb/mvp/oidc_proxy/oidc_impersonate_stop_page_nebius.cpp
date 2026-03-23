@@ -12,10 +12,7 @@ TImpersonateStopPageHandler::TImpersonateStopPageHandler(const NActors::TActorId
 {}
 
 void TImpersonateStopPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
-    NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
-    EnsureRequestIdHeader(request);
-    BLOG_D(GetLogPrefix(request) << "Incoming OIDC request: " << request->Method << ' ' << request->URL);
-    Register(new THandlerCleanup(event->Sender, request, HttpProxyId, Settings, CreateNameImpersonatedCookie(Settings.ClientId)));
+    Register(new THandlerCleanup(event->Sender, event->Get()->Request, HttpProxyId, Settings, CreateNameImpersonatedCookie(Settings.ClientId)));
 }
 
 } // NMVP::NOIDC

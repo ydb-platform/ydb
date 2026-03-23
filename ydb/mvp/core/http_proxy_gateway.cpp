@@ -89,6 +89,7 @@ public:
     void Handle(NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr event) {
         CancelSubscriber = std::move(event);
         if (RequestCancelled) {
+            BLOG_D(GetLogPrefix(Event->Get()->Request) << "HTTP request cancelled");
             Send(CancelSubscriber->Sender, new NHttp::TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
             PassAway();
         }
@@ -103,6 +104,7 @@ public:
     void Handle(NHttp::TEvHttpProxy::TEvRequestCancelled::TPtr&) {
         RequestCancelled = true;
         if (CancelSubscriber) {
+            BLOG_D(GetLogPrefix(Event->Get()->Request) << "HTTP request cancelled");
             Send(CancelSubscriber->Sender, new NHttp::TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
             PassAway();
         }

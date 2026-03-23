@@ -25,6 +25,7 @@ enum EService : NActors::NLog::EComponent {
 #define BLOG_GRPC_DC(context, stream) LOG_DEBUG_S(context, EService::GRPC, stream)
 #define BLOG_QUERY_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, EService::QUERY, stream)
 
+// Requires GetLogContext() in the current scope; prepends request-aware log prefix when available.
 #define BLOG_D_CTX(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, EService::MVP, NMVP::GetLogPrefix(GetLogContext()) << stream)
 #define BLOG_I_CTX(stream) LOG_INFO_S(*NActors::TlsActivationContext, EService::MVP, NMVP::GetLogPrefix(GetLogContext()) << stream)
 #define BLOG_W_CTX(stream) LOG_WARN_S(*NActors::TlsActivationContext, EService::MVP, NMVP::GetLogPrefix(GetLogContext()) << stream)

@@ -53,15 +53,15 @@ public:
         : TClientCommandRootKikimrBase(name)
     {
         // Visible commands
+        AddClientCommandServer(*this, factories);
         AddCommand(std::make_unique<TClientCommandAdmin>());
         AddCommand(std::make_unique<TClientCommandDb>());
         AddCommand(std::make_unique<TClientCommandCms>());
         AddCommand(std::make_unique<TCommandWhoAmI>());
         AddCommand(std::make_unique<TClientCommandDiscovery>());
-        AddClientCommandServer(*this, factories);
         AddCommand(std::make_unique<TClientCommandConfig>());
 
-        // Hidden commands (shown only in -hh verbose help)
+        // Hidden commands
         AddHiddenCommand(NewCommandRun(std::move(factories)));
         AddHiddenCommand(NewCommandFormatInfo());
         AddHiddenCommand(NewCommandFormatUtil());
@@ -118,6 +118,65 @@ public:
             .RequiredArgument("PATH").StoreResult(&DummyUDFsDir).Hidden();
 
         TClientCommandRootKikimrBase::Config(config);
+
+        if (config.HelpCommandVerbosiltyLevel <= 1) {
+            for (const auto& name : {"allocator-info", "compatibility-info", "time", "progress"}) {
+                if (auto* opt = nOpts.FindLongOption(name)) {
+                    opt->Hidden_ = true;
+                }
+            }
+        }
+
+        const TString programName(config.ArgC > 0 ? config.ArgV[0] : "ydbd");
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        TStringStream stream;
+        stream << Endl << Endl
+            << colors.BoldColor() << "Quick start" << colors.OldColor() << ":" << Endl
+            << "  Start server:  " << programName << " server [server options...]" << Endl
+            << "  Manage YDB:    " << programName << " -s <host[:port]> <subcommand> [options]" << Endl
+            << Endl
+            << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
+        RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
+        stream << Endl << Endl
+            << colors.BoldColor() << "Detailed help" << colors.OldColor() << ":" << Endl
+            << "  " << colors.Green() << "-hh" << colors.OldColor()
+            << ": Print detailed help with all options and subcommands" << Endl
+            << "  " << programName << " server -h: Show server startup options" << Endl;
+        nOpts.SetCmdLineDescr(stream.Str());
+        nOpts.SetCustomUsage(programName + " [options] <subcommand> [subcommand options...]");
+    }
+
+    void RenderCommandDescription(
+        TStringStream& stream,
+        bool renderTree,
+        const NColorizer::TColors& colors,
+        RenderEntryType type,
+        TString prefix,
+        bool shortForm
+    ) override {
+        TClientCommand::RenderCommandDescription(stream, false, colors, type, prefix, shortForm);
+        if (type == BEGIN || renderTree) {
+            if (type == MIDDLE) {
+                prefix += "│  ";
+            }
+            if (type == END) {
+                prefix += "   ";
+            }
+            TVector<TClientCommand*> visibleSubCommands;
+            auto serverIt = SubCommands.find("server");
+            if (serverIt != SubCommands.end() && serverIt->second->Visible) {
+                visibleSubCommands.push_back(serverIt->second.get());
+            }
+            for (auto& [name, command] : SubCommands) {
+                if (name != "server" && command->Visible) {
+                    visibleSubCommands.push_back(command.get());
+                }
+            }
+            for (auto it = visibleSubCommands.begin(); it != visibleSubCommands.end(); ++it) {
+                bool lastCommand = (std::next(it) == visibleSubCommands.end());
+                (*it)->RenderCommandDescription(stream, renderTree, colors, lastCommand ? END : MIDDLE, prefix, shortForm);
+            }
+        }
     }
 
     void ParseAddress(TConfig& config) override {
@@ -153,6 +212,7 @@ public:
 
 int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories) {
     auto commandsRoot = MakeHolder<TClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), std::move(factories));
+    commandsRoot->Opts.SetTitle("YDB server daemon");
     TClientCommand::TConfig config(argc, argv);
     // TODO: process flags from environment KIKIMR_FLAGS before command line processing
     return commandsRoot->Process(config);

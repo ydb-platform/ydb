@@ -4878,7 +4878,7 @@ Y_UNIT_TEST(CreateSecretWithExpressionCorrect) {
             UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
             UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create");
             UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
-            UNIT_ASSERT_STRING_CONTAINS(line, R"('"value_expr" "$foo")");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('"value_expr" (EvaluateExpr "$foo"))");
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
         }
     };
@@ -4903,7 +4903,7 @@ Y_UNIT_TEST(CreateSecretCorrect) {
                 UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create");
                 UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"("value" '"secret-value")");
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("value_expr"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value_expr")"));
                 UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
             }
         };
@@ -4948,7 +4948,7 @@ Y_UNIT_TEST(CreateSecretCorrect) {
                 UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create");
                 UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/secret-name");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"("value" '"secret-value")");
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("value_expr"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value_expr")"));
                 UNIT_ASSERT_STRING_CONTAINS(line, R"("inherit_permissions" '"0")");
             }
         };
@@ -5137,7 +5137,7 @@ Y_UNIT_TEST(AlterSecretWithExpressionCorrect) {
             UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
             UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'alter");
             UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
-            UNIT_ASSERT_STRING_CONTAINS(line, R"('"value_expr" "$foo")");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('"value_expr" (EvaluateExpr "$foo"))");
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value")"));
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
         }
@@ -5162,7 +5162,7 @@ Y_UNIT_TEST(AlterSecretCorrect) {
             UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'alter");
             UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
             UNIT_ASSERT_STRING_CONTAINS(line, R"("value" '"secret-value")");
-            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("value_expr"));
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value_expr")"));
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
         }
     };

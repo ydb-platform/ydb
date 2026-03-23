@@ -1,6 +1,6 @@
 #include "kqp_node_service.h"
 #include "kqp_node_state.h"
-#include "kqp_query_cp.h"
+#include "kqp_query_control_plane.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/feature_flags.h>

@@ -1,6 +1,6 @@
 #include "kqp_node_service.h"
 #include "kqp_node_state.h"
-#include "kqp_query_cp.h"
+#include "kqp_query_control_plane.h"
 
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/events.h>

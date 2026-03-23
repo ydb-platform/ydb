@@ -19,6 +19,7 @@ SRCS(
     locks_ut.cpp
     scan_cleanup_ut.cpp
     optimizer_ut.cpp
+    options_ut.cpp
     peephole_ut.cpp
     sys_view_ut.cpp
     tiering_ut.cpp

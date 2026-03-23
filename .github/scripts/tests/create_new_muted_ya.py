@@ -425,13 +425,30 @@ def is_delete_candidate(test, aggregated_data):
     test['period_days'] = test_data.get('period_days')
     test['is_muted'] = test_data.get('is_muted', False)
     
-    total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count'] + test_data['skip_count']
-    
-    result = total_runs == 0
+    pass_count = test_data['pass_count']
+    fail_count = test_data['fail_count']
+    mute_count = test_data['mute_count']
+    skip_count = test_data['skip_count']
+    total_runs = pass_count + fail_count + mute_count + skip_count
+
+    # Delete stale muted tests with no runs at all,
+    # and muted tests that were only skipped during the whole delete window.
+    only_skipped_while_muted = (
+        test_data.get('is_muted', False)
+        and skip_count > 0
+        and pass_count == 0
+        and fail_count == 0
+        and mute_count == 0
+    )
+    result = total_runs == 0 or only_skipped_while_muted
     
     # Добавляем детальное логирование для диагностики
     if test_data.get('is_muted', False):  # Логируем только для замьюченных тестов
-        logging.debug(f"DELETE_CHECK: {test.get('full_name')} - runs:{total_runs}, muted:{test_data.get('is_muted')}, result:{result}")
+        logging.debug(
+            f"DELETE_CHECK: {test.get('full_name')} - runs:{total_runs}, "
+            f"p:{pass_count}, f:{fail_count}, m:{mute_count}, s:{skip_count}, "
+            f"muted:{test_data.get('is_muted')}, only_skipped_while_muted:{only_skipped_while_muted}, result:{result}"
+        )
     
     return result
 

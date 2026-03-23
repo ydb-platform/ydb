@@ -107,10 +107,6 @@ bool IsIdLambda(TExprBase body) {
 
 TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    if (!kqpCtx.Config->GetEnableTopSortSelectIndex()) {
-        return node;
-    }
-
     if (!node.Maybe<TCoTopBase>()) {
         return node;
     }
@@ -347,10 +343,6 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
             ui64 prefixLen = 0;
             if (buildResult.ExpectedMaxRanges.Defined() && *buildResult.ExpectedMaxRanges == 1) {
                 prefixLen = buildResult.PointPrefixLen;
-            }
-
-            if (!kqpCtx.Config->GetEnablePointPredicateSortAutoSelectIndex()) {
-                prefixLen = 0;
             }
 
             bool isIdLambda = IsIdLambda(TCoLambda(buildResult.PrunedLambda).Body());

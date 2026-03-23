@@ -694,7 +694,7 @@ void TConsumerActor::ProcessEventQueue() {
     for (auto& ev : UpdateExternalLockedMessageGroupsIdRequestsQueue) {
         const NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId& record = ev->Get()->Record;
         auto updateResult = Storage->UpdateExternalLockedMessageGroupsId(record.GetUpdate());
-        LOG_D("UpdateExternalLockedMessageGroupsId: " << "Applied=" << updateResult.Applied << ", " << "Invalid=" << updateResult.Invalid << ", " << "ModeChanged=" << updateResult.ModeChanged << ", " << "SetChanged=" << updateResult.SetChanged << ", " << "VersionChanged=" << updateResult.VersionChanged << "; " << record.GetUpdate().ShortUtf8DebugString());
+        LOG_D("UpdateExternalLockedMessageGroupsId: " << "Applied=" << updateResult.Applied << ", " << "Invalid=" << updateResult.Invalid << ", " << "ModeChanged=" << updateResult.ModeChanged << ", " << "SetChanged=" << updateResult.SetChanged << ", " << "VersionChanged=" << updateResult.VersionChanged << "; " << ShortDebugString(record.GetUpdate()));
     }
     UpdateExternalLockedMessageGroupsIdRequestsQueue.clear();
 
@@ -1137,7 +1137,7 @@ void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
         update->SetStep(ChildPartitionsOrderManager.ConsumerStep);
         update->SetMode(childMode);
 
-        LOG_D("UpdateLockedGroupsIdInChildPartitions: updating child partition " << childPartitionId << " with " << record.ShortDebugString());
+        LOG_D("UpdateLockedGroupsIdInChildPartitions: updating child partition " << childPartitionId << " with " << ShortDebugString(record));
         auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), state.TabletId, true, state.Cookie);
         Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
         state.SendFullStateReasons = TChildPartitionsOrderManager::ESendReasons::None;

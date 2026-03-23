@@ -1,5 +1,7 @@
 #include "mlp_consumer_order.h"
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 #include <util/generic/serialized_enum.h>
 #include <util/stream/format.h>
 #include <util/string/builder.h>
@@ -67,4 +69,11 @@ namespace NKikimr::NPQ::NMLP {
         return ss;
     }
 
+    TString ShortDebugString(const NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId& ev) {
+        return ev.ShortUtf8DebugString();
+    }
+
+    TString ShortDebugString(const NKikimrPQ::TExternalLockedMessageGroupsId& update) {
+        return update.ShortUtf8DebugString();
+    }
 } // namespace NKikimr::NPQ::NMLP

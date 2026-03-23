@@ -5,6 +5,11 @@
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
 
+namespace NKikimrPQ {
+    class TEvMLPUpdateExternalLockedMessageGroupsId;
+    class TExternalLockedMessageGroupsId;
+}
+
 namespace NKikimr::NPQ::NMLP {
 
     struct TChildPartitionsOrderManager {
@@ -37,4 +42,7 @@ namespace NKikimr::NPQ::NMLP {
         TMap<ui32, TChildrenPartitionWithKeepOrder> ChildrenPartitionWithKeepOrder;
         TBackoff UpdateChildPartitionsBackoff{TDuration::Seconds(1), TDuration::Seconds(10)};
     };
+
+    TString ShortDebugString(const NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId&);
+    TString ShortDebugString(const NKikimrPQ::TExternalLockedMessageGroupsId&);
 }

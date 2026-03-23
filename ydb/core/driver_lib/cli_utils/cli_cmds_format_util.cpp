@@ -1,7 +1,7 @@
 #include "cli_cmds_standalone.h"
 
-#include <ydb/core/driver_lib/base_utils/base_utils.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/util/pb.h>
 
 namespace NKikimr::NDriverClient {
 

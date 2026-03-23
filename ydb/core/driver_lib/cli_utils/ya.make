@@ -51,7 +51,6 @@ PEERDIR(
     ydb/core/client/scheme_cache_lib
     ydb/core/config/init
     ydb/core/config/validation
-    ydb/core/driver_lib/base_utils
     ydb/core/driver_lib/cli_base
     ydb/core/engine
     ydb/core/erasure

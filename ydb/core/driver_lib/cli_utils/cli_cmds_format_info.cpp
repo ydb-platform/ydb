@@ -1,6 +1,5 @@
 #include "cli_cmds_standalone.h"
 
-#include <ydb/core/driver_lib/base_utils/base_utils.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 
 namespace NKikimr::NDriverClient {

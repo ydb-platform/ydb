@@ -11,6 +11,7 @@ class THttpProxyGatewayRequestActor : public NActors::TActorBootstrapped<THttpPr
     using TBase = NActors::TActorBootstrapped<THttpProxyGatewayRequestActor>;
 
     const NActors::TActorId HttpProxyId;
+    const NHttp::THttpIncomingRequestPtr OriginalRequest;
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
     bool RequestCancelled = false;
@@ -20,6 +21,7 @@ public:
     THttpProxyGatewayRequestActor(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event,
                                   const NActors::TActorId& httpProxyId)
         : HttpProxyId(httpProxyId)
+        , OriginalRequest(event->Get()->Request)
         , Event(std::move(event))
     {
         EnsureRequestIdHeader(Event->Get()->Request);
@@ -52,7 +54,7 @@ public:
             if (!requestId.empty()) {
                 NHttp::THeadersBuilder extraHeaders;
                 extraHeaders.Set(REQUEST_ID_HEADER, requestId);
-                response = response->Duplicate(Event->Get()->Request, extraHeaders);
+                response = response->Duplicate(OriginalRequest, extraHeaders);
             }
 
             StreamingResponse = !response->IsDone();

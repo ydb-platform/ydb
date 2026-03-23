@@ -7,7 +7,7 @@
 
 namespace NMVP {
 
-constexpr TStringBuf REQUEST_ID_HEADER = "X-Request-Id";
+constexpr TStringBuf REQUEST_ID_HEADER = "x-request-id";
 
 struct TMvpLogContext {
     TString RequestId;

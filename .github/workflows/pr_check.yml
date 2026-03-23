@@ -145,14 +145,13 @@ jobs:
         id: create-merge
         env:
           GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           git config --global user.name YDBot
           git config --global user.email ydbot@ydb.tech
-          git config --local github.token ${{ env.GH_TOKEN }}
-
-          PR_HEAD_SHA=${{ github.event.pull_request.head.sha }}
-          BASE_REF=${{ github.event.pull_request.base.ref }}
-          PR_NUMBER=${{ github.event.pull_request.number }}
+          git config --local github.token "${GH_TOKEN}"
 
           git fetch origin "${BASE_REF}"
           git checkout -B "pr-${PR_NUMBER}-merge" "origin/${BASE_REF}"

@@ -11,71 +11,45 @@
 namespace NMVP::NOIDC {
 
 void InitOIDC(NActors::TActorSystem& actorSystem,
-              const NActors::TActorId& httpProxyId,
+              const NActors::TActorId& baseHttpProxyId,
               const TOpenIdConnectSettings& settings) {
-    const auto internalHttpProxyId = actorSystem.Register(NHttp::CreateHttpProxy());
+    const auto httpProxyId = actorSystem.Register(NHttp::CreateHttpProxy());
 
-    actorSystem.Send(internalHttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+    actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/auth/callback",
-                         actorSystem.Register(new TSessionCreateHandler(httpProxyId, settings))
+                         actorSystem.Register(new TSessionCreateHandler(baseHttpProxyId, settings))
                          )
                      );
 
-    actorSystem.Send(internalHttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+    actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/auth/cleanup",
-                         actorSystem.Register(new TCleanupPageHandler(httpProxyId, settings))
+                         actorSystem.Register(new TCleanupPageHandler(baseHttpProxyId, settings))
                          )
                      );
 
     if (settings.AccessServiceType == NMvp::nebius_v1) {
-        actorSystem.Send(internalHttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+        actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                             "/impersonate/start",
-                            actorSystem.Register(new TImpersonateStartPageHandler(httpProxyId, settings))
+                            actorSystem.Register(new TImpersonateStartPageHandler(baseHttpProxyId, settings))
                             )
                         );
 
-        actorSystem.Send(internalHttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+        actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                             "/impersonate/stop",
-                            actorSystem.Register(new TImpersonateStopPageHandler(httpProxyId, settings))
+                            actorSystem.Register(new TImpersonateStopPageHandler(baseHttpProxyId, settings))
                             )
                         );
     }
 
-    actorSystem.Send(internalHttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+    actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                         "/",
-                        actorSystem.Register(new TProtectedPageHandler(httpProxyId, settings))
+                        actorSystem.Register(new TProtectedPageHandler(baseHttpProxyId, settings))
                         )
                     );
 
-    const auto gatewayId = actorSystem.Register(new NMVP::THttpProxyGateway(internalHttpProxyId));
+    const auto gatewayId = actorSystem.Register(new NMVP::THttpProxyGateway(httpProxyId));
 
-    actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/auth/callback",
-                         gatewayId
-                         )
-                     );
-
-    actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/auth/cleanup",
-                         gatewayId
-                         )
-                     );
-
-    if (settings.AccessServiceType == NMvp::nebius_v1) {
-        actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                            "/impersonate/start",
-                            gatewayId
-                            )
-                        );
-
-        actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                            "/impersonate/stop",
-                            gatewayId
-                            )
-                        );
-    }
-
-    actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+    actorSystem.Send(baseHttpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                         "/",
                         gatewayId
                         )

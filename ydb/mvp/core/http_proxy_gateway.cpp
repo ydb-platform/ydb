@@ -13,6 +13,7 @@ class THttpProxyGatewayRequestActor : public NActors::TActorBootstrapped<THttpPr
     const NActors::TActorId HttpProxyId;
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
+    bool RequestCancelled = false;
     bool StreamingResponse = false;
 
 public:
@@ -38,6 +39,11 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr event) {
+        if (RequestCancelled) {
+            PassAway();
+            return;
+        }
+
         auto response = std::move(event->Get()->Response);
         if (response) {
             BLOG_D(GetLogPrefix(Event->Get()->Request) << "Outgoing HTTP response: " << response->Status << ' ' << response->Message);
@@ -62,6 +68,11 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr event) {
+        if (RequestCancelled) {
+            PassAway();
+            return;
+        }
+
         bool isFinished = false;
         if (event->Get()->DataChunk) {
             isFinished = event->Get()->DataChunk->IsEndOfData();
@@ -77,6 +88,10 @@ public:
 
     void Handle(NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr event) {
         CancelSubscriber = std::move(event);
+        if (RequestCancelled) {
+            Send(CancelSubscriber->Sender, new NHttp::TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
+            PassAway();
+        }
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& event) {
@@ -86,10 +101,11 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvRequestCancelled::TPtr&) {
+        RequestCancelled = true;
         if (CancelSubscriber) {
             Send(CancelSubscriber->Sender, new NHttp::TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
+            PassAway();
         }
-        PassAway();
     }
 
     STFUNC(StateWork) {

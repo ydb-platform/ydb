@@ -163,13 +163,13 @@ private:
     void DoAction() override {
         Y_ABORT_UNLESS(QueueAttributes_.Defined());
         if (FeatureFlags_.EnableSQSMigrationCompatibility_ && IsTopicCreated()) {
-            DoActionNewImplimentation();
+            DoActionTopicImplementation();
         } else {
-            DoActionOldImplementation();
+            DoActionTableImplementation();
         }
     }
 
-    void DoActionNewImplimentation() {
+    void DoActionTopicImplementation() {
         Become(&TThis::StateFunc);
 
         const bool isFifo = IsFifoQueue();
@@ -231,7 +231,7 @@ private:
     }
 
     // coverity[var_deref_model]: false positive
-    void DoActionOldImplementation() {
+    void DoActionTableImplementation() {
         Become(&TThis::StateFunc);
 
         const bool isFifo = IsFifoQueue();
@@ -308,7 +308,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup,         HandleWakeup);
             hFunc(NPQ::NMLP::TEvWriteResponse, Handle);
-            hFunc(TSqsEvents::TEvSendMessageBatchResponse, HandleSendResponseOldImplementation);
+            hFunc(TSqsEvents::TEvSendMessageBatchResponse, HandleSendResponseTableImplementation);
         }
     }
 
@@ -347,7 +347,7 @@ private:
         SendReplyAndDie();
     }
 
-    void HandleSendResponseOldImplementation(TSqsEvents::TEvSendMessageBatchResponse::TPtr& ev) {
+    void HandleSendResponseTableImplementation(TSqsEvents::TEvSendMessageBatchResponse::TPtr& ev) {
         const bool isFifo = IsFifoQueue();
         for (size_t i = 0, size = ev->Get()->Statuses.size(); i < size; ++i) {
             const auto& status = ev->Get()->Statuses[i];

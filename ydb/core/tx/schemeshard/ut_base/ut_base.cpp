@@ -3561,7 +3561,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             })");
         ui64 splitTxId = txId;
 
-        WaitForSuppressed(runtime, suppressed, 1, defObserver);
+        WaitForSuppressed(runtime, suppressed, 2, defObserver);
 
         AsyncForceDropUnsafe(runtime, ++txId, describe.GetPathDescription().GetSelf().GetPathId());
         ui64 forceDropTxId = txId;

@@ -82,7 +82,6 @@ NYdb::NTable::TBulkUpsertResult BulkUpsertCsvLimitRow(NYdb::NTable::TTableClient
         {},
         BulkUpsertSettings(CsvSettings()))
         .GetValueSync();
-    Cerr << upsert.GetIssues().ToString() << Endl;
     return upsert;
 }
 
@@ -863,31 +862,35 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         {
             auto res = BulkUpsertCsvLimitRow(client, {TString(1100000, 'a'), "bb", "", "val1", "val2", "val3"});
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "is larger than the allowed threshold");
         }
 
         {
             auto res = BulkUpsertCsvLimitRow(client, {"aa", TString(1100000, 'b'), "", "val1", "val2", "val3"});
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "is larger than the allowed threshold");
         }
 
         {
             auto res = BulkUpsertCsvLimitRow(client, {TString(600000, 'a'), TString(500000, 'b'), "", "val1", "val2", "val3"});
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "is larger than the allowed threshold");
         }
 
         {
             auto res = BulkUpsertCsvLimitRow(client, {TString(500000, 'a'), TString(500000, 'b'), "", TString(17 * 1000000, '1'), "val2", "val3"});
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "is larger than the allowed threshold");
         }
 
         {
-            auto res = BulkUpsertCsvLimitRow(client, {TString(500000, 'a'), TString(500000, 'b'), "", TString(15.9 * 1000000, '1'), "val2", "val3"});
+            auto res = BulkUpsertCsvLimitRow(client, {TString(500000, 'a'), TString(500000, 'b'), "", TString(16 * 1000000, '1'), "val2", "val3"});
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto res = BulkUpsertCsvLimitRow(client, {TString(500000, 'a'), "", TString(500000, 'c'),
-                                                      TString(15.9 * 1000000, '1'), TString(15.9 * 1000000, '2'), TString(15.9 * 1000000, '3')});
+                                                      TString(16 * 1000000, '1'), TString(16 * 1000000, '2'), TString(16 * 1000000, '3')});
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
         }
     }

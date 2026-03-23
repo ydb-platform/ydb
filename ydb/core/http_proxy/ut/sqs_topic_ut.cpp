@@ -1552,7 +1552,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         auto json = CreateQueue({
             {"QueueName", "SetAttrsMain.fifo"},
-            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
         });
         TString queueUrl = GetPathFromQueueUrlMap(json);
 
@@ -1564,13 +1564,14 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         auto attrJson = GetQueueAttributes({
             {"QueueUrl", queueUrl},
-            {"AttributeNames", NJson::TJsonArray{"RedrivePolicy"}}
+            {"AttributeNames", NJson::TJsonArray{"RedrivePolicy", "ContentBasedDeduplication"}}
         });
         UNIT_ASSERT(attrJson["Attributes"].Has("RedrivePolicy"));
         TString resultPolicy = attrJson["Attributes"]["RedrivePolicy"].GetString();
         NJson::TJsonValue policyJson;
         UNIT_ASSERT(NJson::ReadJsonTree(resultPolicy, &policyJson));
         UNIT_ASSERT_VALUES_EQUAL(policyJson["maxReceiveCount"].GetInteger(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["ContentBasedDeduplication"], "true");
     }
 
     Y_UNIT_TEST_F(TestSetQueueAttributesRetentionPeriod, TFixture) {

@@ -1279,6 +1279,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
         pqTabletConfig->SetFormatVersion(0);
+        pqTabletConfig->SetContentBasedDeduplication(request.content_based_deduplication());
 
         auto ct = pqTabletConfig->MutableCodecs();
         for(const auto& codec : request.supported_codecs().codecs()) {

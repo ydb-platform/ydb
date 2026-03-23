@@ -5,11 +5,8 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h> // TODO move to pubcli or common
 #include <ydb/library/kll_median/sketch.h>
-#include <ydb/library/kll_median/windowed_sketch.h>
 
 namespace NKikimr::NPQ {
-
-constexpr size_t KeysSketchPrecision = 100;
 
 using TSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
 
@@ -121,7 +118,7 @@ public:
     TAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId)
         : Config(config)
         , PartitionId(partitionId)
-        , KeysSketch(KeysSketchPrecision, 6, TInstant::Now().Seconds(), 60)
+        // , KeysSketch(KeysSketchPrecision, 6, TInstant::Now().Seconds(), 60)
     {
         RecreateSumWrittenBytes();
     }
@@ -146,9 +143,9 @@ public:
 
         SourceIdCounter.Use(sourceIdHash, now);
 
-        if (key) {
-            KeysSketch.Add(key, now.Seconds());
-        }
+        // if (key) {
+        //     KeysSketch.Add(key, now.Seconds());
+        // }
     }
 
     void CleanUp() override {
@@ -278,7 +275,7 @@ private:
     TMaybe<TSlidingWindow> SumWrittenBytes;
     // SourceIdHash -> SlidingWindow
     std::unordered_map<TString, TSlidingWindow> WrittenBytes;
-    NKll::TWindowedKll<TString> KeysSketch;
+    // NKll::TWindowedKll<TString> KeysSketch;
     TLastCounter SourceIdCounter;
     TInstant LastCleanUp;
 };

@@ -669,7 +669,7 @@ private:
             }
         }
 
-	return std::nullopt;
+        return std::nullopt;
     }
 
     void ProcessInputRows() {

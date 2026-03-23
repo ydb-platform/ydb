@@ -317,8 +317,6 @@ TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDat
         TString caCert;
         if (auto it = prop.find("database_name"); it != prop.end()) {
             database = it->second;
-        } else {
-            Y_DEBUG_ABORT("AUTH_METHOD=IAM: database_name is not present");
         }
         if (auto it = prop.find("use_tls"); it != prop.end()) {
             auto maybeUseTls = TryFromString<bool>(it->second);

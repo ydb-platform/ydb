@@ -849,6 +849,9 @@ message SharedConsumerType {
     // Delay time for message (after sending)
     // Time to wait for message if queue empty and if this parameter is not set in receive request
     google.protobuf.Duration receive_message_wait_time = 13;
+    // Default delay before messages become visible to ReceiveMessage after write (Amazon SQS DelaySeconds).
+    // Only used for shared (SQS-compatible) consumers. If unset or zero, there is no delivery delay.
+    google.protobuf.Duration receive_message_delay = 14;
 }
 
 message AlterSharedConsumerType {
@@ -860,6 +863,11 @@ message AlterSharedConsumerType {
     AlterDeadLetterPolicy alter_dead_letter_policy = 11;
     // Time to wait for message if queue empty and if this parameter is not set in receive request
     google.protobuf.Duration set_receive_message_wait_time = 12;
+
+    // Default delay before messages become visible after write (Amazon SQS DelaySeconds). Shared consumer only.
+    // While this duration has not elapsed since write, ReceiveMessage must not return the message.
+    // Optional: if unset in AlterConsumer.alter_shared_consumer_type, the previous value is unchanged.
+    google.protobuf.Duration set_receive_message_delay = 13;
 }
 
 // Consumer description.
@@ -1090,9 +1098,8 @@ message CreateTopicRequest {
     // Metrics level. If the level is unset, use database setting.
     optional uint32 metrics_level = 13;
 
-    // Delay time for message (after sending)
-    // If not set, there will be no delay for sent messages by default
-    google.protobuf.Duration receive_message_delay = 14;
+    // Enable content-based deduplication for the topic.
+    bool content_based_deduplication = 14;
 }
 
 // Create topic response sent from server to client.
@@ -1230,9 +1237,7 @@ message DescribeTopicResult {
     // Metrics level.
     optional uint32 metrics_level = 16;
 
-    // Delay time for message (after sending)
-    // If not set, there will be no delay for sent messages by default
-    google.protobuf.Duration receive_message_delay = 17;
+    reserved 17; // was receive_message_delay; use Consumer.shared_consumer_type.receive_message_delay
 }
 
 // Describe partition request sent from client to server.
@@ -1411,9 +1416,8 @@ message AlterTopicRequest {
         google.protobuf.Empty reset_metrics_level = 16;
     }
 
-    // Set delay time for message (after sending)
-    // If not set, there will be no delay for sent messages by default
-    google.protobuf.Duration set_receive_message_delay = 17;
+    // Enable content-based deduplication for the topic.
+    bool set_content_based_deduplication = 17;
 }
 
 // Update topic response sent from server to client.

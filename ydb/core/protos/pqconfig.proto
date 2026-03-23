@@ -399,6 +399,7 @@ message TPQTabletConfig {
         optional uint32 MaxProcessingAttempts = 15 [default = 1000]; // For MLP consumers
         optional uint32 DefaultProcessingTimeoutSeconds = 16 [default = 30]; // For MLP consumers
         optional string DeadLetterQueue = 17; // For MLP consumers
+        optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
         optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
 
         optional uint32 MetricsLevel = 21;
@@ -481,10 +482,6 @@ message TPQTabletConfig {
     optional string MonitoringProjectId = 41;
 
     optional string TimestampType = 42;
-
-    // Delay time for message (after sending)
-    // If not set, there will be no delay for sent messages by default
-    optional uint32 DefaultReceiveMessageDelayMs = 43 [default = 0];
 
     optional bool ContentBasedDeduplication = 44 [default = false];
 }

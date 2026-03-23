@@ -129,6 +129,13 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
     Format.SectorSize = FormatSectorSize;
     ui32 mainKeySize = mainKey.Keys.size();
 
+    const bool allowObsoleteKey =
+#ifdef DISABLE_PDISK_ENCRYPTION
+        false;
+#else
+        true;
+#endif
+
     for (ui32 k = 0; k < mainKeySize; ++k) {
         TPDiskStreamCypher cypher(true); // Format record is always encrypted
         cypher.SetKey(mainKey.Keys[k]);
@@ -173,7 +180,10 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
             ui64 sectorOffset = lastGoodIdx * FormatSectorSize;
             ui8* formatSector = formatSectors + sectorOffset;
             if (k < mainKeySize - 1) { // obsolete key is used
-                return TCheckDiskFormatResult(true, true);
+                if (allowObsoleteKey) {
+                    return TCheckDiskFormatResult(true, true);
+                }
+                continue;
             } else if (isBadPresent) {
                 for (ui32 i = 0; i < ReplicationFactor; ++i) {
                     if (isBad[i]) {
@@ -1563,6 +1573,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         TGuard<TMutex> guard(StateMutex);
         const ui64 totalSize = Format.DiskSize;
         const ui64 availableSize = (ui64)Format.ChunkSize * Keeper.GetFreeChunkCount();
+        const ui32 numActiveSlots = GetNumActiveSlots();
 
         if (*Mon.PDiskBriefState != TPDiskMon::TPDisk::Error) {
             *Mon.FreeSpaceBytes = availableSize;
@@ -1585,11 +1596,15 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
         pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog, {})));
         pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
-        pdiskState.SetNumActiveSlots(GetNumActiveSlots());
+        pdiskState.SetNumActiveSlots(numActiveSlots);
         pdiskState.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
         if (ExpectedSlotCount) {
             pdiskState.SetExpectedSlotCount(ExpectedSlotCount);
         }
+
+        *Mon.NumActiveSlots = numActiveSlots;
+        *Mon.SlotSizeInUnits = Cfg->SlotSizeInUnits;
+        *Mon.ExpectedSlotCount = ExpectedSlotCount;
 
         reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
 

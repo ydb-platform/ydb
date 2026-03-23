@@ -821,8 +821,16 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             }
             auto argType = argsTuple.GetElementType(0);
 
+            const auto typeId = TDataType<TUserDataType>::Id;
+            const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(typeId)).Features;
+
             builder.UserType(userType);
-            builder.SupportsBlocks();
+
+            // FIXME: Kernels for the extended date type are NYI.
+            if (!(features & NUdf::ExtDateType)) {
+                builder.SupportsBlocks();
+            }
+
             builder.IsStrict();
 
             TBlockTypeInspector block(*typeInfoHelper, argType);

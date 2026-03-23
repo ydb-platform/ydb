@@ -92,7 +92,7 @@
 
 Инструкция по декомиссии групп работает при выполнении следующих условий:
 
-1. Развернутый [кластер](../../concepts/glossary.md#cluster) {{ ydb-short-name }}. Инструкции по развертыванию доступны в разделе [Первоначальное развёртывание](../../devops/deployment-options/manual/initial-deployment.md).
+1. Развернутый [кластер](../../concepts/glossary.md#cluster) {{ ydb-short-name }}. Инструкции по развертыванию доступны в разделе [Первоначальное развёртывание](../../devops/deployment-options/manual/initial-deployment/index.md).
 2. Установленная утилита `ydb-dstool`. Инструкции по установке доступны в [документации по установке {{ ydb-short-name }} DSTool](../../reference/ydb-dstool/install.md).
 3. Сгенерированный токен аутентификации для доступа к кластеру:
 
@@ -137,12 +137,12 @@
 - CLI
   1. Выполните команду получения списка групп хранения
 
-     ```bash
-     ydb-dstool -e <cluster-endpoint> \
-       --ca-file <path-to-ca-cert> \
-       --token-file ~/ydb_token \
-       group list
-     ```
+   ```bash
+  ydb-dstool -e <cluster-endpoint> \
+    --ca-file <path-to-ca-cert> \
+    --token-file ~/ydb_token \
+    group list
+  ```
 
   2. В выводе команды найдите нужную группу и сохраните её `Group ID`.
 

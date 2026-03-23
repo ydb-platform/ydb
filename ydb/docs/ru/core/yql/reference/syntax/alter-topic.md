@@ -122,9 +122,8 @@ ALTER TOPIC topic_path ADD CONSUMER consumer_name [WITH (option = value[, ...])]
 
 Параметры читателя:
 
-* `important` — определяет важного читателя. Никакие данные из топика не будут удалены, пока все важные читатели их не обработали. Тип значения — `boolean`, значение по умолчанию: `false`.
-* `availability_period` — определяет время доступности сообщений для читателя. Опция позволяет продлить время хранения сообщений в топике с [retention_period](#topic-parameters) вплоть до `availability_period`, если читатель не подтверждает их обработку. Тип значения — `Interval`. Не совместим с параметром `important`. Значение по умолчанию отсутствует.
-* `read_from` — определяет момент времени записи сообщений, начиная с которого читатель будет получать данные. Данные, записанные ранее этого момента, прочитаны не будут. Тип значения: `Datetime` ИЛИ `Timestamp` или `integer` (unix-timestamp в виде числа). Значение по умолчанию — `0` (чтение с самого раннего доступного в топике времени).
+* `important`— определяет важного читателя. Никакие данные из топика не будут удалены, пока все важные читатели их не прочитали. Тип значения — `boolean`, значение по умолчанию: `false`.
+* `read_from`— определяет момент времени записи сообщений, начиная с которого читатель будет получать данные. Данные, записанные ранее этого момента, прочитаны не будут. Тип значения: `Datetime` ИЛИ `Timestamp` или `integer` (unix-timestamp в виде числа). Значение по умолчанию — `0` (чтение с самого раннего доступного в топике времени).
 {% if feature_topic_codecs %}
 * `supported_codecs` — список [кодеков](../../../../concepts/datamodel/topic#message-codec), поддерживаемых читателем.
 {% endif %}
@@ -163,7 +162,7 @@ ALTER TOPIC `my_topic` ALTER CONSUMER my_consumer SET (important = true);
 
 ```yql
 ALTER TOPIC `my_topic`
-    ALTER CONSUMER my_consumer SET (availability_period = Interval('PT48H'))
+    ALTER CONSUMER my_consumer SET (important = true)
     ALTER CONSUMER my_consumer SET (read_from = 0);
 ```
 
@@ -181,10 +180,10 @@ ALTER TOPIC topic_path ALTER CONSUMER consumer_name RESET (option[, ...]);
 
 * `option` — параметр читателя.
 
-Данный пример сбросит параметры `read_from` и `availability_period` в значения по умолчанию:
+Данный пример сбросит параметр `read_from` в значение по умолчанию:
 
 ```yql
-ALTER TOPIC `my_topic` ALTER CONSUMER my_consumer RESET (read_from, availability_period);
+ALTER TOPIC `my_topic` ALTER CONSUMER my_consumer RESET (read_from);
 ```
 
 {% endif %}

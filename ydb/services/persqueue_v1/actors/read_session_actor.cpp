@@ -735,7 +735,8 @@ void TReadSessionActor<UseMigrationProtocol>::NotifyChildren(const TPartitionAct
         }
 
         const auto& topic = topicIt->second;
-        const auto& directChildren = topic->PartitionGraph->GetPartition(partition.Partition.Partition)->DirectChildren;
+        auto partitionGraph = topic->GetPartitionGraph();
+        const auto& directChildren = partitionGraph->GetPartition(partition.Partition.Partition)->DirectChildren;
         if (!directChildren.empty()) {
             for (auto& [_, actorInfo]: Partitions) {
                 for (auto& child: directChildren) {
@@ -1141,7 +1142,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
                 return CloseSession(PersQueue::ErrorCode::OVERLOAD, TStringBuilder()
                     << "metering mode of topic: " << name << " has been changed", ctx);
             }
-            it->second->PartitionGraph = t.PartitionGraph;
+            it->second->SetPartitionGraph(t.PartitionGraph);
         }
     }
 
@@ -1275,7 +1276,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
 
     auto& topic = topicIt->second;
 
-    auto* partitionNode = topic->PartitionGraph->GetPartition(record.GetPartition());
+    auto partitionGraph = topic->GetPartitionGraph();
+    auto* partitionNode = partitionGraph->GetPartition(record.GetPartition());
     if (!partitionNode) {
         Locks.push_back(ev->Release());
         if (!AuthInitActor) {
@@ -1343,8 +1345,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     it->second.PartitionsLocked.Inc();
     it->second.PartitionsInfly.Inc();
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign"
-        << ": record# " << record);
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX
+        << " user=" << (Token ? Token->GetUserSID() : "-")
+        << " topic=" << converter->GetPrintableString()
+        << " assign: record# " << record);
 
     ctx.Send(actorId, new TEvPQProxy::TEvLockPartition(0, {}, false, false));
 }
@@ -2447,26 +2451,26 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
     auto& topic = it->second;
     NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
 
+    TPartitionActorInfo* partitionInfo = nullptr;
+    for (auto& [_, p] : Partitions) {
+        if (p.Partition.Partition == msg->PartitionId) {
+            partitionInfo = &p;
+            break;
+        }
+    }
+
+    if (!partitionInfo) {
+        return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
+            << "Inconsistent state #04", ctx);
+    }
+
+    partitionInfo->EndOffset = msg->EndOffset;
+    partitionInfo->ReadingFinished = true;
+
+    NotifyChildren(*partitionInfo, ctx);
+
     if constexpr (!UseMigrationProtocol) {
         if (AutoPartitioningSupport) {
-            TPartitionActorInfo* partitionInfo = nullptr;
-            for (auto& [_, p] : Partitions) {
-                if (p.Partition.Partition == msg->PartitionId) {
-                    partitionInfo = &p;
-                    break;
-                }
-            }
-
-            if (!partitionInfo) {
-                return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
-                    << "Inconsistent state #04", ctx);
-            }
-
-            partitionInfo->EndOffset = msg->EndOffset;
-            partitionInfo->ReadingFinished = true;
-
-            NotifyChildren(*partitionInfo, ctx);
-
             TServerMessage result;
             result.set_status(Ydb::StatusIds::SUCCESS);
             auto* r = result.mutable_end_partition_session();

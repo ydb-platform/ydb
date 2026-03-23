@@ -45,6 +45,9 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        if (ConsolePipe != ev->Get()->ClientId) {
+            return;
+        }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC33, "Console pipe destroyed", (ConsolePipe, ConsolePipe),
             (ClientId, ev->Get()->ClientId), (Working, Working));
         ConsolePipe = {};
@@ -54,6 +57,31 @@ namespace NKikimr::NBsController {
                     "connection to Console tablet terminated");
             }
             MakeGetBlock();
+        }
+    }
+
+    void TBlobStorageController::TConsoleInteraction::MaybeDisableConfigV2() {
+        if (!Self.PendingV2MigrationCheck) {
+            return;
+        }
+        Self.PendingV2MigrationCheck = false;
+
+        // check if switch_to_config_v2 is set in the committed YAML config
+        bool switchToConfigV2 = false;
+        if (Self.YamlConfig) {
+            try {
+                const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig;
+                NKikimrConfig::TAppConfig appConfig = NYaml::Parse(yamlReturnedByFetch);
+                switchToConfigV2 = appConfig.GetFeatureFlags().GetSwitchToConfigV2();
+            } catch (const std::exception& ex) {
+                STLOG(PRI_ERROR, BS_CONTROLLER, BSC43, "failed to parse YAML config for V2 migration check",
+                    (ErrorReason, ex.what()));
+            }
+        }
+
+        if (!switchToConfigV2) {
+            STLOG(PRI_INFO, BS_CONTROLLER, BSC44, "disabling EnableConfigV2 as SwitchToConfigV2 is not set in YAML config");
+            Self.Execute(Self.CreateTxUpdateEnableConfigV2(false));
         }
     }
 
@@ -74,12 +102,16 @@ namespace NKikimr::NBsController {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC19, "Console proposed config response", (Response, record));
 
         if (!Self.EnableConfigV2 && !PendingReplaceRequest) {
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSC49, "skipping Console propose response due disabled ConfigV2 and no pending replace",
+                (EnableConfigV2, Self.EnableConfigV2), (HasPendingReplaceRequest, static_cast<bool>(PendingReplaceRequest)),
+                (Status, record.GetStatus()), (ConsoleConfigVersion, record.GetConsoleConfigVersion()));
             return;
         }
 
         auto overwriteConfig = [&] {
             TString yamlReturnedByFetch = record.GetYAML();
             if (!yamlReturnedByFetch) {
+                MaybeDisableConfigV2();
                 return; // no yaml config stored in Console
             }
             try {
@@ -102,10 +134,12 @@ namespace NKikimr::NBsController {
                     }
 
                     TYamlConfig yamlConfig(std::move(yaml), version, std::move(yamlReturnedByFetch));
+                    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC50, "committing config during overwriteConfig");
                     Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::nullopt,
                         std::move(storageConfig), std::nullopt, nullptr, std::nullopt,
                         std::nullopt));
                     CommitInProgress = true;
+                    MaybeDisableConfigV2();
                 }
             } catch (const std::exception& ex) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC26, "failed to parse config obtained from Console",
@@ -137,6 +171,7 @@ namespace NKikimr::NBsController {
                 break;
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNotNeeded:
+                MaybeDisableConfigV2();
                 break;
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNeeded:
@@ -149,11 +184,14 @@ namespace NKikimr::NBsController {
                 break;
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::ReverseCommit:
+                STLOG(PRI_DEBUG, BS_CONTROLLER, BSC45, "doing reverse commit");
                 if (PendingReplaceRequest) {
+                    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC47, "ReverseCommit status received when BSC has PendingReplaceRequest");
                     ExpectedYamlConfigVersion.emplace(record.GetConsoleConfigVersion());
                     Handle(PendingReplaceRequest);
                     PendingReplaceRequest.Reset();
                 } else if (!Self.YamlConfig && !Self.StorageYamlConfig) {
+                    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC46, "overwriting config");
                     overwriteConfig();
                 } else {
                     STLOG(PRI_CRIT, BS_CONTROLLER, BSC29, "ReverseCommit status received when BSC has YamlConfig/StorageYamlConfig",
@@ -210,6 +248,7 @@ namespace NKikimr::NBsController {
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed:
+                MaybeDisableConfigV2();
                 if (ClientId) {
                     IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
                 }
@@ -269,6 +308,7 @@ namespace NKikimr::NBsController {
         if (!Self.EnableConfigV2 && !PendingReplaceRequest) {
             Y_ABORT_UNLESS(SwitchEnableConfigV2);
             Y_ABORT_UNLESS(*SwitchEnableConfigV2);
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSC48, "switching to configuration v2 with ReplaceConfig");
             if (!ConsolePipe) {
                 return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::SessionClosed,
                     "connection to Console tablet terminated");
@@ -409,6 +449,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerFetchConfigRequest::TPtr &ev) {
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC51, "received TEvControllerFetchConfigRequest", (EnableConfigV2, Self.EnableConfigV2));
         const auto& record = ev->Get()->Record;
         auto response = std::make_unique<TEvBlobStorage::TEvControllerFetchConfigResponse>();
         if (!Self.EnableConfigV2) {

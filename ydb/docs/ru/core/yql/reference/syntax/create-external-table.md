@@ -21,8 +21,8 @@ CREATE EXTERNAL TABLE table_name (
 * `column1 type1`, `columnN typeN NULL` - колонка данных и ее тип;
 * `data_source_name` - имя [подключения](../../../concepts/datamodel/external_data_source.md) к S3 ({{ objstorage-name }}).
 * `path` - путь внутри бакета с данными. Путь должен вести на существующий каталог внутри бакета.
-* `format_name` - один из [допустимых типов хранения данных](../../../concepts/federated_query/s3/formats.md).
-* `compression_name` - один из [допустимых алгоритмов сжатия](../../../concepts/federated_query/s3/formats.md#compression).
+* `format_name` - один из [допустимых типов хранения данных](../../../concepts/query_execution/federated_query/s3/formats.md).
+* `compression_name` - один из [допустимых алгоритмов сжатия](../../../concepts/query_execution/federated_query/s3/formats.md#compression).
 
 
 Допускается использование только ограниченного подмножества типов данных:

@@ -24,6 +24,17 @@
 
 namespace NActors {
 
+    namespace {
+        template<class TCallback>
+        void ForEachSubSystem(TSubSystems& subsystems, TCallback&& callback) {
+            for (const auto& subsystem : subsystems) {
+                if (subsystem) {
+                    callback(*subsystem);
+                }
+            }
+        }
+    }
+
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     TActorSetupCmd::TActorSetupCmd()
@@ -121,6 +132,7 @@ namespace NActors {
         , LoggerSettings0(loggerSettings)
     {
         ServiceMap.Reset(new TServiceMap());
+        SubSystems = std::move(SystemSetup->SubSystems);
     }
 
     TActorSystem::~TActorSystem() {
@@ -413,6 +425,10 @@ namespace NActors {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start");
         Y_ABORT_UNLESS(!StartExecuted.exchange(true));
 
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnBeforeStart(*this);
+        });
+
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
         TVector<NSchedulerQueue::TReader*> scheduleReaders;
         scheduleReaders.push_back(&ScheduleQueue->Reader);
@@ -451,6 +467,10 @@ namespace NActors {
         CpuManager->Start();
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
         Scheduler->Start();
+
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnAfterStart(*this);
+        });
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: started");
     }
 
@@ -461,6 +481,10 @@ namespace NActors {
             return;
         }
 
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnBeforeStop(*this);
+        });
+
         for (auto&& fn : std::exchange(DeferredPreStop, {})) {
             fn();
         }
@@ -469,6 +493,10 @@ namespace NActors {
         CpuManager->PrepareStop();
         Scheduler->Stop();
         CpuManager->Shutdown();
+
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnAfterStop(*this);
+        });
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: stopped");
     }
 

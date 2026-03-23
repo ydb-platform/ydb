@@ -95,6 +95,8 @@ SRCS(
     scheduler_cookie.h
     scheduler_queue.h
     servicemap.h
+    subsystem.cpp
+    subsystem.h
 )
 
 GENERATE_ENUM_SERIALIZATION(defs.h)

@@ -124,6 +124,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateDropTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::DirectOp:
         return CreateDirectOpUnit(dataShard, pipeline);
+    case EExecutionUnitKind::PrepareIndexValidation:
+        return CreatePrepareIndexValidationUnit(dataShard, pipeline);
     case EExecutionUnitKind::CreatePersistentSnapshot:
         return CreateCreatePersistentSnapshotUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropPersistentSnapshot:

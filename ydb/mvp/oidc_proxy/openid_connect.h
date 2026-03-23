@@ -67,8 +67,6 @@ TString ClearSecureCookie(const TString& name);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
 TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key);
 TCheckStateResult CheckState(const TString& state, const TString& key);
-TString DecodeToken(const TStringBuf& cookie);
-TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName);
 TString GetAddressWithoutPort(const TString& address);
 TString GenerateRandomBase64(size_t byteNumber = 32);
 

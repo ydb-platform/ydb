@@ -243,25 +243,6 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
     return TCheckStateResult();
 }
 
-TString DecodeToken(const TStringBuf& cookie) {
-    TString token;
-    try {
-        Base64StrictDecode(cookie, token);
-    } catch (std::exception& e) {
-        BLOG_D("Base64Decode " << NKikimr::MaskTicket(cookie) << " cookie: " << e.what());
-        token.clear();
-    }
-    return token;
-}
-
-TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) {
-    TStringBuf cookieValue = cookies.Get(cookieName);
-    if (!cookieValue.Empty()) {
-        BLOG_D("Using cookie (" << cookieName << ": " << NKikimr::MaskTicket(cookieValue) << ")");
-    }
-    return cookieValue;
-}
-
 TString GetAddressWithoutPort(const TString& address) {
     // IPv6 with brackets: [addr]:port -> addr
     if (address.StartsWith('[')) {

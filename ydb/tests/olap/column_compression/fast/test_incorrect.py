@@ -116,8 +116,7 @@ class TestIncorrectCompression(object):
                         ADD COLUMN `vStr2` Utf8 COMPRESSION({compression_settings});
                 """
             )
-            # TODO: uncomment after yql merge
-            # assert False, 'Should Fail'
+            assert False, 'Should Fail'
         except ydb.issues.Error as ex:
             assert error_text in ex.message
 
@@ -180,8 +179,7 @@ class TestIncorrectCompression(object):
                     ALTER TABLE `{table_path}` ADD COLUMN  vStr2 Utf8 COMPRESSION(algorithm=zstd);
                 """
             )
-            # TODO: uncomment after yql merge
-            # assert False, 'Should Fail'
+            assert False, 'Should Fail'
         except ydb.issues.Error as ex:
             assert "Column Compression is not supported in row tables" in ex.message
 

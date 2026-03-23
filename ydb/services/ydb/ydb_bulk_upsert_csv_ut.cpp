@@ -1026,7 +1026,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                 BulkUpsertSettings(CsvSettings()))
                 .GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Cannot read CSV: Invalid: In CSV column #3: Row #2: The string 'ratio' is not a valid decimal number");
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Invalid UTF-8 data in column Value_Utf8: Invalid UTF8 sequence at string index 0");
         }
     }
 

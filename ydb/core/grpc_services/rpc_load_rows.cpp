@@ -153,29 +153,6 @@ bool CheckAccess(const TString& table, const TString& token, const NSchemeCache:
     return true;
 }
 
-bool ValidateNotNullColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
-                            const std::set<std::string>& notNullColumns,
-                            TString& errorMessage) {
-    if (!batch || notNullColumns.empty()) {
-        return true;
-    }
-
-    for (const auto& columnName : notNullColumns) {
-        auto column = batch->GetColumnByName(columnName);
-        if (!column) {
-            errorMessage = "Missing key columns: " + TString(columnName);
-            return false;
-        }
-
-        if (column->null_count() > 0) {
-            errorMessage = "Received NULL value for not null column: " + TString(columnName);
-            return false;
-        }
-    }
-
-    return true;
-}
-
 }
 
 using TEvBulkUpsertRequest = TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest,
@@ -552,8 +529,82 @@ private:
             }
         }
 
-        if (!ValidateNotNullColumns(Batch, NotNullColumns, errorMessage)) {
+        if (!ValidateInputBatch(errorMessage)) {
             return false;
+        }
+
+        return true;
+    }
+
+    bool ValidateInputBatch(TString& errorMessage) {
+        if (!ValidateNotNullColumns(errorMessage)) {
+            return false;
+        }
+
+        if (!ValidateUtf8(errorMessage)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ValidateNotNullColumns(TString& errorMessage) {
+        if (!Batch || NotNullColumns.empty()) {
+            return true;
+        }
+
+        for (const auto& columnName : NotNullColumns) {
+            auto column = Batch->GetColumnByName(columnName);
+            if (!column) {
+                errorMessage = "Missing key columns: " + TString(columnName);
+                return false;
+            }
+
+            if (column->null_count() > 0) {
+                errorMessage = "Received NULL value for not null column: " + TString(columnName);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ValidateUtf8(TString& errorMessage) {
+        if (!Batch) {
+            return true;
+        }
+
+        for (const auto& [columnName, columnType] : YdbSchema) {
+            if (columnType.GetTypeId() != NScheme::NTypeIds::Utf8) {
+                continue;
+            }
+
+            auto column = Batch->GetColumnByName(columnName);
+            if (!column) {
+                errorMessage = "Missing Utf8 column: " + columnName;
+                return false;
+            }
+
+            arrow::Status validationStatus;
+            switch (column->type_id()) {
+                case arrow::Type::STRING: {
+                    const auto& typedColumn = static_cast<const arrow::StringArray&>(*column);
+                    validationStatus = typedColumn.ValidateUTF8();
+                    break;
+                }
+                case arrow::Type::LARGE_STRING: {
+                    const auto& typedColumn = static_cast<const arrow::LargeStringArray&>(*column);
+                    validationStatus = typedColumn.ValidateUTF8();
+                    break;
+                }
+                default:
+                    errorMessage = Sprintf("Unexpected Arrow type %s for Utf8 column '%s'",
+                        column->type()->ToString().c_str(), columnName.c_str());
+                    return false;
+            }
+            if (!validationStatus.ok()) {
+                errorMessage = TStringBuilder() << "Invalid UTF-8 data in column " << columnName << ": " << validationStatus.message();
+            }
         }
 
         return true;

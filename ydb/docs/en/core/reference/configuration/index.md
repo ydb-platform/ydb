@@ -86,9 +86,9 @@ The example configuration files provided with the {{ ydb-short-name }} Kubernete
 
 This group lists the static cluster nodes on which the Storage processes run and specifies their main characteristics:
 
-- Numeric node ID
+- Numeric node IDs
 - DNS host name and port that can be used to connect to a node on the IP network
-- ID of the [standard host configuration](#host-configs)
+- ID of the [standard host configuration](host_configs.md)
 - Placement in a specific availability zone, rack
 - Server inventory number (optional)
 

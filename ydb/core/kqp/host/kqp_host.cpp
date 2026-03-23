@@ -691,6 +691,45 @@ const TTypedUnboxedValue* ValidateParameter(const TString& name, const TTypeAnno
     return parameter;
 }
 
+// EvaluateExpr nodes containing Parameter references cannot be evaluated at compile time
+// because parameter values are not available in the evaluation context for DDL queries.
+// This transformer unwraps such nodes before expression evaluation so the existing
+// parameter-at-execution-time flow handles them. Pure expressions (no parameters) keep
+// their EvaluateExpr wrapper and are evaluated normally.
+class TUnwrapEvaluateExprForParametersTransformer {
+public:
+    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        TOptimizeExprSettings optSettings(nullptr);
+        optSettings.VisitChanges = true;
+
+        return OptimizeExpr(input, output,
+            [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+                if (node->IsCallable("EvaluateExpr") && node->ChildrenSize() == 1 &&
+                    ContainsParameter(node->Head())) {
+                    return node->HeadPtr();
+                }
+                return node;
+            }, ctx, optSettings);
+    }
+
+    static TAutoPtr<IGraphTransformer> Sync() {
+        return CreateFunctorTransformer(TUnwrapEvaluateExprForParametersTransformer());
+    }
+
+private:
+    static bool ContainsParameter(const TExprNode& node) {
+        if (node.IsCallable("Parameter")) {
+            return true;
+        }
+        for (ui32 i = 0; i < node.ChildrenSize(); ++i) {
+            if (ContainsParameter(*node.Child(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
 // Collects parameters from CREATE/ALTER SECRET. We need this because parameters are not supported in DDL operations.
 // Secrets are the only schema objects that support parameters.
 class TCollectParametersForSecretsTransformer {
@@ -1832,6 +1871,7 @@ private:
         auto transformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
             .AddPreTypeAnnotation()
+            .Add(TUnwrapEvaluateExprForParametersTransformer::Sync(), "UnwrapEvaluateExprForParameters")
             .AddIOAnnotation()
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
@@ -2126,6 +2166,7 @@ private:
             .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
             .AddPreTypeAnnotation()
+            .Add(TUnwrapEvaluateExprForParametersTransformer::Sync(), "UnwrapEvaluateExprForParameters")
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
@@ -2188,6 +2229,7 @@ private:
             .Add(TLogExprTransformer::Sync("YqlTransformerNewRBO", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransformNewRBO")
             .AddPreTypeAnnotation()
+            .Add(TUnwrapEvaluateExprForParametersTransformer::Sync(), "UnwrapEvaluateExprForParameters")
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)

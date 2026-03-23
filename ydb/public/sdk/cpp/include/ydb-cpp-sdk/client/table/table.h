@@ -435,14 +435,6 @@ public:
         const TGlobalIndexSettings& statsTableSettings = {}
     );
 
-    TGlobalIndexSettings GetIndexTableSettings() const;
-    TGlobalIndexSettings GetLevelTableSettings() const;
-    TGlobalIndexSettings GetPrefixTableSettings() const;
-    TGlobalIndexSettings GetDictTableSettings() const;
-    TGlobalIndexSettings GetDocsTableSettings() const;
-    TGlobalIndexSettings GetStatsTableSettings() const;
-    TGlobalIndexSettings GetPostingTableSettings() const;
-
     void SerializeTo(Ydb::Table::TableIndex& proto) const;
     std::string ToString() const;
     void Out(IOutputStream& o) const;

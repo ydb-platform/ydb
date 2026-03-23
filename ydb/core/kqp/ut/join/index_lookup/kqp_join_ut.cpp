@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -2042,6 +2043,101 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         UNIT_ASSERT_C(leftTableChecked, "No reads found for /Root/TableLeft");
         UNIT_ASSERT_C(rightTableChecked, "No reads found for /Root/TableRight");
+    }
+
+    // Reproduces a hang in StreamLookupActor when an index-based stream lookup JOIN
+    // gets overloaded by incomplete result batches (triplet input with firstRow/lastRow cookies).
+    //
+    // When joining via a secondary index, the optimizer creates two chained stream lookups:
+    //   1. Index lookup (by join key) → produces triplets (left_row, index_row, cookie)
+    //   2. Main table lookup (by PK from index) → receives triplets, IsInputTriplet()=true
+    // The cookie carries firstRow/lastRow flags. Multiple left rows sharing the same index
+    // key produce interleaved output: seqNo=0(firstRow), seqNo=1(firstRow), ...,
+    // seqNo=0(lastRow), seqNo=1(lastRow).
+    //
+    // With FetchInputRows limited to MaxRowsProcessing rows per call, the main table lookup
+    // reads only a few triplets (all with firstRow=true, lastRow=false). After their reads
+    // complete, ResultRowsBySeqNo has non-completable entries (missing LastRow), triggering
+    // overload. FetchInputRows is never called again, so lastRow markers are never consumed.
+    Y_UNIT_TEST(StreamLookupJoinOverloadDeadlock) {
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(false);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+        auto* retrySettings = serverSettings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings();
+        retrySettings->SetMaxShardRetries(100);
+        retrySettings->SetMaxShardResolves(100);
+        retrySettings->SetMaxTotalRetries(100);
+        retrySettings->SetMaxRowsProcessingStreamLookup(1);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto client = kikimr.GetTableClient();
+        auto db = kikimr.GetQueryClient();
+
+        // Limit rows per read response to force incremental result production.
+        {
+            NKikimrTxDataShard::TEvRead evread;
+            evread.SetMaxRows(1);
+            evread.SetMaxRowsInResult(1);
+            NKqp::SetDefaultReadSettings(evread);
+
+            NKikimrTxDataShard::TEvReadAck evreadack;
+            evreadack.SetMaxRows(1);
+            NKqp::SetDefaultReadAckSettings(evreadack);
+        }
+
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            // ta: left table, scanned
+            auto result = session.ExecuteSchemeQuery(Q_(R"(
+                CREATE TABLE `/Root/ta`(a Int64 NOT NULL, fk Int64, PRIMARY KEY(a));
+            )")).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            // tb: right table with a secondary index on fk.
+            // Multiple tb rows share the same fk → one-to-many join via index.
+            // The index lookup + main table lookup creates the triplet chain.
+            auto result = session.ExecuteSchemeQuery(Q_(R"(
+                CREATE TABLE `/Root/tb`(
+                    b Int64 NOT NULL,
+                    fk Int64,
+                    bval Int64,
+                    PRIMARY KEY(b),
+                    INDEX idx_fk GLOBAL ON (fk)
+                );
+            )")).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            // ta: multiple rows sharing fk=1 → interleaved output from index lookup
+            // tb: multiple rows with fk=1 → one-to-many join
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO `/Root/ta`(a, fk) VALUES
+                    (1, 1), (2, 1), (3, 1), (4, 1), (5, 1),
+                    (6, 1), (7, 1), (8, 1), (9, 1), (10, 1);
+                UPSERT INTO `/Root/tb`(b, fk, bval) VALUES
+                    (101, 1, 10), (102, 1, 20), (103, 1, 30);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            // 10 ta rows × 3 tb matches = 30 expected results.
+            // The join uses the secondary index idx_fk on tb.
+            // With the bug, the main table stream lookup hangs on overload.
+            auto future = db.ExecuteQuery(R"(
+                SELECT ta.a, tb.bval
+                FROM `/Root/ta` AS ta
+                INNER JOIN `/Root/tb` VIEW idx_fk AS tb ON ta.fk = tb.fk
+                ORDER BY ta.a, tb.bval;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+
+            UNIT_ASSERT_C(future.Wait(TDuration::Seconds(30)),
+                "Query hung — stream lookup overload deadlock reproduced");
+
+            auto result = future.ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 30);
+        }
     }
 }
 

@@ -630,8 +630,7 @@ public:
 
     std::optional<TString> IsOverloaded(size_t maxRowsProcessing) final {
         if (UnprocessedRows.size() >= maxRowsProcessing ||
-            PendingLeftRowsByKey.size() >= maxRowsProcessing ||
-            ResultRowsBySeqNo.size() >= maxRowsProcessing)
+            PendingLeftRowsByKey.size() >= maxRowsProcessing)
         {
             TStringBuilder overloadDescriptor;
             overloadDescriptor << "unprocessed rows: " << UnprocessedRows.size()

@@ -325,8 +325,10 @@ private:
 
         auto overloaded = StreamLookupWorker->IsOverloaded(MaxRowsProcessing);
         if (!overloaded.has_value()) {
-            FetchInputRows();
-        } else {
+            overloaded = FetchInputRows();
+        }
+
+        if (overloaded.has_value()) {
             CA_LOG_N("Pausing stream lookup because it's overloaded by reason: "
                 << overloaded.value_or("empty"));
         }
@@ -340,7 +342,7 @@ private:
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
         const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
 
-        if (hasPendingResults) {
+        if (hasPendingResults || (allReadsFinished && !allRowsProcessed)) {
             // has more results
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         }
@@ -648,7 +650,7 @@ private:
         }
     }
 
-    void FetchInputRows() {
+    std::optional<TString> FetchInputRows() {
         auto guard = BindAllocator();
 
         NUdf::TUnboxedValue row;
@@ -656,12 +658,18 @@ private:
         YQL_ENSURE(!Input.IsInvalid());
         if (Input.IsFinish() || !Input.HasValue()) {
             LastFetchStatus = NUdf::EFetchStatus::Finish;
-            return;
+            return std::nullopt;
         }
 
+        size_t fetched = 0;
         while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             StreamLookupWorker->AddInputRow(std::move(row));
+            if (++fetched >= MaxRowsProcessing) {
+                return TString("interrupted because of the fetch limit threshold");
+            }
         }
+
+	return std::nullopt;
     }
 
     void ProcessInputRows() {

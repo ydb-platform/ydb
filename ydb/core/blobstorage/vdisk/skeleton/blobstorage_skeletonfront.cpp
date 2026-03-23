@@ -789,7 +789,7 @@ namespace NKikimr {
                     SkeletonFrontGroup);
             IntQueueLowGets = std::make_unique<TIntQueueClass>(
                     NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead,
-                    "FastGets",
+                    "LowGets",
                     Config->SkeletonFrontGets_MaxInFlightCount,
                     Config->SkeletonFrontGets_MaxInFlightCost,
                     SkeletonFrontGroup);

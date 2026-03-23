@@ -196,7 +196,7 @@ public:
     virtual TVector<INode::TPtr>* ContentListPtr();
     virtual TAstNode* Translate(TContext& ctx) const = 0;
     virtual TAggregationPtr GetAggregation() const;
-    virtual void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs);
+    virtual bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs);
     virtual TPtr WindowSpecFunc(const TPtr& type) const;
     virtual bool SetViewName(TContext& ctx, TPosition pos, const TString& view);
     virtual bool SetPrimaryView(TContext& ctx, TPosition pos);
@@ -342,7 +342,7 @@ protected:
     ISource* GetSource() override;
     TVector<INode::TPtr>* ContentListPtr() override;
     TAggregationPtr GetAggregation() const override;
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
     TPtr WindowSpecFunc(const TPtr& type) const override;
     bool SetViewName(TContext& ctx, TPosition pos, const TString& view) override;
     bool SetPrimaryView(TContext& ctx, TPosition pos) override;
@@ -484,7 +484,7 @@ class TAstListNodeImpl final: public TAstListNode {
 public:
     explicit TAstListNodeImpl(TPosition pos);
     TAstListNodeImpl(TPosition pos, TVector<TNodePtr> nodes);
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
     const TString* GetSourceName() const override;
 
 protected:
@@ -510,7 +510,7 @@ protected:
     bool DoInit(TContext& ctx, ISource* src) override;
     bool ValidateArguments(TContext& ctx) const;
     TString GetCallExplain() const;
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
 
 protected:
     TString OpName_;
@@ -971,7 +971,7 @@ public:
     TNodePtr DoClone() const final;
 
 private:
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
     const TString* GetSourceName() const override;
 
     const TVector<TNodePtr> Exprs_;
@@ -990,7 +990,7 @@ public:
     const TStructNode* GetStructNode() const override;
 
 private:
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
     const TString* GetSourceName() const override;
 
     const TVector<TNodePtr> Exprs_;

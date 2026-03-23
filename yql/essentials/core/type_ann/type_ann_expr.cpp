@@ -35,6 +35,7 @@ THashSet<TStringBuf> FuzzUntypedExcludes = {
 // IO funcs will be skipped during partial typecheck
 THashSet<TStringBuf> FuzzUniversalExcludes = {
     "ConfRead!",
+    "PgReadTable!",
 };
 
 class TTypeAnnotationTransformer : public TGraphTransformerBase {

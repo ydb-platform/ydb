@@ -250,8 +250,6 @@ private:
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
 
-    std::atomic<ui64> LsnGenerator;   // TODO move to FastPathService
-
     bool Initialized = false;
     NThreading::TPromise<void> ConnectionEstablishedPromise =
         NThreading::NewPromise();

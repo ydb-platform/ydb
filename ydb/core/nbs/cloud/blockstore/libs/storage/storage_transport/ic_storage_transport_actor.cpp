@@ -153,11 +153,8 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
 
     auto request = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(
         msg->Credentials);
-    for (size_t i = 0; i < msg->Selectors.size(); ++i) {
-        request->AddErase(
-            msg->Selectors[i],
-            msg->Lsns[i],
-            msg->Credentials.Generation);
+    for (size_t i = 0; i < msg->Lsns.size(); ++i) {
+        request->AddErase(msg->Lsns[i], msg->Credentials.Generation);
     }
 
     ctx.Send(MakeHolder<IEventHandle>(

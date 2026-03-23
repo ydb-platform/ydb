@@ -210,15 +210,15 @@ message TEvSyncWithDDiskResult {
 
 message TEvErasePersistentBuffer {
     TQueryCredentials Credentials = 1;
-    TBlockSelector Selector = 2;
-    uint64 Lsn = 3;
+    reserved 2;
+    uint64 Lsn = 3; // Erase all lsns for tablet less than or equal to
     uint32 Generation = 4;
 }
 
 
 message TEvBatchErasePersistentBuffer {
     message TEraseInfo {
-        TBlockSelector Selector = 1;
+        reserved 1;
         uint64 Lsn = 2;
         uint32 Generation = 3;
     }

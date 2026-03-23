@@ -1652,6 +1652,14 @@ public:
 
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
 
+                if (col.Compression) {
+                    auto columnCompression = Y();
+                    for (const auto& [key, value] : col.Compression->Entries) {
+                        columnCompression = L(columnCompression, Q(Y(Q(key), value)));
+                    }
+                    columnDesc = L(columnDesc, Q(Y(Q("columnCompression"), Q(columnCompression))));
+                }
+
                 auto familiesDesc = Y();
                 for (const auto& family : col.Families) {
                     familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));

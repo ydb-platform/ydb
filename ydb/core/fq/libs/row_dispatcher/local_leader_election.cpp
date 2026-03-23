@@ -733,7 +733,7 @@ void TLocalLeaderElection::ProcessCreateSemaphoreResult(const TRpcOut& message) 
     auto status = NYdb::TStatus(static_cast<NYdb::EStatus>(source.status()), std::move(issues));
     LOG_ROW_DISPATCHER_INFO("Semaphore creating status: " << status);
     if (!IsTableCreated(status)) {
-        LOG_ROW_DISPATCHER_ERROR("Semaphore creating error " << issues.ToOneLineString());
+        LOG_ROW_DISPATCHER_ERROR("Semaphore creating error " << status.GetIssues().ToOneLineString());
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -759,7 +759,7 @@ void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message)
     PendingAcquire = false;
 
     if (!status.IsSuccess()) {
-        LOG_ROW_DISPATCHER_ERROR("Failed to acquire semaphore, " << issues.ToOneLineString());
+        LOG_ROW_DISPATCHER_ERROR("Failed to acquire semaphore, " << status.GetIssues().ToOneLineString());
         Metrics.Errors->Inc();
         ResetState();
         return;

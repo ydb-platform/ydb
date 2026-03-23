@@ -15,11 +15,15 @@ class TPartialSourceAddress {
 private:
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY(ui32, SyncPointIndex, 0);
+    // True when this page was tracked via OnPageCreated (streaming mode only).
+    // OnPageSent must be called if and only if this flag is set.
+    YDB_READONLY_FLAG(StreamingPage, false);
 
 public:
-    TPartialSourceAddress(const ui32 sourceIdx, const ui32 syncPointIndex)
+    TPartialSourceAddress(const ui32 sourceIdx, const ui32 syncPointIndex, const bool streamingPage = false)
         : SourceIdx(sourceIdx)
         , SyncPointIndex(syncPointIndex)
+        , StreamingPageFlag(streamingPage)
     {
     }
 };

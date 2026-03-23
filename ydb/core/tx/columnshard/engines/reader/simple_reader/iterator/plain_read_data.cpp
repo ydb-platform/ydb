@@ -52,11 +52,16 @@ void TPlainReadData::OnSentDataFromInterval(const TPartialSourceAddress& sourceA
         "source_idx", sourceAddress.GetSourceIdx())(
         "sync_point_idx", sourceAddress.GetSyncPointIndex());
     
-    // Notify collection that page was sent (for backpressure)
-    Scanner->MutableSourcesCollection().OnPageSent();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_sent")(
-        "source_idx", sourceAddress.GetSourceIdx())(
-        "pages_in_flight", Scanner->GetSourcesCollection().GetPagesInFlightCount());
+    // Only decrement the pages-in-flight counter when this page was actually tracked
+    // via OnPageCreated (streaming mode only).  Non-streaming pages have a
+    // partialSourceAddress set for cursor continuation but never call OnPageCreated,
+    // so calling OnPageSent for them would underflow the counter.
+    if (sourceAddress.IsStreamingPage()) {
+        Scanner->MutableSourcesCollection().OnPageSent();
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_sent")(
+            "source_idx", sourceAddress.GetSourceIdx())(
+            "pages_in_flight", Scanner->GetSourcesCollection().GetPagesInFlightCount());
+    }
     
     Scanner->GetSyncPoint(sourceAddress.GetSyncPointIndex())->Continue(sourceAddress, *this);
 }

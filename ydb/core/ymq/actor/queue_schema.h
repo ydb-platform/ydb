@@ -20,7 +20,7 @@
 namespace NKikimr::NSQS {
 
 class TCreateQueueSchemaActorV2
-    : public TActorWithFeatureFlags<TCreateQueueSchemaActorV2>
+    : public TActorBootstrapped<TCreateQueueSchemaActorV2>
 {
 public:
      TCreateQueueSchemaActorV2(const TQueuePath& path,
@@ -160,6 +160,8 @@ private:
     ECreateComponentsStep CurrentCreationStep_ = ECreateComponentsStep::GetTablesFormatSetting;
 
     TActorId AddQuoterResourceActor_;
+
+    TMigrationFeatureFlags FeatureFlags_;
 };
 
 class TDeleteQueueSchemaActorV2

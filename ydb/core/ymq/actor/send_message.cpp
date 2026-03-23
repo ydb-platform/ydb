@@ -162,7 +162,7 @@ private:
 
     void DoAction() override {
         Y_ABORT_UNLESS(QueueAttributes_.Defined());
-        if (EnableSQSMigrationCompatibility_ && IsTopicCreated()) {
+        if (FeatureFlags_.EnableSQSMigrationCompatibility_ && IsTopicCreated()) {
             DoActionNewImplimentation();
         } else {
             DoActionOldImplementation();

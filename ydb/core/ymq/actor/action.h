@@ -33,26 +33,24 @@
 
 namespace NKikimr::NSQS {
 
-inline const TFeatureFlags& GetFeatureFlags() {
-    static TFeatureFlags DefaultFeatureFlags;
-    return TlsActivationContext ?
-           AppData()->FeatureFlags
-         : DefaultFeatureFlags;
-}
-
-template <typename TDerived>
-class TActorWithFeatureFlags
-    : public TActorBootstrapped<TDerived>
+class TMigrationFeatureFlags
 {
 public:
-    TActorWithFeatureFlags()
+    TMigrationFeatureFlags()
         : EnableSQSMigrationTopicCreation_(GetFeatureFlags().GetEnableSQSMigrationTopicCreation())
         , EnableSQSMigrationCompatibility_(GetFeatureFlags().GetEnableSQSMigrationCompatibility())
         , EnableSQSMigrationFinished_(GetFeatureFlags().GetEnableSQSMigrationFinished())
     {
     }
 
-protected:
+    static const TFeatureFlags& GetFeatureFlags() {
+        static TFeatureFlags DefaultFeatureFlags;
+        return TlsActivationContext ?
+               AppData()->FeatureFlags
+             : DefaultFeatureFlags;
+    }
+
+public:
     const bool EnableSQSMigrationTopicCreation_;
     const bool EnableSQSMigrationCompatibility_;
     const bool EnableSQSMigrationFinished_;
@@ -60,7 +58,7 @@ protected:
 
 template <typename TDerived>
 class TActionActor
-    : public TActorWithFeatureFlags<TDerived>
+    : public TActorBootstrapped<TDerived>
 {
 public:
     TActionActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, EAction action, THolder<IReplyCallback> cb)
@@ -953,6 +951,8 @@ protected:
     bool NeedReportYmqActionInflyCounter = false;
     TSchedulerCookieHolder TimeoutCookie_;
     NKikimrClient::TSqsRequest SourceSqsRequest_;
+
+    TMigrationFeatureFlags FeatureFlags_;
 };
 
 } // namespace NKikimr::NSQS

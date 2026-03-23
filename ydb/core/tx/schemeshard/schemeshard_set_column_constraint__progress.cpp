@@ -68,8 +68,16 @@ public:
                 break;
             }
             case TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps: {
-                ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Done);
-                Progress(BuildId);
+                if (operationInfo.UnlockTxId == InvalidTxId) {
+                    AllocateTxId(BuildId);
+                } else if (operationInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
+                    Send(Self->SelfId(), UnlockPropose(Self, operationInfo), 0, ui64(BuildId));
+                } else if (!operationInfo.UnlockTxDone) {
+                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.UnlockTxId)));
+                } else {
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Done);
+                    Progress(BuildId);
+                }
 
                 break;
             }
@@ -144,11 +152,21 @@ public:
         auto& operationInfo = *operationInfoPtr->get();
         LOG_I("TTxReplyAllocateSetColumnConstraint, id# " << BuildId << ", txId# " << txId);
 
-        if (!operationInfo.LockTxId) {
-            NIceDb::TNiceDb db(txc.DB);
-            operationInfo.LockTxId = txId;
-            Self->PersistSetColumnConstraintLockTxId(db, operationInfo);
-            Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+        NIceDb::TNiceDb db(txc.DB);
+        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps) {
+            if (!operationInfo.LockTxId) {
+                operationInfo.LockTxId = txId;
+                Self->PersistSetColumnConstraintLockTxId(db, operationInfo);
+                Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+            }
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps) {
+            if (!operationInfo.UnlockTxId) {
+                operationInfo.UnlockTxId = txId;
+                Self->PersistSetColumnConstraintUnlockTxId(db, operationInfo);
+                Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+            }
+        } else {
+            Y_UNREACHABLE();
         }
 
         Progress(BuildId);
@@ -200,10 +218,18 @@ public:
             << ", txId# " << txId
             << ", status# " << NKikimrScheme::EStatus_Name(record.GetStatus()));
 
-        Y_ENSURE(txId == operationInfo.LockTxId);
         NIceDb::TNiceDb db(txc.DB);
-        operationInfo.LockTxStatus = record.GetStatus();
-        Self->PersistSetColumnConstraintLockTxStatus(db, operationInfo);
+        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps) {
+            Y_ENSURE(txId == operationInfo.LockTxId);
+            operationInfo.LockTxStatus = record.GetStatus();
+            Self->PersistSetColumnConstraintLockTxStatus(db, operationInfo);
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps) {
+            Y_ENSURE(txId == operationInfo.UnlockTxId);
+            operationInfo.UnlockTxStatus = record.GetStatus();
+            Self->PersistSetColumnConstraintUnlockTxStatus(db, operationInfo);
+        } else {
+            Y_UNREACHABLE();
+        }
 
         Progress(BuildId);
         return true;
@@ -249,10 +275,18 @@ public:
         auto& operationInfo = *operationInfoPtr->get();
         LOG_I("TTxReplyCompletedSetColumnConstraint, id# " << BuildId << ", txId# " << txId);
 
-        Y_ENSURE(txId == operationInfo.LockTxId);
         NIceDb::TNiceDb db(txc.DB);
-        operationInfo.LockTxDone = true;
-        Self->PersistSetColumnConstraintLockTxDone(db, operationInfo);
+        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps) {
+            Y_ENSURE(txId == operationInfo.LockTxId);
+            operationInfo.LockTxDone = true;
+            Self->PersistSetColumnConstraintLockTxDone(db, operationInfo);
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps) {
+            Y_ENSURE(txId == operationInfo.UnlockTxId);
+            operationInfo.UnlockTxDone = true;
+            Self->PersistSetColumnConstraintUnlockTxDone(db, operationInfo);
+        } else {
+            Y_UNREACHABLE();
+        }
 
         Progress(BuildId);
         return true;

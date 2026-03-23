@@ -22,5 +22,34 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     return propose;
 }
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo, TVector<TPath> additionalPaths)
+{
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.UnlockTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+
+    auto addUnlock = [&](TPath path) {
+        NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropLock);
+        modifyScheme.SetInternal(true);
+        modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+        modifyScheme.SetWorkingDir(path.Parent().PathString());
+        modifyScheme.MutableLockConfig()->SetName(path.LeafName());
+    };
+
+    addUnlock(TPath::Init(buildInfo.TablePathId, ss));
+
+    for (auto& path : additionalPaths) {
+        if (path.IsResolved() && !path.IsDeleted() && path.IsLocked()) {
+            addUnlock(std::move(path));
+        }
+    }
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "UnlockPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
 } // namespace NSchemeShard
 } // namespace NKikimr

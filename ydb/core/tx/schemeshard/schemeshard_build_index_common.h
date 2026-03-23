@@ -13,5 +13,8 @@ namespace NSchemeShard {
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose
     (TSchemeShard* ss, const TIndexBuildInfo& buildInfo, TTxId txId, const TPath& path);
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose
+    (TSchemeShard* ss, const TIndexBuildInfo& buildInfo, TVector<TPath> additionalPaths = {});
+
 } // namespace NSchemeShard
 } // namespace NKikimr

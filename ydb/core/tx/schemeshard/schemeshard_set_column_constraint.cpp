@@ -24,6 +24,18 @@ void TSchemeShard::PersistSetColumnConstraintLockTxDone([[maybe_unused]] NIceDb:
     // todo
 }
 
+void TSchemeShard::PersistSetColumnConstraintUnlockTxId([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
+    // todo
+}
+
+void TSchemeShard::PersistSetColumnConstraintUnlockTxStatus([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
+    // todo
+}
+
+void TSchemeShard::PersistSetColumnConstraintUnlockTxDone([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
+    // todo
+}
+
 void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxCreateSetColumnConstraint(ev), ctx);
 }

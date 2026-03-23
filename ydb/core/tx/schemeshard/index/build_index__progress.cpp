@@ -1,18 +1,9 @@
-<<<<<<< HEAD:ydb/core/tx/schemeshard/index/build_index__progress.cpp
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
 #include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include  <ydb/core/tx/schemeshard/schemeshard_build_index_common.h>
-=======
-#include "schemeshard_build_index.h"
-#include "schemeshard_build_index_helpers.h"
-#include "schemeshard_build_index_tx_base.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_index_utils.h"
-#include "schemeshard_build_index_common.h"
->>>>>>> 8a8c269ef16 (init states in __progress):ydb/core/tx/schemeshard/schemeshard_build_index__progress.cpp
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -478,42 +469,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
 
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "ApplyPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-
-    return propose;
-}
-
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
-{
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.UnlockTxId), ss->TabletID());
-    propose->Record.SetFailOnExist(true);
-
-    auto addUnlock = [&](TPath path) {
-        NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropLock);
-        modifyScheme.SetInternal(true);
-        modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
-
-        modifyScheme.SetWorkingDir(path.Parent().PathString());
-
-        auto& lockConfig = *modifyScheme.MutableLockConfig();
-        lockConfig.SetName(path.LeafName());
-    };
-
-    addUnlock(TPath::Init(buildInfo.TablePathId, ss));
-
-    if (buildInfo.IsValidatingUniqueIndex()
-        || buildInfo.IsFlatRelevanceFulltext())
-    {
-        // Unlock also indexImplTable
-        TPath indexImplTablePath = GetBuildPath(ss, buildInfo, NTableIndex::ImplTable);
-        if (indexImplTablePath.IsResolved() && !indexImplTablePath.IsDeleted() && indexImplTablePath.IsLocked()) {
-            addUnlock(std::move(indexImplTablePath));
-        }
-    }
-
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "UnlockPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -2295,7 +2250,11 @@ public:
             if (buildInfo.UnlockTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
+                TVector<TPath> additionalUnlockPaths;
+                if (buildInfo.IsValidatingUniqueIndex() || buildInfo.IsFlatRelevanceFulltext()) {
+                    additionalUnlockPaths.emplace_back(GetBuildPath(Self, buildInfo, NTableIndex::ImplTable));
+                }
+                Send(Self->SelfId(), UnlockPropose(Self, buildInfo, std::move(additionalUnlockPaths)), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {
@@ -2336,7 +2295,11 @@ public:
             if (buildInfo.UnlockTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
+                TVector<TPath> additionalUnlockPaths;
+                if (buildInfo.IsValidatingUniqueIndex() || buildInfo.IsFlatRelevanceFulltext()) {
+                    additionalUnlockPaths.emplace_back(GetBuildPath(Self, buildInfo, NTableIndex::ImplTable));
+                }
+                Send(Self->SelfId(), UnlockPropose(Self, buildInfo, std::move(additionalUnlockPaths)), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {
@@ -2382,7 +2345,11 @@ public:
             if (buildInfo.UnlockTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), UnlockPropose(Self, buildInfo), 0, ui64(BuildId));
+                TVector<TPath> additionalUnlockPaths;
+                if (buildInfo.IsValidatingUniqueIndex() || buildInfo.IsFlatRelevanceFulltext()) {
+                    additionalUnlockPaths.emplace_back(GetBuildPath(Self, buildInfo, NTableIndex::ImplTable));
+                }
+                Send(Self->SelfId(), UnlockPropose(Self, buildInfo, std::move(additionalUnlockPaths)), 0, ui64(BuildId));
             } else if (!buildInfo.UnlockTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.UnlockTxId)));
             } else {

@@ -8,7 +8,11 @@
 #include <ydb/library/formats/arrow/replace_key.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
+#include <functional>
+
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
+
+using TMayUsePortion = std::function<bool(const TPortionInfo::TConstPtr&)>;
 
 class TOrderedPortion {
 private:
@@ -94,8 +98,8 @@ public:
 class TPortionsChain {
 private:
     std::vector<TPortionInfo::TConstPtr> Portions;
-
     TPortionInfo::TConstPtr NotIncludedNextPortion;
+    bool ConsistBlockedPortions;
 
 public:
     const std::vector<TPortionInfo::TConstPtr>& GetPortions() const {
@@ -104,6 +108,10 @@ public:
 
     const TPortionInfo::TConstPtr& GetNotIncludedNextPortion() const {
         return NotIncludedNextPortion;
+    }
+
+    bool HasBlockedPortions() const {
+        return ConsistBlockedPortions;
     }
 
     TChainAddress GetAddress() const {
@@ -116,10 +124,16 @@ public:
         }
     }
 
-    TPortionsChain(const std::vector<TPortionInfo::TConstPtr>& portions, const TPortionInfo::TConstPtr& notIncludedNextPortion)
-        : Portions(portions)
-        , NotIncludedNextPortion(notIncludedNextPortion) {
-        AFL_VERIFY(Portions.size() || !!NotIncludedNextPortion);
+    TPortionsChain(
+        const std::vector<TPortionInfo::TConstPtr>& portions, 
+        const TPortionInfo::TConstPtr& notIncludedNextPortion,
+        const bool consistBlockedPortions
+    ): 
+        Portions(portions), 
+        NotIncludedNextPortion(notIncludedNextPortion),
+        ConsistBlockedPortions(consistBlockedPortions)
+    {
+        AFL_VERIFY(Portions.size() || !!NotIncludedNextPortion || ConsistBlockedPortions);
     }
 };
 
@@ -179,13 +193,6 @@ public:
         } else {
             return Portions;
         }
-        auto moveIds = GetMovePortionIds();
-        for (auto&& i : Portions) {
-            if (!moveIds.contains(i->GetPortionId())) {
-                result.emplace_back(i);
-            }
-        }
-        return result;
     }
 
     std::vector<TPortionInfo::TConstPtr> GetMovePortions() const {
@@ -359,8 +366,9 @@ private:
     virtual ui64 DoGetWeight(bool highPriority) const = 0;
     virtual TInstant DoGetWeightExpirationInstant() const = 0;
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
-    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks() const = 0;
-    virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const = 0;
+    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const = 0;
+    virtual std::optional<TPortionsChain> DoGetAffectedPortions(
+        const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to, const TMayUsePortion& mayUsePortion) const = 0;
     virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const = 0;
 
     virtual NJson::TJsonValue DoSerializeToJson() const {
@@ -482,8 +490,9 @@ public:
         return DoDebugString();
     }
 
-    std::optional<TPortionsChain> GetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const {
-        return DoGetAffectedPortions(from, to);
+    std::optional<TPortionsChain> GetAffectedPortions(
+        const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to, const TMayUsePortion& mayUsePortion) const {
+        return DoGetAffectedPortions(from, to, mayUsePortion);
     }
 
     ui64 GetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const {
@@ -534,13 +543,9 @@ public:
         return DoGetBucketPositions(pkSchema);
     }
 
-    std::vector<TCompactionTaskData> GetOptimizationTasks() const {
+    std::vector<TCompactionTaskData> GetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
         AFL_VERIFY(NextLevel);
-        std::vector<TCompactionTaskData> result = DoGetOptimizationTasks();
-        AFL_VERIFY(!result.empty());
-        for (const auto& compactionTaskData: result) {
-            AFL_VERIFY(!compactionTaskData.IsEmpty());
-        }
+        std::vector<TCompactionTaskData> result = DoGetOptimizationTasks(mayUsePortion);
         return result;
     }
 };

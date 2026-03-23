@@ -1237,7 +1237,8 @@ message DescribeTopicResult {
     // Metrics level.
     optional uint32 metrics_level = 16;
 
-    reserved 17; // was receive_message_delay; use Consumer.shared_consumer_type.receive_message_delay
+    // Is content-based deduplication enabled for the topic.
+    bool content_based_deduplication = 17;
 }
 
 // Describe partition request sent from client to server.

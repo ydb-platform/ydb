@@ -692,8 +692,8 @@ void TConsumerActor::ProcessEventQueue() {
 
     for (auto& ev : UpdateExternalLockedMessageGroupsIdRequestsQueue) {
         const NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId& record = ev->Get()->Record;
-        auto ur = Storage->UpdateExternalLockedMessageGroupsId(record.GetUpdate());
-        LOG_D("UpdateExternalLockedMessageGroupsId: " << LabeledOutput(ur.Applied, ur.Invalid, ur.ModeChanged, ur.SetChanged, ur.VersionChanged) << "; " << record.GetUpdate().ShortUtf8DebugString());
+        auto updateResult = Storage->UpdateExternalLockedMessageGroupsId(record.GetUpdate());
+        LOG_D("UpdateExternalLockedMessageGroupsId: " << "Applied=" << updateResult.Applied << ", " << "Invalid=" << updateResult.Invalid << ", " << "ModeChanged=" << updateResult.ModeChanged << ", " << "SetChanged=" << updateResult.SetChanged << ", " << "VersionChanged=" << updateResult.VersionChanged << "; " << record.GetUpdate().ShortUtf8DebugString());
     }
     UpdateExternalLockedMessageGroupsIdRequestsQueue.clear();
 

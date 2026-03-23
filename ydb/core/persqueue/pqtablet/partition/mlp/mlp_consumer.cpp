@@ -441,7 +441,7 @@ void TConsumerActor::UpdateChildPartitionsOnCommit() {
     if (GetPartitionConfig().GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
         return;
     }
-    bool update = ChildPartitionsKeepOrderManager.SetSendFullStateToAll(TChildPartitionsKeepOrderManager::ESendReasons::ParentDone);
+    bool update = ChildPartitionsOrderManager.SetSendFullStateToAll(TChildPartitionsOrderManager::ESendReasons::ParentDone);
     if (update) {
         UpdateLockedGroupsIdInChildPartitions(false);
     }
@@ -520,9 +520,9 @@ void TConsumerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     if (ev->Cookie == static_cast<int>(ESendCookie::SendToPQTablet)) {
         FirstPipeCacheRequest = true;
     } else {
-        bool update = ChildPartitionsKeepOrderManager.SetSendFullStateByCookie(ev->Cookie, TChildPartitionsKeepOrderManager::ESendReasons::DeliveryProblem);
+        bool update = ChildPartitionsOrderManager.SetSendFullStateByCookie(ev->Cookie, TChildPartitionsOrderManager::ESendReasons::DeliveryProblem);
         if (update) {
-            Schedule(ChildPartitionsKeepOrderManager.UpdateChildPartitionsBackoff.Next(), new TEvents::TEvWakeup(EWakeUpTag::UpdateChildPartitions));
+            Schedule(ChildPartitionsOrderManager.UpdateChildPartitionsBackoff.Next(), new TEvents::TEvWakeup(EWakeUpTag::UpdateChildPartitions));
         }
     }
 }
@@ -1084,27 +1084,23 @@ const NKikimrPQ::TPQTabletConfig::TPartition& TConsumerActor::GetPartitionConfig
 
 bool TConsumerActor::EnumerateChildrenPartitionsWithKeepOrder() {
     if (!Config.GetKeepMessageOrder()) {
-        Y_ASSERT(ChildPartitionsKeepOrderManager.Empty());
+        Y_ASSERT(ChildPartitionsOrderManager.Empty());
         return false;
     }
     const auto& partitionConfig = GetPartitionConfig();
     for (const auto childPartitionId : partitionConfig.GetChildPartitionIds()) {
-        if (ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrder.contains(childPartitionId)) {
+        if (ChildPartitionsOrderManager.ChildrenPartitionWithKeepOrder.contains(childPartitionId)) {
             continue;
         }
         const auto& childPartitionConfig = GetPartitionConfig(childPartitionId);
         const auto childTabletId = childPartitionConfig.GetTabletId();
-        ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrder[childPartitionId] = TChildPartitionsKeepOrderManager::TChildrenPartitionWithKeepOrder{
+        ChildPartitionsOrderManager.ChildrenPartitionWithKeepOrder[childPartitionId] = TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder{
             .TabletId = childTabletId,
-            .Cookie = ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrderCookie++,
-            .SendFullStateReasons = TChildPartitionsKeepOrderManager::ESendReasons::Initial,
+            .Cookie = ChildrenPartitionWithKeepOrderCookie++,
+            .SendFullStateReasons = TChildPartitionsOrderManager::ESendReasons::Initial,
         };
     }
-    return !ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrder.empty();
-}
-
-bool TConsumerActor::TChildPartitionsKeepOrderManager::TChildrenPartitionWithKeepOrder::NeedSendFullState() const {
-    return SendFullStateReasons != ESendReasons::None;
+    return !ChildPartitionsOrderManager.Empty();
 }
 
 void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
@@ -1113,12 +1109,12 @@ void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
     if (!EnumerateChildrenPartitionsWithKeepOrder()) {
         return;
     }
-    const bool shouldSend = force || AnyOf(IterateValues(ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrder), &TChildPartitionsKeepOrderManager::TChildrenPartitionWithKeepOrder::NeedSendFullState);
+    const bool shouldSend = force || AnyOf(IterateValues(ChildPartitionsOrderManager.ChildrenPartitionWithKeepOrder), &TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::NeedSendFullState);
     if (!shouldSend) {
         LOG_D("UpdateLockedGroupsIdInChildPartitions no send diff");
         return;
     }
-    ++ChildPartitionsKeepOrderManager.ConsumerStep;
+    ++ChildPartitionsOrderManager.ConsumerStep;
     const auto& partitionConfig = GetPartitionConfig();
     const NKikimrPQ::ETopicPartitionStatus status = partitionConfig.GetStatus();
     Y_ASSERT(status != ETopicPartitionStatus::Active);
@@ -1126,7 +1122,7 @@ void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
     const EReadWithKeepOrder childMode = allRead
         ? EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL
         : EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLOCK_ALL;
-    for (auto& [childPartitionId, state] : ChildPartitionsKeepOrderManager.ChildrenPartitionWithKeepOrder) {
+    for (auto& [childPartitionId, state] : ChildPartitionsOrderManager.ChildrenPartitionWithKeepOrder) {
         if (!(force || state.NeedSendFullState())) {
             continue;
         }
@@ -1138,70 +1134,14 @@ void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
         update->SetParentPartitionId(PartitionId);
         update->SetGeneration(PartitionGeneration);
         update->SetConsumerGeneration(Config.GetGeneration());
-        update->SetStep(ChildPartitionsKeepOrderManager.ConsumerStep);
+        update->SetStep(ChildPartitionsOrderManager.ConsumerStep);
         update->SetMode(childMode);
 
         LOG_D("UpdateLockedGroupsIdInChildPartitions: updating child partition " << childPartitionId << " with " << record.ShortDebugString());
         auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), state.TabletId, true, state.Cookie);
         Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
-        state.SendFullStateReasons = TChildPartitionsKeepOrderManager::ESendReasons::None;
+        state.SendFullStateReasons = TChildPartitionsOrderManager::ESendReasons::None;
     }
-}
-
-
-bool TConsumerActor::TChildPartitionsKeepOrderManager::Empty() const {
-    return ChildrenPartitionWithKeepOrder.empty();
-}
-
-bool TConsumerActor::TChildPartitionsKeepOrderManager::TChildrenPartitionWithKeepOrder::AddSendFullStateReason(ESendReasons reason) {
-    ESendReasons n = static_cast<ESendReasons>(static_cast<ui32>(SendFullStateReasons) | static_cast<ui32>(reason));
-    std::swap(SendFullStateReasons, n);
-    return SendFullStateReasons != n;
-}
-
-bool TConsumerActor::TChildPartitionsKeepOrderManager::SetSendFullStateToAll(ESendReasons reason) {
-    Y_ASSERT(reason != ESendReasons::None);
-    bool update = false;
-    for (auto& [_, state] : ChildrenPartitionWithKeepOrder) {
-        if (state.AddSendFullStateReason(reason)) {
-            update = true;
-        }
-    }
-    return update;
-}
-
-bool TConsumerActor::TChildPartitionsKeepOrderManager::SetSendFullStateByCookie(ui32 cookie, ESendReasons reason) {
-    bool update = false;
-    for (auto& [childPartitionId, state] : ChildrenPartitionWithKeepOrder) {
-        if (state.Cookie == cookie) {
-            state.AddSendFullStateReason(reason);
-            update = true;
-        }
-    }
-    return update;
-}
-
-TString TConsumerActor::TChildPartitionsKeepOrderManager::SendReasonsToString(const ESendReasons reasons) {
-    if (reasons == ESendReasons::None) {
-        return ToString(ESendReasons::None);
-    }
-    TStringBuilder ss;
-    ui32 uReasons = static_cast<ui32>(reasons);
-    for (const auto p : GetEnumAllValues<ESendReasons>()) {
-        const ui32 uCheck = static_cast<ui32>(p);
-        if ((uReasons & uCheck) != uCheck || uCheck == 0) {
-            continue;
-        }
-        ss << p << '|';
-        uReasons &= ~uCheck;
-    }
-    if (uReasons != 0) {
-        ss << Hex(uReasons, {});
-    }
-    if (ss.EndsWith('|')) {
-        ss.pop_back();
-    }
-    return ss;
 }
 
 NActors::IActor* CreateConsumerActor(

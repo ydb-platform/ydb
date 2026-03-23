@@ -5,6 +5,7 @@ SRCS(
     mlp_consumer.cpp
     mlp_consumer_app.cpp
     mlp_consumer_metrics.cpp
+    mlp_consumer_order.cpp
     mlp_dlq_mover.cpp
     mlp_message_enricher.cpp
     mlp_storage.cpp
@@ -20,7 +21,7 @@ PEERDIR(
     ydb/core/util
 )
 
-GENERATE_ENUM_SERIALIZATION(mlp_consumer.h)
+GENERATE_ENUM_SERIALIZATION(mlp_consumer_order.h)
 GENERATE_ENUM_SERIALIZATION(mlp_storage.h)
 
 END()

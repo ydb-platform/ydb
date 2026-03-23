@@ -69,6 +69,7 @@ namespace NKikimr::NDDisk {
     class TDDiskActor : public TActorBootstrapped<TDDiskActor> {
         TString DDiskId;
         TVDiskConfig::TBaseInfo BaseInfo;
+        TDDiskConfig Config;
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TIntrusivePtr<NMonitoring::TDynamicCounters> CountersBase;
         std::vector<std::pair<TString, TString>> CountersChain;
@@ -269,7 +270,8 @@ namespace NKikimr::NDDisk {
 
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+            TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
         ~TDDiskActor();
         void Bootstrap();
         STFUNC(StateFunc);

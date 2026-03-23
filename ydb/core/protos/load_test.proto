@@ -184,6 +184,10 @@ message TEvLoadTestRequest {
 
         // When true, the load test performs reads instead of writes.
         optional bool IsReadLoad = 15 [default = false];
+        // Enable io_uring SQPOLL mode for DDisk direct I/O.
+        optional bool SQPoll = 16 [default = false];
+        // Enable io_uring IOPOLL mode for DDisk direct I/O.
+        optional bool IOPoll = 17 [default = false];
     }
 
     message TPersistentBufferWriteLoad {

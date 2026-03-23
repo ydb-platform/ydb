@@ -283,6 +283,38 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         )"));
     }
 
+    Y_UNIT_TEST(Delimiter) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+
+        CreateTestTable(client);
+
+        TStringBuilder csv;
+        csv << "Key@Value\n";
+        csv << "1@10\n";
+        csv << "2@20\n";
+
+        auto upsert = client.BulkUpsert(
+            "/Root/Test",
+            EDataFormat::CSV,
+            csv,
+            {},
+            BulkUpsertSettings(CsvSettingsWithHeader("@", {})))
+            .GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        NKqp::CompareYson(R"([
+            [[1u];[10]];
+            [[2u];[20]]
+        ])", StreamQueryToYson(client, R"(
+            SELECT Key, Value
+            FROM `/Root/Test`
+            ORDER BY Key;
+        )"));
+    }
+
     Y_UNIT_TEST(NullValueSetting) {
         TKikimrWithGrpcAndRootSchema server;
         auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));

@@ -8,6 +8,8 @@ ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration unittest.[*/*] chun
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
+ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewRanges
+ydb/core/kqp/ut/tli KqpTli.CrossTables
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsDeferredLock
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySessions_NoCommits_AutoscaleAwareSDK
@@ -163,22 +165,14 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-1-1_to_stable-25-4-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrage[rolling_stable-25-4-1_to_stable-26-1-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrage[rolling_stable-26-1-1_to_prestable-26-2]
-ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
-ydb/tests/fq/s3 test_bindings_0.py.TestBindings.test_modify_connection_with_a_lot_of_bindings[v2-kikimr_settings0-client0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_insert_to_topic[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]
-ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
-ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
-ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
-ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
-ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
-ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
-ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
 ydb/tests/functional/api test_discovery.py.TestDiscoveryFaultInjectionSlotStop.test_scenario
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
+ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_failover
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
@@ -191,6 +185,7 @@ ydb/tests/functional/tenants py3test.[*/*] chunk
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[4]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[59]
+ydb/tests/functional/tpc/medium py3test.[test_workload_manager.py] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py] chunk
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[21]
 ydb/tests/olap py3test.[*/*] chunk

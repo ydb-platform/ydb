@@ -105,7 +105,6 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
         iamParams.ResourceType = serviceControl.GetResourceType();
         iamParams.ResourceId = resourceId;
         iamParams.TargetServiceAccountId = serviceAccountId;
-        iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory();
 
         return CreateIamServiceCredentialsProviderFactory(iamParams);
     }

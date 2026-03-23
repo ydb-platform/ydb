@@ -58,15 +58,6 @@ private:
     }
 
 protected:
-    virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
-        for (auto&& i : Levels) {
-            if (i->IsLocked(dataLocksManager)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         std::vector<std::vector<TPortionInfo::TPtr>> removePortionsByLevel;
         removePortionsByLevel.resize(Levels.size());

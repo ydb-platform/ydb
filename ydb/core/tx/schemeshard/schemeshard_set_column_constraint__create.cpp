@@ -112,9 +112,9 @@ public:
         operationInfo->BuildKind = TIndexBuildInfo::EBuildKind::SetColumnConstraint;
 
         Self->PersistCreateSetColumnConstraint(db, *operationInfo);
-        operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps;
 
-        Self->PersistBuildIndexState(db, *operationInfo);
+        operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps;
+        Self->PersistSetColumnConstraintState(db, *operationInfo);
 
         Self->AddSetColumnConstraintOperation(operationInfo);
 

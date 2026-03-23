@@ -32,6 +32,24 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistBuildIndexState(db, buildInfo);
     }
+
+    for (auto& rec: SetColumnConstraintStateChanges) {
+        TIndexBuildId operationId;
+        TSetColumnConstraintOperationInfo::EOperationState state;
+        std::tie(operationId, state) = rec;
+
+        const auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(operationId);
+        Y_VERIFY_S(operationInfoPtr, "SetColumnConstraintOperations has no " << operationId);
+        auto& operationInfo = *operationInfoPtr->get();
+        LOG_I("Change SetColumnConstraint state from " << (ui32)operationInfo.OperationState << " to " << (ui32)state);
+        if (state == TSetColumnConstraintOperationInfo::EOperationState::Done) {
+            operationInfo.EndTime = TAppData::TimeProvider->Now();
+        }
+        operationInfo.OperationState = state;
+
+        NIceDb::TNiceDb db(txc.DB);
+        Self->PersistSetColumnConstraintState(db, operationInfo);
+    }
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
@@ -186,6 +204,10 @@ void TSchemeShard::TIndexBuilder::TTxBase::AllocateTxId(TIndexBuildId buildId) {
 
 void TSchemeShard::TIndexBuilder::TTxBase::ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state) {
     StateChanges.push_back(TChangeStateRec(id, state));
+}
+
+void TSchemeShard::TIndexBuilder::TTxBase::ChangeState(TIndexBuildId id, TSetColumnConstraintOperationInfo::EOperationState state) {
+    SetColumnConstraintStateChanges.push_back(TChangeSetColumnConstraintStateRec(id, state));
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::Progress(TIndexBuildId id) {

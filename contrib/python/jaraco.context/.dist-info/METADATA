@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: jaraco.context
-Version: 6.1.0
+Version: 6.1.1
 Summary: Useful decorators and context managers
 Author-email: "Jason R. Coombs" <jaraco@jaraco.com>
 License-Expression: MIT

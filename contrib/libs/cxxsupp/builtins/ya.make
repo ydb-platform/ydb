@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(22.1.1)
+VERSION(21.1.8)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-22.1.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-21.1.8.tar.gz)
 
 NO_COMPILER_WARNINGS()
 
@@ -133,7 +133,6 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         arm/comparesf2.S
         arm/divdf3vfp.S
         arm/divmodsi4.S
-        arm/divsf3.S
         arm/divsf3vfp.S
         arm/divsi3.S
         arm/eqdf2vfp.S
@@ -147,10 +146,7 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         arm/floatsisfvfp.S
         arm/floatunssidfvfp.S
         arm/floatunssisfvfp.S
-        arm/fnan2.c
-        arm/fnorm2.c
         arm/fp_mode.c
-        arm/funder.c
         arm/gedf2vfp.S
         arm/gesf2vfp.S
         arm/gtdf2vfp.S
@@ -161,7 +157,6 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         arm/ltsf2vfp.S
         arm/modsi3.S
         arm/muldf3vfp.S
-        arm/mulsf3.S
         arm/mulsf3vfp.S
         arm/nedf2vfp.S
         arm/negdf2vfp.S
@@ -222,6 +217,7 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         divmoddi4.c
         divmodti4.c
         divsc3.c
+        divsf3.c
         divtc3.c
         divtf3.c
         divti3.c
@@ -286,6 +282,7 @@ IF (ARCH_ARM6 OR ARCH_ARM7)
         mulosi4.c
         muloti4.c
         mulsc3.c
+        mulsf3.c
         multc3.c
         multf3.c
         multi3.c

@@ -207,15 +207,19 @@ private:
 
         const auto now = TAppData::TimeProvider->Now();
 
-        auto queryManId = CachedQueryManagerId;
-        if (queryManId) {
-            CachedQueryManagerId = TActorId{};
-        } else {
-            queryManId = Register(CreateKqpQueryManager(Counters, State_, ResourceManager_, CaFactory_));
+        auto& runtimeSettings = msg.GetRuntimeSettings();
+
+        TActorId queryManId;
+        if (runtimeSettings.GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_FULL) {
+            queryManId = CachedQueryManagerId;
+            if (queryManId) {
+                CachedQueryManagerId = TActorId{};
+            } else {
+                queryManId = Register(CreateKqpQueryManager(Counters, State_, ResourceManager_, CaFactory_));
+            }
         }
 
         auto request = TNodeRequest(txId, executerId, query, queryManId, now);
-        auto& runtimeSettings = msg.GetRuntimeSettings();
         if (runtimeSettings.GetTimeoutMs() > 0) {
             // compute actor should not arm timer since in case of timeout it will receive TEvAbortExecution from Executer
             auto timeout = TDuration::MilliSeconds(runtimeSettings.GetTimeoutMs());

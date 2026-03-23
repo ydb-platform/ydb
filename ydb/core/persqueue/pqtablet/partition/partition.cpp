@@ -2264,8 +2264,9 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event)
 {
+    const bool skipSrcIdInfo = event->GetSkipSrcIdInfo();
     UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(event), Now()));
-    RequestWriteInfoIfRequired(event->GetSkipSrcIdInfo());
+    RequestWriteInfoIfRequired(skipSrcIdInfo);
 }
 
 void TPartition::RequestWriteInfoIfRequired(bool skipSrcIdInfo)
@@ -2299,9 +2300,10 @@ void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConf
 
 void TPartition::AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> tx)
 {
+    const bool skipSrcIdInfo = tx->GetSkipSrcIdInfo();
     UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(tx)));
     ++ImmediateTxCount;
-    RequestWriteInfoIfRequired(tx->GetSkipSrcIdInfo());
+    RequestWriteInfoIfRequired(skipSrcIdInfo);
 }
 
 void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)

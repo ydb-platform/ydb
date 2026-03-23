@@ -32,7 +32,7 @@ inline TString GetRequestId(const NHttp::THttpIncomingRequestPtr& request) {
     return {};
 }
 
-inline TString EnsureRequestId(NHttp::THttpIncomingRequestPtr& request) {
+inline TString EnsureRequestIdHeader(NHttp::THttpIncomingRequestPtr& request) {
     TString requestId = GetRequestId(request);
     if (!requestId.empty()) {
         return requestId;
@@ -47,8 +47,18 @@ inline TString EnsureRequestId(NHttp::THttpIncomingRequestPtr& request) {
     return requestId;
 }
 
-inline TMvpLogContext CreateLogContext(NHttp::THttpIncomingRequestPtr& request) {
-    return {.RequestId = EnsureRequestId(request)};
+inline TMvpLogContext CreateLogContext(const NHttp::THttpIncomingRequestPtr& request) {
+    return {.RequestId = GetRequestId(request)};
+}
+
+inline void SetRequestIdHeader(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* headers) {
+    if (!headers) {
+        return;
+    }
+    TString requestId = GetRequestId(request);
+    if (!requestId.empty()) {
+        headers->Set(REQUEST_ID_HEADER, requestId);
+    }
 }
 
 inline TString GetLogPrefix(const TMvpLogContext* context) {
@@ -56,6 +66,11 @@ inline TString GetLogPrefix(const TMvpLogContext* context) {
         return {};
     }
     return TStringBuilder() << "request id: " << context->RequestId << ", ";
+}
+
+inline TString GetLogPrefix(const NHttp::THttpIncomingRequestPtr& request) {
+    TMvpLogContext context = CreateLogContext(request);
+    return GetLogPrefix(&context);
 }
 
 } // namespace NMVP

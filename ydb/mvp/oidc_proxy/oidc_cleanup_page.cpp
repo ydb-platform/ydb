@@ -38,7 +38,10 @@ TCleanupPageHandler::TCleanupPageHandler(const NActors::TActorId& httpProxyId, c
 {}
 
 void TCleanupPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
-    Register(new THandlerCleanup(event->Sender, event->Get()->Request, HttpProxyId, Settings, CreateNameSessionCookie(Settings.ClientId)));
+    NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
+    EnsureRequestIdHeader(request);
+    BLOG_D(GetLogPrefix(request) << "Incoming OIDC request: " << request->Method << ' ' << request->URL);
+    Register(new THandlerCleanup(event->Sender, request, HttpProxyId, Settings, CreateNameSessionCookie(Settings.ClientId)));
 }
 
 } // NMVP::NOIDC

@@ -48,6 +48,7 @@ void TExtensionFinal::SetProxyResponseHeaders() {
             params.HeadersOverride->Set(header, headers->Get(header));
         }
     }
+    SetRequestIdHeader(params.Request, params.HeadersOverride.Get());
 
     if (headers->Has(LOCATION_HEADER)) {
         params.HeadersOverride->Set(LOCATION_HEADER, GetFixedLocationHeader(headers->Get(LOCATION_HEADER)));

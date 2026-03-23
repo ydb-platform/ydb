@@ -14,8 +14,10 @@ protected:
 
     explicit TOidcHttpRequestHandlerBase(const NHttp::THttpIncomingRequestPtr& request)
         : Request(request)
-        , LogContext(CreateLogContext(Request))
-    {}
+    {
+        EnsureRequestIdHeader(Request);
+        LogContext = CreateLogContext(Request);
+    }
 
     const TMvpLogContext* GetLogContext() const override {
         return &LogContext;

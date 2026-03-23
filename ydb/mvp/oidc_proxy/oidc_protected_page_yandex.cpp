@@ -37,7 +37,10 @@ void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvErrorResponse::TPt
     if (event->Get()->Status == "400") {
         return ReplyAndPassAway(GetHttpOutgoingResponsePtr(Request, Settings));
     } else {
-        return ReplyAndPassAway(Request->CreateResponse( event->Get()->Status, event->Get()->Message, "text/plain", event->Get()->Details));
+        NHttp::THeadersBuilder responseHeaders;
+        responseHeaders.Set("Content-Type", "text/plain");
+        SetRequestIdHeader(Request, &responseHeaders);
+        return ReplyAndPassAway(Request->CreateResponse(event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details));
     }
 }
 

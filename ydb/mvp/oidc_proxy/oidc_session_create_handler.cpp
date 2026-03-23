@@ -12,6 +12,8 @@ TSessionCreateHandler::TSessionCreateHandler(const NActors::TActorId& httpProxyI
 
 void TSessionCreateHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
     NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
+    EnsureRequestIdHeader(request);
+    BLOG_D(GetLogPrefix(request) << "Incoming OIDC request: " << request->Method << ' ' << request->URL);
     if (request->Method == "GET") {
         switch (Settings.AccessServiceType) {
             case NMvp::yandex_v2:

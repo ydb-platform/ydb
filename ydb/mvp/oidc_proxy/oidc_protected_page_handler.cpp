@@ -11,12 +11,15 @@ TProtectedPageHandler::TProtectedPageHandler(const NActors::TActorId& httpProxyI
 {}
 
 void TProtectedPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
+    NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
+    EnsureRequestIdHeader(request);
+    BLOG_D(GetLogPrefix(request) << "Incoming OIDC request: " << request->Method << ' ' << request->URL);
     switch (Settings.AccessServiceType) {
         case NMvp::yandex_v2:
-            Register(new THandlerSessionServiceCheckYandex(event->Sender, event->Get()->Request, HttpProxyId, Settings));
+            Register(new THandlerSessionServiceCheckYandex(event->Sender, request, HttpProxyId, Settings));
             break;
         case NMvp::nebius_v1:
-            Register(new THandlerSessionServiceCheckNebius(event->Sender, event->Get()->Request, HttpProxyId, Settings));
+            Register(new THandlerSessionServiceCheckNebius(event->Sender, request, HttpProxyId, Settings));
             break;
     }
 }

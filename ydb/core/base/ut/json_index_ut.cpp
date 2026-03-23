@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"invalid json", error), TVector<TString>{});
         UNIT_ASSERT(!error.empty());
 
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"literal string\"", error), TVector<TString>{TString("\0\3literal string", 16)});
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"literal string\"", error), (TVector<TString>{TString(), TString("\0\3literal string", 16)}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         TString obj = "{\"id\":42042,\"brand\":\"bricks\",\"part_count\":1401,\"price\":null,\"parts\":"
@@ -129,6 +129,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         auto tokens = TokenizeJson(obj, error);
         std::sort(tokens.begin(), tokens.end());
         UNIT_ASSERT_VALUES_EQUAL(tokens, (TVector<TString>{
+            TString(),
             TString("\2id", 3),
             TString("\2id\0\4\0\0\0\0@\x87\xE4@", 13),
             TString("\5brand", 6),
@@ -155,6 +156,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
         TString emptyKeyObj = "{\"\":{\"a\":\"b\"}}";
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson(emptyKeyObj, error), (TVector<TString>{
+            TString(),
             TString("\0", 1),
             TString("\0\1a", 3),
             TString("\0\1a\0\3b", 6)
@@ -167,6 +169,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             longKey[i] = 'a';
         TString longKeyObj = "{\"" + longKey + "\":{\"short\":\"b\"}}";
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson(longKeyObj, error), (TVector<TString>{
+            TString(),
             TString("\xE8\7") + longKey,
             TString("\xE8\7") + longKey + TString("\5short", 6),
             TString("\xE8\7") + longKey + TString("\5short\0\3b", 9)

@@ -20,6 +20,7 @@
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -2465,6 +2466,11 @@ public:
                                     ? ComputeFalsePositiveProbabilityFromDeprecatedParams(
                                         *localBloomNgramFilterDesc.FilterSizeBytes, *localBloomNgramFilterDesc.RecordsCount)
                                     : localBloomNgramFilterDesc.FalsePositiveProbability;
+                                proto->set_hashes_count(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
+                                proto->set_filter_size_bytes(
+                                    NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                                proto->set_records_count(
+                                    NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
                                 proto->set_false_positive_probability(fpp);
                             }
                         } else {

@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -540,6 +541,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 if (settings.FalsePositiveProbability) {
                     bloom->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
                 }
+
                 break;
             }
             case TIndexDescription::EType::LocalBloomNgramFilter: {
@@ -570,6 +572,9 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                     ? NYql::ComputeFalsePositiveProbabilityFromDeprecatedParams(
                         *settings.FilterSizeBytes, *settings.RecordsCount)
                     : settings.FalsePositiveProbability;
+                ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
+                ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
                 ngram->SetFalsePositiveProbability(fpp);
                 break;
             }

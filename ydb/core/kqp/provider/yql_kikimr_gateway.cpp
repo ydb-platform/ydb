@@ -534,21 +534,25 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
         error = "hashes_count is not supported for bloom ngram filter and is calculated automatically";
         return;
     }
+
     if (name == "filter_size_bytes") {
         ui32 uiValue = 0;
         if (!TryFromString<ui32>(value, uiValue)) {
             error = TStringBuilder() << "Invalid filter_size_bytes value: " << value;
             return;
         }
+
         desc.FilterSizeBytes = uiValue;
         return;
     }
+
     if (name == "records_count") {
         ui32 uiValue = 0;
         if (!TryFromString<ui32>(value, uiValue)) {
             error = TStringBuilder() << "Invalid records_count value: " << value;
             return;
         }
+
         desc.RecordsCount = uiValue;
         return;
     }

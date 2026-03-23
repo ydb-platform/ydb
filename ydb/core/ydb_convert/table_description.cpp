@@ -7,6 +7,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/protos/follower_group.pb.h>
@@ -1105,9 +1106,13 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 ngram->SetCaseSensitive(index.local_bloom_ngram_filter_index().has_case_sensitive()
                     ? index.local_bloom_ngram_filter_index().case_sensitive()
                     : true);
-                ngram->SetFalsePositiveProbability(index.local_bloom_ngram_filter_index().has_false_positive_probability()
+                const double fpp = index.local_bloom_ngram_filter_index().has_false_positive_probability()
                     ? index.local_bloom_ngram_filter_index().false_positive_probability()
-                    : 0.1);
+                    : 0.1;
+                ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
+                ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
+                ngram->SetFalsePositiveProbability(fpp);
                 ngram->SetColumnName(index.index_columns(0));
                 break;
             }

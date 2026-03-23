@@ -13,6 +13,7 @@ public:
     static constexpr ui32 MaxNGrammSize = 8;
     static constexpr ui32 MinHashesCount = 1;
     static constexpr ui32 MaxHashesCount = 8;
+    static constexpr ui32 DeprecatedRecordsCount = 10000;
     static constexpr ui32 MinFilterSizeBytes = 128;
     static constexpr ui32 MaxFilterSizeBytes = 1 << 20;
     static constexpr ui32 MinRecordsCount = 128;
@@ -36,6 +37,22 @@ public:
 
     static ui32 CalcHashesCount(const double falsePositiveProbability) {
         return std::max<ui32>(1, static_cast<ui32>(-std::log(falsePositiveProbability) / std::log(2.0)));
+    }
+
+    static ui32 CalcDeprecatedRecordsCount(const double /*falsePositiveProbability*/) {
+        return DeprecatedRecordsCount;
+    }
+
+    static ui32 CalcDeprecatedFilterSizeBytes(const double falsePositiveProbability) {
+        const double probability = (std::isfinite(falsePositiveProbability) && falsePositiveProbability > 0.0 && falsePositiveProbability < 1.0)
+            ? falsePositiveProbability
+            : 0.1;
+        const double hashesCount = static_cast<double>(CalcHashesCount(probability));
+        const double recordsCount = static_cast<double>(CalcDeprecatedRecordsCount(probability));
+        const double bitsCount =
+            std::ceil((-hashesCount * recordsCount) / std::log(1.0 - std::pow(probability, 1.0 / hashesCount)));
+        return std::clamp<ui32>(
+            static_cast<ui32>(std::ceil(bitsCount / 8.0)), MinFilterSizeBytes, MaxFilterSizeBytes);
     }
 
     static TString GetHashesCountIntervalString();

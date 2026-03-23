@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cmath>
-
 #include <ydb/library/aclib/aclib.h>
 #include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>

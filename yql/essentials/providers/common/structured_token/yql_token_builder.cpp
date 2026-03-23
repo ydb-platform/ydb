@@ -34,6 +34,12 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::SetBasicAuthWithSecret(const T
     return *this;
 }
 
+TStructuredTokenBuilder& TStructuredTokenBuilder::SetIamAuth(const TString& serviceAccountId, const TString& resourceId) {
+    Data_.SetField("iam_sa_id", serviceAccountId);
+    Data_.SetField("iam_resource_id", resourceId);
+    return *this;
+}
+
 TStructuredTokenBuilder& TStructuredTokenBuilder::SetTokenAuthWithSecret(const TString& tokenReference, const TString& token) {
     Data_.SetField("token_ref", tokenReference);
     Data_.SetField("token", token);
@@ -147,6 +153,16 @@ bool TStructuredTokenParser::IsNoAuth() const {
     return Data_.HasField("no_auth");
 }
 
+bool TStructuredTokenParser::GetIamAuth(TString& serviceAccountId, TString& resourceId) const {
+    serviceAccountId = Data_.GetField("iam_sa_id");
+    resourceId = Data_.GetField("iam_resource_id");
+    return true;
+}
+
+bool TStructuredTokenParser::HasIamAuth() const {
+    return Data_.HasField("iam_sa_id") && Data_.HasField("iam_resource_id");
+}
+
 void TStructuredTokenParser::ListReferences(TSet<TString>& references) const {
     if (Data_.HasField("basic_password_ref")) {
         references.insert(Data_.GetField("basic_password_ref"));
@@ -238,6 +254,18 @@ TString ComposeStructuredTokenJsonForTransientTokenAuth(const TString& transient
 
     if (transientToken) {
         result.SetTransientTokenAuth(transientToken);
+        return result.ToJson();
+    }
+
+    result.SetNoAuth();
+    return result.ToJson();
+}
+
+TString ComposeStructuredTokenJsonForIamAuth(const TString& serviceAccountId, const TString& resourceId) {
+    TStructuredTokenBuilder result;
+
+    if (serviceAccountId && resourceId) {
+        result.SetIamAuth(serviceAccountId, resourceId);
         return result.ToJson();
     }
 

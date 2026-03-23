@@ -78,6 +78,14 @@ public:
                     && portionClass.GetIsDefaultTier();
         }
     };
+    
+    template <NOlap::NPortion::EProduced Type>
+    class TPortionsByType : public IStatsSelector {
+    public:
+        bool Select(const TPortionClass& portionClass) const override {
+            return portionClass.GetProduced() == Type;
+        }
+    };
 };
 
 }

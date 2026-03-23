@@ -12,14 +12,14 @@
 
 namespace NKikimr::NSqsTopic::V1 {
 
-    std::expected<TConsumerAttributes, std::string> ParseConsumerAttributes(
+    std::expected<TQueueAttributes, std::string> ParseQueueAttributes(
         const google::protobuf::Map<TString, TString>& attributes,
         const TString& queueName,
         const TString& consumerName,
         const TString& database,
         EConsumerAttributeUsageTarget usageTarget
     ) {
-        TConsumerAttributes result;
+        TQueueAttributes result;
 
         auto& config = result.Consumer;
         bool fifoQueueByName = queueName.EndsWith(".fifo");
@@ -130,7 +130,7 @@ namespace NKikimr::NSqsTopic::V1 {
     std::expected<void, std::string> CompareWithExistingQueueAttributes(
         const NKikimrPQ::TPQTabletConfig& existingConfig,
         const NKikimrPQ::TPQTabletConfig::TConsumer& existingConsumer,
-        const TConsumerAttributes& newConfig
+        const TQueueAttributes& newConfig
     ) {
         const auto& newConsumer = newConfig.Consumer;
 
@@ -232,7 +232,7 @@ namespace NKikimr::NSqsTopic::V1 {
         return {};
     }
 
-    std::expected<void, std::string> ValidateLimits(const TConsumerAttributes& config) {
+    std::expected<void, std::string> ValidateLimits(const TQueueAttributes& config) {
         const auto& consumer = config.Consumer;
 
         if (consumer.HasDefaultProcessingTimeoutSeconds()) {

@@ -176,7 +176,6 @@ private:
         NPQ::NMLP::TWriterSettings writerSettings;
         writerSettings.DatabasePath = GetDatabaseName();
         writerSettings.TopicName = GetTopicName();
-        //writerSettings.UserToken = UserToken_; // TODO Permissions already checked??
         writerSettings.Messages.reserve(IsBatch_ ? BatchRequest().EntriesSize() : 1);
 
         for (size_t i = 0, size = IsBatch_ ? BatchRequest().EntriesSize() : 1; i < size; ++i) {

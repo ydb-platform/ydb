@@ -7,58 +7,56 @@ namespace NMVP {
 
 namespace {
 
-class THttpProxyGatewayRequest : public NActors::TActorBootstrapped<THttpProxyGatewayRequest> {
-    using TBase = NActors::TActorBootstrapped<THttpProxyGatewayRequest>;
+class THttpProxyGatewayRequestActor : public NActors::TActorBootstrapped<THttpProxyGatewayRequestActor> {
+    using TBase = NActors::TActorBootstrapped<THttpProxyGatewayRequestActor>;
 
-    const NActors::TActorId OriginalSender;
-    const NActors::TActorId NextProxyId;
-    NHttp::THttpIncomingRequestPtr Request;
-    TString UserToken;
-    bool WaitForDataChunks = false;
+    const NActors::TActorId HttpProxyId;
+    NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
+    NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
+    bool StreamingResponse = false;
 
 public:
-    THttpProxyGatewayRequest(const NActors::TActorId& originalSender,
-                             const NActors::TActorId& nextProxyId,
-                             const NHttp::THttpIncomingRequestPtr& request,
-                             TString userToken)
-        : OriginalSender(originalSender)
-        , NextProxyId(nextProxyId)
-        , Request(request)
-        , UserToken(std::move(userToken))
+    THttpProxyGatewayRequestActor(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event,
+                                  const NActors::TActorId& httpProxyId)
+        : HttpProxyId(httpProxyId)
+        , Event(std::move(event))
     {
-        EnsureRequestIdHeader(Request);
+        EnsureRequestIdHeader(Event->Get()->Request);
     }
 
     void Bootstrap() {
-        BLOG_D(GetLogPrefix(Request) << "Incoming HTTP request: " << Request->Method << ' ' << Request->URL);
+        const auto& request = Event->Get()->Request;
+        BLOG_D(GetLogPrefix(request) << "Incoming HTTP request: " << request->Method << ' ' << request->URL);
 
-        auto event = std::make_unique<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(Request);
-        event->UserToken = UserToken;
-        Send(NextProxyId, event.release());
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), NActors::IEventHandle::FlagTrackDelivery);
 
-        Become(&THttpProxyGatewayRequest::StateWork);
+        auto forwardedEvent = std::make_unique<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(request);
+        forwardedEvent->UserToken = Event->Get()->UserToken;
+        Send(HttpProxyId, forwardedEvent.release());
+
+        Become(&THttpProxyGatewayRequestActor::StateWork);
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr event) {
         auto response = std::move(event->Get()->Response);
         if (response) {
-            BLOG_D(GetLogPrefix(Request) << "Outgoing HTTP response: " << response->Status << ' ' << response->Message);
+            BLOG_D(GetLogPrefix(Event->Get()->Request) << "Outgoing HTTP response: " << response->Status << ' ' << response->Message);
 
-            TString requestId = GetRequestId(Request);
+            TString requestId = GetRequestId(Event->Get()->Request);
             if (!requestId.empty()) {
                 NHttp::THeadersBuilder extraHeaders;
                 extraHeaders.Set(REQUEST_ID_HEADER, requestId);
-                response = response->Duplicate(Request, extraHeaders);
+                response = response->Duplicate(Event->Get()->Request, extraHeaders);
             }
 
-            WaitForDataChunks = !response->TransferEncoding.empty();
+            StreamingResponse = !response->TransferEncoding.empty();
         }
 
         auto forwarded = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(std::move(response));
         forwarded->ProgressNotificationBytes = event->Get()->ProgressNotificationBytes;
-        Send(OriginalSender, forwarded.release());
+        Send(Event->Sender, forwarded.release(), 0, Event->Cookie);
 
-        if (!WaitForDataChunks) {
+        if (!StreamingResponse) {
             PassAway();
         }
     }
@@ -67,10 +65,10 @@ public:
         bool isFinished = false;
         if (event->Get()->DataChunk) {
             isFinished = event->Get()->DataChunk->IsEndOfData();
-            Send(OriginalSender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(std::move(event->Get()->DataChunk)));
+            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(std::move(event->Get()->DataChunk)), 0, Event->Cookie);
         } else {
             isFinished = true;
-            Send(OriginalSender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(event->Get()->Error));
+            Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(event->Get()->Error), 0, Event->Cookie);
         }
         if (isFinished) {
             PassAway();
@@ -78,13 +76,14 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr event) {
-        NActors::TActivationContext::Send(new NActors::IEventHandle(
-            OriginalSender,
-            event->Sender,
-            new NHttp::TEvHttpProxy::TEvSubscribeForCancel(),
-            event->Flags,
-            event->Cookie
-        ));
+        CancelSubscriber = std::move(event);
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvRequestCancelled::TPtr&) {
+        if (CancelSubscriber) {
+            Send(CancelSubscriber->Sender, new NHttp::TEvHttpProxy::TEvRequestCancelled(), 0, CancelSubscriber->Cookie);
+        }
+        PassAway();
     }
 
     STFUNC(StateWork) {
@@ -92,14 +91,15 @@ public:
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvSubscribeForCancel, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvRequestCancelled, Handle);
         }
     }
 };
 
 } // namespace
 
-THttpProxyGateway::THttpProxyGateway(const NActors::TActorId& nextProxyId)
-    : NextProxyId(nextProxyId)
+THttpProxyGateway::THttpProxyGateway(const NActors::TActorId& httpProxyId)
+    : HttpProxyId(httpProxyId)
 {}
 
 void THttpProxyGateway::Bootstrap() {
@@ -107,7 +107,7 @@ void THttpProxyGateway::Bootstrap() {
 }
 
 void THttpProxyGateway::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
-    Register(new THttpProxyGatewayRequest(event->Sender, NextProxyId, event->Get()->Request, event->Get()->UserToken));
+    Register(new THttpProxyGatewayRequestActor(std::move(event), HttpProxyId));
 }
 
 } // namespace NMVP

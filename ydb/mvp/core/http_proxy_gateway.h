@@ -8,10 +8,10 @@ namespace NMVP {
 class THttpProxyGateway : public NActors::TActorBootstrapped<THttpProxyGateway> {
     using TBase = NActors::TActorBootstrapped<THttpProxyGateway>;
 
-    const NActors::TActorId NextProxyId;
+    const NActors::TActorId HttpProxyId;
 
 public:
-    explicit THttpProxyGateway(const NActors::TActorId& nextProxyId);
+    explicit THttpProxyGateway(const NActors::TActorId& httpProxyId);
 
     void Bootstrap();
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event);

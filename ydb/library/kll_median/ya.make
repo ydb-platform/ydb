@@ -6,7 +6,6 @@ PEERDIR(
 
 SRCS(
     sketch.h
-    windowed_sketch.h
 )
 
 END()

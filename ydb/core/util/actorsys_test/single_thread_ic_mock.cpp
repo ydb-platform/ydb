@@ -88,6 +88,7 @@ public:
 
     TActorId CreateSession();
     void ForwardToSession(TAutoPtr<IEventHandle> ev);
+    void ForwardToSession(TEvForwardSubscribeSession::TPtr ev);
 
     void DropSessionEvent(std::unique_ptr<IEventHandle> ev);
     void HandleDropPendingEvents(TAutoPtr<IEventHandle> ev);
@@ -407,6 +408,11 @@ void TMock::TProxyActor::ForwardToSession(TAutoPtr<IEventHandle> ev) {
                 nullptr, ++DropPendingEventsCookie));
         }
     }
+}
+
+void TMock::TProxyActor::ForwardToSession(TEvForwardSubscribeSession::TPtr ev) {
+    TAutoPtr<IEventHandle> forwarded(ev.Release());
+    ForwardToSession(forwarded);
 }
 
 void TMock::TProxyActor::DropSessionEvent(std::unique_ptr<IEventHandle> ev) {

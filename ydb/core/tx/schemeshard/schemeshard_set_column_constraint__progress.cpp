@@ -50,6 +50,30 @@ public:
                 break;
             }
             case TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites: {
+                ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Validate);
+                Progress(BuildId);
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::Validate: {
+                ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites);
+                Progress(BuildId);
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites: {
+                ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps);
+                Progress(BuildId);
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps: {
+                ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Done);
+                Progress(BuildId);
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::Done: {
                 LOG_N("TTxProgressSetColumnConstraint::DoExecute"
                     ": LockNullWrites not implemented yet"
                     ", id# " << BuildId);
@@ -65,22 +89,7 @@ public:
 
                 Send(operationInfo.CreateSender, std::move(response), 0, operationInfo.SenderCookie);
 
-                break;
-            }
-            case TSetColumnConstraintOperationInfo::EOperationState::Validate: {
-
-                break;
-            }
-            case TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites: {
-
-                break;
-            }
-            case TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps: {
-
-                break;
-            }
-            case TSetColumnConstraintOperationInfo::EOperationState::Done: {
-                SendNotificationsIfFinished(operationInfo);
+                // SendNotificationsIfFinished(operationInfo);
                 break;
             }
         }

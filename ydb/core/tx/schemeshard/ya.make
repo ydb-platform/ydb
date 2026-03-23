@@ -217,6 +217,7 @@ SRCS(
     schemeshard__operation_move_tables.cpp
     schemeshard__operation_part.cpp
     schemeshard__operation_part.h
+    schemeshard__operation_prepare_index_validation.cpp
     schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_rmdir.cpp
     schemeshard__operation_rotate_cdc_stream.cpp

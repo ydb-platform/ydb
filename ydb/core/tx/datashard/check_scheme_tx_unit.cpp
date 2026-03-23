@@ -32,6 +32,7 @@ private:
     bool CheckCreatePersistentSnapshot(TActiveTransaction *activeTx);
     bool CheckDropPersistentSnapshot(TActiveTransaction *activeTx);
     bool CheckInitiateBuildIndex(TActiveTransaction *activeTx);
+    bool CheckPrepareIndexValidation(TActiveTransaction *activeTx);
     bool CheckFinalizeBuildIndex(TActiveTransaction *activeTx);
     bool CheckDropIndexNotice(TActiveTransaction *activeTx);
     bool CheckMoveTable(TActiveTransaction *activeTx);
@@ -358,6 +359,9 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
     case TSchemaOperation::ETypeCreatePersistentSnapshot:
         res = CheckCreatePersistentSnapshot(activeTx);
         break;
+    case TSchemaOperation::ETypePrepareIndexValidation:
+        res = CheckPrepareIndexValidation(activeTx);
+        break;
     case TSchemaOperation::ETypeDropPersistentSnapshot:
         res = CheckDropPersistentSnapshot(activeTx);
         break;
@@ -621,6 +625,18 @@ bool TCheckSchemeTxUnit::CheckCreatePersistentSnapshot(TActiveTransaction *activ
     const auto& tx = activeTx->GetSchemeTx();
 
     if (HasDuplicate(activeTx, "CreatePersistentSnapshot", &TPipeline::HasCreatePersistentSnapshot)) {
+        return false;
+    }
+
+    Y_UNUSED(tx);
+
+    return true;
+}
+
+bool TCheckSchemeTxUnit::CheckPrepareIndexValidation(TActiveTransaction *activeTx) {
+    const auto& tx = activeTx->GetSchemeTx();
+
+    if (HasDuplicate(activeTx, "PrepareIndexValidation", &TPipeline::HasPrepareIndexValidation)) {
         return false;
     }
 

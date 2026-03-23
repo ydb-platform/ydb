@@ -233,6 +233,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     case TIndexBuildInfo::EState::CreateBuild:
     case TIndexBuildInfo::EState::LockBuild:
     case TIndexBuildInfo::EState::AlterSequence:
+    case TIndexBuildInfo::EState::PrepareValidation:
         index.SetState(Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
         index.SetProgress(indexInfo.CalcProgressPercent());
         break;

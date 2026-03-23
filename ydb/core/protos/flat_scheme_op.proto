@@ -1306,6 +1306,10 @@ message TFinalizeBuildIndexMainTable {
     optional TBuildIndexOutcome Outcome = 4;
 }
 
+message TPrepareIndexValidation {
+    optional string TableName = 1;
+}
+
 message TCopyTableConfig { //TTableDescription implemets copying a table in original and full way
     optional string SrcPath = 1;
     optional string DstPath = 2;
@@ -1972,6 +1976,8 @@ message TModifyScheme {
     // but in the future it may have an indirect impact on the schema,
     // for example, by resetting all sequences.
     optional TTruncateTable TruncateTable = 92;
+
+    optional TPrepareIndexValidation PrepareIndexValidation = 93;
 
     // Some entries are grouped by semantics, so are out of order
 }

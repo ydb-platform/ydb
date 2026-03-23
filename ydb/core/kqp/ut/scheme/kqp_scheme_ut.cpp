@@ -3526,9 +3526,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     class TKikimrRunnerWithPauseIndexBuild : public TKikimrRunner {
     public:
-        static TKikimrSettings MakeSettings() {
+        static TKikimrSettings MakeSettings(bool onlineUnique = false) {
             NKikimrConfig::TFeatureFlags featureFlags;
             featureFlags.SetEnableAddUniqueIndex(true);
+            featureFlags.SetEnableOnlineAddUniqueIndex(onlineUnique);
 
             TKikimrSettings settings;
             settings
@@ -3538,10 +3539,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             return settings;
         }
 
-        TKikimrRunnerWithPauseIndexBuild(bool yqlDetailedLogging = false)
-            : TKikimrRunner(MakeSettings())
+        TKikimrRunnerWithPauseIndexBuild(bool yqlDetailedLogging = false, bool onlineUnique = false)
+            : TKikimrRunner(MakeSettings(onlineUnique))
             , BuildIndexRequestPromise(NThreading::NewPromise<void>())
             , BuildIndexRequest(BuildIndexRequestPromise.GetFuture())
+            , ValidateIndexRequestPromise(NThreading::NewPromise<void>())
+            , ValidateIndexRequest(ValidateIndexRequestPromise.GetFuture())
         {
             GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
             if (yqlDetailedLogging) {
@@ -3557,6 +3560,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     BuildIndexRequestPromise.SetValue();
                     BuildIndexRequestEvent.Swap(event);
                     return NActors::TTestActorRuntimeBase::EEventAction::DROP;
+                } else if (!ValidateIndexEventIsIntercepted && event->Type == static_cast<ui32>(NKikimr::TEvDataShard::EvValidateUniqueIndexRequest)) {
+                    Cerr << "NKikimr::TEvDataShard::TEvValidateUniqueIndexRequest is intercepted\n";
+                    ValidateIndexEventIsIntercepted = true;
+                    ValidateIndexRequestPromise.SetValue();
+                    ValidateIndexRequestEvent.Swap(event);
+                    return NActors::TTestActorRuntimeBase::EEventAction::DROP;
                 }
                 return NActors::TTestActorRuntimeBase::EEventAction::PROCESS;
             });
@@ -3570,15 +3579,28 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             GetTestServer().GetRuntime()->Send(BuildIndexRequestEvent.Release());
         }
 
+        void WaitValidateIndex() {
+            ValidateIndexRequest.Wait();
+        }
+
+        void ContinueValidateIndex() {
+            GetTestServer().GetRuntime()->Send(ValidateIndexRequestEvent.Release());
+        }
+
     private:
         NThreading::TPromise<void> BuildIndexRequestPromise;
         NThreading::TFuture<void> BuildIndexRequest;
         TAutoPtr<IEventHandle> BuildIndexRequestEvent;
         bool BuildIndexEventIsIntercepted = false;
+
+        NThreading::TPromise<void> ValidateIndexRequestPromise;
+        NThreading::TFuture<void> ValidateIndexRequest;
+        TAutoPtr<IEventHandle> ValidateIndexRequestEvent;
+        bool ValidateIndexEventIsIntercepted = false;
     };
 
-    void BuildingUniqIndexDeniesTableModifications(bool sqlInterface) {
-        TKikimrRunnerWithPauseIndexBuild kikimr(false /* yqlDetailedLogging */);
+    void BuildingUniqIndexAllowsTableModifications(bool sqlInterface, bool onlineBuild) {
+        TKikimrRunnerWithPauseIndexBuild kikimr(false /* yqlDetailedLogging */, onlineBuild);
         kikimr.RunCall([&]
         {
             auto db = kikimr.GetTableClient();
@@ -3629,108 +3651,117 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             kikimr.WaitBuildIndex();
 
-            TString upsertQuery = R"sql(
-                UPSERT INTO `/Root/TestTable` (Key, Value) VALUES (1, "1");
-            )sql";
+            for (int i = 0; i < 3; i++) {
 
-            TString insertQuery = R"sql(
-                INSERT INTO `/Root/TestTable` (Key, Value) VALUES (2, "2");
-            )sql";
+                TString upsertQuery = R"sql(
+                    UPSERT INTO `/Root/TestTable` (Key, Value) VALUES (1, "1");
+                )sql";
 
-            TString updateQuery = R"sql(
-                UPDATE `/Root/TestTable` SET Value = "11" WHERE Key = 1;
-            )sql";
+                TString insertQuery = Sprintf(R"sql(
+                    INSERT INTO `/Root/TestTable` (Key, Value) VALUES (%d, "%d");
+                )sql", 2+i, 2+i);
 
-            TString deleteQuery = R"sql(
-                DELETE FROM `/Root/TestTable` WHERE Key = 2;
-            )sql";
+                TString updateQuery = R"sql(
+                    UPDATE `/Root/TestTable` SET Value = "11" WHERE Key = 1;
+                )sql";
 
-            TString returningQuery = R"sql(
-                REPLACE INTO `/Root/TestTable` (Key, Value) VALUES (1, "1") RETURNING Key, Value;
-            )sql";
+                TString deleteQuery = R"sql(
+                    DELETE FROM `/Root/TestTable` WHERE Key = 2;
+                )sql";
 
-            auto modificationQueries = {
-                upsertQuery,
-                insertQuery,
-                updateQuery,
-                deleteQuery,
-                returningQuery,
-            };
+                TString returningQuery = R"sql(
+                    REPLACE INTO `/Root/TestTable` (Key, Value) VALUES (1, "1") RETURNING Key, Value;
+                )sql";
 
-            for (const TString& query : modificationQueries) {
-                Cerr << "Running query:\n" << query << Endl;
-                auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                if (result.GetStatus() != EStatus::BAD_REQUEST
-                    || result.GetIssues().ToString().find("Table `/Root/TestTable` modification is disabled: Unique index uniq_value_idx is under construction") == TString::npos)
-                {
-                    Cerr << "Execute query issues. Query: " << query << Endl;
-                    Cerr << "Execute issues:\n" << result.GetIssues().ToString() << Endl;
-                    ythrow yexception() << "Unexpected status of modification query: " << result.GetStatus() << ": " << result.GetIssues().ToString();
+                auto modificationQueries = {
+                    upsertQuery,
+                    insertQuery,
+                    updateQuery,
+                    deleteQuery,
+                    returningQuery,
+                };
+
+                for (const TString& query : modificationQueries) {
+                    Cerr << "Running query:\n" << query << Endl;
+                    auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                    bool ok = false;
+                    if (onlineBuild || i == 2) {
+                        ok = (result.GetStatus() == EStatus::SUCCESS);
+                    } else {
+                        ok = (result.GetStatus() == EStatus::BAD_REQUEST
+                            && result.GetIssues().ToString().find("Table `/Root/TestTable` modification is disabled: Unique index uniq_value_idx is under construction") != TString::npos);
+                    }
+                    if (!ok) {
+                        Cerr << "Execute query issues. Query: " << query << Endl;
+                        Cerr << "Execute issues:\n" << result.GetIssues().ToString() << Endl;
+                        ythrow yexception() << "Unexpected status of modification query: " << result.GetStatus() << ": " << result.GetIssues().ToString();
+                    }
+                }
+
+                auto checkBulkUpsert = [&]{
+                    NYdb::TValueBuilder rows;
+                    rows.BeginList();
+                    rows.AddListItem()
+                        .BeginStruct()
+                        .AddMember("Key").Uint64(42)
+                        .AddMember("Value").String("42")
+                        .EndStruct();
+                    rows.EndList();
+
+                    auto bulkUpsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+                    if (bulkUpsertResult.IsSuccess()
+                        || (bulkUpsertResult.GetStatus() == EStatus::BAD_REQUEST && bulkUpsertResult.GetIssues().ToString().find("Only async-indexed tables are supported by BulkUpsert") == TString::npos))
+                    {
+                        ythrow yexception() << "Unexpected status of bulk upsert: " << bulkUpsertResult.GetStatus() << ": " << bulkUpsertResult.GetIssues().ToString();
+                    }
+                };
+
+                checkBulkUpsert();
+
+                if (i == 0) {
+                    kikimr.ContinueBuildIndex();
+                    kikimr.WaitValidateIndex();
+                } else if (i == 1) {
+                    kikimr.ContinueValidateIndex();
+
+                    // Wait for index to be built
+                    if (sqlInterface) {
+                        auto result = alterTableResultFuture.GetValueSync();
+                        if (!result.IsSuccess()) {
+                            ythrow yexception() << "Unexpected status of index build: " << result.GetStatus() << ": " << result.GetIssues().ToString();
+                        }
+                    } else {
+                        bool ready = false;
+                        TMaybe<NYdb::NTable::TBuildIndexOperation> buildOp;
+                        while (!ready) {
+                            Sleep(TDuration::MilliSeconds(100));
+                            NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+                            buildOp = opClient.Get<NYdb::NTable::TBuildIndexOperation>(alterOpId).GetValueSync();
+                            ready = buildOp->Ready();
+                        }
+                        if (!buildOp->Status().IsSuccess()) {
+                            ythrow yexception() << "Unexpected status of index build: " << buildOp->Status().GetStatus() << ": " << buildOp->Status().GetIssues().ToString();
+                        }
+                    }
                 }
             }
-
-            auto checkBulkUpsert = [&]{
-                NYdb::TValueBuilder rows;
-                rows.BeginList();
-                rows.AddListItem()
-                    .BeginStruct()
-                    .AddMember("Key").Uint64(42)
-                    .AddMember("Value").String("42")
-                    .EndStruct();
-                rows.EndList();
-
-                auto bulkUpsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
-                if (bulkUpsertResult.IsSuccess()
-                    || (bulkUpsertResult.GetStatus() == EStatus::BAD_REQUEST && bulkUpsertResult.GetIssues().ToString().find("Only async-indexed tables are supported by BulkUpsert") == TString::npos))
-                {
-                    ythrow yexception() << "Unexpected status of bulk upsert: " << bulkUpsertResult.GetStatus() << ": " << bulkUpsertResult.GetIssues().ToString();
-                }
-            };
-
-            checkBulkUpsert();
-
-            kikimr.ContinueBuildIndex();
-
-            // Wait for index to be built
-            if (sqlInterface) {
-                auto result = alterTableResultFuture.GetValueSync();
-                if (!result.IsSuccess()) {
-                    ythrow yexception() << "Unexpected status of index build: " << result.GetStatus() << ": " << result.GetIssues().ToString();
-                }
-            } else {
-                bool ready = false;
-                TMaybe<NYdb::NTable::TBuildIndexOperation> buildOp;
-                while (!ready) {
-                    Sleep(TDuration::MilliSeconds(100));
-                    NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
-                    buildOp = opClient.Get<NYdb::NTable::TBuildIndexOperation>(alterOpId).GetValueSync();
-                    ready = buildOp->Ready();
-                }
-                if (!buildOp->Status().IsSuccess()) {
-                    ythrow yexception() << "Unexpected status of index build: " << buildOp->Status().GetStatus() << ": " << buildOp->Status().GetIssues().ToString();
-                }
-            }
-
-            for (const TString& query : modificationQueries) {
-                auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                if (result.GetStatus() != EStatus::SUCCESS) {
-                    Cerr << "Execute query issues. Query: " << query << Endl;
-                    Cerr << "Execute issues:\n" << result.GetIssues().ToString() << Endl;
-                    ythrow yexception() << "Unexpected status of upsert query: " << result.GetStatus() << ": " << result.GetIssues().ToString();
-                }
-            }
-
-            // Bulk upsert must be denied even after index is built
-            checkBulkUpsert();
         });
     }
 
     Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsPublicApi) {
-        BuildingUniqIndexDeniesTableModifications(false);
+        BuildingUniqIndexAllowsTableModifications(false, false);
     }
 
     Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsSql) {
-        BuildingUniqIndexDeniesTableModifications(true);
+        BuildingUniqIndexAllowsTableModifications(true, false);
+    }
+
+    Y_UNIT_TEST(BuildingUniqIndexAllowsTableModificationsPublicApi) {
+        BuildingUniqIndexAllowsTableModifications(false, true);
+    }
+
+    Y_UNIT_TEST(BuildingUniqIndexAllowsTableModificationsSql) {
+        BuildingUniqIndexAllowsTableModifications(true, true);
     }
 
     void ValidatingUniqIndex(bool sqlInterface, bool isUnique) {

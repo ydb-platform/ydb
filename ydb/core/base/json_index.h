@@ -14,22 +14,22 @@ using namespace NYql;
 
 class TResult {
 public:
-    using TQuery = std::optional<std::string>;
+    using TQueries = TVector<TString>;
     using TError = TIssue;
 
-    TResult(const TQuery& query);
+    TResult(const TQueries& queries);
 
-    TResult(TQuery&& query);
+    TResult(TQueries&& queries);
 
-    TResult(const std::string& queryText);
+    TResult(const TString& query);
 
-    TResult(std::string&& queryText);
+    TResult(TString&& query);
 
     TResult(TError&& issue);
 
-    const TQuery& GetQuery() const;
+    const TQueries& GetQueries() const;
 
-    TQuery& GetQuery();
+    TQueries& GetQueries();
 
     const TError& GetError() const;
 
@@ -40,7 +40,7 @@ public:
     void MarkDone();
 
 private:
-    std::variant<TQuery, TError> Result;
+    std::variant<TQueries, TError> Result;
     bool Done = false;
 };
 
@@ -105,6 +105,11 @@ private:
 private:
     TJsonPathReader Reader;
 };
+
+TVector<TString> BuildSearchTerms(const TString& jsonPathStr);
+
+TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error);
+TVector<TString> TokenizeBinaryJson(const TStringBuf text);
 
 }  // namespace NJsonIndex
 

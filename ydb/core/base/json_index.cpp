@@ -1,5 +1,8 @@
 #include "json_index.h"
 
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/binary_json/format.h>
 
 namespace NKikimr {
@@ -30,23 +33,23 @@ NBinaryJson::EEntryType GetEntryType(const TJsonPathItem& item) {
 
 }  // namespace
 
-TResult::TResult(const TQuery& query)
-    : Result(query)
+TResult::TResult(const TQueries& queries)
+    : Result(queries)
 {
 }
 
-TResult::TResult(TQuery&& query)
-    : Result(std::move(query))
+TResult::TResult(TQueries&& queries)
+    : Result(std::move(queries))
 {
 }
 
-TResult::TResult(std::string&& query)
-    : Result(std::move(query))
+TResult::TResult(TString&& query)
+    : Result(TQueries{std::move(query)})
 {
 }
 
-TResult::TResult(const std::string& query)
-    : Result(query)
+TResult::TResult(const TString& query)
+    : Result(TQueries{query})
 {
 }
 
@@ -55,12 +58,12 @@ TResult::TResult(TResult::TError&& issue)
 {
 }
 
-const TResult::TQuery& TResult::GetQuery() const {
-    return std::get<TQuery>(Result);
+const TResult::TQueries& TResult::GetQueries() const {
+    return std::get<TQueries>(Result);
 }
 
-TResult::TQuery& TResult::GetQuery() {
-    return std::get<TQuery>(Result);
+TResult::TQueries& TResult::GetQueries() {
+    return std::get<TQueries>(Result);
 }
 
 const TResult::TError& TResult::GetError() const {
@@ -168,7 +171,7 @@ TResult TQueryCollector::Collect(const TJsonPathItem& item) {
 }
 
 TResult TQueryCollector::EvaluateLiteral(const TJsonPathItem& item) {
-    std::string value;
+    TString value;
     value.push_back(0);
     value.push_back((char)GetEntryType(item));
 
@@ -201,29 +204,29 @@ TResult TQueryCollector::Finalize(const TJsonPathItem& item) {
 }
 
 TResult TQueryCollector::ContextObject() {
-    return TResult(std::string{});
+    return TResult(TResult::TQueries{TString{}});
 }
 
 TResult TQueryCollector::MemberAccess(const TJsonPathItem& item) {
     auto input = Collect(Reader.ReadInput(item));
-    if (input.IsError() || input.IsDone() || !input.GetQuery().has_value()) {
+    if (input.IsError() || input.IsDone() || input.GetQueries().empty()) {
         return input;
     }
 
-    auto& query = input.GetQuery();
-    auto member = std::string(item.GetString());
+    auto& query = input.GetQueries()[0];
+    auto member = TString(item.GetString());
     auto size = member.size();
 
     do {
         if (size < 0x80) {
-            query->push_back((ui8)size);
+            query.push_back((ui8)size);
         } else {
-            query->push_back(0x80 | (ui8)(size & 0x7F));
+            query.push_back(0x80 | (ui8)(size & 0x7F));
         }
         size >>= 7;
     } while (size > 0);
 
-    *query += std::move(member);
+    query += std::move(member);
     return input;
 }
 
@@ -336,19 +339,19 @@ TResult TQueryCollector::BinaryNotEqual(const TJsonPathItem& item) {
 }
 
 TResult TQueryCollector::NullLiteral() {
-    return TResult(std::nullopt);
+    return TResult(TResult::TQueries{});
 }
 
 TResult TQueryCollector::BooleanLiteral(const TJsonPathItem&) {
-    return TResult(std::nullopt);
+    return TResult(TResult::TQueries{});
 }
 
 TResult TQueryCollector::NumberLiteral(const TJsonPathItem&) {
-    return TResult(std::nullopt);
+    return TResult(TResult::TQueries{});
 }
 
 TResult TQueryCollector::StringLiteral(const TJsonPathItem&) {
-    return TResult(std::nullopt);
+    return TResult(TResult::TQueries{});
 }
 
 TResult TQueryCollector::FilterObject(const TJsonPathItem& item) {
@@ -364,26 +367,7 @@ TResult TQueryCollector::FilterPredicate(const TJsonPathItem& item) {
 }
 
 TResult TQueryCollector::StartsWithPredicate(const TJsonPathItem& item) {
-    auto input = Collect(Reader.ReadInput(item));
-    if (input.IsError() || input.IsDone() || !input.GetQuery().has_value()) {
-        return input;
-    }
-
-    const auto& prefixItem = Reader.ReadPrefix(item);
-    if (prefixItem.Type != EJsonPathItemType::StringLiteral) {
-        return TResult(TIssue("Expected a string literal"));
-    }
-
-    auto prefix = EvaluateLiteral(prefixItem);
-    if (prefix.IsError()) {
-        return prefix;
-    }
-
-    auto& query = input.GetQuery();
-    *query += std::move(prefix.GetQuery().value());
-
-    input.MarkDone();
-    return input;
+    return Finalize(item);
 }
 
 TResult TQueryCollector::IsUnknownPredicate(const TJsonPathItem& item) {
@@ -399,13 +383,130 @@ TResult TQueryCollector::ExistsPredicate(const TJsonPathItem& item) {
 }
 
 TResult TQueryCollector::LikeRegexPredicate(const TJsonPathItem& item) {
-    auto input = Collect(Reader.ReadInput(item));
-    input.MarkDone();
-    return input;
+    return Finalize(item);
 }
 
 TResult TQueryCollector::Variable(const TJsonPathItem&) {
     return TResult(TIssue("Variables are not supported at the moment"));
+}
+
+TVector<TString> BuildSearchTerms(const TString& jsonPathStr) {
+    NYql::TIssues issues;
+    const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPathStr, issues, 1);
+    if (!issues.Empty()) {
+        return {};
+    }
+
+    auto result = TQueryCollector(path).Collect();
+    if (result.IsError()) {
+        return {};
+    }
+
+    return result.GetQueries();
+}
+
+void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, TVector<TString>& tokens);
+
+void TokenizeBinaryJson(NBinaryJson::TEntryCursor element, const TString& prefix, TVector<TString>& tokens) {
+    if (element.GetType() == NBinaryJson::EEntryType::Container) {
+        TokenizeBinaryJson(element.GetContainer(), prefix, tokens);
+        return;
+    }
+    TString token = prefix;
+    token.push_back(0);
+    // Value always comes last in the token and we may want range queries on value,
+    // so we just store element type and data.
+    token.push_back((char)element.GetType());
+    switch (element.GetType()) {
+    case NBinaryJson::EEntryType::String:
+        token += element.GetString();
+        break;
+    case NBinaryJson::EEntryType::Number: {
+        double number = element.GetNumber();
+        token += TStringBuf((char*)&number, sizeof(double));
+        break;
+    }
+    case NBinaryJson::EEntryType::BoolFalse:
+    case NBinaryJson::EEntryType::BoolTrue:
+    case NBinaryJson::EEntryType::Null:
+        break;
+    case NBinaryJson::EEntryType::Container:
+        Y_ENSURE(false, "Unreachable");
+        break;
+    }
+    tokens.push_back(token);
+}
+
+TString TokenizeJsonNextPrefix(const TString& prefix, TStringBuf key) {
+    size_t size = key.size();
+    TString newPrefix = prefix;
+    // We don't need range queries on paths and keys may contain binary data,
+    // for example a zero byte, so we store keys with varint length
+    do {
+        if (size < 0x80) {
+            newPrefix.push_back((ui8)size);
+        } else {
+            newPrefix.push_back(0x80 | (ui8)(size & 0x7F));
+        }
+        size >>= 7;
+    } while (size > 0);
+    newPrefix += key;
+    return newPrefix;
+}
+
+void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, TVector<TString>& tokens) {
+    switch (root.GetType()) {
+    case NBinaryJson::EContainerType::TopLevelScalar:
+        TokenizeBinaryJson(root.GetElement(0), prefix, tokens);
+        break;
+    case NBinaryJson::EContainerType::Array:
+        if (root.GetSize() == 0) {
+            tokens.push_back(prefix + (char)NBinaryJson::EEntryType::Container);
+            return;
+        }
+
+        for (ui32 pos = 0; pos < root.GetSize(); pos++) {
+            TokenizeBinaryJson(root.GetElement(pos), prefix, tokens);
+        }
+        break;
+    case NBinaryJson::EContainerType::Object:
+        auto it = root.GetObjectIterator();
+        if (!it.HasNext()) {
+            tokens.push_back(prefix + (char)NBinaryJson::EEntryType::Container);
+            return;
+        }
+
+        while (it.HasNext()) {
+            auto kv = it.Next();
+            Y_ENSURE(kv.first.GetType() == NBinaryJson::EEntryType::String);
+            TString nextPrefix = TokenizeJsonNextPrefix(prefix, kv.first.GetString());
+            tokens.push_back(nextPrefix);
+            TokenizeBinaryJson(kv.second, nextPrefix, tokens);
+        }
+        break;
+    }
+}
+
+TVector<TString> TokenizeBinaryJson(const TStringBuf binaryJson) {
+    TVector<TString> tokens;
+    if (!binaryJson.size()) {
+        return tokens;
+    }
+    tokens.emplace_back();
+    auto reader = NKikimr::NBinaryJson::TBinaryJsonReader::Make(binaryJson);
+    TokenizeBinaryJson(reader->GetRootCursor(), "", tokens);
+    return tokens;
+}
+
+TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
+    auto json = NKikimr::NBinaryJson::SerializeToBinaryJson(jsonStr);
+    if (std::holds_alternative<TString>(json)) {
+        error = std::get<TString>(json);
+        return TVector<TString>();
+    }
+    error = "";
+    auto buffer = std::get<NKikimr::NBinaryJson::TBinaryJson>(json);
+    return TokenizeBinaryJson(TStringBuf(buffer.data(), buffer.size()));
 }
 
 }  // namespace NJsonIndex

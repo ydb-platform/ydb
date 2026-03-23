@@ -99,22 +99,21 @@ ydb hard nofile 10000
 1. Скачайте и распакуйте архив с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками:
 
   {% list tabs %}
-  <!-- markdownlint-disable MD046 -->
-    - OSS
 
+  <!-- markdownlint-disable MD046 -->
+    - OSS  
       ```bash
       mkdir ydbd-stable-linux-amd64
       curl -L <binaries_url> | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
-      ```
-
-    - Enterprise
-
+      ```  
+    - Enterprise  
       ```bash
       mkdir ydbd-stable-linux-amd64
       curl -L <binaries_url> | tar -xJ --strip-component=1 -C ydbd-stable-linux-amd64
       ```
 
   <!-- markdownlint-enable MD046 -->
+  
   {% endlist %}
 
   где `binaries_url` — ссылка на архив нужной вам версии со страницы [загрузок](../../../../downloads/index.md).

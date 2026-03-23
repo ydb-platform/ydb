@@ -5,6 +5,10 @@
 
 namespace NMVP::NOIDC {
 
+const TMvpLogContext* TExtensionWhoamiWorker::GetLogContext() const {
+    return Context ? &Context->LogContext : nullptr;
+}
+
 void TExtensionWhoamiWorker::Bootstrap() {
     auto connection = CreateGRpcServiceConnection<TProfileService>(Settings.WhoamiExtendedInfoEndpoint);
     RequestContext = MVPAppData()->GRpcClientLow->CreateContext();
@@ -30,14 +34,14 @@ void TExtensionWhoamiWorker::Bootstrap() {
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvGetProfileResponse::TPtr event) {
-    BLOG_D("Whoami Extension Info: OK");
+    BLOG_D_CTX("Whoami Extension Info: OK");
     IamResponse = std::move(event);
     RequestContext.reset();
     ApplyIfReady();
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvErrorResponse::TPtr event) {
-    BLOG_D("Whoami Extension Info " << event->Get()->Status << ": " << event->Get()->Message << ", " << event->Get()->Details);
+    BLOG_D_CTX("Whoami Extension Info " << event->Get()->Status << ": " << event->Get()->Message << ", " << event->Get()->Details);
     IamError = std::move(event);
     RequestContext.reset();
     ApplyIfReady();
@@ -122,7 +126,7 @@ void TExtensionWhoamiWorker::ApplyExtension() {
         if (!error) {
             error = "Can not process request to protected resource";
         }
-        BLOG_D("Incoming client error for protected resource: " << error);
+        BLOG_D_CTX("Incoming client error for protected resource: " << error);
         SetExtendedError(errorJson, "Ydb", "ClientError", error);
     }
 

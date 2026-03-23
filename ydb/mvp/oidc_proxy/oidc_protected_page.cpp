@@ -12,8 +12,8 @@ THandlerSessionServiceCheck::THandlerSessionServiceCheck(const NActors::TActorId
                                                          const NHttp::THttpIncomingRequestPtr& request,
                                                          const NActors::TActorId& httpProxyId,
                                                          const TOpenIdConnectSettings& settings)
-    : Sender(sender)
-    , Request(request)
+    : TOidcHttpRequestHandlerBase(request)
+    , Sender(sender)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
     , ProtectedPage(Request)
@@ -35,7 +35,7 @@ void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
 
 void THandlerSessionServiceCheck::HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     if (event->Get()->Response != nullptr) {
-        BLOG_D("Incoming response for protected resource: " << event->Get()->Response->Status);
+        BLOG_D_CTX("Incoming response for protected resource: " << event->Get()->Response->Status);
         if (NeedSendSecureHttpRequest(event->Get()->Response)) {
             NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
             return SendSecureHttpRequest(response);
@@ -48,7 +48,7 @@ void THandlerSessionServiceCheck::HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomi
 void THandlerSessionServiceCheck::HandleIncompleteProxy(NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse::TPtr event) {
     if (event->Get()->Response != nullptr) {
         NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
-        BLOG_D("Incoming incomplete response for protected resource: " << response->Status);
+        BLOG_D_CTX("Incoming incomplete response for protected resource: " << response->Status);
 
         StreamResponse = Request->CreateResponseString(response->AsString());
         StreamConnection = event->Sender;
@@ -56,19 +56,19 @@ void THandlerSessionServiceCheck::HandleIncompleteProxy(NHttp::TEvHttpProxy::TEv
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(StreamResponse));
     } else {
         static constexpr size_t MAX_LOGGED_SIZE = 1024;
-        BLOG_D("Can not process incomplete request to protected resource:\n" << event->Get()->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
+        BLOG_D_CTX("Can not process incomplete request to protected resource:\n" << event->Get()->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
         ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource(Request, "Failed to process streaming response"));
     }
 }
 
 void THandlerSessionServiceCheck::HandleDataChunk(NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk::TPtr event) {
     if (event->Get()->Error) {
-        BLOG_D("Incoming data chunk for protected resource error: " << event->Get()->Error);
+        BLOG_D_CTX("Incoming data chunk for protected resource error: " << event->Get()->Error);
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(event->Get()->Error));
         return PassAway();
     }
 
-    BLOG_D("Incoming data chunk for protected resource: " << event->Get()->Data.size() << " bytes");
+    BLOG_D_CTX("Incoming data chunk for protected resource: " << event->Get()->Data.size() << " bytes");
     NHttp::THttpOutgoingDataChunkPtr dataChunk;
     if (event->Get()->IsEndOfData()) {
         dataChunk = StreamResponse->CreateIncompleteDataChunk();
@@ -85,7 +85,7 @@ void THandlerSessionServiceCheck::HandleDataChunk(NHttp::TEvHttpProxy::TEvHttpIn
 }
 
 void THandlerSessionServiceCheck::HandleCancelled() {
-    BLOG_D("Connection closed");
+    BLOG_D_CTX("Connection closed");
     if (StreamConnection) {
         Send(StreamConnection, new NActors::TEvents::TEvPoisonPill());
     }
@@ -116,7 +116,7 @@ TDuration THandlerSessionServiceCheck::GetRequestTimeout() const {
 }
 
 void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool secure) {
-    BLOG_D("Forward user request bypass OIDC");
+    BLOG_D_CTX("Forward user request bypass OIDC");
 
     auto timeout = GetRequestTimeout();
     ExtensionManager = MakeHolder<TExtensionManager>(Sender, Settings, ProtectedPage, TString(authHeader));
@@ -140,7 +140,7 @@ void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool
 
 void THandlerSessionServiceCheck::SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) {
     NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
-    BLOG_D("Try to send request to HTTPS port");
+    BLOG_D_CTX("Try to send request to HTTPS port");
     NHttp::THeadersBuilder headers {request->Headers};
     ForwardUserRequest(headers.Get(AUTHORIZATION_HEADER), true);
 }

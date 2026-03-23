@@ -1,18 +1,20 @@
 #pragma once
 
+#include "oidc_request_base.h"
 #include "oidc_settings.h"
 #include "context.h"
 #include <ydb/library/actors/core/events.h>
 
 namespace NMVP::NOIDC {
 
-class THandlerImpersonateStart : public NActors::TActorBootstrapped<THandlerImpersonateStart> {
+class THandlerImpersonateStart
+    : public NActors::TActorBootstrapped<THandlerImpersonateStart>
+    , protected TOidcHttpRequestHandlerBase {
 private:
     using TBase = NActors::TActorBootstrapped<THandlerImpersonateStart>;
 
 protected:
     const NActors::TActorId Sender;
-    const NHttp::THttpIncomingRequestPtr Request;
     const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "extension_manager.h"
+#include "oidc_request_base.h"
 
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
@@ -11,12 +12,13 @@
 
 namespace NMVP::NOIDC {
 
-class THandlerSessionServiceCheck : public NActors::TActorBootstrapped<THandlerSessionServiceCheck> {
+class THandlerSessionServiceCheck
+    : public NActors::TActorBootstrapped<THandlerSessionServiceCheck>
+    , protected TOidcHttpRequestHandlerBase {
 protected:
     using TBase = NActors::TActorBootstrapped<THandlerSessionServiceCheck>;
 
     const NActors::TActorId Sender;
-    NHttp::THttpIncomingRequestPtr Request;
     const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
     const TCrackedPage ProtectedPage;

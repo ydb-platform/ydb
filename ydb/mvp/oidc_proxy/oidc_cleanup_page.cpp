@@ -9,15 +9,15 @@ THandlerCleanup::THandlerCleanup(const NActors::TActorId& sender,
                                  const NActors::TActorId& httpProxyId,
                                  const TOpenIdConnectSettings& settings,
                                  const TString& cookieName)
-    : Sender(sender)
-    , Request(request)
+    : TOidcHttpRequestHandlerBase(request)
+    , Sender(sender)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
     , CookieName(cookieName)
 {}
 
 void THandlerCleanup::Bootstrap() {
-    BLOG_D("Clear cookie: (" << CookieName << ")");
+    BLOG_D_CTX("Clear cookie: (" << CookieName << ")");
 
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", ClearSecureCookie(CookieName));

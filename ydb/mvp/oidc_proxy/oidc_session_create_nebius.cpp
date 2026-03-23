@@ -64,7 +64,7 @@ void THandlerSessionCreateNebius::ProcessSessionToken(const NJson::TJsonValue& j
     expiresIn = std::min(expiresIn, static_cast<unsigned long long>(TDuration::Days(7).Seconds())); // clean cookies no less than once a week.
     TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
     TString sessionCookieValue = Base64Encode(sessionToken);
-    BLOG_D("Set session cookie: (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
+    BLOG_D_CTX("Set session cookie: (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
 
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(Request, &responseHeaders);

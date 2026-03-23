@@ -1,5 +1,7 @@
 #pragma once
 
+#include "oidc_request_base.h"
+
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -11,13 +13,14 @@
 
 namespace NMVP::NOIDC {
 
-class THandlerSessionCreate : public NActors::TActorBootstrapped<THandlerSessionCreate> {
+class THandlerSessionCreate
+    : public NActors::TActorBootstrapped<THandlerSessionCreate>
+    , protected TOidcHttpRequestHandlerBase {
 private:
     using TBase = NActors::TActorBootstrapped<THandlerSessionCreate>;
 
 protected:
     const NActors::TActorId Sender;
-    const NHttp::THttpIncomingRequestPtr Request;
     const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
     TContext Context;

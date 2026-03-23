@@ -16,14 +16,14 @@ THandlerImpersonateStart::THandlerImpersonateStart(const NActors::TActorId& send
                                                    const NHttp::THttpIncomingRequestPtr& request,
                                                    const NActors::TActorId& httpProxyId,
                                                    const TOpenIdConnectSettings& settings)
-    : Sender(sender)
-    , Request(request)
+    : TOidcHttpRequestHandlerBase(request)
+    , Sender(sender)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
 {}
 
 void THandlerImpersonateStart::Bootstrap() {
-    BLOG_D("Start impersonation process");
+    BLOG_D_CTX("Start impersonation process");
 
     NHttp::TUrlParameters urlParameters(Request->URL);
     TString serviceAccountId = urlParameters["service_account_id"];
@@ -49,7 +49,7 @@ void THandlerImpersonateStart::Bootstrap() {
 }
 
 void THandlerImpersonateStart::RequestImpersonatedToken(TString& sessionToken, TString& serviceAccountId) {
-    BLOG_D("Request impersonated token");
+    BLOG_D_CTX("Request impersonated token");
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetImpersonateEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
 
@@ -89,7 +89,7 @@ void THandlerImpersonateStart::ProcessImpersonatedToken(const NJson::TJsonValue&
     expiresIn = std::min(expiresIn, static_cast<unsigned long long>(TDuration::Days(7).Seconds())); // clean cookies no less than once a week.
     TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
     TString impersonatedCookieValue = Base64Encode(impersonatedToken);
-    BLOG_D("Set impersonated cookie: (" << impersonatedCookieName << ": " << NKikimr::MaskTicket(impersonatedCookieValue) << ")");
+    BLOG_D_CTX("Set impersonated cookie: (" << impersonatedCookieName << ": " << NKikimr::MaskTicket(impersonatedCookieValue) << ")");
 
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", CreateSecureCookie(impersonatedCookieName, impersonatedCookieValue, expiresIn));
@@ -100,7 +100,7 @@ void THandlerImpersonateStart::ProcessImpersonatedToken(const NJson::TJsonValue&
 void THandlerImpersonateStart::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     if (event->Get()->Error.empty() && event->Get()->Response) {
         NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
-        BLOG_D("Incoming response from authorization server: " << response->Status);
+        BLOG_D_CTX("Incoming response from authorization server: " << response->Status);
         if (response->Status == "200") {
             NJson::TJsonValue jsonValue;
             NJson::TJsonReaderConfig jsonConfig;

@@ -1,7 +1,9 @@
 #pragma once
 
+#include "oidc_request_base.h"
 #include "openid_connect.h"
 #include <ydb/mvp/core/cracked_page.h>
+#include <ydb/mvp/core/mvp_log.h>
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -29,10 +31,15 @@ struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {
     std::unique_ptr<IExtension> Next();
 };
 
-struct TExtensionContext : public TThrRefBase {
+struct TExtensionContext : public TThrRefBase, public IMvpLogContextProvider {
     NActors::TActorId Sender;
     TExtensionsSteps Steps;
     TProxiedResponseParams Params;
+    TMvpLogContext LogContext;
+
+    const TMvpLogContext* GetLogContext() const override {
+        return &LogContext;
+    }
 
     void Reply(NHttp::THttpOutgoingResponsePtr httpResponse);
     void Reply();

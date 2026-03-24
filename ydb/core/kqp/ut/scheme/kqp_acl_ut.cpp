@@ -513,6 +513,9 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         AddConnectPermission(kikimr, UserName);
         AddPermissions(kikimr, "/Root/test_acl", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"});
+        if (!UseSink) {
+            AddPermissions(kikimr, "/Root/test_acl", UserName, {"ydb.deprecated.select_row"});
+        }
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())

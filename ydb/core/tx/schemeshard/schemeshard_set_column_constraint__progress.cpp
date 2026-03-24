@@ -122,16 +122,14 @@ public:
     }
 };
 
-ITransaction* TSchemeShard::CreateTxSetColumnConstraintProgress(TIndexBuildId operationId) {
-    return new TIndexBuilder::TTxProgressSetColumnConstraint(this, operationId);
-}
+namespace NSetColumnConstraint {
 
-struct TTxReplyAllocateSetColumnConstraint : public TSchemeShard::TIndexBuilder::TTxBase {
+    struct TTxReplyAllocate : public TSchemeShard::TIndexBuilder::TTxBase {
 private:
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult;
 
 public:
-    explicit TTxReplyAllocateSetColumnConstraint(
+    explicit TTxReplyAllocate(
         TSchemeShard* self,
         TEvTxAllocatorClient::TEvAllocateResult::TPtr& allocateResult)
         : TTxBase(self, TIndexBuildId(allocateResult->Cookie), TXTYPE_CREATE_SET_COLUMN_CONSTRAINT)
@@ -143,14 +141,14 @@ public:
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_I("TTxReplyAllocateSetColumnConstraint: operation not found"
+            LOG_I("TTxReplyAllocate: operation not found"
                 ", cookie# " << AllocateResult->Cookie
                 << ", txId# " << txId);
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_I("TTxReplyAllocateSetColumnConstraint, id# " << BuildId << ", txId# " << txId);
+        LOG_I("TTxReplyAllocate, id# " << BuildId << ", txId# " << txId);
 
         NIceDb::TNiceDb db(txc.DB);
         if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps) {
@@ -178,17 +176,17 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        LOG_E("TTxReplyAllocateSetColumnConstraint: OnUnhandledException"
+        LOG_E("TTxReplyAllocate: OnUnhandledException"
             ", id# " << BuildId << ", exception: " << exc.what());
     }
 };
 
-struct TTxReplyModifySetColumnConstraint : public TSchemeShard::TIndexBuilder::TTxBase {
+struct TTxReplyModify : public TSchemeShard::TIndexBuilder::TTxBase {
 private:
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult;
 
 public:
-    explicit TTxReplyModifySetColumnConstraint(
+    explicit TTxReplyModify(
         TSchemeShard* self,
         TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& modifyResult)
         : TTxBase(self, InvalidIndexBuildId, TXTYPE_CREATE_SET_COLUMN_CONSTRAINT)
@@ -201,20 +199,20 @@ public:
 
         auto* operationIdPtr = Self->TxIdToSetColumnConstraintOperations.FindPtr(txId);
         if (!operationIdPtr) {
-            LOG_I("TTxReplyModifySetColumnConstraint: operation not found, txId# " << txId);
+            LOG_I("TTxReplyModify: operation not found, txId# " << txId);
             return true;
         }
 
         BuildId = *operationIdPtr;
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_I("TTxReplyModifySetColumnConstraint: operation not found by BuildId"
+            LOG_I("TTxReplyModify: operation not found by BuildId"
                 ", id# " << BuildId << ", txId# " << txId);
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_I("TTxReplyModifySetColumnConstraint, id# " << BuildId
+        LOG_I("TTxReplyModify, id# " << BuildId
             << ", txId# " << txId
             << ", status# " << NKikimrScheme::EStatus_Name(record.GetStatus()));
 
@@ -240,17 +238,17 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        LOG_E("TTxReplyModifySetColumnConstraint: OnUnhandledException"
+        LOG_E("TTxReplyModify: OnUnhandledException"
             ", id# " << BuildId << ", exception: " << exc.what());
     }
 };
 
-struct TTxReplyCompletedSetColumnConstraint : public TSchemeShard::TIndexBuilder::TTxBase {
+struct TTxReplyCompleted : public TSchemeShard::TIndexBuilder::TTxBase {
 private:
     TTxId CompletedTxId;
 
 public:
-    explicit TTxReplyCompletedSetColumnConstraint(TSchemeShard* self, TTxId completedTxId)
+    explicit TTxReplyCompleted(TSchemeShard* self, TTxId completedTxId)
         : TTxBase(self, InvalidIndexBuildId, TXTYPE_CREATE_SET_COLUMN_CONSTRAINT)
         , CompletedTxId(completedTxId)
     {}
@@ -260,20 +258,20 @@ public:
 
         auto* operationIdPtr = Self->TxIdToSetColumnConstraintOperations.FindPtr(txId);
         if (!operationIdPtr) {
-            LOG_I("TTxReplyCompletedSetColumnConstraint: operation not found, txId# " << txId);
+            LOG_I("TTxReplyCompleted: operation not found, txId# " << txId);
             return true;
         }
 
         BuildId = *operationIdPtr;
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_I("TTxReplyCompletedSetColumnConstraint: operation not found by BuildId"
+            LOG_I("TTxReplyCompleted: operation not found by BuildId"
                 ", id# " << BuildId << ", txId# " << txId);
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_I("TTxReplyCompletedSetColumnConstraint, id# " << BuildId << ", txId# " << txId);
+        LOG_I("TTxReplyCompleted, id# " << BuildId << ", txId# " << txId);
 
         NIceDb::TNiceDb db(txc.DB);
         if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps) {
@@ -297,25 +295,31 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        LOG_E("TTxReplyCompletedSetColumnConstraint: OnUnhandledException"
+        LOG_E("TTxReplyCompleted: OnUnhandledException"
             ", id# " << BuildId << ", exception: " << exc.what());
     }
 };
 
+} // namespace NSetColumnConstraint
+
+ITransaction* TSchemeShard::CreateTxSetColumnConstraintProgress(TIndexBuildId operationId) {
+    return new TIndexBuilder::TTxProgressSetColumnConstraint(this, operationId);
+}
+
 ITransaction* TSchemeShard::CreateTxReplyAllocateSetColumnConstraint(
     TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev)
 {
-    return new TTxReplyAllocateSetColumnConstraint(this, ev);
+    return new NSetColumnConstraint::TTxReplyAllocate(this, ev);
 }
 
 ITransaction* TSchemeShard::CreateTxReplyModifySetColumnConstraint(
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev)
 {
-    return new TTxReplyModifySetColumnConstraint(this, ev);
+    return new NSetColumnConstraint::TTxReplyModify(this, ev);
 }
 
 ITransaction* TSchemeShard::CreateTxReplyCompletedSetColumnConstraint(TTxId completedTxId) {
-    return new TTxReplyCompletedSetColumnConstraint(this, completedTxId);
+    return new NSetColumnConstraint::TTxReplyCompleted(this, completedTxId);
 }
 
 } // namespace NSchemeShard

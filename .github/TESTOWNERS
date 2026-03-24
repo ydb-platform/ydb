@@ -18,11 +18,28 @@
 /ydb/tests/stress/oltp_workload @ydb-platform/datashard
 /ydb/tests/datashard/vector_index/large @ydb-platform/datashard
 /ydb/tests/functional/statistics @ydb-platform/datashard
+/ydb/tests/functional/serializable @ydb-platform/datashard
+/ydb/tests/functional/large_serializable @ydb-platform/datashard
+/ydb/tests/functional/ttl @ydb-platform/datashard
+/ydb/tests/functional/split_merge @ydb-platform/datashard
+/ydb/tests/tools/ydb_serializable @ydb-platform/datashard
 /ydb/core/tx/tx_allocator @ydb-platform/datashard
+/ydb/core/tx/tx_allocator_client @ydb-platform/datashard
+/ydb/core/tx/time_cast @ydb-platform/datashard
+/ydb/core/tx/sequenceshard @ydb-platform/datashard
+/ydb/core/tx/sequenceproxy @ydb-platform/datashard
+/ydb/core/tx/mediator @ydb-platform/datashard
+/ydb/core/tx/balance_coverage @ydb-platform/datashard
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 /ydb/core/tx/tiering @ydb-platform/cs
+/ydb/core/tx/sharding @ydb-platform/cs
+/ydb/core/tx/long_tx_service @ydb-platform/cs
+/ydb/core/tx/conveyor_composite @ydb-platform/cs
+/ydb/core/formats/arrow @ydb-platform/cs
+/ydb/core/io_formats @ydb-platform/cs
+/ydb/core/wrappers @ydb-platform/cs
 /ydb/tests/olap @ydb-platform/cs
 /ydb/tests/stress/olap_workload  @ydb-platform/cs
 /ydb/core/kqp/ut/olap @ydb-platform/cs
@@ -46,8 +63,31 @@
 /ydb/tests/functional/audit @ydb-platform/system-infra
 /ydb/tests/functional/limits @ydb-platform/system-infra
 /ydb/tests/functional/scheme_shard @ydb-platform/system-infra
+/ydb/tests/functional/scheme_tests @ydb-platform/system-infra
 /ydb/tests/functional/tenants @ydb-platform/system-infra
+/ydb/tests/functional/wardens @ydb-platform/system-infra
+/ydb/tests/functional/rename @ydb-platform/system-infra
+/ydb/tests/functional/autoconfig @ydb-platform/system-infra
+/ydb/tests/functional/restarts @ydb-platform/system-infra
 /ydb/services/ydb/table_split_ut @ydb-platform/system-infra
+/ydb/services/dynamic_config @ydb-platform/system-infra
+/ydb/core/tx/tx_proxy/ut_storage_tenant @ydb-platform/system-infra
+/ydb/core/tx/tx_proxy/ut_ext_tenant @ydb-platform/system-infra
+/ydb/core/tx/tx_proxy/ut_base_tenant @ydb-platform/system-infra
+/ydb/core/mind/address_classification @ydb-platform/system-infra
+/ydb/core/mind/ut @ydb-platform/system-infra
+/ydb/core/mind/ut_fat @ydb-platform/system-infra
+/ydb/core/grpc_services @ydb-platform/system-infra
+/ydb/core/grpc_streaming @ydb-platform/system-infra
+/ydb/core/driver_lib @ydb-platform/system-infra
+/ydb/core/mon @ydb-platform/system-infra
+/ydb/core/base @ydb-platform/system-infra
+/ydb/core/control @ydb-platform/system-infra
+/ydb/core/graph @ydb-platform/system-infra
+/ydb/core/jaeger_tracing @ydb-platform/system-infra
+/ydb/core/log_backend @ydb-platform/system-infra
+/ydb/core/testlib @ydb-platform/system-infra
+/ydb/core/raw_socket @ydb-platform/system-infra
 
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
@@ -59,9 +99,11 @@
 #Security Team @azevaykin TEAM:@ydb-platform/security
 /ydb/core/security @ydb-platform/security
 /ydb/core/tx/tx_proxy/ut_schemereq @ydb-platform/security
+/ydb/core/tx/tx_proxy/ut_encrypted_storage @ydb-platform/security
 /ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
 /ydb/tests/functional/security @ydb-platform/security
+/ydb/tests/functional/encryption @ydb-platform/security
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
@@ -71,13 +113,24 @@
 /ydb/tests/functional/clickbench @ydb-platform/qp
 /ydb/tests/functional/postgresql @ydb-platform/qp
 /ydb/tests/functional/kqp @ydb-platform/qp
+/ydb/tests/functional/script_execution @ydb-platform/qp
+/ydb/tests/functional/query_cache @ydb-platform/qp
 /ydb/tests/tools/kqprun @ydb-platform/qp
+/ydb/tests/tools/canondata_sync @ydb-platform/qp
+/ydb/core/sys_view @ydb-platform/qp
+/ydb/core/resource_pools @ydb-platform/qp
 
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam
+/ydb/public/tools @ydb-platform/appteam
+/ydb/public/lib/ydb_cli @ydb-platform/appteam
+/ydb/public/lib/value @ydb-platform/appteam
+/ydb/public/lib/json_value @ydb-platform/appteam
+/ydb/public/lib/idx_test @ydb-platform/appteam
+/ydb/public/lib/validation @ydb-platform/appteam
 /ydb/tests/functional/ydb_cli @ydb-platform/appteam
 /ydb/tests/functional/api @ydb-platform/appteam
-/ydb/public/lib/ydb_cli @ydb-platform/appteam
+/ydb/tests/functional/sdk @ydb-platform/appteam
 /ydb/apps/ydb @ydb-platform/appteam
 
 #YDB Postgres Compatibility @rekby TEAM:@ydb-platform/postgres-compatibility
@@ -86,8 +139,16 @@
 
 #YDB Engineering Team @maximyurchuk TEAM:@ydb-platform/engineering
 /ydb/tests/functional/tpc @ydb-platform/engineering
+/ydb/tests/functional/tpcc @ydb-platform/engineering
+/ydb/tests/functional/benchmarks_init @ydb-platform/engineering
 /ydb/tests/compatibility @ydb-platform/engineering
 /ydb/tests/stress @ydb-platform/engineering
+/ydb/tests/stability @ydb-platform/engineering
+/ydb/tests/tools/nemesis @ydb-platform/engineering
+/ydb/tests/tools/local_cluster @ydb-platform/engineering
+/ydb/tools/ydbd_slice @ydb-platform/engineering
+/ydb/tools/cfg @ydb-platform/engineering
+/ydb/core/load_test @ydb-platform/engineering
 
 #Orphan components @spuchin @maximyurchuk @kirrysin @ydb-platform/duty
 /ydb/services/ydb @ydb-platform/duty
@@ -110,12 +171,17 @@
 /ydb/tests/functional/blobstorage @ydb-platform/blobstorage
 /ydb/tests/functional/dstool @ydb-platform/blobstorage
 /ydb/apps/dstool @ydb-platform/blobstorage
+/ydb/tools/stress_tool @ydb-platform/blobstorage
+/ydb/core/tablet @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config @ydb-platform/core
 /ydb/core/cms @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
+/ydb/core/kesus @ydb-platform/core
+/ydb/core/memory_controller @ydb-platform/core
 /ydb/core/backup @ydb-platform/core
+/ydb/services/config @ydb-platform/core
 /ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
 /ydb/core/tx/replication @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
@@ -137,6 +203,7 @@
 /ydb/services/persqueue_v1 @ydb-platform/Topics
 /ydb/services/persqueue_cluster_discovery @ydb-platform/Topics
 /ydb/services/sqs_topic @ydb-platform/Topics
+/ydb/tests/tools/pq_read @ydb-platform/Topics
 /ydb/core/ymq @ydb-platform/Topics
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/Topics
@@ -158,6 +225,8 @@
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/core/external_sources @ydb-platform/fq
 /ydb/services/fq/ @ydb-platform/fq
+/ydb/services/metadata @ydb-platform/fq
+/ydb/tests/functional/secrets @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
 /ydb/library/yql/providers/generic @ydb-platform/fq

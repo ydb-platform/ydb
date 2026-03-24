@@ -40,7 +40,24 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
-{% endlist %}
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    AlterTableSettings settings = new AlterTableSettings()
+            .setTableTtl(TableTtl.dateTimeColumn("created_at", 3600));
+
+    session.alterTable("mytable", settings).join().expectSuccess();
+    ```
+
+  - JDBC
+
+    Выполните YQL `ALTER TABLE` с настройкой TTL или используйте нативный `Session` Table API.
+
+  {% endlist %}
 
 Следующий пример демонстрирует использование колонки `modified_at` с числовым типом (`Uint32`) в качестве TTL-колонки. Значение колонки интерпретируется как секунды от Unix-эпохи:
 
@@ -77,6 +94,29 @@
   ```python
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    AlterTableSettings settings = new AlterTableSettings()
+            .setTableTtl(TableTtl.valueSinceUnixEpoch(
+                    "modified_at",
+                    TableTtl.TtlUnit.SECONDS,
+                    3600
+            ));
+
+    session.alterTable("mytable", settings).join().expectSuccess();
+    ```
+
+  - JDBC
+
+    См. вкладку Native SDK или выполните эквивалентный DDL через YQL.
+
+  {% endlist %}
 
 {% endlist %}
 
@@ -160,6 +200,29 @@
   )
   ```
 
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    TableDescription description = TableDescription.newBuilder()
+            .addNullableColumn("id", PrimitiveType.Uint64)
+            .addNullableColumn("expire_at", PrimitiveType.Timestamp)
+            .setPrimaryKey("id")
+            .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
+            .build();
+
+    session.createTable("mytable", description).join().expectSuccess();
+    ```
+
+  - JDBC
+
+    Создайте таблицу через YQL (`CREATE TABLE` с TTL) или используйте нативный Table API.
+
+  {% endlist %}
+
 {% endlist %}
 
 ## Выключение TTL {#disable}
@@ -196,6 +259,25 @@
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
 
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    AlterTableSettings settings = new AlterTableSettings()
+            .setTableTtl(TableTtl.notSet());
+
+    session.alterTable("mytable", settings).join().expectSuccess();
+    ```
+
+  - JDBC
+
+    Выполните `ALTER TABLE` через YQL для снятия TTL или используйте нативный Table API.
+
+  {% endlist %}
+
 {% endlist %}
 
 ## Получение настроек TTL {#describe}
@@ -231,6 +313,22 @@
   desc = session.describe_table('mytable')
   ttl = desc.ttl_settings
   ```
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
+    ```
+
+  - JDBC
+
+    Получите описание таблицы через системные представления или нативный API.
+
+  {% endlist %}
 
 {% endlist %}
 

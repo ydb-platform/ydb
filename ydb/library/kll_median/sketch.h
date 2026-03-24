@@ -114,7 +114,7 @@ private:
     }
 
     void EnsureLevel(size_t lvl) {
-        if (Levels_.size() <= lvl) {
+        while (Levels_.size() <= lvl) {
             Levels_.emplace_back(CurrentWeight_);
             CurrentWeight_ <<= 1;
         }

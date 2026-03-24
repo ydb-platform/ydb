@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .ConsumerName(TEST_CONSUMER)
             .MaxMemoryUsageBytes(10_MB)
             .DecompressionExecutor(decompressor)
-            .AppendTopics(setup.GetTopicPath())
+            .AppendTopics(TEST_TOPIC)
             // .DirectRead(EnableDirectRead)
             ;
 

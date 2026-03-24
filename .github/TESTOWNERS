@@ -18,6 +18,7 @@
 /ydb/tests/stress/oltp_workload @ydb-platform/datashard
 /ydb/tests/datashard/vector_index/large @ydb-platform/datashard
 /ydb/tests/functional/statistics @ydb-platform/datashard
+/ydb/core/tx/tx_allocator @ydb-platform/datashard
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
@@ -75,6 +76,7 @@
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam
 /ydb/tests/functional/ydb_cli @ydb-platform/appteam
+/ydb/tests/functional/api @ydb-platform/appteam
 /ydb/public/lib/ydb_cli @ydb-platform/appteam
 /ydb/apps/ydb @ydb-platform/appteam
 
@@ -146,6 +148,7 @@
 
 #NBS / Cloud Blockstore TEAM:@ydb-platform/nbs
 /ydb/core/nbs @ydb-platform/nbs
+/ydb/tests/functional/nbs @ydb-platform/nbs
 
 #YDB Analytics TEAM:???
 

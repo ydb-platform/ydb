@@ -180,7 +180,7 @@ class TestCreateWithColumnCompression(TestCompressionBase):
                 assert column.HasField("Serializer") is False
             else:
                 assert column.Serializer.ArrowCompression.Codec == codec_id
-        assert validated_columns > 0, "No columns with suffix '2' found for compression verification"
+        assert validated_columns == 4
 
         table = ColumnTableHelper(self.ydb_client, self.table_path)
         current_num_rows: int = table.get_row_count()

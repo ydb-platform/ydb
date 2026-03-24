@@ -456,6 +456,7 @@ namespace NKikimr::NDDisk {
 
         const ui64 lsn = record.GetLsn();
         const ui32 generation = record.GetGeneration();
+        TBlockSelector selector(record.GetSelector());
 
         Counters.Interface.ReadPersistentBuffer.Request(selector.Size);
 
@@ -487,7 +488,7 @@ namespace NKikimr::NDDisk {
         }
         TPersistentBuffer::TRecord& pr = jt->second;
 
-        if (selector.Size == 0 && selector.OffsetInBytes == 0 && selector.VChunkIndex == 0) {
+        if (!record.HasSelector()) {
             selector.VChunkIndex = pr.VChunkIndex;
             selector.OffsetInBytes = pr.OffsetInBytes;
             selector.Size = pr.Size;

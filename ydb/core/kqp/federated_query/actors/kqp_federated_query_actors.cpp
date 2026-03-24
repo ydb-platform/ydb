@@ -610,6 +610,9 @@ public:
 
     void Bootstrap() {
         Request();
+        Promise.GetFuture().Subscribe([actorSystem = TlsActivationContext->ActorSystem(), selfId = SelfId()](const auto&) {
+            actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
+        });
     }
 
 private:
@@ -637,6 +640,7 @@ private:
         Y_ABORT_UNLESS(AppData()->YdbDriver);
         NYdb::NTable::TTableClient tableClient(*AppData()->YdbDriver, settings);
         tableClient.GetSession().Subscribe([promise = Promise, actorSystem, selfId, backoff = Backoff, database = Database](const NYdb::NTable::TAsyncCreateSessionResult& future) mutable {
+            try {
                 auto& result = future.GetValue();
                 if (!result.IsSuccess()) {
                     LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " GetSession failed"
@@ -649,7 +653,6 @@ private:
                     } else {
                         promise.SetValue(
                                 TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
-                        actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
                     }
                     return;
                 }
@@ -657,40 +660,46 @@ private:
                 result.GetSession()
                       .DescribeTable(database, {})
                       .Subscribe([promise, actorSystem, selfId, backoff](const NYdb::NTable::TAsyncDescribeTableResult& future) mutable {
-                        const auto& result = future.GetValue();
-                        if (!result.IsSuccess()) {
-                            LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " DescribeTable failed"
-                                << ", status# " << result.GetStatus()
-                                << ", issues# " << result.GetIssues().ToOneLineString()
-                                << ", iteration# " << backoff->GetIteration());
+                          try {
+                              const auto& result = future.GetValue();
+                              if (!result.IsSuccess()) {
+                                  LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " DescribeTable failed"
+                                      << ", status# " << result.GetStatus()
+                                      << ", issues# " << result.GetIssues().ToOneLineString()
+                                      << ", iteration# " << backoff->GetIteration());
 
-                            if (IsRetryableError(result) && backoff->HasMore()) {
-                                actorSystem->Schedule(backoff->Next(),
-                                        new NActors::IEventHandle(selfId, TActorId(), new TEvents::TEvWakeup()));
-                            } else {
-                                promise.SetValue(
-                                        TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
-                                actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
-                            }
-                            return;
-                        }
-                        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                                "DescribeResourceId: SelfId=" << selfId << " Succeed");
+                                  if (IsRetryableError(result) && backoff->HasMore()) {
+                                      actorSystem->Schedule(backoff->Next(),
+                                              new NActors::IEventHandle(selfId, TActorId(), new TEvents::TEvWakeup()));
+                                  } else {
+                                      promise.SetValue(
+                                              TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
+                                  }
+                                  return;
+                              }
+                              LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
+                                      "DescribeResourceId: SelfId=" << selfId << " Succeed");
 
-                        for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
-                            LOG_TRACE_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                                    "DescribeResourceId: SelfId=" << selfId << " key=" << k << " value=" << v);
-                            if (k == "cloud_id") {
-                                LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " Resolved ResourceId=" << v);
-                                promise.SetValue(TString{v});
-                                actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
-                                return;
-                            }
-                        }
-                        LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " cloud_id not found");
-                        promise.SetValue(TString(""));
-                        actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
-                    });
+                              for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
+                                  LOG_TRACE_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
+                                          "DescribeResourceId: SelfId=" << selfId << " key=" << k << " value=" << v);
+                                  if (k == "cloud_id") {
+                                      LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " Resolved ResourceId=" << v);
+                                      promise.SetValue(TString{v});
+                                      return;
+                                  }
+                              }
+                              LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " cloud_id not found");
+                              promise.SetValue(TString(""));
+                          } catch(const std::exception& ex) {
+                              LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
+                              promise.SetException(std::current_exception());
+                          }
+                      });
+              } catch(const std::exception& ex) {
+                LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
+                promise.SetException(std::current_exception());
+              }
         });
     }
 private:

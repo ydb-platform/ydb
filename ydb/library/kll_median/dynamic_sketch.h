@@ -75,7 +75,7 @@ private:
         return static_cast<size_t>(std::distance(Sketch_.Levels_.begin(), lb));
     }
 
-    TKllSketch<TString> Sketch_;
+    TKllSketch<T> Sketch_;
 };
 
 } // namespace NKikimr::NKll

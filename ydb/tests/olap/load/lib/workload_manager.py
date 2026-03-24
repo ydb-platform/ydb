@@ -429,7 +429,7 @@ class TestWorkloadManagerClickbenchComputeSchedulerP1T4(WorkloadManagerClickbenc
 class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     threads = 1
     tpcc_warehouses: int = 4500
-    tpcc_threads: int = 4
+    tpcc_threads: int = 0
     verify_data: bool = False
     _tpcc_executions: list[tuple[str, re.LongRemoteExecution]] = []
     _tpcc_thread: Thread = None

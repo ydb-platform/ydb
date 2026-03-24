@@ -20,7 +20,7 @@ void TSizedCache::Put(const TIntrusivePtr<ICacheObj>& obj, bool lock) {
     auto guard = Guard(Lock_);
     auto it = Cache_.Find(name);
     if (it == Cache_.End()) {
-        Cache_.Insert(name, TEntry{obj, lock ? 1U : 0U});
+        Cache_.Insert(name, TEntry{.Obj = obj, .Locks = lock ? 1U : 0U});
         CurrentSize_ += size;
     } else if (lock) {
         ++it->Locks;

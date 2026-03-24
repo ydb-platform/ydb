@@ -290,6 +290,8 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
         RunCommonChecks();
 
+        IsDryRun = request.GetDryRun();
+
         // extract YAML files provided by the user
         NewYaml = request.HasYAML() ? std::make_optional(request.GetYAML()) : std::nullopt;
         NewStorageYaml = request.HasStorageYAML() ? std::make_optional(request.GetStorageYAML()) : std::nullopt;
@@ -474,6 +476,11 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::ReplaceStorageConfigExecute() {
         Y_ABORT_UNLESS(!LifetimeToken.expired());
+
+        if (IsDryRun) {
+            return Finish(TResult::OK, std::nullopt);
+        }
+
         for (const auto& actorId : Self->DetachedQueries) {
             Send(actorId, new TEvNodeWardenStorageConfig(std::make_shared<const NKikimrBlobStorage::TStorageConfig>(
                 ProposedStorageConfig), false, nullptr, nullptr), 0, 1);
@@ -492,7 +499,7 @@ namespace NKikimr::NStorage {
 
             if (!res->HasCollectConfigs()) {
                 throw TExError() << "Incorrect CollectConfigs response";
-            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
+            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, IsDryRun); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
             } else if (r.ConfigToPropose) {
                 throw TExError() << "Unexpected config proposition";
@@ -574,6 +581,7 @@ namespace NKikimr::NStorage {
 
             case EControllerOp::DISABLE_DISTCONF:
                 record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf);
+                record.SetDryRun(IsDryRun);
                 if (ProposedStorageConfig.HasExpectedStorageYamlVersion()) {
                     record.SetExpectedStorageConfigVersion(ProposedStorageConfig.GetExpectedStorageYamlVersion());
                     record.SetPeerName(replaceStorageConfig.GetPeerName());

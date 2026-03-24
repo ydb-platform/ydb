@@ -148,8 +148,7 @@ jobs:
               PR_NUM=${BASH_REMATCH[1]}
               echo "Processing pull request: $PR_NUM"
 
-              PR_DATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                "https://api.github.com/repos/ydb-platform/ydb/pulls/$PR_NUM")
+              PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: token $GITHUB_TOKEN" \
               MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
               BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
 

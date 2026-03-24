@@ -44,14 +44,12 @@ namespace NKikimr::NDataShard {
 
 } // namespace NKikimr::NDataShard
 
-namespace std {
-    template<>
-    struct hash<::NKikimr::NDataShard::TLockRowsRequestId> {
-        size_t operator()(const ::NKikimr::NDataShard::TLockRowsRequestId& value) const {
-            return value.Hash();
-        }
-    };
-}
+template<>
+struct std::hash<::NKikimr::NDataShard::TLockRowsRequestId> {
+    size_t operator()(const ::NKikimr::NDataShard::TLockRowsRequestId& value) const {
+        return value.Hash();
+    }
+};
 
 template<>
 struct THash<NKikimr::NDataShard::TLockRowsRequestId> {
@@ -59,4 +57,3 @@ struct THash<NKikimr::NDataShard::TLockRowsRequestId> {
         return value.Hash();
     }
 };
-

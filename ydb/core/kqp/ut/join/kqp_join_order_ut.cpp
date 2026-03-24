@@ -1249,6 +1249,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    Y_UNIT_TEST(CanonizedJoinOrderTPCDS14) {
+        CanonizedJoinOrderTest(
+            "queries/tpcds14.sql", "stats/tpcds1000s.json", "join_order/tpcds14_1000s.json", false, true
+        );
+    }
+
     Y_UNIT_TEST(CanonizedJoinOrderTPCDS64) {
         CanonizedJoinOrderTest(
             "queries/tpcds64.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", false, true
@@ -1276,6 +1282,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST(CanonizedJoinOrderLookupBug) {
         CanonizedJoinOrderTest(
             "queries/lookupbug.sql", "stats/lookupbug.json", "join_order/lookupbug.json", false, false
+        );
+    }
+
+    Y_UNIT_TEST(CanonizedJoinOrderReuseShuffleWithWrongOrderBug) {
+        CanonizedJoinOrderTest(
+            "queries/reuse_shuffle_with_wrong_order_bug.sql",
+            "stats/tpcc.json",
+            "join_order/reuse_shuffle_with_wrong_order_bug.json", false, true
         );
     }
 

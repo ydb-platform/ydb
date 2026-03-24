@@ -284,13 +284,13 @@ TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprCont
         .Done();
 
     return THoppingTraits {
-        hoppingColumn,
-        newTraits,
-        static_cast<ui64>(hopTime),
-        static_cast<ui64>(intervalTime),
-        static_cast<ui64>(delayTime),
-        earlyPolicy,
-        latePolicy,
+        .Column=hoppingColumn,
+        .Traits=newTraits,
+        .Hop=static_cast<ui64>(hopTime),
+        .Interval=static_cast<ui64>(intervalTime),
+        .Delay=static_cast<ui64>(delayTime),
+        .EarlyPolicy=earlyPolicy,
+        .LatePolicy=latePolicy,
     };
 }
 

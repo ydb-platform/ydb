@@ -630,6 +630,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableAddUniqueIndex(true);
+    app.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
     app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
@@ -669,6 +670,10 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);
         app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
     }
+
+    app.FeatureFlags.SetEnableDataShardSplitHistogramSorting(opts.EnableDataShardSplitHistogramSorting_);
+    app.FeatureFlags.SetEnableDataShardSplitKeySelection(opts.EnableDataShardSplitKeySelection_);
+    app.FeatureFlags.SetEnableDataShardSplitHistogramOmission(opts.EnableDataShardSplitHistogramOmission_);
 
     app.FeatureFlags.SetEnableConditionalEraseResponseBatching(opts.EnableConditionalEraseResponseBatching_);
     if (opts.CondEraseResponseBatchSize_) {

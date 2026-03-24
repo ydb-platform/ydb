@@ -180,11 +180,14 @@ SRCS(
     memory_state_migration.cpp
     move_index_unit.cpp
     move_table_unit.cpp
+    multi_txids.cpp
+    multi_txids.h
     operation.cpp
     operation.h
     plan_queue_unit.cpp
     prepare_data_tx_in_rs_unit.cpp
     prepare_distributed_erase_tx_in_rs_unit.cpp
+    prepare_index_validation_unit.cpp
     prepare_kqp_data_tx_in_rs_unit.cpp
     prepare_scheme_tx_in_rs_unit.cpp
     prepare_write_tx_in_rs_unit.cpp
@@ -276,6 +279,7 @@ PEERDIR(
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/split
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public

@@ -869,7 +869,7 @@ public:
                 weekOfYear = 1;
             }
 
-            Days_[date] = TDayInfo{month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek};
+            Days_[date] = TDayInfo{.Month = month, .Day = day, .DayOfYear = dayOfYear, .WeekOfYear = weekOfYear, .WeekOfYearIso8601 = weekOfYearIso8601, .DayOfWeek = dayOfWeek};
         }
 
         InitializeSolarCycle();
@@ -1191,16 +1191,16 @@ private:
             auto daysInYear = IsLeapYear(year) ? 366u : 365u;
             auto lastDayOfWeek = (dayOfWeek + daysInYear - 1) % 7;
             YearsCache_[yearIdx] = TYearCache{
-                date,
-                7 + dayOfWeek,
-                (dayOfWeek >= 4) ? dayOfWeek : dayOfWeek + 7,
-                lastDayOfWeek,
-                weekOfYearIso8601 == 53};
+                .CumulativeDays = date,
+                .WeekOffset = 7 + dayOfWeek,
+                .Iso8601WeekOffset = (dayOfWeek >= 4) ? dayOfWeek : dayOfWeek + 7,
+                .LastDayOfWeek = lastDayOfWeek,
+                .FirstIsoWeek53 = weekOfYearIso8601 == 53};
             ui32 weekOfYear = 1;
             for (ui32 dayOfYear = 0; dayOfYear < daysInYear; ++dayOfYear) {
                 ui32 month, day;
                 EnrichMonthDay(year, dayOfYear, month, day);
-                DaysCache_[date] = TDayCache{month, day, dayOfYear, weekOfYear, weekOfYearIso8601};
+                DaysCache_[date] = TDayCache{.Month = month, .Day = day, .DayOfYear = dayOfYear, .WeekOfYear = weekOfYear, .WeekOfYearIso8601 = weekOfYearIso8601};
 
                 date++;
                 if (dayOfWeek < 6) {

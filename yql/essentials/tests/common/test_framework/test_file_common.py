@@ -98,7 +98,7 @@ def get_sql_query(provider, suite, case, config, data_path=None, template=['.sql
 def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                       yqlrun_binary=None, extra_args=[], force_blocks=False, allow_llvm=True, data_path=None,
                       run_sql=True, cfg_postprocess=None, langver=None, attr_postprocess=None,
-                      is_yql_select=False):
+                      is_yql_select=False, fuzz_universal=False):
     check_provider(provider, config)
 
     sql_query = get_sql_query(provider, suite, case, config, data_path, template=['.sql', '.yql'] if run_sql else '.yqls')
@@ -131,7 +131,8 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                                            is_yql_select=is_yql_select),
         extra_args=extra_args,
         udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'),
-        langver=langver
+        langver=langver,
+        fuzz_universal=fuzz_universal
     )
 
     res, tables_res = execute(
@@ -170,13 +171,13 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
 
 def run_file(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary=None,
              extra_args=[], force_blocks=False, allow_llvm=True, data_path=None, run_sql=True,
-             cfg_postprocess=None, langver=None, attr_postprocess=None):
+             cfg_postprocess=None, langver=None, attr_postprocess=None, fuzz_universal=False):
     if (suite, case, cfg) not in run_file.cache:
         run_file.cache[(suite, case, cfg)] = \
             run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                               yqlrun_binary, extra_args, force_blocks=force_blocks, allow_llvm=allow_llvm,
                               data_path=data_path, run_sql=run_sql, cfg_postprocess=cfg_postprocess,
-                              langver=langver, attr_postprocess=attr_postprocess)
+                              langver=langver, attr_postprocess=attr_postprocess, fuzz_universal=fuzz_universal)
 
     return run_file.cache[(suite, case, cfg)]
 

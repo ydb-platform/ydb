@@ -740,6 +740,34 @@ TJoinTestData InnerJoinRenamesTestData() {
     return td;
 }
 
+// INNER on join column: left key is Uint64, right key is Optional<Uint64>. A NULL on the right must not match
+// a non-null left key (same row position does not imply match).
+TJoinTestData InnerJoinIntAndOptionalIntKeyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2, 3};
+    TVector<ui64> leftKeys = {10, 20, 30};
+
+    TVector<ui64> rightIds = {1, 2, 3};
+    TVector<std::optional<ui64>> rightKeys = {10, std::nullopt, 30};
+
+    TVector<ui64> expLeftIds = {1, 3};
+    TVector<ui64> expLeftKeys = {10, 30};
+    TVector<ui64> expRightIds = {1, 3};
+    TVector<std::optional<ui64>> expRightKeys = {10, 30};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
 TJoinTestData SpillingTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -826,21 +854,52 @@ TJoinTestData BigStringsTestData() {
     return td;
 }
 
-void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
-    FilterRenamesForSemiAndOnlyJoins(testData);
+TJoinTestData OutputBufferBoundedTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int leftSize = 200;
+    constexpr int rightSize = 200;
+    constexpr int valueSize = 512;
+
+    TVector<ui64> leftKeys(leftSize, 1);
+    TVector<TString> leftValues(leftSize);
+    for (int i = 0; i < leftSize; ++i) {
+        leftValues[i] = TString(valueSize, 'A' + (i % 26));
+    }
+
+    TVector<ui64> rightKeys(rightSize, 1);
+    TVector<TString> rightValues(rightSize);
+    for (int i = 0; i < rightSize; ++i) {
+        rightValues[i] = TString(valueSize, 'a' + (i % 26));
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinDescription MakeJoinDescription(TJoinTestData& td) {
+    FilterRenamesForSemiAndOnlyJoins(td);
     TJoinDescription descr;
-    descr.CustomRenames = testData.Renames;
-    descr.Setup = testData.Setup.get();
-    descr.LeftSource.KeyColumnIndexes = testData.LeftKeyColmns;
+    descr.CustomRenames = td.Renames;
+    descr.Setup = td.Setup.get();
+    descr.LeftSource.KeyColumnIndexes = td.LeftKeyColmns;
     descr.LeftSource.ColumnTypes =
-        AS_TYPE(TTupleType, AS_TYPE(TListType, testData.Left.Type)->GetItemType())->GetElements();
-    descr.LeftSource.ValuesList = testData.Left.Value;
-    descr.RightSource.KeyColumnIndexes = testData.RightKeyColmns;
+        AS_TYPE(TTupleType, AS_TYPE(TListType, td.Left.Type)->GetItemType())->GetElements();
+    descr.LeftSource.ValuesList = td.Left.Value;
+    descr.RightSource.KeyColumnIndexes = td.RightKeyColmns;
     descr.RightSource.ColumnTypes =
-        AS_TYPE(TTupleType, AS_TYPE(TListType, testData.Right.Type)->GetItemType())->GetElements();
-    descr.RightSource.ValuesList = testData.Right.Value;
-    descr.BlockSize = testData.BlockSize;
-    descr.SliceBlocks = testData.SliceBlocks;
+        AS_TYPE(TTupleType, AS_TYPE(TListType, td.Right.Type)->GetItemType())->GetElements();
+    descr.RightSource.ValuesList = td.Right.Value;
+    descr.BlockSize = td.BlockSize;
+    descr.SliceBlocks = td.SliceBlocks;
+    return descr;
+}
+
+void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
+    auto descr = MakeJoinDescription(testData);
     if (testData.JoinMemoryConstraint){
         descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
     } else {
@@ -874,6 +933,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestMixedKeysPassthrough, BlockJoin) {
         Test(MixedKeysInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinIntAndOptionalIntKey, BlockJoin) {
+        Test(InnerJoinIntAndOptionalIntKeyTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {
@@ -1003,6 +1066,45 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
     Y_UNIT_TEST(TestSmallStrings) { 
         Test(SmallStringsTestData(), true);
+    }
+    Y_UNIT_TEST(TestOutputBufferBounded) {
+        auto td = OutputBufferBoundedTestData();
+        auto descr = MakeJoinDescription(td);
+
+        THolder<IComputationGraph> graph = ConstructJoinGraphStream(
+            td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);
+
+        const size_t tupleWidth = td.Renames.size() + 1;
+        std::vector<NUdf::TUnboxedValue> buff(tupleWidth);
+        auto stream = graph->GetValue();
+
+        i64 totalRows = 0;
+        i64 maxBlockRows = 0;
+        int blockCount = 0;
+
+        while (true) {
+            auto status = stream.WideFetch(buff.data(), tupleWidth);
+            if (status == NYql::NUdf::EFetchStatus::Finish) {
+                break;
+            }
+            if (status == NYql::NUdf::EFetchStatus::Yield) {
+                continue;
+            }
+            int rows = ArrowScalarAsInt(TArrowBlock::From(buff[tupleWidth - 1]));
+            totalRows += rows;
+            maxBlockRows = std::max(maxBlockRows, static_cast<i64>(rows));
+            ++blockCount;
+        }
+
+        constexpr i64 expectedTotal = 200 * 200;
+        constexpr i64 maxOutputRows = 10000;
+        UNIT_ASSERT_VALUES_EQUAL(totalRows, expectedTotal);
+        UNIT_ASSERT_C(blockCount > 1,
+            TStringBuilder() << "Expected multiple output blocks but got " << blockCount
+                             << " (all " << totalRows << " rows in one block)");
+        UNIT_ASSERT_C(maxBlockRows <= maxOutputRows,
+            TStringBuilder() << "Max block size " << maxBlockRows
+                             << " should be at most " << maxOutputRows);
     }
 }
 } // namespace NKikimr::NMiniKQL

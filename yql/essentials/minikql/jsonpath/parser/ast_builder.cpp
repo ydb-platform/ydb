@@ -78,7 +78,7 @@ TArrayAccessNode::TSubscript TAstBuilder::BuildArraySubscript(const TRule_array_
     if (node.HasBlock2()) {
         to = BuildExpr(node.GetBlock2().GetRule_expr2());
     }
-    return {from, to};
+    return {.From = from, .To = to};
 }
 
 TAstNodePtr TAstBuilder::BuildArrayAccessor(const TRule_array_accessor& node, TAstNodePtr input) {

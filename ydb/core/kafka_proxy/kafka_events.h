@@ -152,6 +152,15 @@ struct TEvKafka {
         const TMessagePtr<TSaslAuthenticateRequestData> Request;
     };
 
+    struct TEvMtlsAuthRequest : public TEventLocal<TEvMtlsAuthRequest, EvRequest> {
+        TEvMtlsAuthRequest(const TString& clientCertificate)
+            : ClientCertificate(clientCertificate)
+        {
+        }
+
+        const TString ClientCertificate;
+    };
+
     struct TEvAuthResult : public TEventLocal<TEvAuthResult, EvAuthResult> {
 
         TEvAuthResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TString error = "")

@@ -8,7 +8,7 @@
 {%-         set compiler_jvm_flags = target_javac_flags|select('startsWith', '-J') -%}
 {%-     endif -%}
 
-{%-     if javac_flags|length or compiler_jvm_flags|length or with_errorprone %}
+{%-     if javac_flags|length or compiler_jvm_flags|length or has_errorprone %}
 
 tasks.{{ task }}.configure {
 {%-         if javac_flags|length -%}

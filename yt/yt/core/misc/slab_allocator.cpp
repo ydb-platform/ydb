@@ -8,6 +8,7 @@
 
 #include <library/cpp/yt/malloc/malloc.h>
 
+#include <library/cpp/yt/memory/free_list.h>
 #include <library/cpp/yt/memory/poison.h>
 
 namespace NYT {

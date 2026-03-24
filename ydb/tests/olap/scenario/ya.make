@@ -26,6 +26,7 @@ PY3TEST()
         contrib/python/boto3
         contrib/python/moto
         contrib/python/requests
+        library/python/port_manager
         library/python/testing/yatest_common
         library/recipes/common
         ydb/public/sdk/python

@@ -1,13 +1,8 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: muted */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
-SELECT
-    Ensure(0, FALSE, 'muted: flaky: Error: Name not found: count')
-
-/*
 SELECT
     Count(DISTINCT ws_order_number) AS `order count`,
     Sum(ws_ext_ship_cost) AS `total shipping cost`,
@@ -49,4 +44,3 @@ WHERE
 ORDER BY
     Count(DISTINCT ws_order_number)
 LIMIT 100;
-*/;

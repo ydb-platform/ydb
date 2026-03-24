@@ -4,12 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(30)
 
 REQUIREMENTS(cpu:2)
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 SRCS(
     kqp_indexes_fulltext_ut.cpp

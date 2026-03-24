@@ -741,7 +741,8 @@ protected:
                 return;
             }
 
-            case NYql::NDqProto::COMPUTE_STATE_EXECUTING: {
+            case NYql::NDqProto::COMPUTE_STATE_EXECUTING:
+            case NYql::NDqProto::COMPUTE_STATE_FINISHED: {
                 if (populateChannels) {
                     auto& task = TasksGraph.GetTask(taskId);
                     THashMap<TActorId, THashSet<ui64>> updates;
@@ -1344,7 +1345,7 @@ protected:
 protected:
     TString TraceId() const {
         if (ExecuterSpan) {
-            return ExecuterSpan.GetTraceId().GetHexTraceId();
+            return ExecuterSpan.GetTraceId().GetHexTraceIdLowerCase();
         }
         return TString();
     }

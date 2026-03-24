@@ -135,8 +135,9 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TChain
         ////////////////////////////////////////////////////////////////////////////
-        TChain::TChain(TString vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap::TChain& chain)
+        TChain::TChain(TString vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap::TChain& chain, TControlWrapper chunksSoftLocking)
             : VDiskLogPrefix(std::move(vdiskLogPrefix))
+            , ChunksSoftLocking(chunksSoftLocking)
         {
             LoadFromProto(chain);
         }
@@ -538,8 +539,9 @@ namespace NKikimr {
             Y_VERIFY_S(!Chains.empty(), VDiskLogPrefix);
         }
 
-        TAllChains::TAllChains(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap)
+        TAllChains::TAllChains(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap, TControlWrapper chunksSoftLocking)
             : VDiskLogPrefix(vdiskLogPrefix)
+            , ChunksSoftLocking(chunksSoftLocking)
         {
             LoadFromProto(heap);
         }
@@ -667,7 +669,7 @@ namespace NKikimr {
 
             Chains.reserve(heap.ChainsSize());
             for (const auto& chain : heap.GetChains()) {
-                Chains.emplace_back(VDiskLogPrefix, chain);
+                Chains.emplace_back(VDiskLogPrefix, chain, ChunksSoftLocking);
             }
         }
 
@@ -861,9 +863,9 @@ namespace NKikimr {
                 maxHugeBlobInBytes, overhead, stepsBetweenPowersOf2, useBucketsV2, chunksSoftLocking)
         {}
 
-        THeap::THeap(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap)
+        THeap::THeap(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap, TControlWrapper chunksSoftLocking)
             : VDiskLogPrefix(vdiskLogPrefix)
-            , Chains(vdiskLogPrefix, heap)
+            , Chains(vdiskLogPrefix, heap, chunksSoftLocking)
         {
             LoadFromProto(heap);
         }

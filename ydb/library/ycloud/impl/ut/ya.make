@@ -10,6 +10,7 @@ ENDIF()
 PEERDIR(
     library/cpp/retry
     ydb/core/testlib/default
+    ydb/library/testlib/service_mocks
 )
 
 YQL_LAST_ABI_VERSION()

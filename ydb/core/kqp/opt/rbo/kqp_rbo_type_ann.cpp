@@ -11,7 +11,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
+const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
@@ -32,7 +32,7 @@ std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode*
     return {std::move(tableName), tableDesc};
 }
 
-TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext & ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext& ctx) {
     auto table = ResolveTable(read->TableCallable.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
     if (!table.second) {
         YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not resolve table";
@@ -245,11 +245,11 @@ TStatus ComputeTypes(TIntrusivePtr<TOpUnionAll> unionAll, TRBOContext& ctx) {
 
 TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
-    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
     TVector<const TItemExprType*> newItemTypes;
     THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;
-    for (const auto* itemType : structType->GetItems()) {
+    for (const auto itemType : structType->GetItems()) {
         const auto itemName = itemType->GetName();
         aggTraitsMap.emplace(itemName, itemType->GetItemType());
     }
@@ -286,6 +286,20 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
+TVector<const TItemExprType*> AddOptional(const TVector<const TItemExprType*>& types, TRBOContext& rboCtx) {
+    auto& ctx = rboCtx.ExprCtx;
+    TVector<const TItemExprType*> optionalTypes;
+    for (ui32 i = 0, e = types.size(); i < e; ++i) {
+        const auto itemType = types[i]->GetItemType();
+        if (!itemType->IsOptionalOrNull()) {
+            optionalTypes.push_back(ctx.MakeType<TItemExprType>(types[i]->GetName(), ctx.MakeType<TOptionalExprType>(itemType)));
+        } else {
+            optionalTypes.push_back(types[i]);
+        }
+    }
+    return optionalTypes;
+}
+
 TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
     auto leftInputType = join->GetLeftInput()->Type;
     auto rightInputType = join->GetRightInput()->Type;
@@ -299,9 +313,12 @@ TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
 
     if (join->JoinKind == "LeftOnly" || join->JoinKind == "LeftSemi") {
         rightItemTypes = {};
-    }
-    if (join->JoinKind == "RightOnly" || join->JoinKind == "RightSemi") {
+    } else if (join->JoinKind == "RightOnly" || join->JoinKind == "RightSemi") {
         leftItemTypes = {};
+    } else if (join->JoinKind == "Left") {
+        rightItemTypes = AddOptional(rightItemTypes, ctx);
+    } else if (join->JoinKind == "Right") {
+        leftItemTypes = AddOptional(leftItemTypes, ctx);
     }
 
     structItemTypes.insert(structItemTypes.end(), leftItemTypes.begin(), leftItemTypes.end());

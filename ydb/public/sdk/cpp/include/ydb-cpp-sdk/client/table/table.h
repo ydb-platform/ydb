@@ -548,6 +548,26 @@ private:
     TMetadata Metadata_;
 };
 
+class TCompactionOperation : public TOperation {
+public:
+    using TOperation::TOperation;
+    TCompactionOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    struct TMetadata {
+        ECompactState State;
+        float Progress;
+        std::string Path;
+        bool Cascade;
+        uint32_t MaxInFlight;
+        uint32_t Total;
+        uint32_t Done;
+    };
+
+    const TMetadata& Metadata() const;
+private:
+    TMetadata Metadata_;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents changefeed description

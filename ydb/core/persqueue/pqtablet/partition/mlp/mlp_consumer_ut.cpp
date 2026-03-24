@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/mon.h>
 #include <library/cpp/iterator/iterate_values.h>
 #include <util/string/split.h>
+#include <span>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -777,7 +778,7 @@ TMap<TString, TMessageId> ReadAndCommitFIFO(
     return uncommited;
 }
 
-void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescription>& groups) {
+void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescription>& groups, const std::span<const ui32> partitionsToRestart = {}) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 
@@ -877,6 +878,11 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
     }
 
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2});
+
+    for (ui32 partitionId : partitionsToRestart) {
+        Cerr << ">>>>> Restart partition " << partitionId << Endl;
+        ReloadPQTablet(setup, "/Root", "/Root/topic1", partitionId);
+    }
 
     Cerr << ">>>>> Phase 6: Verify that we cannot read any messages written to the child partitions, if not all messages from the parent partition was commited" << Endl;
 
@@ -1110,6 +1116,94 @@ Y_UNIT_TEST(Order_GroupBC_OneACommittedBeforeSplit) {
         {"group-D", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
         {"group-E", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
     });
+}
+
+Y_UNIT_TEST(Order_AllCommittedBeforeSplit_RestartParentPartition) {
+    static constexpr ui32 restartPartitions[] = {0};
+    PartitionSplitWithMessageGroupOrdering({
+        {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 3,}}},
+        {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
+        {"group-C", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
+        {"group-D", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+        {"group-E", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+    }, restartPartitions);
+}
+
+Y_UNIT_TEST(Order_AllCommittedBeforeSplit_RestartChildPartition) {
+    static constexpr ui32 restartPartitions[] = {1};
+    PartitionSplitWithMessageGroupOrdering({
+        {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 3,}}},
+        {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
+        {"group-C", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
+        {"group-D", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+        {"group-E", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+    }, restartPartitions);
+}
+
+Y_UNIT_TEST(Order_NoneCommittedBeforeSplit_RestartParentPartition) {
+    static constexpr ui32 restartPartitions[] = {0};
+    PartitionSplitWithMessageGroupOrdering({
+        {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 0,}}},
+        {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 0,}}},
+        {"group-C", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 0,}}},
+        {"group-D", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+        {"group-E", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+    }, restartPartitions);
+}
+
+Y_UNIT_TEST(Order_NoneCommittedBeforeSplit_RestartChildPartition) {
+    static constexpr ui32 restartPartitions[] = {1};
+    PartitionSplitWithMessageGroupOrdering({
+        {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 0,}}},
+        {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 0,}}},
+        {"group-C", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 0,}}},
+        {"group-D", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+        {"group-E", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+    }, restartPartitions);
+}
+
+Y_UNIT_TEST(Order_GroupAB_CommittedBeforeSplit_RestartParentPartition) {
+    static constexpr ui32 restartPartitions[] = {0};
+    PartitionSplitWithMessageGroupOrdering({
+        {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 3,}}},
+        {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
+        {"group-C", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 0,}}},
+        {"group-D", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+        {"group-E", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+    }, restartPartitions);
+}
+
+Y_UNIT_TEST(Order_GroupAB_CommittedBeforeSplit_RestartChildPartition) {
+    static constexpr ui32 restartPartitions[] = {1};
+    PartitionSplitWithMessageGroupOrdering({
+        {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 3,}}},
+        {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
+        {"group-C", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 0,}}},
+        {"group-D", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+        {"group-E", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+    }, restartPartitions);
+}
+
+Y_UNIT_TEST(Order_GroupBC_OneACommittedBeforeSplit_RestartParentPartition) {
+    static constexpr ui32 restartPartitions[] = {0};
+    PartitionSplitWithMessageGroupOrdering({
+        {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 1,}}},
+        {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
+        {"group-C", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
+        {"group-D", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+        {"group-E", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+    }, restartPartitions);
+}
+
+Y_UNIT_TEST(Order_GroupBC_OneACommittedBeforeSplit_RestartChildPartition) {
+    static constexpr ui32 restartPartitions[] = {1};
+    PartitionSplitWithMessageGroupOrdering({
+        {"group-A", {.SizeBeforeSplit = 3, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 1,}}},
+        {"group-B", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
+        {"group-C", {.SizeBeforeSplit = 2, .SizeAfterSplit = 1, .ReadBeforeSplit = {.ReadCount = 2,}}},
+        {"group-D", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+        {"group-E", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
+    }, restartPartitions);
 }
 
 // Sanity check: minimal test with two groups, one message each before and after split.

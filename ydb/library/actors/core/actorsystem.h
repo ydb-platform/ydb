@@ -8,6 +8,7 @@
 #include "log_settings.h"
 #include "scheduler_cookie.h"
 #include "cpu_manager.h"
+#include "subsystem.h"
 
 #include <library/cpp/threading/future/future.h>
 #include <ydb/library/actors/util/ticket_lock.h>
@@ -122,6 +123,7 @@ namespace NActors {
         TLocalServices LocalServices;
 
         std::shared_ptr<IRcBufAllocator> RcBufAllocator;
+        TSubSystems SubSystems;
 
         ui32 GetExecutorsCount() const {
             return Executors ? ExecutorsCount : CpuManager.GetExecutorsCount();
@@ -147,6 +149,11 @@ namespace NActors {
             } else {
                 return CpuManager.GetThreadsOptional(poolId);
             }
+        }
+
+        template<class T>
+        void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {
+            NActors::RegisterSubSystem(SubSystems, std::move(subsystem));
         }
     };
 
@@ -184,6 +191,7 @@ namespace NActors {
         TProxyWrapperFactory ProxyWrapperFactory;
         TMutex ProxyCreationLock;
         mutable std::vector<TActorId> DynamicProxies;
+        TSubSystems SubSystems;
 
         std::atomic_bool StartExecuted = false;
         std::atomic_bool StopExecuted = false;
@@ -335,6 +343,22 @@ namespace NActors {
 
         TVector<IExecutorPool*> GetBasicExecutorPools() const {
             return CpuManager->GetBasicExecutorPools();
+        }
+
+        template<class T>
+        void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {
+            Y_ABORT_UNLESS(!StartExecuted.load(), "cannot register subsystem after actor system start");
+            NActors::RegisterSubSystem(SubSystems, std::move(subsystem));
+        }
+
+        template<class T>
+        T* GetSubSystem() {
+            return NActors::GetSubSystem<T>(SubSystems);
+        }
+
+        template<class T>
+        const T* GetSubSystem() const {
+            return NActors::GetSubSystem<T>(SubSystems);
         }
 
         void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;

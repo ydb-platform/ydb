@@ -16,7 +16,9 @@
 #include "thread_context.h"
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/actors/interconnect/events_local.h>
 #include <util/generic/hash.h>
+#include <util/system/backtrace.h>
 #include <util/system/rwlock.h>
 #include <util/random/random.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
@@ -25,6 +27,36 @@
 namespace NActors {
 
     LWTRACE_USING(ACTORLIB_PROVIDER);
+
+    namespace {
+        ui32 ExtractCurrentSenderActivityIndex() {
+            if (!TlsActivationContext) {
+                return Max<ui32>();
+            }
+
+            const TActorContext& ctx = TActivationContext::AsActorContext();
+            if (IActor* actor = ctx.Mailbox.FindActor(ctx.SelfID.LocalId())) {
+                return actor->GetActivityType().GetIndex();
+            }
+            if (IActor* actor = ctx.Mailbox.FindAlias(ctx.SelfID.LocalId())) {
+                return actor->GetActivityType().GetIndex();
+            }
+            return Max<ui32>();
+        }
+
+        TString ExtractForwardedEventTypeName(const IEventHandle& ev) {
+            if (ev.HasEvent()) {
+                return ev.GetTypeName();
+            }
+            return Sprintf("0x%08" PRIx32, ev.Type);
+        }
+
+        TString ExtractCurrentStackTrace() {
+            TBackTrace backTrace;
+            backTrace.Capture();
+            return backTrace.PrintToString();
+        }
+    } // namespace
 
     TActorSetupCmd::TActorSetupCmd()
         : MailboxType(TMailboxType::HTSwap)
@@ -250,7 +282,30 @@ namespace NActors {
             Y_ENSURE(ev->Recipient == recipient,
                 "Event rewrite from " << ev->Recipient << " to " << recipient << " would be lost via interconnect");
             recipient = InterconnectProxy(recpNodeId);
-            ev->Rewrite(TEvInterconnect::EvForward, recipient);
+            if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
+                const TActorId sender = ev->Sender;
+                const ui64 cookie = ev->Cookie;
+                const ui32 flags = ev->Flags & ~IEventHandle::FlagSubscribeOnSession;
+                const TActorId forwardOnNondeliveryRecipient = ev->GetForwardOnNondeliveryRecipient();
+                const TActorId* forwardOnNondelivery = forwardOnNondeliveryRecipient
+                    ? &forwardOnNondeliveryRecipient
+                    : nullptr;
+                auto traceId = ev->TraceId.Clone();
+                const ui32 activityIndex = ExtractCurrentSenderActivityIndex();
+                const bool collectTrace = SystemSetup->InterconnectCollectSubscriptionStackTrace;
+                const TString eventTypeName = collectTrace
+                    ? ExtractForwardedEventTypeName(*ev)
+                    : TString();
+                const TString stackTrace = collectTrace
+                    ? ExtractCurrentStackTrace()
+                    : TString();
+                auto wrapped = std::make_unique<IEventHandle>(recipient, sender,
+                    new TEvForwardSubscribeSession(ev.release(), activityIndex, eventTypeName, stackTrace),
+                    flags, cookie, forwardOnNondelivery, std::move(traceId));
+                ev = std::move(wrapped);
+            } else {
+                ev->Rewrite(TEvInterconnect::EvForward, recipient);
+            }
         }
         if (recipient.IsService()) {
             TActorId target = ServiceMap->LookupLocal(recipient);

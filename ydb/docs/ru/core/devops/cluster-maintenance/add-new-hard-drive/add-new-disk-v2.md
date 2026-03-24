@@ -8,13 +8,13 @@
 
 ### Обновите inventory/group_vars/ydb/all.yaml
 
-Откройте файл `inventory/group_vars/ydb/all.yaml` в каталоге проекта Ansible и добавьте новый диск в переменную `ydb_disks` с новым `label`. Структуру репозитория и расположение файлов см. в [руководстве по развёртыванию](../../deployment-options/ansible/initial-deployment.md) и [обзоре конфигурации V2](../../configuration-management/configuration-v2/config-overview.md).
+Откройте файл `inventory/group_vars/ydb/all.yaml` в каталоге проекта Ansible и добавьте новый диск в переменную `ydb_disks` с новым `label`. Структуру репозитория и расположение файлов см. в руководстве по развёртыванию(ссылка) и [обзоре конфигурации V2](../../configuration-management/configuration-v2/config-overview.md).
 
 Этот `label` потребуется для выполнения следующих шагов.
 
 ### Обновите files/config.yaml
 
-Откройте `files/config.yaml` (см. [подготовку конфигурации](../../deployment-options/ansible/initial-deployment.md#ydb-config-prepare)) и добавьте `label` нового диска в секцию `config.host_configs`.
+Откройте `files/config.yaml` (см. подготовку конфигурации(ссылка)) и добавьте `label` нового диска в секцию `config.host_configs`.
 
 Убедитесь, что `label` совпадает со значением, указанным в `ydb_disks` в `inventory/group_vars/ydb/all.yaml`.
 

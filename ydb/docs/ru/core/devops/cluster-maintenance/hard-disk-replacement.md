@@ -55,7 +55,7 @@
 
 ### Подготовьте диск к использованию
 
-Перейдите на управляющий узел (node) — ту машину и рабочую директорию Ansible, с которых выполнялась [установка и развёртывание](../deployment-options/ansible/initial-deployment.md) кластера {{ ydb-short-name }}. Выполните команду:
+Перейдите на управляющий узел (node) — ту машину и рабочую директорию Ansible, с которых выполнялась установка и развёртывание(ссылка) кластера {{ ydb-short-name }}. Выполните команду:
 
 ```bash
 ansible-playbook ydb_platform.ydb.prepare_drives -l static-node.ydb-cluster.com 

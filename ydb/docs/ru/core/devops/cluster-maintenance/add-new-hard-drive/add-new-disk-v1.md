@@ -8,13 +8,13 @@
 
 ### Обновите inventory/50-inventory.yaml
 
-Откройте `inventory/50-inventory.yaml` (см. [создание инвентаря](../../deployment-options/ansible/initial-deployment.md#inventory-create)) и добавьте новый диск в переменную `ydb_disks`, указав для него новый `label`.
+Откройте `inventory/50-inventory.yaml` (см. создание инвентаря(ссылка)) и добавьте новый диск в переменную `ydb_disks`, указав для него новый `label`.
 
 Этот `label` потребуется для выполнения следующих шагов.
 
 ### Обновите files/config.yaml
 
-Откройте `files/config.yaml` (см. [подготовку конфигурации](../../deployment-options/ansible/initial-deployment.md#ydb-config-prepare)) и добавьте `label` нового диска в секцию `host_configs`.
+Откройте `files/config.yaml` (см. подготовку конфигурации(ссылка)) и добавьте `label` нового диска в секцию `host_configs`.
 
 `Label` должен совпадать с тем, который вы указали в `inventory/50-inventory.yaml`.
 

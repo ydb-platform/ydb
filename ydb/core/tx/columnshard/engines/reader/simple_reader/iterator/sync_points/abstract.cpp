@@ -104,14 +104,34 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "continue_source");
     auto* source = SourcesSequentially.front()->MutableAs<IDataSource>();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", SourcesSequentially.front()->GetSourceIdx())
-        ("has_cursor", source->HasCursor());
+        ("has_cursor", source->HasCursor())("prefetch_triggered", source->IsPrefetchTriggered())("streaming", source->IsStreamingMode());
     // HasCursor() is false when ContinueCursor was already called in OnSourceReady as a
     // pre-fetch (streaming mode, pages-in-flight count was below the limit).  In that
     // case the next page fetch is already in progress and we must not start it again.
     // HasCursor() is true when the pre-fetch was suppressed (limit reached) or in
     // non-streaming mode – both cases require us to trigger the fetch now.
     if (source->HasCursor()) {
-        source->ContinueCursor(SourcesSequentially.front());
+        // In streaming mode, if pre-fetching was already triggered, we should not call
+        // ContinueCursor again to avoid double-advancing the page index.
+        // The pre-fetch will handle advancing to the next page.
+        if (source->IsStreamingMode() && source->IsPrefetchTriggered()) {
+            // Pre-fetch was already triggered, do not call ContinueCursor again
+            // but reset the flag for the next iteration
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_continue_cursor_prefetch_already_triggered")
+                ("source_idx", source->GetSourceIdx())
+                ("page_index", source->GetCurrentEarlyPageIndex())
+                ("total_pages", source->GetEarlyPages().size())
+                ("reverse", source->GetContext()->GetReadMetadata()->IsDescSorted());
+            source->SetPrefetchTriggered(false);
+        } else {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "call_continue_cursor")
+                ("source_idx", source->GetSourceIdx())
+                ("page_index", source->GetCurrentEarlyPageIndex())
+                ("total_pages", source->GetEarlyPages().size())
+                ("reverse", source->GetContext()->GetReadMetadata()->IsDescSorted())
+                ("has_more_pages", source->HasMorePages());
+            source->ContinueCursor(SourcesSequentially.front());
+        }
     }
 }
 

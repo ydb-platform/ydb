@@ -35,6 +35,7 @@ void TExecutionContext::OnFinishProgramStepExecution() {
 void TExecutionContext::Stop() {
     ProgramIterator.reset();
     ExecutionVisitor.reset();
+    CursorStep.reset();
 }
 
 void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,

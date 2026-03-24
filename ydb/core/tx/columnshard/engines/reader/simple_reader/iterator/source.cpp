@@ -68,24 +68,45 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
     // TDecideStreamingModeStep is a no-op on re-entry (HasEarlyPages() guard), so
     // restarting from step 0 is safe and cheap.
     if (IsStreamingMode() && HasMorePages() && StreamingFetchScript) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
+            "event", "ContinueCursor_AdvanceEarlyPage")(
+            "page_index_before", GetCurrentEarlyPageIndex())(
+            "total_pages", GetEarlyPages().size())(
+            "reverse", GetContext()->GetReadMetadata()->IsDescSorted())(
+            "has_more_pages", HasMorePages());
         AdvanceEarlyPage();
 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
-            "event", "ContinueCursor_NextPage_Refetch")(
-            "page_index", GetCurrentEarlyPageIndex())(
-            "total_pages", GetEarlyPages().size());
+            "event", GetContext()->GetReadMetadata()->IsDescSorted() ?
+                "ContinueCursor_PrevPage_Refetch" : "ContinueCursor_NextPage_Refetch")(
+            "page_index_after", GetCurrentEarlyPageIndex())(
+            "total_pages", GetEarlyPages().size())(
+            "reverse", GetContext()->GetReadMetadata()->IsDescSorted());
 
         // Reset stage data and StageResult so the next fetch+assemble+finalize
         // cycle starts with a clean slate.  EarlyPages and StreamingMode are
         // preserved — they are needed by NeedFetchColumns, DoAssembleColumns,
         // and Finalize for the next page.
+        //
+        // IMPORTANT: Reset the execution context so TProgramStep creates a fresh
+        // iterator for the next page.  Without this, HasProgramIterator() returns
+        // true (old exhausted iterator from the first page), DoExecuteInplace skips
+        // Start() and calls iterator->Next() on the exhausted iterator → crash at
+        // graph_execute.cpp:389.
+        MutableExecutionContext().Stop();
         ScriptCursor.reset();
         ClearStageData();
-        StageResult.reset();
+        ResetStageResultForNextPage();
         InitStageData(std::make_unique<TFetchedData>(
             GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
                 GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(),
             GetRecordsCountOptional()));
+
+        // Reset prefetch tracking flag since we're starting a new fetch cycle
+        SetPrefetchTriggered(false);
+        // Reset the assembled-data-is-page-relative flag for the new fetch cycle.
+        // DoAssembleColumns (old path) will set it back to true if it runs.
+        SetAssembledDataPageRelative(false);
 
         // Restart from the beginning of the original fetch script.
         TFetchingScriptCursor cursor(StreamingFetchScript, 0);
@@ -119,7 +140,8 @@ void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::
     if (sourceSimple->IsStreamingMode() && sourceSimple->HasMorePages()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_page_fetched")(
             "source_idx", sourceSimple->GetSourceIdx())(
-            "has_more_pages", sourceSimple->HasMorePages());
+            "has_more_pages", sourceSimple->HasMorePages())(
+            "reverse", sourceSimple->GetContext()->GetReadMetadata()->IsDescSorted());
     }
 
     // Pass control to sync point which will:
@@ -180,7 +202,8 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     if (StreamingMode) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_enabled")(
             "source_idx", GetSourceIdx())("records", GetRecordsCount())(
-            "pages", StageResult->GetPagesToResultVerified().size());
+            "pages", StageResult->GetPagesToResultVerified().size())(
+            "reverse", GetContext()->GetReadMetadata()->IsDescSorted());
     }
 
     if (StageResult->IsEmpty()) {
@@ -215,7 +238,8 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             "page_index", GetCurrentEarlyPageIndex())(
             "total_pages", GetEarlyPages().size())(
             "start", *pageStartRow)(
-            "end", *pageEndRow);
+            "end", *pageEndRow)(
+            "reverse", GetContext()->GetReadMetadata()->IsDescSorted());
     }
 
     for (auto&& i : columnIds) {
@@ -539,6 +563,9 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
                     .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), pageRange, ss)
                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>(), Portion->GetPathId().DebugString())
                     .DetachResult();
+        // The assembled batch contains only the current page's rows (page-relative,
+        // starting at row 0).  TBuildResultStep must use batchStartIndex=0 for this path.
+        SetAssembledDataPageRelative(true);
     } else {
         batch = GetPortionAccessor()
                     .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)

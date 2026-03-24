@@ -33,7 +33,7 @@ bool AllExistingWritesSkipConflictCheck(const C& ops)
 
     for (const auto& op : ops) {
         if (!op.HasSkipConflictCheck()) {
-            // операция чтения
+            // SkipConflictCheck is not set for read operations
             continue;
         }
 

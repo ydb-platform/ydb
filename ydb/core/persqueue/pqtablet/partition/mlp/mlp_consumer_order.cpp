@@ -46,6 +46,10 @@ namespace NKikimr::NPQ::NMLP {
         return update;
     }
 
+    TString TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::SendFullStateReasonsAsString() const {
+        return SendReasonsToString(SendFullStateReasons);
+    }
+
     TString TChildPartitionsOrderManager::SendReasonsToString(const ESendReasons reasons) {
         if (reasons == ESendReasons::None) {
             return ToString(ESendReasons::None);
@@ -54,14 +58,17 @@ namespace NKikimr::NPQ::NMLP {
         ui32 uReasons = static_cast<ui32>(reasons);
         for (const auto p : GetEnumAllValues<ESendReasons>()) {
             const ui32 uCheck = static_cast<ui32>(p);
-            if ((uReasons & uCheck) != uCheck || uCheck == 0) {
+            if (uCheck == 0) {
+                continue;
+            }
+            if ((uReasons & uCheck) != uCheck) {
                 continue;
             }
             ss << p << '|';
             uReasons &= ~uCheck;
         }
         if (uReasons != 0) {
-            ss << Hex(uReasons, {});
+            ss << Hex(uReasons, HF_ADDX);
         }
         if (ss.EndsWith('|')) {
             ss.pop_back();

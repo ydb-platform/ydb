@@ -29,6 +29,7 @@ namespace NKikimr::NPQ::NMLP {
 
             bool AddSendFullStateReason(ESendReasons reason);
             bool NeedSendFullState() const;
+            TString SendFullStateReasonsAsString() const;
         };
 
         bool Empty() const;

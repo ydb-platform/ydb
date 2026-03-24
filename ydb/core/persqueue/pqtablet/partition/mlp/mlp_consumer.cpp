@@ -1136,7 +1136,7 @@ void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
         update->SetStep(ChildPartitionsOrderManager.ConsumerStep);
         update->SetMode(childMode);
 
-        LOG_D("UpdateLockedGroupsIdInChildPartitions: updating child partition " << childPartitionId << " with " << ShortDebugString(record));
+        LOG_D("UpdateLockedGroupsIdInChildPartitions: updating child partition " << childPartitionId << "; reason=" << state.SendFullStateReasonsAsString() << "; update=" << ShortDebugString(record));
         auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), state.TabletId, true, state.Cookie);
         Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
         state.SendFullStateReasons = TChildPartitionsOrderManager::ESendReasons::None;

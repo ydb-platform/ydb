@@ -14,7 +14,7 @@ public:
         : TBase(&THandlerActorMetaCapabilities::StateWork)
     {}
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event, const NActors::TActorContext& ctx) {
         // Stub endpoint for UI compatibility so clients do not receive 404 while capabilities are not implemented yet.
         static constexpr TStringBuf ResponseBody = "{\n  \"Capabilities\": {}\n}\n";
         auto response = event->Get()->Request->CreateResponseOK(ResponseBody, "application/json; charset=utf-8");

@@ -10,6 +10,8 @@ namespace NKikimr::NKqp {
 TMaxTasksGraph::TMaxTasksGraph(size_t maxChannelsCount) : MaxChannelsCount(maxChannelsCount) {}
 
 void TMaxTasksGraph::AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot) {
+    YQL_ENSURE(!resourcesSnapshot.empty());
+
     Nodes.reserve(resourcesSnapshot.size());
     Nodes.resize(resourcesSnapshot.size(), {MaxChannelsCount});
 

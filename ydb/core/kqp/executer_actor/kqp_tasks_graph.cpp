@@ -440,7 +440,8 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
 
 } // anonymous namespace
 
-void TKqpTasksGraph::FillKqpTasksGraphStages() {
+// TODO: can we use TableKind from TableConstInfo from prepared query?
+void TKqpTasksGraph::FillStages() {
     for (size_t txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
         const auto& tx = Transactions.at(txIdx);
 
@@ -605,27 +606,6 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
             }
 
             YQL_ENSURE(tables.empty() || tables.size() == 1);
-
-            // Check which type of tasks to build later
-            const bool maybeOlapRead = (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap();
-
-            const bool buildFromSourceTasks = stage.SourcesSize() > 0;
-            const bool buildSysViewTasks = stageInfo.Meta.IsSysView();
-            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!GetMeta().IsScan && stage.SinksSize() + stage.OutputTransformsSize() > 0 && !(maybeOlapRead && stageInfo.Meta.HasReads()));
-            const bool buildScanTasks = GetMeta().IsScan
-                ? stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()
-                : maybeOlapRead && (stage.SinksSize() + stage.OutputTransformsSize() == 0 || stageInfo.Meta.HasReads())
-                ;
-
-            if (buildFromSourceTasks) {
-                stageInfo.Meta.TasksType = TStageInfoMeta::SOURCE_TASKS;
-            } else if (buildSysViewTasks) {
-                stageInfo.Meta.TasksType = TStageInfoMeta::SYSVIEW_TASKS;
-            } else if (buildComputeTasks) {
-                stageInfo.Meta.TasksType = TStageInfoMeta::COMPUTE_TASKS;
-            } else if (buildScanTasks) {
-                stageInfo.Meta.TasksType = TStageInfoMeta::SCAN_TASKS;
-            }
         }
     }
 }
@@ -1856,6 +1836,13 @@ void TKqpTasksGraph::CountSysViewScanTasks(const TStageInfo& stageInfo) {
     const auto& stageId = stageInfo.Id;
     const auto& stage = stageInfo.Meta.GetStage(stageId);
 
+    // TODO: can it have any inputs at all?
+    std::list<TStageId> inputs;
+    for (const auto& input : stage.GetInputs()) {
+        inputs.push_back(NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex()));
+    }
+    MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::FIXED, inputs);
+
     MaxTasksGraph.AddTasks(stageId, stage.GetTableOps().size());
 }
 
@@ -1936,6 +1923,9 @@ void TKqpTasksGraph::CountComputeTasks(const TStageInfo& stageInfo, const ui32 n
     bool forceMapTasks = false;
     ui32 mapConnectionCount = 0;
 
+    std::list<TStageId> inputs;
+    std::optional<TStageId> copyInput;
+    TMaxTasksGraph::EStageType stageType = TMaxTasksGraph::ANY;
     for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
         const auto& input = stage.GetInputs(inputIndex);
 
@@ -1960,34 +1950,47 @@ void TKqpTasksGraph::CountComputeTasks(const TStageInfo& stageInfo, const ui32 n
             }
         }
 
-        auto& originStageInfo = GetStageInfo(NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex()));
+        const auto& inputStageId = NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex());
+        inputs.push_back(inputStageId);
 
         switch (input.GetTypeCase()) {
             case NKqpProto::TKqpPhyConnection::kHashShuffle: {
-                inputTasks += originStageInfo.Tasks.size();
+                inputTasks += MaxTasksGraph.GetStageTasksCount(inputStageId);
                 isShuffle = true;
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kStreamLookup: {
-                partitionsCount = originStageInfo.Tasks.size();
+                stageType = TMaxTasksGraph::COPY;
+                copyInput = inputStageId;
+                partitionsCount = MaxTasksGraph.GetStageTasksCount(inputStageId); // TODO: what if `partitionsCount` is already set?
+                Cerr << "partitionsCount: " << partitionsCount << Endl;
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kMap: {
-                partitionsCount = originStageInfo.Tasks.size();
+                stageType = TMaxTasksGraph::COPY;
+                copyInput = inputStageId;
+                partitionsCount = MaxTasksGraph.GetStageTasksCount(inputStageId); // TODO: what if `partitionsCount` is already set?
+                Cerr << "partitionsCount: " << partitionsCount << Endl;
                 forceMapTasks = true;
                 ++mapConnectionCount;
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
-                partitionsCount = std::max<ui64>(partitionsCount, originStageInfo.Tasks.size());
+                partitionsCount = std::max<ui64>(partitionsCount, MaxTasksGraph.GetStageTasksCount(inputStageId));
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kVectorResolve: {
-                partitionsCount = originStageInfo.Tasks.size();
+                stageType = TMaxTasksGraph::COPY;
+                copyInput = inputStageId;
+                partitionsCount = MaxTasksGraph.GetStageTasksCount(inputStageId); // TODO: what if `partitionsCount` is already set?
+                Cerr << "partitionsCount: " << partitionsCount << Endl;
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kSequencer: {
-                partitionsCount = originStageInfo.Tasks.size();
+                stageType = TMaxTasksGraph::COPY;
+                copyInput = inputStageId;
+                partitionsCount = MaxTasksGraph.GetStageTasksCount(inputStageId); // TODO: what if `partitionsCount` is already set?
+                Cerr << "partitionsCount: " << partitionsCount << Endl;
                 break;
             }
             default:
@@ -2004,6 +2007,7 @@ void TKqpTasksGraph::CountComputeTasks(const TStageInfo& stageInfo, const ui32 n
         }
     }
 
+    MaxTasksGraph.AddStage(stageId, stageType, inputs, copyInput);
     MaxTasksGraph.AddTasks(stageId, partitionsCount);
 }
 
@@ -2077,6 +2081,12 @@ void TKqpTasksGraph::CountScanTasksFromShards(const TStageInfo& stageInfo, bool 
     const auto& stage = stageInfo.Meta.GetStage(stageId);
     bool shuffleEliminated = enableShuffleElimination && stage.GetIsShuffleEliminated();
 
+    // TODO: can it have any inputs at all?
+    std::list<TStageId> inputs;
+    for (const auto& input : stage.GetInputs()) {
+        inputs.push_back(NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex()));
+    }
+
     THashMap<ui64 /* nodeId */, ui64> nodeShards;
 
     for (int i = 0, s = stage.TableOpsSize(); i < s; ++i) {
@@ -2090,20 +2100,28 @@ void TKqpTasksGraph::CountScanTasksFromShards(const TStageInfo& stageInfo, bool 
         }
 
         if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() && !shuffleEliminated || (!isOlapScan && isSorted)) {
-            for (const auto& [nodeId, shards] : nodeShards) {
-                if (stageInfo.Meta.IsOlap() && isSorted) {
+            if (stageInfo.Meta.IsOlap() && isSorted) {
+                MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::FIXED, inputs);
+                for (const auto& [nodeId, shards] : nodeShards) {
                     MaxTasksGraph.AddTasks(stageId, nodeId, shards);
-                } else {
+                }
+            } else {
+                MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::ANY, inputs);
+                for (const auto& [nodeId, shards] : nodeShards) {
                     const auto maxTasksPerNode = GetScanTasksPerNode(stageInfo, isOlapScan, nodeId).first;
                     MaxTasksGraph.AddTasks(stageId, nodeId, std::min<ui32>(shards, maxTasksPerNode));
                 }
             }
         } else if (shuffleEliminated) {
+            MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::FIXED, inputs);
+
             for (const auto& [nodeId, shards] : nodeShards) {
                 const auto maxTasksPerNode = GetScanTasksPerNode(stageInfo, isOlapScan, nodeId, true).first;
                 MaxTasksGraph.AddTasks(stageId, nodeId, std::min<ui32>(shards, maxTasksPerNode));
             }
         } else {
+            MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::ANY, inputs);
+
             // It's ok to create tasks only on nodes with shards - to prevent cross-network traffic.
             for (const auto& [nodeId, _] : nodeShards) {
                 const auto maxTasksPerNode = GetScanTasksPerNode(stageInfo, isOlapScan, nodeId).first;
@@ -2313,8 +2331,15 @@ void TKqpTasksGraph::CountReadTasksFromSource(const TStageInfo& stageInfo, size_
     const auto& stageId = stageInfo.Id;
     const auto& stage = stageInfo.Meta.GetStage(stageId);
     const auto& externalSource = stage.GetSources(0).GetExternalSource();
-    ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
 
+    // TODO: can it have any inputs at all?
+    std::list<TStageId> inputs;
+    for (const auto& input : stage.GetInputs()) {
+        inputs.push_back(NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex()));
+    }
+    MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::ANY, inputs);
+
+    ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
     if (scheduledTaskCount) {
         taskCount = std::min<ui32>(taskCount, scheduledTaskCount);
     } else if (resourceSnapshotSize) {
@@ -2423,16 +2448,26 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
 
 void TKqpTasksGraph::CountFullTextScanTasksFromSource(const TStageInfo& stageInfo) {
     const auto& stageId = stageInfo.Id;
+    const auto& stage = stageInfo.Meta.GetStage(stageId);
+
+    // TODO: can it have any inputs at all?
+    std::list<TStageId> inputs;
+    for (const auto& input : stage.GetInputs()) {
+        inputs.push_back(NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex()));
+    }
+    MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::ANY, inputs);
+
     ui64 nodeId = GetMeta().ExecuterId.NodeId();
     MaxTasksGraph.AddTasks(stageId, nodeId, 1);
 }
 
-void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats) {
-    YQL_ENSURE(stageInfo.Meta.GetStage(stageInfo.Id).GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource);
-    Y_UNUSED(stats);
+void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats*) {
+    const auto& stageId = stageInfo.Id;
+    const auto& stage = stageInfo.Meta.GetStage(stageId);
 
-    auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-    const auto& source = stageInfo.Meta.GetStage(stageInfo.Id).GetSources(0);
+    YQL_ENSURE(stage.GetSources(0).HasFullTextSource());
+
+    const auto& source = stage.GetSources(0);
     const auto& fullTextSource = source.GetFullTextSource();
 
     YQL_ENSURE(fullTextSource.GetIndex());
@@ -2456,7 +2491,6 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
 
     auto guard = TxAlloc->TypeEnv.BindAllocator();
     {
-
         TStringBuilder queryBuilder;
         for (const auto& query : fullTextSource.GetQuerySettings().GetQueryValue()) {
             auto value = ExtractPhyValue(
@@ -2468,8 +2502,7 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         settings->MutableQuerySettings()->SetQuery(TString(queryBuilder));
     }
 
-    if (fullTextSource.HasTakeLimit())
-    {
+    if (fullTextSource.HasTakeLimit()) {
         auto value = ExtractPhyValue(
             stageInfo, fullTextSource.GetTakeLimit(),
             TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
@@ -2534,6 +2567,15 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
 
 void TKqpTasksGraph::CountSysViewTasksFromSource(const TStageInfo& stageInfo) {
     const auto& stageId = stageInfo.Id;
+    const auto& stage = stageInfo.Meta.GetStage(stageId);
+
+    // TODO: can it have any inputs at all?
+    std::list<TStageId> inputs;
+    for (const auto& input : stage.GetInputs()) {
+        inputs.push_back(NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex()));
+    }
+    MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::ANY, inputs);
+
     ui64 nodeId = GetMeta().ExecuterId.NodeId();
     MaxTasksGraph.AddTasks(stageId, nodeId, 1);
 }
@@ -2663,6 +2705,12 @@ void TKqpTasksGraph::CountScanTasksFromSource(const TStageInfo& stageInfo, bool 
     const auto& source = stage.GetSources(0).GetReadRangesSource();
     bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
     bool singlePartitionedStage = stage.GetIsSinglePartition();
+
+    std::list<TStageId> inputs;
+    for (const auto& input : stage.GetInputs()) {
+        inputs.push_back(NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex()));
+    }
+    MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::ANY, inputs);
 
     if (partitions.empty()) {
         return;
@@ -3118,12 +3166,38 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
 
     // Counting tasks via MaxTasksGraph
 
+    if (!resourcesSnapshot.empty()) {
+        MaxTasksGraph.AddNodes(resourcesSnapshot);
+    }
+
     for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
         const auto& tx = Transactions.at(txIdx);
         auto scheduledTaskCount = ScheduleByCost(tx, resourcesSnapshot);
         for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
             const auto& stage = tx.Body->GetStages(stageIdx);
-            const auto& stageInfo = GetStageInfo(NYql::NDq::TStageId(txIdx, stageIdx));
+            auto& stageInfo = GetStageInfo(NYql::NDq::TStageId(txIdx, stageIdx));
+
+            // TODO: move this check to FillStages() - after all necessary params are set in KqpTasksGraph ctor.
+            // Check which type of tasks to build later
+            const bool maybeOlapRead = (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap();
+
+            const bool buildFromSourceTasks = stage.SourcesSize() > 0;
+            const bool buildSysViewTasks = stageInfo.Meta.IsSysView();
+            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!GetMeta().IsScan && stage.SinksSize() + stage.OutputTransformsSize() > 0 && !(maybeOlapRead && stageInfo.Meta.HasReads()));
+            const bool buildScanTasks = GetMeta().IsScan
+                ? stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()
+                : maybeOlapRead && (stage.SinksSize() + stage.OutputTransformsSize() == 0 || stageInfo.Meta.HasReads())
+                ;
+
+            if (buildFromSourceTasks) {
+                stageInfo.Meta.TasksType = TStageInfoMeta::SOURCE_TASKS;
+            } else if (buildSysViewTasks) {
+                stageInfo.Meta.TasksType = TStageInfoMeta::SYSVIEW_TASKS;
+            } else if (buildComputeTasks) {
+                stageInfo.Meta.TasksType = TStageInfoMeta::COMPUTE_TASKS;
+            } else if (buildScanTasks) {
+                stageInfo.Meta.TasksType = TStageInfoMeta::SCAN_TASKS;
+            }
 
             switch(stageInfo.Meta.TasksType) {
                 case TStageInfoMeta::SOURCE_TASKS: {
@@ -3285,6 +3359,7 @@ TKqpTasksGraph::TKqpTasksGraph(
     const NKikimrConfig::TTableServiceConfig::TResourceManager&, // TODO: should be used to calculate max channels count per node
     const TKqpRequestCounters::TPtr& counters,
     TActorId bufferActorId,
+    TActorId executerId,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
     : Transactions(transactions)
     , TxAlloc(txAlloc)
@@ -3294,6 +3369,7 @@ TKqpTasksGraph::TKqpTasksGraph(
     , UserToken(std::move(userToken))
     , MaxTasksGraph(10000)
 {
+    GetMeta().ExecuterId = executerId;
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;
     GetMeta().RequestIsolationLevel = NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SERIALIZABLE;
@@ -3351,7 +3427,7 @@ TKqpTasksGraph::TKqpTasksGraph(
             YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)*txsType);
     }
 
-    FillKqpTasksGraphStages();
+    FillStages();
 }
 
 std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrder() const {

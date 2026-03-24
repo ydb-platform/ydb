@@ -154,7 +154,7 @@ public:
         , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, AggregationSettings, executerConfig.TableServiceConfig.GetResourceManager(), Counters, BufferActorId, UserToken)
+        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, AggregationSettings, executerConfig.TableServiceConfig.GetResourceManager(), Counters, BufferActorId, SelfId(), UserToken)
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
     {
@@ -898,7 +898,6 @@ protected:
     }
 
     void HandleReady(TEvKqpExecuter::TEvTxRequest::TPtr ev) {
-        TasksGraph.GetMeta().ExecuterId = SelfId();
         TasksGraph.GetMeta().TxId = TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 

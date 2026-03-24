@@ -626,6 +626,10 @@ private:
         size_t sourceScanPartitionsCount = 0;
 
         if (!graphRestored) {
+            // TODO: is it ok? We get it anyway later in planner
+            if (ResourcesSnapshot.empty()) {
+                ResourcesSnapshot = GetKqpResourceManager()->GetClusterResources();
+            }
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get());
         }
 

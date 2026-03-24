@@ -401,6 +401,7 @@ public:
         const NKikimrConfig::TTableServiceConfig::TResourceManager& channelSettings,
         const TKqpRequestCounters::TPtr& counters,
         TActorId bufferActorId,
+        TActorId executerId,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken
     );
 
@@ -421,7 +422,7 @@ public:
     TString DumpToString() const;
 
 private:
-    void FillKqpTasksGraphStages();
+    void FillStages();
 
     void CountScanTasksFromSource(const TStageInfo& stageInfo, bool limitTasksPerNode);
     void CountFullTextScanTasksFromSource(const TStageInfo& stageInfo);

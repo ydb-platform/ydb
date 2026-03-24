@@ -50,7 +50,7 @@ jobs:
         # Function to fetch a page of runners
         fetch_runners_page() {
           local page=$1
-          echo "Fetching runners page $page..."
+          echo "Fetching runners page $page..." >&2
           local tmpfile=$(mktemp)
           local http_code=$(curl -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -58,8 +58,8 @@ jobs:
             "https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100&page=$page")
           
           if [ "$http_code" != "200" ]; then
-            echo "HTTP error fetching page $page: $http_code"
-            cat "$tmpfile"
+            echo "HTTP error fetching page $page: $http_code" >&2
+            cat "$tmpfile" >&2
             rm -f "$tmpfile"
             return 1
           fi
@@ -75,11 +75,11 @@ jobs:
         more_pages=true
         
         while $more_pages; do
-          runners_data=$(fetch_runners_page $page)
-          if [ $? -ne 0 ]; then
+          if ! runners_data=$(fetch_runners_page $page); then
             echo "Failed to fetch runners page $page, exiting"
             exit 1
           fi
+          echo "Page $page response (first 300 chars): ${runners_data:0:300}" >&2
           
           # Extract runner IDs for this page
           readarray -t page_ids < <(echo "$runners_data" | jq -r "$query" | grep -v "^$")

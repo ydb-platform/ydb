@@ -379,6 +379,10 @@ class TTableDescription::TImpl {
 
         // read replicas settings
         ReadReplicasSettings_ = TReadReplicasSettings::FromProto(proto.read_replicas_settings());
+
+        if (proto.has_metrics_settings()) {
+            MetricsSettings_ = TMetricsSettings::FromProto(proto.metrics_settings());
+        }
     }
 
 public:
@@ -546,6 +550,15 @@ public:
         ReadReplicasSettings_ = TReadReplicasSettings(mode, readReplicasCount);
     }
 
+    /**
+     * Set the metrics configuration for the given table.
+     *
+     * @param[in] metricsLevel The metrics level
+     */
+    void SetMetricsSettings(TMetricsSettings::EMetricsLevel metricsLevel) {
+        MetricsSettings_ = TMetricsSettings(metricsLevel);
+    }
+
     void SetStoreType(EStoreType type) {
         StoreType_ = type;
     }
@@ -642,6 +655,15 @@ public:
         return ReadReplicasSettings_;
     }
 
+    /**
+     * Return the metrics configuration for the given table.
+     *
+     * @return The metrics configuration
+     */
+    const std::optional<TMetricsSettings>& GetMetricsSettings() const {
+        return MetricsSettings_;
+    }
+
 private:
     Ydb::Table::DescribeTableResult Proto_;
     TStorageSettings StorageSettings_;
@@ -664,6 +686,7 @@ private:
     TPartitioningSettings PartitioningSettings_;
     std::optional<bool> KeyBloomFilter_;
     std::optional<TReadReplicasSettings> ReadReplicasSettings_;
+    std::optional<TMetricsSettings> MetricsSettings_;
     bool HasStorageSettings_ = false;
     bool HasPartitioningSettings_ = false;
     EStoreType StoreType_ = EStoreType::Row;
@@ -868,6 +891,10 @@ void TTableDescription::SetReadReplicasSettings(TReadReplicasSettings::EMode mod
     Impl_->SetReadReplicasSettings(mode, readReplicasCount);
 }
 
+void TTableDescription::SetMetricsSettings(TMetricsSettings::EMetricsLevel metricsLevel) {
+    Impl_->SetMetricsSettings(metricsLevel);
+}
+
 void TTableDescription::SetStoreType(EStoreType type) {
     Impl_->SetStoreType(type);
 }
@@ -918,6 +945,10 @@ std::optional<bool> TTableDescription::GetKeyBloomFilter() const {
 
 std::optional<TReadReplicasSettings> TTableDescription::GetReadReplicasSettings() const {
     return Impl_->GetReadReplicasSettings();
+}
+
+std::optional<TMetricsSettings> TTableDescription::GetMetricsSettings() const {
+    return Impl_->GetMetricsSettings();
 }
 
 const Ydb::Table::DescribeTableResult& TTableDescription::GetProto() const {
@@ -1001,6 +1032,10 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
     if (const auto& settings = Impl_->GetReadReplicasSettings()) {
         settings->SerializeTo(*request.mutable_read_replicas_settings());
+    }
+
+    if (const auto& settings = Impl_->GetMetricsSettings()) {
+        settings->SerializeTo(*request.mutable_metrics_settings());
     }
 }
 
@@ -1391,6 +1426,11 @@ TTableBuilder& TTableBuilder::SetKeyBloomFilter(bool enabled) {
 
 TTableBuilder& TTableBuilder::SetReadReplicasSettings(TReadReplicasSettings::EMode mode, uint64_t readReplicasCount) {
     TableDescription_.SetReadReplicasSettings(mode, readReplicasCount);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::SetMetricsSettings(TMetricsSettings::EMetricsLevel metricsLevel) {
+    TableDescription_.SetMetricsSettings(metricsLevel);
     return *this;
 }
 
@@ -1808,6 +1848,17 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
     if (settings.SetReadReplicasSettings_.has_value()) {
         const auto& replSettings = settings.SetReadReplicasSettings_.value();
         replSettings.SerializeTo(*request.mutable_set_read_replicas_settings());
+    }
+
+    if (const auto& metricsSettings = settings.GetAlterMetricsSettings()) {
+        switch (metricsSettings->GetAction()) {
+        case TAlterMetricsSettings::EAction::Set:
+            metricsSettings->GetMetricsSettings().SerializeTo(*request.mutable_set_metrics_settings());
+            break;
+        case TAlterMetricsSettings::EAction::Drop:
+            request.mutable_drop_metrics_settings();
+            break;
+        }
     }
 
     return request;
@@ -2452,6 +2503,61 @@ void TReadReplicasSettings::SerializeTo(Ydb::Table::ReadReplicasSettings& proto)
     }
 }
 
+std::optional<TMetricsSettings> TMetricsSettings::TMetricsSettings::FromProto(
+    const Ydb::Table::MetricsSettings& proto
+) {
+    switch (proto.metrics_level()) {
+    case Ydb::Table::METRICS_LEVEL_UNSPECIFIED:
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Unspecified);
+
+    case Ydb::Table::METRICS_LEVEL_DISABLED:
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Disabled);
+
+    case Ydb::Table::METRICS_LEVEL_DATABASE:
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Database);
+
+    case Ydb::Table::METRICS_LEVEL_TABLE:
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Table);
+
+    case Ydb::Table::METRICS_LEVEL_PARTITION:
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Partition);
+
+    default:
+        // Unknown metrics level, ignore the metrics settings completely
+        return {};
+    }
+}
+
+/**
+ * Read the metrics configuration to the corresponding protobuf message.
+ *
+ * @param[in,out] proto The message to write to
+ */
+void TMetricsSettings::SerializeTo(Ydb::Table::MetricsSettings& proto) const {
+    switch (GetMetricsLevel()) {
+    case EMetricsLevel::Unspecified:
+        proto.set_metrics_level(Ydb::Table::METRICS_LEVEL_UNSPECIFIED);
+        break;
+
+    case EMetricsLevel::Disabled:
+        proto.set_metrics_level(Ydb::Table::METRICS_LEVEL_DISABLED);
+        break;
+
+    case EMetricsLevel::Database:
+        proto.set_metrics_level(Ydb::Table::METRICS_LEVEL_DATABASE);
+        break;
+
+    case EMetricsLevel::Table:
+        proto.set_metrics_level(Ydb::Table::METRICS_LEVEL_TABLE);
+        break;
+
+    case EMetricsLevel::Partition:
+        proto.set_metrics_level(Ydb::Table::METRICS_LEVEL_PARTITION);
+        break;
+    }
+}
+
+
 TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalIndexSettings& proto) {
     auto partitionsFromProto = [](const Ydb::Table::GlobalIndexSettings& proto) -> TUniformOrExplicitPartitions {
         switch (proto.partitions_case()) {
@@ -2464,10 +2570,17 @@ TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalInd
         }
     };
 
+    std::optional<TMetricsSettings> metricsSettings;
+
+    if (proto.has_metrics_settings()) {
+        metricsSettings = TMetricsSettings::FromProto(proto.metrics_settings());
+    }
+
     return {
         .PartitioningSettings = TPartitioningSettings(proto.partitioning_settings()),
         .Partitions = partitionsFromProto(proto),
-        .ReadReplicasSettings = TReadReplicasSettings::FromProto(proto.read_replicas_settings())
+        .ReadReplicasSettings = TReadReplicasSettings::FromProto(proto.read_replicas_settings()),
+        .MetricsSettings = metricsSettings,
     };
 }
 
@@ -2486,6 +2599,10 @@ void TGlobalIndexSettings::SerializeTo(Ydb::Table::GlobalIndexSettings& settings
 
     if (ReadReplicasSettings) {
         ReadReplicasSettings->SerializeTo(*settings.mutable_read_replicas_settings());
+    }
+
+    if (MetricsSettings) {
+        MetricsSettings->SerializeTo(*settings.mutable_metrics_settings());
     }
 }
 
@@ -3633,6 +3750,81 @@ TAlterTableSettings& TAlterTtlSettingsBuilder::EndAlterTtlSettings() {
     return Parent_.AlterTtlSettings(Impl_->GetAlterTtlSettings());
 }
 
+/**
+ * The implementation of the builder for the metrics configuration
+ * for the ALTER TABLE request.
+ */
+class TAlterMetricsSettingsBuilder::TImpl {
+public:
+    TImpl() {
+    }
+
+    /**
+     * Configure the ALTER TABLE request to remove the metrics configuration.
+     */
+    void Drop() {
+        AlterMetricsSettings = TAlterMetricsSettings::Drop();
+    }
+
+    /**
+     * Configure the ALTER TABLE request to use the given metrics configuration.
+     *
+     * @param[in] settings The metrics configuration to use
+     */
+    void Set(TMetricsSettings&& settings) {
+        AlterMetricsSettings = TAlterMetricsSettings::Set(std::move(settings));
+    }
+
+    /**
+     * Configure the ALTER TABLE request to use the given metrics configuration.
+     *
+     * @param[in] settings The metrics configuration to use
+     */
+    void Set(const TMetricsSettings& settings) {
+        AlterMetricsSettings = TAlterMetricsSettings::Set(settings);
+    }
+
+    /**
+     * Return the current metrics configuration.
+     *
+     * @return The current metrics configuration
+     */
+    const std::optional<TAlterMetricsSettings>& GetAlterMetricsSettings() const {
+        return AlterMetricsSettings;
+    }
+
+private:
+    std::optional<TAlterMetricsSettings> AlterMetricsSettings;
+};
+
+TAlterMetricsSettingsBuilder::TAlterMetricsSettingsBuilder(TAlterTableSettings& parent)
+    : Parent(parent)
+    , Impl(std::make_shared<TImpl>())
+{ }
+
+TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Drop() {
+    Impl->Drop();
+    return *this;
+}
+
+TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Set(TMetricsSettings&& settings) {
+    Impl->Set(std::move(settings));
+    return *this;
+}
+
+TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Set(const TMetricsSettings& settings) {
+    Impl->Set(settings);
+    return *this;
+}
+
+TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Set(TMetricsSettings::EMetricsLevel metricsLevel) {
+    return Set(TMetricsSettings(metricsLevel));
+}
+
+TAlterTableSettings& TAlterMetricsSettingsBuilder::EndAlterMetricsSettings() {
+    return Parent.SetAlterMetricsSettings(Impl->GetAlterMetricsSettings());
+}
+
 class TAlterTableSettings::TImpl {
 public:
     TImpl() { }
@@ -3645,8 +3837,27 @@ public:
         return AlterTtlSettings_;
     }
 
+    /**
+     * Update the metrics configuration for the ALTER TABLE request.
+     *
+     * @param[in] settings The metrics configuration to use
+     */
+    void SetAlterMetricsSettings(const std::optional<TAlterMetricsSettings>& settings) {
+        AlterMetricsSettings = settings;
+    }
+
+    /**
+     * Return the current metrics configuration for the ALTER TABLE request.
+     *
+     * @return The current metrics configuration
+     */
+    const std::optional<TAlterMetricsSettings>& GetAlterMetricsSettings() const {
+        return AlterMetricsSettings;
+    }
+
 private:
     std::optional<TAlterTtlSettings> AlterTtlSettings_;
+    std::optional<TAlterMetricsSettings> AlterMetricsSettings;
 };
 
 TAlterTableSettings::TAlterTableSettings()
@@ -3662,6 +3873,17 @@ const std::optional<TAlterTtlSettings>& TAlterTableSettings::GetAlterTtlSettings
     return Impl_->GetAlterTtlSettings();
 }
 
+const std::optional<TAlterMetricsSettings>& TAlterTableSettings::GetAlterMetricsSettings() const {
+    return Impl_->GetAlterMetricsSettings();
+}
+
+TAlterTableSettings& TAlterTableSettings::SetAlterMetricsSettings(
+    const std::optional<TAlterMetricsSettings>& settings
+) {
+    Impl_->SetAlterMetricsSettings(settings);
+    return *this;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TReadReplicasSettings::TReadReplicasSettings(EMode mode, uint64_t readReplicasCount)
@@ -3675,6 +3897,14 @@ TReadReplicasSettings::EMode TReadReplicasSettings::GetMode() const {
 
 uint64_t TReadReplicasSettings::GetReadReplicasCount() const {
     return ReadReplicasCount_;
+}
+
+TMetricsSettings::TMetricsSettings(EMetricsLevel metricsLevel)
+    : MetricsLevel(metricsLevel) {
+}
+
+TMetricsSettings::EMetricsLevel TMetricsSettings::GetMetricsLevel() const {
+    return MetricsLevel;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

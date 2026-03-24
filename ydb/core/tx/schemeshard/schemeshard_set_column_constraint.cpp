@@ -24,6 +24,30 @@ void TSchemeShard::PersistSetColumnConstraintLockTxDone([[maybe_unused]] NIceDb:
     // todo
 }
 
+void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxId([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
+    // todo
+}
+
+void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxStatus([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
+    // todo
+}
+
+void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxDone([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
+    // todo
+}
+
+void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxId([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
+    // todo
+}
+
+void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxStatus([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
+    // todo
+}
+
+void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxDone([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
+    // todo
+}
+
 void TSchemeShard::PersistSetColumnConstraintUnlockTxId([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
     // todo
 }

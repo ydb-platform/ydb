@@ -13,118 +13,35 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-using namespace NTabletFlatExecutor;
-
-struct TSchemeShard::TIndexBuilder::TTxProgressSetColumnConstraint
-    : public TSchemeShard::TIndexBuilder::TTxBase
-{
-public:
-    explicit TTxProgressSetColumnConstraint(TSelf* self, TIndexBuildId operationId)
-        : TTxBase(self, operationId, TXTYPE_CREATE_SET_COLUMN_CONSTRAINT)
-    {}
-
-    bool DoExecute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
-        LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId);
-
-        auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
-        Y_ENSURE(operationInfoPtr);
-        auto& operationInfo = *operationInfoPtr->get();
-
-        switch (operationInfo.OperationState) {
-            case TSetColumnConstraintOperationInfo::EOperationState::Invalid: {
-                Y_UNREACHABLE();
-                break;
-            }
-            case TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps: {
-                if (operationInfo.LockTxId == InvalidTxId) {
-                    AllocateTxId(BuildId);
-                } else if (operationInfo.LockTxStatus == NKikimrScheme::StatusSuccess) {
-                    Send(Self->SelfId(), LockPropose(Self, operationInfo, operationInfo.LockTxId, TPath::Init(operationInfo.TablePathId, Self)), 0, ui64(BuildId));
-                } else if (!operationInfo.LockTxDone) {
-                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.LockTxId)));
-                } else {
-                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites);
-                    Progress(BuildId);
-                }
-
-                break;
-            }
-            case TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites: {
-                ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Validate);
-                Progress(BuildId);
-
-                break;
-            }
-            case TSetColumnConstraintOperationInfo::EOperationState::Validate: {
-                ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites);
-                Progress(BuildId);
-
-                break;
-            }
-            case TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites: {
-                ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps);
-                Progress(BuildId);
-
-                break;
-            }
-            case TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps: {
-                if (operationInfo.UnlockTxId == InvalidTxId) {
-                    AllocateTxId(BuildId);
-                } else if (operationInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
-                    Send(Self->SelfId(), UnlockPropose(Self, operationInfo), 0, ui64(BuildId));
-                } else if (!operationInfo.UnlockTxDone) {
-                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.UnlockTxId)));
-                } else {
-                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Done);
-                    Progress(BuildId);
-                }
-
-                break;
-            }
-            case TSetColumnConstraintOperationInfo::EOperationState::Done: {
-                LOG_N("TTxProgressSetColumnConstraint::DoExecute"
-                    ": LockNullWrites not implemented yet"
-                    ", id# " << BuildId);
-
-                auto response = MakeHolder<TEvSetColumnConstraint::TEvCreateResponse>(ui64(BuildId));
-                response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
-                AddIssue(response->Record.MutableIssues(),
-                    "SetColumnConstraint operation is not yet implemented");
-
-                LOG_N("TTxProgressSetColumnConstraint::DoExecute: replying UNSUPPORTED"
-                    << ", id# " << BuildId
-                    << ", replyTo# " << operationInfo.CreateSender.ToString());
-
-                Send(operationInfo.CreateSender, std::move(response), 0, operationInfo.SenderCookie);
-
-                // SendNotificationsIfFinished(operationInfo);
-                break;
-            }
-        }
-
-        return true;
-    }
-
-    void DoComplete(const TActorContext& /*ctx*/) override {
-    }
-
-    void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
-        TIndexBuildInfo* operationInfo, const std::exception& exc) override
-    {
-        if (!operationInfo) {
-            LOG_N("TTxProgressSetColumnConstraint: OnUnhandledException: id not found"
-                ", id# " << BuildId);
-            return;
-        }
-        LOG_E("TTxProgressSetColumnConstraint: OnUnhandledException"
-            ", id# " << BuildId
-            << ", exception: " << exc.what());
-    }
-};
-
 namespace NSetColumnConstraint {
 
-    struct TTxReplyAllocate : public TSchemeShard::TIndexBuilder::TTxBase {
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWritesPropose(
+    TSchemeShard* ss, const TSetColumnConstraintOperationInfo& operationInfo)
+{
+    Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableLockPropose");
+
+    auto doFunc = [](const TSetColumnConstraintOperationInfo& operationInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
+        Y_UNUSED(operationInfo);
+        Y_UNUSED(modifyScheme);
+    };
+
+    return AlterMainTableProposeTemplate(ss, operationInfo, doFunc);
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWritesPropose(
+    TSchemeShard* ss, const TSetColumnConstraintOperationInfo& operationInfo)
+{
+    Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableUnlockPropose");
+
+    auto doFunc = [](const TSetColumnConstraintOperationInfo& operationInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
+        Y_UNUSED(operationInfo);
+        Y_UNUSED(modifyScheme);
+    };
+
+    return AlterMainTableProposeTemplate(ss, operationInfo, doFunc);
+}
+
+struct TTxReplyAllocate : public TSchemeShard::TIndexBuilder::TTxBase {
 private:
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult;
 
@@ -155,6 +72,18 @@ public:
             if (!operationInfo.LockTxId) {
                 operationInfo.LockTxId = txId;
                 Self->PersistSetColumnConstraintLockTxId(db, operationInfo);
+                Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+            }
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites) {
+            if (!operationInfo.LockNullWritesTxId) {
+                operationInfo.LockNullWritesTxId = txId;
+                Self->PersistSetColumnConstraintLockNullWritesTxId(db, operationInfo);
+                Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+            }
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites) {
+            if (!operationInfo.UnlockNullWritesTxId) {
+                operationInfo.UnlockNullWritesTxId = txId;
+                Self->PersistSetColumnConstraintUnlockNullWritesTxId(db, operationInfo);
                 Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
             }
         } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps) {
@@ -221,6 +150,14 @@ public:
             Y_ENSURE(txId == operationInfo.LockTxId);
             operationInfo.LockTxStatus = record.GetStatus();
             Self->PersistSetColumnConstraintLockTxStatus(db, operationInfo);
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites) {
+            Y_ENSURE(txId == operationInfo.LockNullWritesTxId);
+            operationInfo.LockNullWritesTxStatus = record.GetStatus();
+            Self->PersistSetColumnConstraintLockNullWritesTxStatus(db, operationInfo);
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites) {
+            Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
+            operationInfo.UnlockNullWritesTxStatus = record.GetStatus();
+            Self->PersistSetColumnConstraintUnlockNullWritesTxStatus(db, operationInfo);
         } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps) {
             Y_ENSURE(txId == operationInfo.UnlockTxId);
             operationInfo.UnlockTxStatus = record.GetStatus();
@@ -278,6 +215,14 @@ public:
             Y_ENSURE(txId == operationInfo.LockTxId);
             operationInfo.LockTxDone = true;
             Self->PersistSetColumnConstraintLockTxDone(db, operationInfo);
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites) {
+            Y_ENSURE(txId == operationInfo.LockNullWritesTxId);
+            operationInfo.LockNullWritesTxDone = true;
+            Self->PersistSetColumnConstraintLockNullWritesTxDone(db, operationInfo);
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites) {
+            Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
+            operationInfo.UnlockNullWritesTxDone = true;
+            Self->PersistSetColumnConstraintUnlockNullWritesTxDone(db, operationInfo);
         } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps) {
             Y_ENSURE(txId == operationInfo.UnlockTxId);
             operationInfo.UnlockTxDone = true;
@@ -300,33 +245,132 @@ public:
     }
 };
 
-} // namespace NSetColumnConstraint
-
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWritesPropose(
-    TSchemeShard* ss, const TSetColumnConstraintOperationInfo& operationInfo)
-{
-    Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableLockPropose");
-
-    auto doFunc = [](const TSetColumnConstraintOperationInfo& operationInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
-        Y_UNUSED(operationInfo);
-        Y_UNUSED(modifyScheme);
-    };
-
-    return AlterMainTableProposeTemplate(ss, operationInfo, doFunc);
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWritesPropose(
-    TSchemeShard* ss, const TSetColumnConstraintOperationInfo& operationInfo)
+using namespace NTabletFlatExecutor;
+
+struct TSchemeShard::TIndexBuilder::TTxProgressSetColumnConstraint
+    : public TSchemeShard::TIndexBuilder::TTxBase
 {
-    Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableLockPropose");
+public:
+    explicit TTxProgressSetColumnConstraint(TSelf* self, TIndexBuildId operationId)
+        : TTxBase(self, operationId, TXTYPE_CREATE_SET_COLUMN_CONSTRAINT)
+    {}
 
-    auto doFunc = [](const TSetColumnConstraintOperationInfo& operationInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
-        Y_UNUSED(operationInfo);
-        Y_UNUSED(modifyScheme);
-    };
+    bool DoExecute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
+        LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId);
 
-    return AlterMainTableProposeTemplate(ss, operationInfo, doFunc);
-}
+        auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
+        Y_ENSURE(operationInfoPtr);
+        auto& operationInfo = *operationInfoPtr->get();
+
+        switch (operationInfo.OperationState) {
+            case TSetColumnConstraintOperationInfo::EOperationState::Invalid: {
+                Y_UNREACHABLE();
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps: {
+                if (operationInfo.LockTxId == InvalidTxId) {
+                    AllocateTxId(BuildId);
+                } else if (operationInfo.LockTxStatus == NKikimrScheme::StatusSuccess) {
+                    Send(Self->SelfId(), LockPropose(Self, operationInfo, operationInfo.LockTxId, TPath::Init(operationInfo.TablePathId, Self)), 0, ui64(BuildId));
+                } else if (!operationInfo.LockTxDone) {
+                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.LockTxId)));
+                } else {
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites);
+                    Progress(BuildId);
+                }
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites: {
+                if (operationInfo.LockNullWritesTxId == InvalidTxId) {
+                    AllocateTxId(BuildId);
+                } else if (operationInfo.LockNullWritesTxStatus == NKikimrScheme::StatusSuccess) {
+                    Send(Self->SelfId(), NSetColumnConstraint::AlterMainTableLockNullWritesPropose(Self, operationInfo), 0, ui64(BuildId));
+                } else if (!operationInfo.LockNullWritesTxDone) {
+                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.LockNullWritesTxId)));
+                } else {
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Validate);
+                    Progress(BuildId);
+                }
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::Validate: {
+                ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites);
+                Progress(BuildId);
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites: {
+                if (operationInfo.UnlockNullWritesTxId == InvalidTxId) {
+                    AllocateTxId(BuildId);
+                } else if (operationInfo.UnlockNullWritesTxStatus == NKikimrScheme::StatusSuccess) {
+                    Send(Self->SelfId(), NSetColumnConstraint::AlterMainTableUnlockNullWritesPropose(Self, operationInfo), 0, ui64(BuildId));
+                } else if (!operationInfo.UnlockNullWritesTxDone) {
+                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.UnlockNullWritesTxId)));
+                } else {
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps);
+                    Progress(BuildId);
+                }
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps: {
+                if (operationInfo.UnlockTxId == InvalidTxId) {
+                    AllocateTxId(BuildId);
+                } else if (operationInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {
+                    Send(Self->SelfId(), UnlockPropose(Self, operationInfo), 0, ui64(BuildId));
+                } else if (!operationInfo.UnlockTxDone) {
+                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.UnlockTxId)));
+                } else {
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Done);
+                    Progress(BuildId);
+                }
+
+                break;
+            }
+            case TSetColumnConstraintOperationInfo::EOperationState::Done: {
+                LOG_N("TTxProgressSetColumnConstraint::DoExecute"
+                    ": LockNullWrites not implemented yet"
+                    ", id# " << BuildId);
+
+                auto response = MakeHolder<TEvSetColumnConstraint::TEvCreateResponse>(ui64(BuildId));
+                response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
+                AddIssue(response->Record.MutableIssues(),
+                    "SetColumnConstraint operation is not yet implemented");
+
+                LOG_N("TTxProgressSetColumnConstraint::DoExecute: replying UNSUPPORTED"
+                    << ", id# " << BuildId
+                    << ", replyTo# " << operationInfo.CreateSender.ToString());
+
+                Send(operationInfo.CreateSender, std::move(response), 0, operationInfo.SenderCookie);
+
+                // SendNotificationsIfFinished(operationInfo);
+                break;
+            }
+        }
+
+        return true;
+    }
+
+    void DoComplete(const TActorContext& /*ctx*/) override {
+    }
+
+    void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
+        TIndexBuildInfo* operationInfo, const std::exception& exc) override
+    {
+        if (!operationInfo) {
+            LOG_N("TTxProgressSetColumnConstraint: OnUnhandledException: id not found"
+                ", id# " << BuildId);
+            return;
+        }
+        LOG_E("TTxProgressSetColumnConstraint: OnUnhandledException"
+            ", id# " << BuildId
+            << ", exception: " << exc.what());
+    }
+};
 
 ITransaction* TSchemeShard::CreateTxSetColumnConstraintProgress(TIndexBuildId operationId) {
     return new TIndexBuilder::TTxProgressSetColumnConstraint(this, operationId);

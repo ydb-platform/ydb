@@ -860,6 +860,14 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     EOperationState OperationState = EOperationState::Invalid;
     std::vector<std::string> NotNullColumns;
 
+    TTxId LockNullWritesTxId = TTxId();
+    NKikimrScheme::EStatus LockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
+    bool LockNullWritesTxDone = false;
+
+    TTxId UnlockNullWritesTxId = TTxId();
+    NKikimrScheme::EStatus UnlockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
+    bool UnlockNullWritesTxDone = false;
+
     bool IsDone() const override {
         return OperationState == EOperationState::Done;
     }

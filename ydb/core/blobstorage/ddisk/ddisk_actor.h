@@ -632,7 +632,8 @@ namespace NKikimr::NDDisk {
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);
         void StartRestorePersistentBuffer();
         void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
-        void ReplyReadPersistentBuffer(ui64 operationCookie, TRope&& data);
+        void ReplyReadPersistentBuffer(ui64 operationCookie, ui64 vChunkIndex = 0, ui32 offsetInBytes = 0, ui32 size = 0, TRope&& data = {});
+
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases);

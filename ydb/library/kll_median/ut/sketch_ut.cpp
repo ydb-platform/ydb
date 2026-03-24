@@ -5,6 +5,8 @@
 #include <util/generic/fwd.h>
 #include <util/generic/string.h>
 
+#include <cstdio>
+
 using namespace NKikimr::NKll;
 
 Y_UNIT_TEST_SUITE(TKllMedianTest) {
@@ -124,7 +126,11 @@ Y_UNIT_TEST_SUITE(TKllMedianTest) {
         UNIT_ASSERT_VALUES_EQUAL(s1.Median(), s2.Median());
     }
 
-    Y_UNIT_TEST(DynamicSketch_SmallWeightUsesBaseLevelAfterAccept) {
+} // Y_UNIT_TEST_SUITE(TKllMedianTest)
+
+Y_UNIT_TEST_SUITE(TDynamicKllSketchTest) {
+
+    Y_UNIT_TEST(SmallWeightUsesBaseLevelAfterAccept) {
         TDynamicKllSketch<TString> d(20, 12345u);
         for (int i = 0; i < 100; ++i) {
             d.Add(TStringBuilder() << "k" << i, 1);
@@ -133,4 +139,75 @@ Y_UNIT_TEST_SUITE(TKllMedianTest) {
         UNIT_ASSERT(m.StartsWith("k"));
     }
 
-} // Y_UNIT_TEST_SUITE(TKllMedianTest)
+    Y_UNIT_TEST(EmptyMedianThrows) {
+        TDynamicKllSketch<TString> d(30, 1u);
+        UNIT_ASSERT_EXCEPTION(d.Median(), yexception);
+    }
+
+    Y_UNIT_TEST(ZeroWeightDoesNothing) {
+        TDynamicKllSketch<TString> d(30, 1u);
+        d.Add(TString{"x"}, 0);
+        UNIT_ASSERT_EXCEPTION(d.Median(), yexception);
+    }
+
+    Y_UNIT_TEST(SingleElement) {
+        TDynamicKllSketch<TString> d(30, 42u);
+        d.Add(TString{"only"}, 100);
+        UNIT_ASSERT_VALUES_EQUAL(d.Median(), TString{"only"});
+    }
+
+    Y_UNIT_TEST(SameKeyManyTimes) {
+        TDynamicKllSketch<TString> d(40, 99u);
+        for (int i = 0; i < 2000; ++i) {
+            d.Add(TString{"same"}, 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(d.Median(), TString{"same"});
+    }
+
+    Y_UNIT_TEST(DeterministicWithSeed) {
+        TDynamicKllSketch<TString> d1(50, 13579u);
+        TDynamicKllSketch<TString> d2(50, 13579u);
+        for (int i = 0; i < 800; ++i) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "k%08d", i);
+            TString key{buf};
+            d1.Add(key, 1);
+            d2.Add(key, 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(d1.Median(), d2.Median());
+    }
+
+    Y_UNIT_TEST(HeavyKeyBiasesMedian) {
+        TDynamicKllSketch<TString> d(60, 24680u);
+        d.Add(TString{"a"}, 1);
+        d.Add(TString{"c"}, 1);
+        for (int i = 0; i < 5000; ++i) {
+            d.Add(TString{"b"}, 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(d.Median(), TString{"b"});
+    }
+
+    Y_UNIT_TEST(LargeInitialWeightSmallAddsStillDeterministic) {
+        const ui64 seed = 97531u;
+        TDynamicKllSketch<TString> d1(45, seed, 4096);
+        TDynamicKllSketch<TString> d2(45, seed, 4096);
+        for (int i = 0; i < 600; ++i) {
+            TString key = TStringBuilder() << "p" << i;
+            d1.Add(key, 1);
+            d2.Add(key, 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(d1.Median(), d2.Median());
+    }
+
+    Y_UNIT_TEST(StreamingLexPaddedKeysApproxCentral) {
+        TDynamicKllSketch<TString> d(55, 2024u);
+        for (int i = 0; i < 10000; ++i) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "x%07d", i);
+            d.Add(TString{buf}, 1);
+        }
+        TString m = d.Median();
+        UNIT_ASSERT(m >= TString{"x0000000"} && m <= TString{"x0009999"});
+    }
+
+} // Y_UNIT_TEST_SUITE(TDynamicKllSketchTest)

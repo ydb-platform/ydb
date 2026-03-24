@@ -1,3 +1,3 @@
 ```bash
-npm install @ydbjs/query
+npm install @ydbjs/core @ydbjs/query
 ```

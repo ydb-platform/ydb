@@ -6,6 +6,7 @@
 
 #include <library/cpp/testing/hook/hook.h>
 
+#include <util/folder/path.h>
 #include <util/folder/tempdir.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
@@ -61,6 +62,48 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         sb << "}";
         return sb;
     }
+
+    template <bool IsFs>
+    struct TExportEnv {
+        TMaybe<TPortManager> PortManager;
+        TMaybe<TS3Mock> S3MockInstance;
+        TMaybe<TTempDir> TempDir;
+        TString Request;
+
+        explicit TExportEnv(const TVector<TExportItem>& items, const TString& extraSettings = "") {
+            if constexpr (IsFs) {
+                TempDir.ConstructInPlace();
+                Request = Sprintf(MakeFsRequestTemplate(items, extraSettings).c_str(), TempDir->Path().c_str());
+            } else {
+                PortManager.ConstructInPlace();
+                ui16 port = PortManager->GetPort();
+                S3MockInstance.ConstructInPlace(THashMap<TString, TString>{}, TS3Mock::TSettings(port));
+                UNIT_ASSERT(S3MockInstance->Start());
+                Request = Sprintf(MakeS3RequestTemplate(items, extraSettings).c_str(), port);
+            }
+        }
+
+        void SetupRuntime(TTestActorRuntime& runtime) {
+            if constexpr (IsFs) {
+                runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+            }
+        }
+
+        bool HasFile(const TString& path) const {
+            if constexpr (IsFs) {
+                Y_ABORT_UNLESS(TempDir.Defined());
+                return TFsPath(TStringBuilder() << TempDir->Path() << path).Exists();
+            } else {
+                Y_ABORT_UNLESS(S3MockInstance.Defined());
+                return S3MockInstance->GetData().FindPtr(path) != nullptr;
+            }
+        }
+
+        TS3Mock& S3Mock() {
+            Y_ABORT_UNLESS(S3MockInstance.Defined());
+            return *S3MockInstance;
+        }
+    };
 
     using TRunFnWithSetup = void(*)(const TVector<TTypedScheme>&, const TString&, TTestWithReboots&, TRuntimeSetup);
 
@@ -120,29 +163,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     {
         Decorate(t, IsFs, schemeObjects, items, &Forget, opts, extraSettings);
     }
-
-    using TRunFn = void(*)(const TVector<TTypedScheme>&, const TString&, TTestWithReboots&);
-
-    void DecorateS3(TTestWithReboots& t, const TVector<TTypedScheme>& schemeObjects, const TString& request,
-        TRunFn func, const TTestEnvOptions& opts)
-    {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        t.GetTestEnvOptions() = opts;
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        func(schemeObjects, Sprintf(request.c_str(), port), t);
-    }
-
-    void RunS3(TTestWithReboots& t, const TVector<TTypedScheme>& schemeObjects, const TString& request,
-        const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions())
-    {
-        DecorateS3(t, schemeObjects, request, &Run, opts);
-    }
-
-    // Simple tests -- parameterized with IsFs
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleShardTable, 2, 1, false, IsFs) {
         RunExport<IsFs>(t, {
@@ -221,16 +241,13 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, {{"/MyRoot/View", "view"}, {"/MyRoot/Table", "table"}});
     }
 
-    // Complex S3-only test: checks s3Mock.GetData()
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnViewsAndTablesPermissions, 2, 1, false) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnViewsAndTablesPermissions, 2, 1, false, IsFs) {
+        TExportEnv<IsFs> env({{"/MyRoot/View", "view"}, {"/MyRoot/Table", "table"}});
 
         t.GetTestEnvOptions() = TTestEnvOptions().EnablePermissionsExport(true);
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            env.SetupRuntime(runtime);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
             runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
@@ -253,20 +270,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                     }
                 });
 
-                TestExport(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
-                    ExportToS3Settings {
-                        endpoint: "localhost:%d"
-                        scheme: HTTP
-                        items {
-                            source_path: "/MyRoot/View"
-                            destination_prefix: "view"
-                        }
-                        items {
-                            source_path: "/MyRoot/Table"
-                            destination_prefix: "table"
-                        }
-                    }
-                )", port));
+                TestExport(runtime, ++t.TxId, "/MyRoot", env.Request);
             }
 
             const ui64 exportId = t.TxId;
@@ -278,11 +282,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             }
         });
 
-        auto* tablePermissions = s3Mock.GetData().FindPtr("/table/permissions.pb");
-        UNIT_ASSERT(tablePermissions);
-
-        auto* viewPermissions = s3Mock.GetData().FindPtr("/view/permissions.pb");
-        UNIT_ASSERT(viewPermissions);
+        UNIT_ASSERT(env.HasFile("/table/permissions.pb"));
+        UNIT_ASSERT(env.HasFile("/view/permissions.pb"));
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleShardTable, 2, 1, false, IsFs) {
@@ -490,11 +491,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             }
         }
 
-        // Legacy S3-only request strings for complex tests
-        static TString S3Request(EPathType pathType = EPathType::EPathTypeTable) {
-            return MakeS3RequestTemplate(Items(pathType));
-        }
-
     private:
         static const char* TableName;
         static const TTypedScheme TableScheme;
@@ -656,15 +652,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, TTestData::Items());
     }
 
-    // Complex S3-only tests that use TS3Mock directly
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedAutoDropping, 2, 1, false) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedAutoDropping, 2, 1, false, IsFs) {
+        TExportEnv<IsFs> env(TTestData::Items());
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            env.SetupRuntime(runtime);
             runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
             {
@@ -673,7 +665,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                     TTestData::Table()
                 });
 
-                TestExport(runtime, ++t.TxId, "/MyRoot", Sprintf(TTestData::S3Request().data(), port));
+                TestExport(runtime, ++t.TxId, "/MyRoot", env.Request);
             }
 
             const ui64 exportId = t.TxId;
@@ -690,14 +682,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldDisableAutoDropping, 2, 1, false) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldDisableAutoDropping, 2, 1, false, IsFs) {
+        TExportEnv<IsFs> env(TTestData::Items());
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            env.SetupRuntime(runtime);
             runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
             {
@@ -706,7 +695,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                     TTestData::Table()
                 });
 
-                TestExport(runtime, ++t.TxId, "/MyRoot", Sprintf(TTestData::S3Request().data(), port));
+                TestExport(runtime, ++t.TxId, "/MyRoot", env.Request);
             }
 
             const ui64 exportId = t.TxId;
@@ -726,36 +715,26 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         });
     }
 
-    // Topic tests use S3-specific TSimpleTopic::GetExportRequest(), keep S3-only
-    using S3Func = void (*)(TTestWithReboots&, const TVector<TTypedScheme>&, const TString&, const TTestEnvOptions&);
-
-    void TestSingleTopic(TTestWithReboots& t, S3Func func) {
+    template <bool IsFs>
+    void TestSingleTopic(TTestWithReboots& t, TRunFnWithSetup func) {
         auto topic = NDescUT::TSimpleTopic(0, 2);
-        func(t,
-            {
-                {
-                    EPathTypePersQueueGroup,
-                    topic.GetPrivateProto().DebugString()
-                }
-            }
-            , topic.GetExportRequest()
-            , TTestWithReboots::GetDefaultTestEnvOptions());
+        Decorate(t, IsFs,
+            {{EPathTypePersQueueGroup, topic.GetPrivateProto().DebugString()}},
+            {{"/MyRoot/Topic_0", "/Topic_0"}},
+            func,
+            TTestWithReboots::GetDefaultTestEnvOptions());
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTopic, 2, 1, false) {
-        TestSingleTopic(t, &RunS3);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleTopic, 2, 1, false, IsFs) {
+        TestSingleTopic<IsFs>(t, &Run);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelOnSingleTopic, 2, 1, false) {
-        TestSingleTopic(t, [](TTestWithReboots& t, const TVector<TTypedScheme>& s, const TString& r, const TTestEnvOptions& o) {
-            DecorateS3(t, s, r, &Cancel, o);
-        });
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelOnSingleTopic, 2, 1, false, IsFs) {
+        TestSingleTopic<IsFs>(t, &Cancel);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleTopic, 2, 1, false) {
-        TestSingleTopic(t, [](TTestWithReboots& t, const TVector<TTypedScheme>& s, const TString& r, const TTestEnvOptions& o) {
-            DecorateS3(t, s, r, &Forget, o);
-        });
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ForgetShouldSucceedOnSingleTopic, 2, 1, false, IsFs) {
+        TestSingleTopic<IsFs>(t, &Forget);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(IndexMaterialization, 2, 1, false, IsFs) {
@@ -859,16 +838,13 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, TTestData::Items(EPathTypeExternalTable));
     }
 
-    // Complex S3-only tests: System view with permissions
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSystemViewPermissions, 2, 1, false) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSystemViewPermissions, 2, 1, false, IsFs) {
+        TExportEnv<IsFs> env({{"/MyRoot/.sys/partition_stats", "/partition_stats"}});
 
         t.GetTestEnvOptions().EnablePermissionsExport(true);
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            env.SetupRuntime(runtime);
             runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
                 TInactiveZone inactive(activeZone);
@@ -880,18 +856,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            TestExport(runtime, ++t.TxId, "/MyRoot",
-                Sprintf(R"(
-                    ExportToS3Settings {
-                        endpoint: "localhost:%d"
-                        scheme: HTTP
-                        items {
-                            source_path: "/MyRoot/.sys/partition_stats"
-                            destination_prefix: "/partition_stats"
-                        }
-                    }
-                )", port)
-            );
+            TestExport(runtime, ++t.TxId, "/MyRoot", env.Request);
 
             const ui64 exportId = t.TxId;
             t.TestEnv->TestWaitNotification(runtime, exportId);
@@ -908,8 +873,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                     return;
                 }
 
-                auto* sysviewPermissions = s3Mock.GetData().FindPtr("/partition_stats/permissions.pb");
-                UNIT_ASSERT(sysviewPermissions);
+                UNIT_ASSERT(env.HasFile("/partition_stats/permissions.pb"));
 
                 TestForgetExport(runtime, ++t.TxId, "/MyRoot", exportId);
                 t.TestEnv->TestWaitNotification(runtime, exportId);
@@ -919,15 +883,13 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSystemViewPermissions, 2, 1, false) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSystemViewPermissions, 2, 1, false, IsFs) {
+        TExportEnv<IsFs> env({{"/MyRoot/.sys/partition_stats", "/partition_stats"}});
 
         t.GetTestEnvOptions().EnablePermissionsExport(true);
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            env.SetupRuntime(runtime);
             runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
                 TInactiveZone inactive(activeZone);
@@ -939,18 +901,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            TestExport(runtime, ++t.TxId, "/MyRoot",
-                Sprintf(R"(
-                    ExportToS3Settings {
-                        endpoint: "localhost:%d"
-                        scheme: HTTP
-                        items {
-                            source_path: "/MyRoot/.sys/partition_stats"
-                            destination_prefix: "/partition_stats"
-                        }
-                    }
-                )", port)
-            );
+            TestExport(runtime, ++t.TxId, "/MyRoot", env.Request);
 
             const ui64 exportId = t.TxId;
 
@@ -981,15 +932,13 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSystemViewPermissions, 2, 1, false) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ForgetShouldSucceedOnSystemViewPermissions, 2, 1, false, IsFs) {
+        TExportEnv<IsFs> env({{"/MyRoot/.sys/partition_stats", "/partition_stats"}});
 
         t.GetTestEnvOptions().EnablePermissionsExport(true);
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            env.SetupRuntime(runtime);
             runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
                 TInactiveZone inactive(activeZone);
@@ -1000,18 +949,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 TestModifyACL(runtime, ++t.TxId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestExport(runtime, ++t.TxId, "/MyRoot",
-                    Sprintf(R"(
-                        ExportToS3Settings {
-                            endpoint: "localhost:%d"
-                            scheme: HTTP
-                            items {
-                                source_path: "/MyRoot/.sys/partition_stats"
-                                destination_prefix: "/partition_stats"
-                            }
-                        }
-                    )", port)
-                );
+                TestExport(runtime, ++t.TxId, "/MyRoot", env.Request);
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 

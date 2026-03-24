@@ -224,6 +224,10 @@ private:
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         ExecuteScanTx();
 
+        if (CheckExecutionComplete()) {
+            return;
+        }
+
         Become(&TKqpScanExecuter::ExecuteState);
     }
 

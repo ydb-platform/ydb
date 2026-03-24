@@ -34,6 +34,8 @@ When TLI occurs, the server writes four entries — one from each component for 
 
 **Example scenario:**
 
+Two sessions are established: victim and breaker.
+
 | Time | QuerySpanId | Role | Query |
 |:-----|:------------|:-----|:------|
 | T1 | `1111111111111111` | Victim | `SELECT * FROM Orders WHERE OrderId = 42` (acquires lock) |
@@ -88,7 +90,7 @@ VictimQueryTexts: [QuerySpanId=1111111111111111 QueryText=SELECT * FROM Orders W
 | `VictimQueryTexts` | All queries of the victim transaction | Victim SessionActor logs |
 | `BreakerQueryTexts` | All queries of the breaker transaction | Breaker SessionActor logs |
 
-## Step-by-step log correlation
+## Log analysis
 
 Using the `VictimQuerySpanId` from the SDK error message, you can find all related events:
 
@@ -102,10 +104,15 @@ Using the `VictimQuerySpanId` from the SDK error message, you can find all relat
 
 For automatic TLI log correlation, the {{ ydb-short-name }} repository includes the [`find_tli_chain.py`](https://github.com/ydb-platform/ydb/tree/main/ydb/tools/tli_analysis) utility.
 
-It takes a `VictimQuerySpanId` from the error message and a log file, finds all related entries, and displays them in a convenient format:
+This utility takes the following parameters:
+
+- `VictimQuerySpanId` - identifier of the broken query from the SDK error message;
+- `LogFile` - name of the log file for log analysis.
+
+It is assumed that TLI logging was previously enabled in the [configuration](../../../reference/configuration/log_config.md), log files were collected from database nodes and merged into one file.
 
 ```bash
-python3 find_tli_chain.py <VictimQuerySpanId> <logfile>
+python3 find_tli_chain.py <VictimQuerySpanId> <LogFile>
 ```
 
 **Example:**
@@ -148,10 +155,10 @@ The utility outputs:
 - **VictimTx** — all queries of the victim transaction in execution order;
 - **BreakerTx** — all queries of the breaker transaction.
 
-Additional options:
+Additional parameters:
 
-| Option | Description |
-|:-------|:------------|
+| Parameter | Description |
+|:---------|:---------|
 | `--window-sec N` | Time window for searching around the event (default: 10 s) |
 | `--no-color` | Disable colored output |
 

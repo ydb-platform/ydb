@@ -38,7 +38,7 @@ public:
 
     ui64 GenerateLsn() override;
 
-    NThreading::TFuture<void> EstablishConnections() override;
+    void EstablishConnections() override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,

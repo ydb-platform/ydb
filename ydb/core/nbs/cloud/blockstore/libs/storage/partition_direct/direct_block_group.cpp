@@ -103,7 +103,7 @@ ui64 TDirectBlockGroup::GenerateLsn()
     return ++LsnGenerator;
 }
 
-NThreading::TFuture<void> TDirectBlockGroup::EstablishConnections()
+void TDirectBlockGroup::EstablishConnections()
 {
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this()]   //
@@ -113,7 +113,6 @@ NThreading::TFuture<void> TDirectBlockGroup::EstablishConnections()
                 self->DoEstablishConnections();
             }
         });
-    return ConnectionEstablishedPromise.GetFuture();
 }
 
 NThreading::TFuture<TDBGReadBlocksResponse>

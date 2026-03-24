@@ -210,7 +210,9 @@ private:
             message.Index = i;
             message.MessageBody = std::move(currentRequest->GetMessageBody());
             message.Delay = GetDelay(*currentRequest);
-            message.MessageDeduplicationId = std::move(deduplicationId);
+            if (!deduplicationId.empty()) {
+                message.MessageDeduplicationId = std::move(deduplicationId);
+            }
             message.MessageGroupId = std::move(currentRequest->GetMessageGroupId());
 
             {

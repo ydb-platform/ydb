@@ -44,7 +44,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -64,6 +63,7 @@
     ```
 
   {% endlist %}
+
 - JavaScript
 
   ```javascript
@@ -72,7 +72,6 @@
   let client = new CoordinationClient(driver);
   await client.createNode("/path/to/mynode", {});
   ```
-
 
 {% endlist %}
 
@@ -117,7 +116,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -144,11 +142,6 @@
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
-
-{% endlist %}
-- JavaScript
-
   ```javascript
   import { CoordinationClient } from "@ydbjs/coordination";
 
@@ -156,6 +149,7 @@
   await using session = await client.createSession("/path/to/mynode", {}, signal);
   ```
 
+{% endlist %}
 
 ### Контроль завершения сессии {#session-control}
 
@@ -174,6 +168,7 @@
 - Python
 
   В Python SDK сессия автоматически восстанавливает связь с кластером {{ ydb-short-name }} при сбоях. Рекомендуется использовать контекстный менеджер (`with` или `async with`) для гарантированного закрытия сессии при выходе из блока. При работе с семафорами через контекстный менеджер (`with session.semaphore(name)` или `async with session.semaphore(name)`) семафор автоматически освобождается при выходе из блока, а сессия — при закрытии контекста.
+
 - JavaScript
 
   В JS SDK для отслеживания таких ситуаций используется сигнал `session.signal`, который абортится вместе с сессией. SDK самостоятельно обрабатывает ошибки транспортного уровня и восстанавливает соединение с сервисом, пытаясь восстановить сессию, если это возможно. Таким образом, клиенту достаточно следить за сигналом сессии, чтобы не совершать действий когда сессия была закрыта или просрочена.
@@ -230,7 +225,6 @@
   В Python SDK семафор создаётся неявно при первом вызове `acquire()` в методе `session.semaphore(name, limit)`. Лимит указывается при создании объекта семафора.
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -254,6 +248,7 @@
     ```
 
   {% endlist %}
+
 - JavaScript
 
   ```javascript
@@ -263,7 +258,6 @@
     data: new Uint8Array(),
   });
   ```
-
 
 {% endlist %}
 
@@ -317,7 +311,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -355,6 +348,7 @@
     ```
 
   {% endlist %}
+
 - JavaScript
 
   ```javascript
@@ -363,7 +357,6 @@
     await doWork(lease.signal);
   } // lease.release() called automatically
   ```
-
 
 {% endlist %}
 
@@ -399,7 +392,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -423,6 +415,7 @@
     ```
 
   {% endlist %}
+
 - JavaScript
 
   ```javascript
@@ -432,7 +425,6 @@
     data: new Uint8Array(),
   });
   ```
-
 
 {% endlist %}
 
@@ -492,7 +484,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -518,6 +509,7 @@
     ```
 
   {% endlist %}
+
 - JavaScript
 
   ```javascript
@@ -527,7 +519,6 @@
     waiters: true,
   });
   ```
-
 
 {% endlist %}
 
@@ -559,7 +550,6 @@
   В Python SDK семафор освобождается методом `release()` у объекта семафора. При использовании контекстного менеджера (`with` или `async with`) освобождение происходит автоматически при выходе из блока.
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -587,6 +577,7 @@
     ```
 
   {% endlist %}
+
 - JavaScript
 
   Чтобы отпустить захваченный в сессии семафор, необходимо вызвать метод `Release` у объекта `Lease`. Если взятие семафора было с использованием конструкции using, то при выходе из скоупа, семафор будет освобожден автоматически.
@@ -594,7 +585,6 @@
   ```javascript
   await lease.release();
   ```
-
 
 {% endlist %}
 

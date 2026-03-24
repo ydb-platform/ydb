@@ -17,9 +17,11 @@
 /ydb/tests/datashard @ydb-platform/datashard
 /ydb/tests/stress/oltp_workload @ydb-platform/datashard
 /ydb/tests/datashard/vector_index/large @ydb-platform/datashard
+/ydb/tests/functional/statistics @ydb-platform/datashard
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
+/ydb/core/tx/tiering @ydb-platform/cs
 /ydb/tests/olap @ydb-platform/cs
 /ydb/tests/stress/olap_workload  @ydb-platform/cs
 /ydb/core/kqp/ut/olap @ydb-platform/cs
@@ -39,7 +41,7 @@
 /ydb/core/audit @ydb-platform/system-infra
 /ydb/core/health_check @ydb-platform/system-infra
 /ydb/library/aclib @ydb-platform/system-infra
-/ydb/mvp/oidc_proxy @ydb-platform/system-infra
+/ydb/mvp @ydb-platform/system-infra
 /ydb/tests/functional/audit @ydb-platform/system-infra
 /ydb/tests/functional/limits @ydb-platform/system-infra
 /ydb/tests/functional/scheme_shard @ydb-platform/system-infra
@@ -58,6 +60,7 @@
 /ydb/core/tx/tx_proxy/ut_schemereq @ydb-platform/security
 /ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
+/ydb/tests/functional/security @ydb-platform/security
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
@@ -67,6 +70,7 @@
 /ydb/tests/functional/clickbench @ydb-platform/qp
 /ydb/tests/functional/postgresql @ydb-platform/qp
 /ydb/tests/functional/kqp @ydb-platform/qp
+/ydb/tests/tools/kqprun @ydb-platform/qp
 
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam
@@ -76,6 +80,7 @@
 
 #YDB Postgres Compatibility @rekby TEAM:@ydb-platform/postgres-compatibility
 /ydb/tests/postgres_integrations @ydb-platform/postgres-compatibility
+/ydb/core/pgproxy @ydb-platform/postgres-compatibility
 
 #YDB Engineering Team @maximyurchuk TEAM:@ydb-platform/engineering
 /ydb/tests/functional/tpc @ydb-platform/engineering
@@ -100,15 +105,22 @@
 /ydb/tests/functional/config @ydb-platform/blobstorage
 /ydb/services/keyvalue/ut @ydb-platform/blobstorage
 /ydb/tests/functional/bridge @ydb-platform/blobstorage
+/ydb/tests/functional/blobstorage @ydb-platform/blobstorage
 /ydb/tests/functional/dstool @ydb-platform/blobstorage
+/ydb/apps/dstool @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
-/ydb/core/config/ut @ydb-platform/core
+/ydb/core/config @ydb-platform/core
 /ydb/core/cms @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
+/ydb/core/backup @ydb-platform/core
 /ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
+/ydb/core/tx/replication @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
+/ydb/services/cms @ydb-platform/core
+/ydb/services/rate_limiter @ydb-platform/core
 /ydb/services/ydb/backup_ut @ydb-platform/core
+/ydb/tests/functional/backup @ydb-platform/core
 /ydb/tests/functional/backup_collection @ydb-platform/core
 /ydb/tests/functional/cms @ydb-platform/core
 /ydb/tests/functional/serverless @ydb-platform/core
@@ -121,6 +133,8 @@
 /ydb/services/datastreams @ydb-platform/Topics
 /ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
 /ydb/services/persqueue_v1 @ydb-platform/Topics
+/ydb/services/persqueue_cluster_discovery @ydb-platform/Topics
+/ydb/services/sqs_topic @ydb-platform/Topics
 /ydb/core/ymq @ydb-platform/Topics
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/Topics
@@ -130,12 +144,16 @@
 /ydb/public/sdk/cpp/tests/integration/topic @ydb-platform/Topics
 /ydb/public/sdk/cpp/src/client/federated_topic/ @ydb-platform/Topics
 
+#NBS / Cloud Blockstore TEAM:@ydb-platform/nbs
+/ydb/core/nbs @ydb-platform/nbs
+
 #YDB Analytics TEAM:???
 
 #Federative query @uzhastik TEAM:@ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq
 /ydb/tests/solomon @ydb-platform/fq
 /ydb/core/fq/ @ydb-platform/fq
+/ydb/core/external_sources @ydb-platform/fq
 /ydb/services/fq/ @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq

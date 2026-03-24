@@ -4018,6 +4018,8 @@ WITH (
         UNIT_ASSERT(consumer3.has_shared_consumer_type());
         const auto& sharedType = consumer3.shared_consumer_type();
         UNIT_ASSERT_VALUES_EQUAL(sharedType.keep_messages_order(), true);
+        UNIT_ASSERT_VALUES_EQUAL(sharedType.receive_message_delay().seconds(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(sharedType.receive_message_wait_time().seconds(), 3);
         UNIT_ASSERT_VALUES_EQUAL(sharedType.default_processing_timeout().seconds(), 30);
         UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs_size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs(0), 1);

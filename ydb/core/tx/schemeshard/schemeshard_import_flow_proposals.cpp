@@ -474,10 +474,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
             addedConsumer.SetType(::NKikimrPQ::TPQTabletConfig_EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_MLP);
             addedConsumer.SetKeepMessageOrder(sharedConsumerType.keep_messages_order());
             addedConsumer.SetDefaultProcessingTimeoutSeconds(sharedConsumerType.default_processing_timeout().seconds());
-            // TODO: uncomment when these fields are in protobuf
-            // addedConsumer.SetContentBasedDeduplication(sharedConsumerType.contentbaseddeduplication());
-            // addedConsumer.SetDefaultDelayMessageTimeMs(sharedConsumerType.defaultdelaymessagetimems().seconds() * 1000);
-            // addedConsumer.SetDefaultReceiveMessageWaitTimeMs(sharedConsumerType.defaultreceivemessagewaittimems().seconds() * 1000);
+            addedConsumer.SetDefaultDelayMessageTimeMs(sharedConsumerType.receive_message_delay().seconds() * 1000);
+            addedConsumer.SetDefaultReceiveMessageWaitTimeMs(sharedConsumerType.receive_message_wait_time().seconds() * 1000);
             const auto& deadLetterPolicy = sharedConsumerType.dead_letter_policy();
 
             if (sharedConsumerType.has_dead_letter_policy() && deadLetterPolicy.enabled()) {

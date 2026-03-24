@@ -346,6 +346,39 @@ Y_UNIT_TEST_SUITE(CalcProgressPercent) {
         UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 100.f, 1e-5f);
     }
 
+    // FulltextPlain / Json index: single shard-scan stage, uses plain 100 * done / total.
+
+    Y_UNIT_TEST(FulltextPlain_NoShards) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        info.IndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
+        // No shards yet -> 0%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 0.f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(FulltextPlain_HalfDone) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        info.IndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        // 100 * 1 / 2 = 50%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 50.f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(FulltextPlain_AllDone) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        info.IndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        MarkDone(info, 1, 2);
+        // 100 * 2 / 2 = 100%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 100.f, 1e-5f);
+    }
+
     Y_UNIT_TEST(FulltextNonRelevance_UsesShardProgress) {
         // Non-relevance fulltext index: only 1 stage, uses plain shard-based progress
         TIndexBuildInfo info;

@@ -21,6 +21,20 @@ namespace {
         return TDuration::Days(365 * 1000);
     }
 
+    TDuration SmallWindow() {
+        return TDuration::Seconds(5);
+    }
+
+    template <typename T>
+    void AddRandomKeys(TPartitioningKeysManager& m, size_t N, T& keys) {
+        for (size_t i = 0; i < N; ++i) {
+            keys.emplace_back(CreateGuidAsString());
+        }
+        std::mt19937 rng(20260324u);
+        std::shuffle(keys.begin(), keys.end(), rng);
+        for (const auto& key : keys) {m.Add(key, kMsgSize);}
+    }
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
@@ -71,14 +85,7 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
         TPartitioningKeysManager m(1, HugeWindow());
         std::vector<TString> keys;
         keys.reserve(N);
-        for (size_t i = 0; i < N; ++i) {
-            keys.push_back(CreateGuidAsString());
-        }
-        std::mt19937 rng(20260324u);
-        std::shuffle(keys.begin(), keys.end(), rng);
-        for (const auto& key : keys) {
-            m.Add(key, kMsgSize);
-        }
+        AddRandomKeys(m, N, keys);
         TString med = m.GetMedianKey();
         UNIT_ASSERT(!med.empty());
 
@@ -88,6 +95,30 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
         const size_t tol = N / 10;
         const size_t loIdx = mid > tol ? mid - tol : 0;
         const size_t hiIdx = std::min(N - 1, mid + tol);
+        UNIT_ASSERT_C(keys[loIdx] <= med && med <= keys[hiIdx],
+            "median " << med << " outside [" << keys[loIdx] << ", " << keys[hiIdx] << "]");
+    }
+
+    Y_UNIT_TEST(GetMedianKey_MultipleSketches) {
+        constexpr size_t N = 100'000;
+        TPartitioningKeysManager m(1, SmallWindow());
+        std::deque<TString> keys;
+
+        for (int i = 0; i < 10; ++i) {
+            AddRandomKeys(m, N / 10, keys);
+            Sleep(TDuration::Seconds(1));
+        }
+
+        keys.erase(keys.begin(), keys.begin() + N / 2);
+        TString med = m.GetMedianKey();
+        UNIT_ASSERT(!med.empty());
+
+        std::sort(keys.begin(), keys.end());
+        const size_t mid = keys.size() / 2;
+        // Allow ~10% rank slack around the empirical median (KLL is approximate).
+        const size_t tol = keys.size() / 10;
+        const size_t loIdx = mid > tol ? mid - tol : 0;
+        const size_t hiIdx = std::min(keys.size() - 1, mid + tol);
         UNIT_ASSERT_C(keys[loIdx] <= med && med <= keys[hiIdx],
             "median " << med << " outside [" << keys[loIdx] << ", " << keys[hiIdx] << "]");
     }

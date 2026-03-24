@@ -15,7 +15,7 @@ TPartitioningKeysManager::TPartitioningKeysManager(size_t numSketches, TDuration
 
 void TPartitioningKeysManager::Add(const TString& key, ui64 msgSize) {
     RemoveOldSketches();
-    if (Sketches.empty() || Sketches.back().StartTime + SketchWindowSize < Now()) {
+    if (Sketches.empty() || Sketches.back().StartTime + SketchWindowSize <= Now()) {
         Sketches.emplace_back(
             NKll::TDynamicKllSketch<TString>(DEFAULT_SKETCH_K, std::random_device{}(), DEFAULT_MIN_WEIGHT),
             Now());

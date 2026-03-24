@@ -5,7 +5,6 @@
 #include <ydb/core/persqueue/public/partitioning_keys_manager.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h> // TODO move to pubcli or common
-#include <ydb/library/kll_median/sketch.h>
 
 namespace NKikimr::NPQ {
 
@@ -34,9 +33,10 @@ public:
         Y_UNUSED(config);
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] const TString& key = "") override {
+    void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override {
         Y_UNUSED(sourceId);
         Y_UNUSED(size);
+        Y_UNUSED(key);
     }
 
     void CleanUp() override {
@@ -126,7 +126,7 @@ public:
         RecreateSumWrittenBytes();
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] const TString& key = "") override  {
+    void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override  {
         auto now = TInstant::Now();
 
         SumWrittenBytes->Update(size, now);

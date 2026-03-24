@@ -21,24 +21,23 @@ public:
         if (!alterRequest.HasOptions()) {
             return true;
         }
-        const auto& options = alterRequest.GetOptions();
-        if (options.HasSchemeNeedActualization()) {
+        if (alterRequest.GetOptions().HasSchemeNeedActualization()) {
             SetSchemeNeedActualizationSpecified(true);
-            SetSchemeNeedActualization(options.GetSchemeNeedActualization());
+            SetSchemeNeedActualization(alterRequest.GetOptions().GetSchemeNeedActualization());
         }
-        if (options.HasScanReaderPolicyName()) {
-            ScanReaderPolicyName = options.GetScanReaderPolicyName();
+        if (alterRequest.GetOptions().HasScanReaderPolicyName()) {
+            ScanReaderPolicyName = alterRequest.GetOptions().GetScanReaderPolicyName();
         }
-        if (options.HasMetadataManagerConstructor()) {
-            auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(options.GetMetadataManagerConstructor());
+        if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
+            auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
             if (container.IsFail()) {
                 errors.AddError(container.GetErrorMessage());
                 return false;
             }
             MetadataManagerConstructor = container.DetachResult();
         }
-        if (options.HasCompactionPlannerConstructor()) {
-            auto container = NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(options.GetCompactionPlannerConstructor());
+        if (alterRequest.GetOptions().HasCompactionPlannerConstructor()) {
+            auto container = NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetCompactionPlannerConstructor());
             if (container.IsFail()) {
                 errors.AddError(container.GetErrorMessage());
                 return false;

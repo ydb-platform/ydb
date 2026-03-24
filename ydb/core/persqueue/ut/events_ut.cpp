@@ -3,6 +3,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#define UNIT_ASSERT_TRUE(e)  UNIT_ASSERT((e))
+#define UNIT_ASSERT_FALSE(e) UNIT_ASSERT(!(e))
+
 namespace NKikimr::NPQ {
 
 Y_UNIT_TEST_SUITE(EventsTest) {
@@ -12,7 +15,7 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_NonDataTx) {
 
     event.Record.MutableConfig();
 
-    UNIT_ASSERT(not event.GetSkipSrcIdInfo());
+    UNIT_ASSERT_FALSE(event.GetSkipSrcIdInfo());
 }
 
 Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataEmptyOps) {
@@ -20,7 +23,7 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataEmptyOps) {
 
     event.Record.MutableData();
 
-    UNIT_ASSERT(not event.GetSkipSrcIdInfo());
+    UNIT_ASSERT_FALSE(event.GetSkipSrcIdInfo());
 }
 
 Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataOnlyReads) {
@@ -30,7 +33,7 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataOnlyReads) {
     tx->AddOperations();
     tx->AddOperations();
 
-    UNIT_ASSERT(not event.GetSkipSrcIdInfo());
+    UNIT_ASSERT_FALSE(event.GetSkipSrcIdInfo());
 }
 
 Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataAllWritesTrue) {
@@ -42,7 +45,7 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataAllWritesTrue) {
     op = tx->AddOperations();
     op->SetSkipConflictCheck(true);
 
-    UNIT_ASSERT(event.GetSkipSrcIdInfo());
+    UNIT_ASSERT_TRUE(event.GetSkipSrcIdInfo());
 }
 
 Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataAllWritesFalse) {
@@ -54,7 +57,7 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataAllWritesFalse) {
     op = tx->AddOperations();
     op->SetSkipConflictCheck(false);
 
-    UNIT_ASSERT(not event.GetSkipSrcIdInfo());
+    UNIT_ASSERT_FALSE(event.GetSkipSrcIdInfo());
 }
 
 Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataMixedFlags) {
@@ -66,7 +69,7 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataMixedFlags) {
     op = tx->AddOperations();
     op->SetSkipConflictCheck(true);
 
-    UNIT_ASSERT(not event.GetSkipSrcIdInfo());
+    UNIT_ASSERT_FALSE(event.GetSkipSrcIdInfo());
 }
 
 }

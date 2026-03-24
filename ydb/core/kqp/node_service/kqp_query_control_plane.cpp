@@ -8,6 +8,8 @@
 
 #include <ydb/library/wilson_ids/wilson.h>
 
+#include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
+
 namespace NKikimr::NKqp {
 
 template <class TTasksCollection>
@@ -33,12 +35,27 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvents::TEvPoison, HandlePoison);
+            hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
+            hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleStart);
         }
     }
 
     void HandlePoison(NActors::TEvents::TEvPoison::TPtr&) {
         PassAway();
+    }
+
+    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {
+        SendProfileStats();
+        Schedule(StatsReportPeriod, new TEvents::TEvWakeup());
+    }
+
+    void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        switch (ev->Get()->SourceType) {
+            case NYql::NDq::TDqComputeEvents::EvNodeState:
+                PassAway();
+                break;
+        }
     }
 
     void HandleStart(TEvKqpNode::TEvStartKqpTasksRequest::TPtr ev) {
@@ -49,6 +66,11 @@ public:
         const auto executerId = ev->Sender;
         auto& msg = ev->Get()->Record;
 
+        if (ExecuterId) {
+            YQL_ENSURE(ExecuterId == executerId);
+        } else {
+            ExecuterId = executerId;
+        }
         YQL_ENSURE(msg.GetStartAllOrFail()); // TODO: support partial start
         YQL_ENSURE(!msg.GetTasks().empty(), "TEvStartKqpTasksRequest with empty task list");
 
@@ -108,7 +130,7 @@ public:
 
         ui64 taskCount = 0;
         if (!State_->UpdateRequest(executerId, txId, query, now, deadline, tasks, taskCount)) {
-            co_return ReplyError(executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR,
+            co_return ReplyError(msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR,
                 ev->Cookie, "Request was cancelled");
         }
 
@@ -147,6 +169,8 @@ public:
             poolId, msg.GetMemoryPoolPercent(),
             msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
 
+        auto reportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings);
+
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
             const auto taskId = dqTask.GetId();
@@ -159,7 +183,7 @@ public:
                 .LockMode = lockMode,
                 .Task = &dqTask,
                 .TxInfo = txInfo,
-                .ReportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings),
+                .ReportStatsSettings = reportStatsSettings,
                 .TraceId = NWilson::TTraceId(ev->TraceId),
                 .Arena = ev->Get()->Arena,
                 .SerializedGUCSettings = serializedGUCSettings,
@@ -186,7 +210,7 @@ public:
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
 
-                ReplyError(executerId, msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
+                ReplyError(msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
 
                 // TerminateTx(txId, executerId, rmResult->GetFailReason());
                 State_->MarkRequestAsCancelled(executerId);
@@ -241,10 +265,52 @@ public:
             }
         }
 
+        if (StatsMode == NYql::NDqProto::DQ_STATS_MODE_NONE) {
+            StatsMode = runtimeSettings.GetStatsMode();
+            if (StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+                StatsReportPeriod = reportStatsSettings.MinInterval;
+                SendProfileStats();
+                Schedule(StatsReportPeriod, new TEvents::TEvWakeup());
+            }
+        }
+
         Send(executerId, reply.Release(), IEventHandle::FlagTrackDelivery, txId);
     }
 
-    void ReplyError(TActorId executerId, const NKikimrKqp::TEvStartKqpTasksRequest& request,
+    void SendProfileStats() {
+
+        ui64 memPhysicalUsage = 0;
+        ui64 memSysAllocated = 0;
+        ui64 memSysFragmented = 0;
+        ui64 memArrowDefault = 0;
+        ui64 memMkqlAllocated = 0;
+        ui64 memMkqlFreeList = 0;
+
+        if (auto p = tcmalloc::MallocExtension::GetNumericProperty("generic.physical_memory_used"); p) {
+            memPhysicalUsage = *p;
+        }
+        if (auto p = tcmalloc::MallocExtension::GetNumericProperty("generic.current_allocated_bytes"); p) {
+            memSysAllocated = *p;
+        }
+        if (auto p = tcmalloc::MallocExtension::GetNumericProperty("generic.realized_fragmentation"); p) {
+            memSysFragmented = *p;
+        }
+        memArrowDefault = arrow::default_memory_pool()->bytes_allocated();
+        memMkqlAllocated = GetTotalMmapedBytes<>();
+        memMkqlFreeList = GetTotalFreeListBytes<>();
+
+        auto ev = MakeHolder<NYql::NDq::TEvDqCompute::TEvNodeState>();
+        ev->Record.SetNodeId(SelfId().NodeId());
+        ev->Record.SetMemPhysicalUsage(memPhysicalUsage);
+        ev->Record.SetMemSysAllocated(memSysAllocated);
+        ev->Record.SetMemSysFragmented(memSysFragmented);
+        ev->Record.SetMemArrowDefault(memArrowDefault);
+        ev->Record.SetMemMkqlAllocated(memMkqlAllocated);
+        ev->Record.SetMemMkqlFreeList(memMkqlFreeList);
+        Send(ExecuterId, ev.Release());
+    }
+
+    void ReplyError(const NKikimrKqp::TEvStartKqpTasksRequest& request,
         NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
     {
         auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
@@ -256,13 +322,16 @@ public:
             resp->SetMessage(message);
             resp->SetRequestId(requestId);
         }
-        Send(executerId, ev.Release());
+        Send(ExecuterId, ev.Release());
     }
 private:
     TIntrusivePtr<TKqpCounters> Counters_;
     std::shared_ptr<TNodeState> State_;
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
+    TActorId ExecuterId;
+    NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
+    TDuration StatsReportPeriod;
 };
 
 NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,

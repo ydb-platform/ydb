@@ -363,10 +363,6 @@ private:
                     (node_id, SelfId().NodeId()));
                 break;
 
-            case NYql::NDq::TDqComputeEvents::EvNodeState:
-                ProfiledExecutors.erase(ev->Sender);
-                break;
-
             default:
                 STLOG_E("Undelivered event with unexpected source type",
                     (node_id, SelfId().NodeId()),

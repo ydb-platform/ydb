@@ -225,16 +225,42 @@ Y_UNIT_TEST_SUITE(TLocationTest)
 
     Y_UNIT_TEST(TestLocationMaskPrint)
     {
-        auto mask = TLocationMask::MakePBuffer(true, false, true, false, false);
-        auto str = mask.Print();
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[D+....P.....]",
+            TLocationMask::MakeDDisk(true, false, false, false, false).Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[D.+...P.....]",
+            TLocationMask::MakeDDisk(false, true, false, false, false).Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[D..+..P.....]",
+            TLocationMask::MakeDDisk(false, false, true, false, false).Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[D...*.P.....]",
+            TLocationMask::MakeDDisk(false, false, false, true, false).Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[D....*P.....]",
+            TLocationMask::MakeDDisk(false, false, false, false, true).Print());
 
-        // The Print method currently returns ToString(Mask), so we can test
-        // it's not empty
-        UNIT_ASSERT(!str.empty());
-        // Test with empty mask
-        auto emptyMask = TLocationMask::MakeEmpty();
-        auto emptyStr = emptyMask.Print();
-        UNIT_ASSERT(!emptyStr.empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[D.....P+....]",
+            TLocationMask::MakePBuffer(true, false, false, false, false)
+                .Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[D.....P.+...]",
+            TLocationMask::MakePBuffer(false, true, false, false, false)
+                .Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[D.....P..+..]",
+            TLocationMask::MakePBuffer(false, false, true, false, false)
+                .Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[D.....P...*.]",
+            TLocationMask::MakePBuffer(false, false, false, true, false)
+                .Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[D.....P....*]",
+            TLocationMask::MakePBuffer(false, false, false, false, true)
+                .Print());
     }
 
     Y_UNIT_TEST(TestAllLocationsArray)

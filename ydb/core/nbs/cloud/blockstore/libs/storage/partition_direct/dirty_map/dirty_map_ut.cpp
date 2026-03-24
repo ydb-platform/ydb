@@ -15,48 +15,51 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // We should be able to get read hints
         auto readHint =
             dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
-        UNIT_ASSERT_EQUAL(false, readHint.WaitReady.Initialized());
-        UNIT_ASSERT_EQUAL(1, readHint.RangeHints.size());
-        UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePrimaryDDisk(),
-            readHint.RangeHints[0].LocationMask);
-        UNIT_ASSERT_EQUAL(
-            TBlockRange64::WithLength(0, 10),
-            readHint.RangeHints[0].RequestRelativeRange);
-        UNIT_ASSERT_EQUAL(
-            TBlockRange64::WithLength(10, 10),
-            readHint.RangeHints[0].VChunkRange);
-        UNIT_ASSERT_EQUAL(0, readHint.RangeHints[0].Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D+++..P.....][10..19][0..9]};",
+            readHint.DebugPrint());
     }
 
     Y_UNIT_TEST(ShouldReadAfterWriteFinished)
     {
         TBlocksDirtyMap dirtyMap;
 
-        TLocationMask requested = TLocationMask::MakePrimaryPBuffers();
-        TLocationMask confirmed = TLocationMask::MakePrimaryPBuffers();
-
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
-            requested,
-            confirmed);
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
 
         // After write, we should be able to get read hints
         auto readHint =
             dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
-        UNIT_ASSERT_EQUAL(false, readHint.WaitReady.Initialized());
-        UNIT_ASSERT_EQUAL(1, readHint.RangeHints.size());
-        UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePrimaryPBuffers(),
-            readHint.RangeHints[0].LocationMask);
-        UNIT_ASSERT_EQUAL(
-            TBlockRange64::WithLength(0, 10),
-            readHint.RangeHints[0].RequestRelativeRange);
-        UNIT_ASSERT_EQUAL(
+        UNIT_ASSERT_VALUES_EQUAL(
+            "123{[D.....P+++..][10..19][0..9]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadAfterWriteFinishedFromLastLsn)
+    {
+        TBlocksDirtyMap dirtyMap;
+
+        dirtyMap.WriteFinished(
+            123,
             TBlockRange64::WithLength(10, 10),
-            readHint.RangeHints[0].VChunkRange);
-        UNIT_ASSERT_EQUAL(123, readHint.RangeHints[0].Lsn);
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            124,
+            TBlockRange64::WithLength(10, 10),
+            TLocationMask::MakePBuffer(true, true, false, true, false),
+            TLocationMask::MakePBuffer(true, true, false, true, false));
+
+        // After write, we should be able to get read hints
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "124{[D.....P++.*.][10..19][0..9]};",
+            readHint.DebugPrint());
     }
 
     Y_UNIT_TEST(ShouldWriteAndFlushAndErase)

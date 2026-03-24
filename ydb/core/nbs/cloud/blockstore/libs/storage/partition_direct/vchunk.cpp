@@ -152,7 +152,6 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
             meta.Range,
             pbuffersMap[meta.HostIndex]);
     }
-    BlocksDirtyMap.PrepareReadyItems();
     DirtyMapRestored = true;
 
     DoFlush();

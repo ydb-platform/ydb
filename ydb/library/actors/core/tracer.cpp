@@ -184,10 +184,10 @@ namespace NActors::NTracing {
             ev.Type = static_cast<ui8>(ETraceEventType::SendLocal);
             ev.Actor1 = event.Sender.LocalId();
             ev.Actor2 = event.GetRecipientRewrite().LocalId();
-            ev.Aux = event.GetTypeRewrite();
+            ev.Aux = event.Type;
             ev.Extra = ts.CurrentActivityIndex;
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
-            TracerImpl.RegisterEventTypeName(ts.Buffer, event.GetTypeRewrite(), event.GetTypeName());
+            TracerImpl.RegisterEventTypeName(ts.Buffer, event.Type, event.GetTypeName());
         }
 
         void HandleReceive(IActor& recipient, IEventHandle& event) override {
@@ -202,10 +202,10 @@ namespace NActors::NTracing {
             ev.Type = static_cast<ui8>(ETraceEventType::ReceiveLocal);
             ev.Actor1 = event.Sender.LocalId();
             ev.Actor2 = event.GetRecipientRewrite().LocalId();
-            ev.Aux = event.GetTypeRewrite();
+            ev.Aux = event.Type;
             ev.Extra = activityIndex;
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
-            TracerImpl.RegisterEventTypeName(ts.Buffer, event.GetTypeRewrite(), event.GetTypeName());
+            TracerImpl.RegisterEventTypeName(ts.Buffer, event.Type, event.GetTypeName());
         }
 
         bool Start() override {

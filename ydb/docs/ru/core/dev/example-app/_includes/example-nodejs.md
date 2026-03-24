@@ -124,17 +124,13 @@ for (const [episode] of episodes) {
 Фрагмент кода, демонстрирующий выполнение транзакции:
 
 ```js
-import { query } from '@ydbjs/query';
-
-await sql.begin({ idempotent: true }, async (tx) => {
-    const txSql = query(driver, { tx });
-
-    const [[episode]] = await txSql`
+await sql.begin(async (tx) => {
+    const [[episode]] = await tx`
         SELECT title, air_date
         FROM episodes
         WHERE series_id = ${1n} AND season_id = ${1n} AND episode_id = ${1n}`;
 
-    await txSql`
+    await tx`
         UPDATE episodes
         SET air_date = CurrentUtcDate()
         WHERE series_id = ${1n} AND season_id = ${1n} AND episode_id = ${1n}`;

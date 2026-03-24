@@ -36,6 +36,8 @@ TICStorageTransport::WriteToPBuffer(
     const TGuardedSgList& data,
     NWilson::TSpan& span)
 {
+    Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
+
     auto request = std::make_unique<TEvTransportPrivate::TEvWriteToPBuffer>(
         connection.GetServiceId(),
         connection.Credentials,
@@ -61,6 +63,8 @@ TICStorageTransport::EraseFromPBuffer(
     TVector<ui64> lsns,
     NWilson::TSpan& span)
 {
+    Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
+
     auto request = std::make_unique<TEvTransportPrivate::TEvEraseFromPBuffer>(
         connection.GetServiceId(),
         connection.Credentials,
@@ -86,6 +90,8 @@ TICStorageTransport::ReadFromPBuffer(
     const TGuardedSgList& data,
     NWilson::TSpan& span)
 {
+    Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
+
     auto request = std::make_unique<TEvTransportPrivate::TEvReadFromPBuffer>(
         connection.GetServiceId(),
         connection.Credentials,
@@ -112,6 +118,8 @@ TICStorageTransport::ReadFromDDisk(
     const TGuardedSgList& data,
     NWilson::TSpan& span)
 {
+    Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::DDisk);
+
     auto request = std::make_unique<TEvTransportPrivate::TEvReadFromDDisk>(
         connection.GetServiceId(),
         connection.Credentials,
@@ -137,6 +145,10 @@ TICStorageTransport::SyncWithPBuffer(
     TVector<ui64> lsns,
     NWilson::TSpan& span)
 {
+    Y_ABORT_UNLESS(
+        pbufferConnection.ConnectionType == EConnectionType::PBuffer);
+    Y_ABORT_UNLESS(ddiskConnection.ConnectionType == EConnectionType::DDisk);
+
     auto request = std::make_unique<TEvTransportPrivate::TEvSyncWithPBuffer>(
         ddiskConnection.GetServiceId(),
         ddiskConnection.Credentials,
@@ -158,6 +170,8 @@ TICStorageTransport::SyncWithPBuffer(
 TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>
 TICStorageTransport::ListPBufferEntries(const THostConnection& connection)
 {
+    Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
+
     auto request = std::make_unique<TEvTransportPrivate::TEvListPBufferEntries>(
         connection.GetServiceId(),
         connection.Credentials);

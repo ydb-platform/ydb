@@ -69,22 +69,26 @@ TDirectBlockGroup::TDirectBlockGroup(
 
     auto addDDiskConnections = [&](const TVector<NBsController::TDDiskId>& ids,
                                    TVector<TDDiskConnection>& connections,
-                                   bool fromPersistentBuffer)
+                                   EConnectionType type)
     {
         for (const auto& ddiskId: ids) {
             connections.push_back(TDDiskConnection{
                 .HostConnection = NTransport::THostConnection{
+                    .ConnectionType = type,
                     .DDiskId = ddiskId,
                     .Credentials = NDDisk::TQueryCredentials(
                         TabletId,
                         generation,
                         std::nullopt,
-                        fromPersistentBuffer)}});
+                        type == EConnectionType::PBuffer)}});
         }
     };
 
-    addDDiskConnections(ddisksIds, DDiskConnections, false);
-    addDDiskConnections(pbufferIds, PBufferConnections, true);
+    addDDiskConnections(ddisksIds, DDiskConnections, EConnectionType::DDisk);
+    addDDiskConnections(
+        pbufferIds,
+        PBufferConnections,
+        EConnectionType::PBuffer);
 }
 
 TExecutorPtr TDirectBlockGroup::GetExecutor()
@@ -536,21 +540,17 @@ void TDirectBlockGroup::DoEstablishConnections()
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     for (size_t i = 0; i < DDiskConnections.size(); ++i) {
-        DoEstablishConnection(EConnectionType::DDisk, i, DDiskConnections[i]);
+        DoEstablishConnection(i, DDiskConnections[i]);
     }
 
     for (size_t i = 0; i < PBufferConnections.size(); ++i) {
-        DoEstablishConnection(
-            EConnectionType::PBuffer,
-            i,
-            PBufferConnections[i]);
+        DoEstablishConnection(i, PBufferConnections[i]);
     }
 
     DoListPBuffers();
 }
 
 void TDirectBlockGroup::DoEstablishConnection(
-    EConnectionType connectionType,
     size_t index,
     const TDDiskConnection& connection)
 {
@@ -563,7 +563,7 @@ void TDirectBlockGroup::DoEstablishConnection(
     future.Subscribe(
         [weakSelf = weak_from_this(),
          executor = Executor,
-         connectionType,
+         connectionType = connection.HostConnection.ConnectionType,
          index]   //
         (const TFuture<TEvConnectResult>& f) mutable
         {

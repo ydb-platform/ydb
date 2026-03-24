@@ -56,6 +56,8 @@ public:
         const THostConnection& connection) override;
 
 private:
+    using EConnectionType = THostConnection::EConnectionType;
+
     NActors::TActorSystem* const ActorSystem;
     const NActors::TActorId ICStorageTransportActorId;
 };

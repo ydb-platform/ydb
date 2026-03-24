@@ -206,11 +206,7 @@ public:
         ui8 hostIndex) override;
 
 private:
-    enum class EConnectionType
-    {
-        DDisk,
-        PBuffer,
-    };
+    using EConnectionType = NTransport::THostConnection::EConnectionType;
 
     struct TDDiskConnection
     {
@@ -226,7 +222,6 @@ private:
 
     void DoEstablishConnections();
     void DoEstablishConnection(
-        EConnectionType connectionType,
         size_t index,
         const TDDiskConnection& connection);
     void OnConnectionEstablished(

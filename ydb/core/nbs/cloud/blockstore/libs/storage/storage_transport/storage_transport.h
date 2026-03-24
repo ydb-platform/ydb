@@ -12,6 +12,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 struct THostConnection
 {
+    enum class EConnectionType
+    {
+        DDisk,
+        PBuffer,
+    };
+
+    EConnectionType ConnectionType;
     NKikimr::NBsController::TDDiskId DDiskId;
     NKikimr::NDDisk::TQueryCredentials Credentials;
 

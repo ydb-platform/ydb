@@ -214,11 +214,21 @@ private:
             message.MessageGroupId = std::move(currentRequest->GetMessageGroupId());
 
             {
-                TMessageAttributeList attrs;
-                for (const auto& a : currentRequest->GetMessageAttributes()) {
-                    attrs.AddAttributes()->CopyFrom(a);
+                NKikimr::NSQS::TMessageAttributes messageAttributes;
+                for (const auto& attr : currentRequest->GetMessageAttributes()) {
+                    auto* dstAttribute = messageAttributes.add_attributes();
+                    dstAttribute->SetName(attr.GetName());
+                    dstAttribute->SetDataType(attr.GetDataType());
+                    if (const auto& value = attr.GetStringValue()) {
+                        dstAttribute->SetStringValue(value);
+                    } else if (const auto& value = attr.GetBinaryValue()) {
+                        dstAttribute->SetBinaryValue(value);
+                    }
                 }
-                message.SerializedMessageAttributes = ProtobufToString(attrs);
+                TString serialized;
+                bool res = messageAttributes.SerializeToString(&serialized);
+                Y_ABORT_UNLESS(res);
+                message.SerializedMessageAttributes = std::move(serialized);
             }
         }
 

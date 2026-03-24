@@ -1,13 +1,16 @@
 #include "action.h"
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "error.h"
 #include "executor.h"
 #include "log.h"
 #include "params.h"
 
+#include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/helpers.h>
+#include <ydb/core/ymq/base/utils.h>
 #include <ydb/core/ymq/proto/records.pb.h>
 #include <ydb/public/lib/value/value.h>
 
@@ -125,16 +128,20 @@ private:
 
         InitParams();
 
-        auto receiveRequest = MakeHolder<TSqsEvents::TEvReceiveMessageBatch>();
-        receiveRequest->RequestId = RequestId_;
-        receiveRequest->MaxMessagesCount = MaxMessagesCount_;
-        receiveRequest->ReceiveAttemptId = ReceiveAttemptId_;
-        receiveRequest->VisibilityTimeout = GetVisibilityTimeout();
-        if (WaitTime_) {
-            receiveRequest->WaitDeadline = WaitDeadline();
-        }
+        if (!FeatureFlags_.EnableSQSMigrationFinished_ || !IsTopicCreated()) {
+            auto receiveRequest = MakeHolder<TSqsEvents::TEvReceiveMessageBatch>();
+            receiveRequest->RequestId = RequestId_;
+            receiveRequest->MaxMessagesCount = MaxMessagesCount_;
+            receiveRequest->ReceiveAttemptId = ReceiveAttemptId_;
+            receiveRequest->VisibilityTimeout = GetVisibilityTimeout();
+            if (WaitTime_ && !FeatureFlags_.EnableSQSMigrationCompatibility_) {
+                receiveRequest->WaitDeadline = WaitDeadline();
+            }
 
-        Send(QueueLeader_, std::move(receiveRequest));
+            Send(QueueLeader_, std::move(receiveRequest));
+        } else {
+            DoActionTopicImplementation();
+        }
     }
 
     TString DoGetQueueName() const override {
@@ -154,10 +161,24 @@ private:
         }
     }
 
+    void DoActionTopicImplementation() {
+        NPQ::NMLP::TReaderSettings settings = {
+            .DatabasePath = GetDatabaseName(),
+            .TopicName = GetTopicName(),
+            .Consumer = ConsumerName,
+            .WaitTime = WaitTime_,
+            .ProcessingTimeout = GetVisibilityTimeout(),
+            .MaxNumberOfMessage = static_cast<ui32>(MaxMessagesCount_),
+            .UncompressMessages = true,
+        };
+        Register(NPQ::NMLP::CreateReader(SelfId(), std::move(settings)));
+    }
+
 private:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
+            hFunc(NPQ::NMLP::TEvReadResponse, Handle);
             hFunc(TSqsEvents::TEvReceiveMessageBatchResponse, HandleReceiveMessageBatchResponse);
         }
     }
@@ -173,6 +194,9 @@ private:
             MakeError(Response_.MutableReceiveMessage(), NErrors::OVER_LIMIT);
         } else {
             if (ev->Get()->Messages.empty()) {
+                if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
+                    return DoActionTopicImplementation();
+                }
                 if (MaybeScheduleWait()) {
                     return;
                 } else {
@@ -217,6 +241,73 @@ private:
                     item->SetMessageDeduplicationId(message.MessageDeduplicationId);
                     item->SetMessageGroupId(message.MessageGroupId);
                     item->SetSequenceNumber(message.SequenceNumber);
+                }
+            }
+        }
+        SendReplyAndDie();
+    }
+
+    void Handle(NPQ::NMLP::TEvReadResponse::TPtr& ev) {
+        const auto status = ev->Get()->Status;
+        if (status != Ydb::StatusIds::SUCCESS) {
+            MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
+        } else {
+            auto messages = ev->Get()->Messages;
+
+            for (auto& message : messages) {
+                auto* item = Response_.MutableReceiveMessage()->AddMessages();
+                //item->SetApproximateFirstReceiveTimestamp(message.FirstReceiveTimestamp.MilliSeconds());
+                //item->SetApproximateReceiveCount(message.ReceiveCount);
+                item->SetMessageId(ToMessageId(message.MessageId));
+                item->SetMD5OfMessageBody(MD5::Calc(message.Data));
+                item->SetData(std::move(message.Data));
+
+                TReceipt receipt;
+                receipt.SetOffset(message.MessageId.Offset);
+                receipt.SetShard(message.MessageId.PartitionId);
+                item->SetReceiptHandle(EncodeReceiptHandle(receipt));
+
+                item->SetSentTimestamp(message.SentTimestamp.MilliSeconds());
+                // if (message.SenderId) {
+                //     item->SetSenderId(message.SenderId);
+                // }
+
+                if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_ATTRIBUTES)) {
+                    NKikimr::NSQS::TMessageAttributes messageAttributes;
+                    if (messageAttributes.ParseFromString(*value)) {
+                        //result.set_m_d_5_of_message_attributes(NSQS::CalcMD5OfMessageAttributes(messageAttributes.attributes()));
+                        //auto* mma = result.mutable_message_attributes();
+                        for (const auto& attribute : messageAttributes.attributes()) {
+                            auto* value = item->AddMessageAttributes();
+                            value->SetName(attribute.name());
+                            value->SetDataType(attribute.datatype());
+                            if (attribute.has_binaryvalue()) {
+                                value->SetBinaryValue(attribute.binaryvalue());
+                            } else if (attribute.has_stringvalue()) {
+                                value->SetStringValue(attribute.stringvalue());
+                            } else {
+                                continue;
+                            }
+                        }
+                    } else {
+                        RLOG_SQS_WARN("Unable to deserialize message attributes");
+                    }
+
+                    if (item->MessageAttributesSize() > 0) {
+                        const TString md5 = CalcMD5OfMessageAttributes(item->GetMessageAttributes());
+                        item->SetMD5OfMessageAttributes(md5);
+                    }
+                }
+
+                if (!message.MessageGroupId.empty()) {
+                    item->SetMessageGroupId(message.MessageGroupId);
+                }
+
+                if (IsFifoQueue()) {
+                    if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_DEDUPLICATION_ID)) {
+                        item->SetMessageDeduplicationId(*value);
+                    }
+                    item->SetSequenceNumber(message.MessageId.Offset);
                 }
             }
         }

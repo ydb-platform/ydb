@@ -3,6 +3,7 @@ import os
 import subprocess
 
 import pytest
+import requests
 import urllib3
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -11,8 +12,17 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
+TOKENS = [
+    None,
+    'user@builtin',
+    'database@builtin',
+    'viewer@builtin',
+    'monitoring@builtin',
+    'root@builtin',
+]
+
+
 def generate_certificates(certs_tmp_dir):
-    """Create a temporary CA and server certificate for HTTPS monitoring tests."""
     ca_key = os.path.join(certs_tmp_dir, 'server_ca.key')
     ca_crt = os.path.join(certs_tmp_dir, 'server_ca.crt')
 
@@ -46,8 +56,6 @@ def generate_certificates(certs_tmp_dir):
 
     subprocess.run(['openssl', 'genrsa', '-out', server_key, '2048'], check=True, capture_output=True)
 
-    # The monitoring endpoint is accessed through localhost in tests, so SAN
-    # entries must include the local hostnames and loopback address.
     with open(server_conf, 'w') as config_file:
         config_file.write('[req]\n')
         config_file.write('distinguished_name = req_distinguished_name\n')
@@ -108,16 +116,10 @@ def generate_certificates(certs_tmp_dir):
     }
 
 
-def create_ydb_configurator(
-    certificates,
-    enforce_user_token_requirement=True,
-    require_counters_authentication=None,
-    require_healthcheck_authentication=None,
-):
-    """Build a cluster configurator for monitoring access tests."""
+def create_ydb_configurator(certificates):
     cluster_config = {
         'default_clusteradmin': 'root@builtin',
-        'enforce_user_token_requirement': enforce_user_token_requirement,
+        'enforce_user_token_requirement': True,
     }
     config_generator = KikimrConfigGenerator(**cluster_config)
 
@@ -129,8 +131,6 @@ def create_ydb_configurator(
     config_generator.monitoring_tls_cert_path = certificates['server_cert']
     config_generator.monitoring_tls_key_path = certificates['server_key']
 
-    # These SIDs define the access hierarchy used by the monitoring endpoint
-    # tests. Keeping them together makes the test auth model easy to inspect.
     security_config = config_generator.yaml_config['domains_config']['security_config']
     security_config['database_allowed_sids'] = ['database@builtin']
     security_config['viewer_allowed_sids'] = ['viewer@builtin']
@@ -140,77 +140,132 @@ def create_ydb_configurator(
         'administration_allowed_sids' in security_config and len(security_config['administration_allowed_sids']) > 0
     ), 'administration_allowed_sids was supposed to be set due to default_clusteradmin'
 
-    if require_counters_authentication is not None or require_healthcheck_authentication is not None:
-        if 'monitoring_config' not in config_generator.yaml_config:
-            config_generator.yaml_config['monitoring_config'] = {}
-        if require_counters_authentication is not None:
-            config_generator.yaml_config['monitoring_config'][
-                'require_counters_authentication'
-            ] = require_counters_authentication
-        if require_healthcheck_authentication is not None:
-            config_generator.yaml_config['monitoring_config'][
-                'require_healthcheck_authentication'
-            ] = require_healthcheck_authentication
-
     return config_generator
 
 
 @pytest.fixture(scope='module')
 def certificates(tmp_path_factory):
-    """Provide temporary TLS materials shared by monitoring test clusters."""
     certs_tmp_dir = tmp_path_factory.mktemp('monitoring_certs_')
     return generate_certificates(str(certs_tmp_dir))
 
 
 @pytest.fixture(scope='module')
 def ydb_cluster_with_enforce_user_token(certificates):
-    """Cluster with the default token enforcement mode enabled."""
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-    )
+    configurator = create_ydb_configurator(certificates)
     cluster = KiKiMR(configurator)
     cluster.start()
     yield cluster
     cluster.stop()
 
 
-@pytest.fixture(scope='module')
-def ydb_cluster_without_enforce_user_token(certificates):
-    """Cluster with user token enforcement disabled."""
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=False,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
+def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+
+    response = requests.get(endpoint_url, headers=headers, verify=False)
+    token_desc = token if token is not None else 'null'
+    assert (
+        response.status_code == expected_status
+    ), f'Expected {endpoint_path} with token={token_desc} to return {expected_status}, got {response.status_code}'
 
 
-@pytest.fixture(scope='module')
-def ydb_cluster_with_require_counters_auth(certificates):
-    """Cluster with explicit counters authentication enabled."""
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-        require_counters_authentication=True,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
+def _test_endpoints(cluster, expected_results):
+    host = cluster.nodes[1].host
+    mon_port = cluster.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+
+    for endpoint_path, expected_statuses in expected_results.items():
+        endpoint_url = f'{base_url}{endpoint_path}'
+        for token in TOKENS:
+            assert token in expected_statuses, f'Missing expected status for {endpoint_path} and token={token}'
+            _test_endpoint(endpoint_url, endpoint_path, token, expected_statuses[token])
 
 
-@pytest.fixture(scope='module')
-def ydb_cluster_with_require_healthcheck_auth(certificates):
-    """Cluster with explicit healthcheck authentication enabled."""
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-        require_healthcheck_authentication=True,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
+EXPECTED_RESULTS = {
+    # BUG: legacy suite currently treats this endpoint as public in default mode.
+    '/actors/tablet_counters_aggregator': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/counters': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/counters/hosts': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/followercounters': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/ping': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/status': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/viewer/capabilities': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/healthcheck?format=prometheus': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/login': {
+        None: 400,
+        'user@builtin': 400,
+        'database@builtin': 400,
+        'viewer@builtin': 400,
+        'monitoring@builtin': 400,
+        'root@builtin': 400,
+    },
+    '/monitoring/': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+}
+
+
+def test_public_access(ydb_cluster_with_enforce_user_token):
+    _test_endpoints(ydb_cluster_with_enforce_user_token, EXPECTED_RESULTS)

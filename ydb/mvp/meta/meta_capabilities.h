@@ -1,10 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
 namespace NMVP {

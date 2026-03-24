@@ -340,9 +340,9 @@ GROUP BY
     HOP(CAST(subkey AS Timestamp), "PT10S", "PT1M", "PT30S");
 ```
 
-## GROUP BY HoppingWindow {#hopping_window}
+## GROUP BY ... HoppingWindow {#group-by-hopping_window}
 
-Новая версия [GROUP BY HOP](#hop)
+Новая версия [GROUP BY HOP](#group-by-hop)
 
 ```yql
 HoppingWindow(time_extractor, hop, interval)
@@ -354,7 +354,7 @@ HoppingWindow(time_extractor, hop, interval)
 
 ### Потоковый `HoppingWindow` поверх топика
 
-Отличается от предшественника тем, что не требует указания аргумента `delay`. В `HoppingWindow` окна будут закрываться по получении [водяного знака](../../../../concepts/streaming_query/watermarks.md), а не по истечении `delay`, как это сделано в `HOP`.
+Отличается от предшественника тем, что не требует указания аргумента `delay`. В `HoppingWindow` окна будут закрываться по получении [водяного знака](../../../../dev/streaming-query/watermarks.md), а не по истечении `delay`, как это сделано в `HOP`.
 
 ### Пример
 

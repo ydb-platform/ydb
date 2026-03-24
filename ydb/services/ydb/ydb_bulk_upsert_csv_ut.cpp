@@ -11,9 +11,9 @@
 #include <cmath>
 
 using namespace NYdb;
-
-using namespace NYdb;
 using namespace NYdb::NTable;
+
+namespace {
 
 NYdb::NTable::TBulkUpsertSettings BulkUpsertSettings(const Ydb::Formats::CsvSettings& csvSettings) {
     TString formatSettings;
@@ -125,7 +125,6 @@ NYdb::NTable::TBulkUpsertResult BulkUpsertCsvUint8Row(NYdb::NTable::TTableClient
         {},
         BulkUpsertSettings(CsvSettings()))
         .GetValueSync();
-    Cerr << upsert.GetIssues().ToString() << Endl;
     return upsert;
 }
 
@@ -184,8 +183,8 @@ void Index(NYdb::NTable::EIndexType indexType, bool enableBulkUpsertToAsyncIndex
         auto res = BulkUpsertCsvUint8Row(client, "/Root/ui8", 1, 2);
 
         if (indexType == NYdb::NTable::EIndexType::GlobalAsync) {
-            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), enableBulkUpsertToAsyncIndexedTables
-                ? EStatus::SUCCESS : EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), enableBulkUpsertToAsyncIndexedTables
+                ? EStatus::SUCCESS : EStatus::SCHEME_ERROR, res.GetIssues().ToString());
 
             if (enableBulkUpsertToAsyncIndexedTables) {
                 WaitAndCompareQueryYson(client, R"(
@@ -205,16 +204,18 @@ void Index(NYdb::NTable::EIndexType indexType, bool enableBulkUpsertToAsyncIndex
                 ])");
             }
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
         }
     }
 
     {
         auto res = BulkUpsertCsvUint8Row(client, "/Root/ui8/Value_index/indexImplTable", 1, 2);
-        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, res.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.GetIssues().ToString(), "Writing to index implementation tables is not allowed", res.GetIssues().ToString());
     }
 }
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
     Y_UNIT_TEST(Simple) {

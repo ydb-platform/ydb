@@ -1,27 +1,5 @@
 #include "global.h"
-#include "internal.h"
-
-template <class C>
-bool AllExistingWritesSkipConflictCheck(const C& ops)
-{
-    size_t writeOpsCount = 0;
-    size_t flagsCount = 0;
-
-    for (const auto& op : ops) {
-        if (!op.HasSkipConflictCheck()) {
-            // операция чтения
-            continue;
-        }
-
-        ++writeOpsCount;
-
-        if (op.GetSkipConflictCheck()) {
-            ++flagsCount;
-        }
-    }
-
-    return (writeOpsCount > 0) && (writeOpsCount == flagsCount);
-}
+#include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 
 bool NKikimr::TEvPersQueue::TEvProposeTransaction::GetSkipSrcIdInfo() const
 {
@@ -29,10 +7,8 @@ bool NKikimr::TEvPersQueue::TEvProposeTransaction::GetSkipSrcIdInfo() const
         return false;
     }
 
-    return AllExistingWritesSkipConflictCheck(Record.GetData().GetOperations());
+    return NPQ::AllExistingWritesSkipConflictCheck(Record.GetData().GetOperations());
 }
 
-bool NKikimr::TEvPQ::TEvTxCalcPredicate::GetSkipSrcIdInfo() const
-{
-    return AllExistingWritesSkipConflictCheck(Operations);
-}
+template <>
+bool NKikimr::NPQ::AllExistingWritesSkipConflictCheck(const TVector<NKikimrPQ::TPartitionOperation>& ops);

@@ -25,5 +25,27 @@ void ReplyPersQueueError(
     bool isInternal = false
 );
 
+template <class C>
+bool AllExistingWritesSkipConflictCheck(const C& ops)
+{
+    size_t writeOpsCount = 0;
+    size_t flagsCount = 0;
+
+    for (const auto& op : ops) {
+        if (!op.HasSkipConflictCheck()) {
+            // операция чтения
+            continue;
+        }
+
+        ++writeOpsCount;
+
+        if (op.GetSkipConflictCheck()) {
+            ++flagsCount;
+        }
+    }
+
+    return (writeOpsCount > 0) && (writeOpsCount == flagsCount);
+}
+
 }// NPQ
 }// NKikimr

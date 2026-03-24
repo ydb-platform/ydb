@@ -911,7 +911,8 @@ struct TEvPQ {
             Operations.push_back(std::move(operation));
         }
 
-        bool GetSkipSrcIdInfo() const;
+        bool GetSkipSrcIdInfo() const { return SkipSrcIdInfo; }
+        void SetSkipSrcIdInfo(bool value) { SkipSrcIdInfo = value; }
 
         ui64 Step;
         ui64 TxId;
@@ -920,6 +921,9 @@ struct TEvPQ {
         bool ForcePredicateFalse = false;
 
         NWilson::TSpan Span;
+
+    private:
+        bool SkipSrcIdInfo = false;
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {

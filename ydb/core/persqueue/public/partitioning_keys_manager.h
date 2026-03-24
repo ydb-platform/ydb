@@ -1,33 +1,31 @@
+#pragma once
+
 #include <util/datetime/base.h>
-#include <ydb/library/kll_median/sketch.h>
+#include <ydb/library/kll_median/dynamic_sketch.h>
 
 #include <deque>
 
 namespace NKikimr::NPQ {
 
 struct TPartitioningKeysManager {
-    TPartitioningKeysManager(size_t numSketches, TDuration windowSize)
-        : NumSketches(numSketches)
-        , WindowSize(windowSize) {
-    }
-
-    void Add(const TString& /*key*/, ui64 /*msgSize*/) {
-        
-    }
-    
-    TString GetMedian() const {
-        return {};
-    }
+    TPartitioningKeysManager(size_t numSketches, TDuration windowSize);
+    void Add(const TString& key, ui64 msgSize);
+    TString GetMedianKey();
 
 private:
+    void RemoveOldSketches();
+
+    static constexpr auto DEFAULT_SKETCH_K = 1000;
+    static constexpr auto DEFAULT_MIN_WEIGHT = 512; // 512 bytes
+
     struct KllSketchWrapper {
-        NKll::TKllSketch<TString> Sketch;
+        NKll::TDynamicKllSketch<TString> Sketch;
         TInstant StartTime;
     };
 
     std::deque<KllSketchWrapper> Sketches;
-    [[maybe_unused]] const ui64 NumSketches; // Num sketches in window
     const TDuration WindowSize;
+    const TDuration SketchWindowSize;
 };
 
 } // namespace NKikimr::NPQ

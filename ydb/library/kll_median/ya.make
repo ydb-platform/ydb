@@ -6,6 +6,7 @@ PEERDIR(
 
 SRCS(
     sketch.h
+    dynamic_sketch.h
 )
 
 END()

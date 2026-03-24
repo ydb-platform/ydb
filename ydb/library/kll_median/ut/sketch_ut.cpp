@@ -1,3 +1,4 @@
+#include <ydb/library/kll_median/dynamic_sketch.h>
 #include <ydb/library/kll_median/sketch.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -121,6 +122,15 @@ Y_UNIT_TEST_SUITE(TKllMedianTest) {
             s2.Add(TStringBuilder() << "s" << i);
         }
         UNIT_ASSERT_VALUES_EQUAL(s1.Median(), s2.Median());
+    }
+
+    Y_UNIT_TEST(DynamicSketch_SmallWeightUsesBaseLevelAfterAccept) {
+        TDynamicKllSketch<TString> d(20, 12345u);
+        for (int i = 0; i < 100; ++i) {
+            d.Add(TStringBuilder() << "k" << i, 1);
+        }
+        TString m = d.Median();
+        UNIT_ASSERT(m.StartsWith("k"));
     }
 
 } // Y_UNIT_TEST_SUITE(TKllMedianTest)

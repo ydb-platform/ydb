@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/common/partition_id.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partitioning_keys_manager.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h> // TODO move to pubcli or common
 #include <ydb/library/kll_median/sketch.h>
@@ -118,7 +119,9 @@ public:
     TAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId)
         : Config(config)
         , PartitionId(partitionId)
-        // , KeysSketch(KeysSketchPrecision, 6, TInstant::Now().Seconds(), 60)
+        , KeysManager(
+            Min<size_t>(DEFAULT_NUM_SKETCHES, config.GetPartitionStrategy().GetScaleThresholdSeconds()),
+            TDuration::Seconds(config.GetPartitionStrategy().GetScaleThresholdSeconds()))
     {
         RecreateSumWrittenBytes();
     }
@@ -143,9 +146,9 @@ public:
 
         SourceIdCounter.Use(sourceIdHash, now);
 
-        // if (key) {
-        //     KeysSketch.Add(key, now.Seconds());
-        // }
+        if (key) {
+            KeysManager.Add(key, size);
+        }
     }
 
     void CleanUp() override {
@@ -159,6 +162,61 @@ public:
             return std::nullopt;
         }
 
+        auto medianKey = KeysManager.GetMedianKey();
+        if (medianKey) {
+            return medianKey;
+        }
+
+        return GetSplitBoundaryBasedOnSourceId();
+    }
+
+    NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus /*currentState*/) override {
+        const auto writeSpeedUsagePercent = SumWrittenBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+        const auto sourceIdWindow = TDuration::Seconds(std::min<ui32>(5, Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
+        const auto sourceIdCount = SourceIdCounter.Count(TInstant::Now() - sourceIdWindow);
+        const auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
+
+        // LOG_D("TPartition::CheckScaleStatus"
+        //         << " splitMergeAvgWriteBytes# " << SumWrittenBytes->GetValue()
+        //         << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
+        //         << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
+        //         << " totalPartitionWriteSpeed# " << Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
+        //         << " sourceIdCount=" << sourceIdCount
+        //         << " canSplit=" << canSplit
+        // );
+
+        auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
+            || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
+
+        auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
+
+        if (splitEnabled && canSplit && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
+            // LOG_D("TPartition::CheckScaleStatus NEED_SPLIT.");
+            return NKikimrPQ::EScaleStatus::NEED_SPLIT;
+        } else if (mergeEnabled && writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
+            // LOG_D("TPartition::CheckScaleStatus NEED_MERGE."
+            //        << " writeSpeedUsagePercent: " << writeSpeedUsagePercent);
+            return NKikimrPQ::EScaleStatus::NEED_MERGE;
+        }
+        return NKikimrPQ::EScaleStatus::NORMAL;
+    }
+
+    void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
+        if (config.GetPartitionStrategy().GetScaleThresholdSeconds() != SumWrittenBytes->GetDuration().Seconds()) {
+            RecreateSumWrittenBytes();
+        }
+    }
+
+    std::vector<std::pair<TString, ui64>> GetWrittenBytes() override {
+        return {};
+    }
+
+    void RecreateSumWrittenBytes() {
+        SumWrittenBytes.ConstructInPlace(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), Precision);
+    }
+
+private:
+    std::string GetSplitBoundaryBasedOnSourceId() {
         std::vector<std::pair<TString, ui64>> sorted;
         sorted.reserve(WrittenBytes.size());
         for (const auto& [sourceIdHash, counter] : WrittenBytes) {
@@ -223,59 +281,15 @@ public:
         return MiddleOf(*lastLeft, *lastRight);
     }
 
-    NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus /*currentState*/) override {
-        const auto writeSpeedUsagePercent = SumWrittenBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-        const auto sourceIdWindow = TDuration::Seconds(std::min<ui32>(5, Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
-        const auto sourceIdCount = SourceIdCounter.Count(TInstant::Now() - sourceIdWindow);
-        const auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
+    static constexpr auto DEFAULT_NUM_SKETCHES = 100;
 
-        // LOG_D("TPartition::CheckScaleStatus"
-        //         << " splitMergeAvgWriteBytes# " << SumWrittenBytes->GetValue()
-        //         << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
-        //         << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
-        //         << " totalPartitionWriteSpeed# " << Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
-        //         << " sourceIdCount=" << sourceIdCount
-        //         << " canSplit=" << canSplit
-        // );
-
-        auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
-            || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
-
-        auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
-
-        if (splitEnabled && canSplit && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
-            // LOG_D("TPartition::CheckScaleStatus NEED_SPLIT.");
-            return NKikimrPQ::EScaleStatus::NEED_SPLIT;
-        } else if (mergeEnabled && writeSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
-            // LOG_D("TPartition::CheckScaleStatus NEED_MERGE."
-            //        << " writeSpeedUsagePercent: " << writeSpeedUsagePercent);
-            return NKikimrPQ::EScaleStatus::NEED_MERGE;
-        }
-        return NKikimrPQ::EScaleStatus::NORMAL;
-    }
-
-    void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
-        if (config.GetPartitionStrategy().GetScaleThresholdSeconds() != SumWrittenBytes->GetDuration().Seconds()) {
-            RecreateSumWrittenBytes();
-        }
-    }
-
-    std::vector<std::pair<TString, ui64>> GetWrittenBytes() override {
-        return {};
-    }
-
-    void RecreateSumWrittenBytes() {
-        SumWrittenBytes.ConstructInPlace(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), Precision);
-    }
-
-private:
     const NKikimrPQ::TPQTabletConfig& Config;
     const ui32 PartitionId;
 
     TMaybe<TSlidingWindow> SumWrittenBytes;
     // SourceIdHash -> SlidingWindow
     std::unordered_map<TString, TSlidingWindow> WrittenBytes;
-    // NKll::TWindowedKll<TString> KeysSketch;
+    NPQ::TPartitioningKeysManager KeysManager;
     TLastCounter SourceIdCounter;
     TInstant LastCleanUp;
 };

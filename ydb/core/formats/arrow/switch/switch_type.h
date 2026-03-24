@@ -43,6 +43,7 @@ template <typename TFunc>
             return callback(TTypeWrapper<arrow::UInt32Type>());
         case NScheme::NTypeIds::Int64:
             return callback(TTypeWrapper<arrow::Int64Type>());
+        case NScheme::NTypeIds::Timestamp:
         case NScheme::NTypeIds::Uint64:
             return callback(TTypeWrapper<arrow::UInt64Type>());
         case NScheme::NTypeIds::Float:
@@ -59,8 +60,6 @@ template <typename TFunc>
         case NScheme::NTypeIds::DyNumber:
         case NScheme::NTypeIds::JsonDocument:
             return callback(TTypeWrapper<arrow::BinaryType>());
-        case NScheme::NTypeIds::Timestamp:
-            return callback(TTypeWrapper<arrow::TimestampType>());
         case NScheme::NTypeIds::Interval:
             return callback(TTypeWrapper<arrow::DurationType>());
         case NScheme::NTypeIds::Decimal:

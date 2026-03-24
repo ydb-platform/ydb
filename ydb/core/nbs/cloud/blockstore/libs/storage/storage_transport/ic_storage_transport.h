@@ -39,6 +39,16 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan& span) override;
 
+    NThreading::TFuture<TEvWritePersistentBuffersResult> WriteToPBuffers(
+        const THostConnection& connection,
+        const NKikimr::NDDisk::TBlockSelector& selector,
+        const ui64 lsn,
+        const NKikimr::NDDisk::TWriteInstruction instruction,
+        const std::vector<NKikimrBlobStorage::NDDisk::TDDiskId>& persistentBufferIds,
+        const ui32 replyTimeoutMicroseconds,
+        const TGuardedSgList& data,
+        NWilson::TSpan& span) override;
+
     NThreading::TFuture<TEvSyncWithPersistentBufferResult> SyncWithPBuffer(
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,

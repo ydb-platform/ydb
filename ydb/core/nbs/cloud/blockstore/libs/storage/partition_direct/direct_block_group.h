@@ -27,6 +27,23 @@ struct TDBGWriteBlocksResponse
     NProto::TError Error;
 };
 
+struct TDBGWriteBlocksToManyPBuffersResponse
+{
+    struct TSinglePersistentBufferResult {
+        TSinglePersistentBufferResult(NKikimrBlobStorage::NDDisk::TDDiskId persistentBufferId, NProto::TError error):
+            PersistentBufferId(std::move(persistentBufferId)),
+            Error(std::move(error))
+        {}
+
+        NKikimrBlobStorage::NDDisk::TDDiskId PersistentBufferId;
+        NProto::TError Error;
+    };
+
+    TDBGWriteBlocksToManyPBuffersResponse() = default;
+    TDBGWriteBlocksToManyPBuffersResponse();
+    TVector<TSinglePersistentBufferResult> Errors;
+};
+
 struct TDBGFlushResponse
 {
     TVector<NProto::TError> Errors;
@@ -108,6 +125,15 @@ public:
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) = 0;
 
+    virtual NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
+    WriteBlocksToPBuffers(
+        ui32 vChunkIndex,
+        std::vector<ui8> hostIndexes,
+        ui64 lsn,
+        TBlockRange64 range,
+        const TGuardedSgList &guardedSglist,
+        NWilson::TTraceId traceId) = 0;
+
     // Batch operation to flush a list of PBuffer entries. It can be executed in
     // two modes - when the source and destination are the same host, and when
     // the source and destination hosts are different. In this case, the
@@ -184,6 +210,15 @@ public:
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId) override;
+
+    NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
+    WriteBlocksToPBuffers(
+        ui32 vChunkIndex,
+        std::vector<ui8> hostIndexes,
+        ui64 lsn,
+        TBlockRange64 range,
+        const TGuardedSgList &guardedSglist,
         NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(

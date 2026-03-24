@@ -134,6 +134,82 @@ void TICStorageTransportActor::HandleWritePersistentBufferResult(
     }
 }
 
+//-------- begin
+
+void TICStorageTransportActor::HandleWritePersistentBuffers(
+    const TEvTransportPrivate::TEvWriteToPBuffers::TPtr& ev,
+    const TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    const ui64 requestId = ++RequestIdGenerator;
+    auto [it, inserted] =
+        WriteToPBuffersRequests.emplace(requestId, ev->Release().Release());
+    Y_ABORT_UNLESS(inserted);
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent TEvWriteToPBuffers with requestId# %lu",
+        requestId);
+
+    // TODO maks сделать передачу параметра
+    // NodeId, PDiskId, DDiskSlotId
+    constexpr ui32 tiomeoutMicroseconds = 420;
+    const std::vector<std::tuple<ui32, ui32, ui32>> persistentBufferIds;
+    auto request = std::make_unique<NDDisk::TEvWritePersistentBuffers>(
+        msg->Credentials,
+        msg->Selector,
+        msg->Lsn,
+        msg->Instruction,
+        persistentBufferIds,
+        tiomeoutMicroseconds);
+
+    if (auto guard = msg->Data.Acquire()) {
+        const auto& sglist = guard.Get();
+        TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
+        SgListCopy(sglist, CreateSgList(rope));
+        request->AddPayload(std::move(rope));
+    }
+
+    ctx.Send(MakeHolder<IEventHandle>(
+        msg->ServiceId,
+        ctx.SelfID,
+        request.release(),
+        0,           // flags
+        requestId,   // cookie
+        nullptr,
+        std::move(msg->TraceId)));
+}
+
+void TICStorageTransportActor::HandleWritePersistentBuffersResult(
+    const NDDisk::TEvWritePersistentBuffersResult::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const ui64 requestId = ev->Cookie;
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received TEvWritePersistentBufferResult with requestId# %lu",
+        requestId);
+
+    if (auto* r = WriteToPBuffersRequests.FindPtr(requestId)) {
+        auto& request = **r;
+        request.Promise.SetValue(std::move(ev->Get()->Record));
+        WriteToPBuffersRequests.erase(requestId);
+    } else {
+        // That means that request is already completed
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "WritePersistentBuffersEvent with requestId# %lu not found",
+            requestId);
+    }
+}
+
+//-------- end
+
 void TICStorageTransportActor::HandleErasePersistentBuffer(
     const TEvTransportPrivate::TEvEraseFromPBuffer::TPtr& ev,
     const TActorContext& ctx)

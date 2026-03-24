@@ -220,6 +220,50 @@ struct TEvTransportPrivate
         ~TListPBufferEntries();
     };
 
+    // TODO рассмотреть вариант переиспольщование общего с TWriteToPBuffer кода
+    struct TWriteToPBuffers: TDisableCopyMove
+    {
+        using TResult =
+            NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
+
+        const NActors::TActorId ServiceId;
+        const NKikimr::NDDisk::TQueryCredentials Credentials;
+        const NKikimr::NDDisk::TBlockSelector Selector;
+        const ui64 Lsn;
+        const NKikimr::NDDisk::TWriteInstruction Instruction;
+        const std::vector<NKikimrBlobStorage::NDDisk::TDDiskId> PersistentBufferIds;
+        const ui32 ReplyTimeoutMicroseconds;
+
+        const TGuardedSgList Data;
+        NWilson::TTraceId TraceId;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
+
+        TWriteToPBuffers(
+            const NActors::TActorId serviceId,
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
+            const NKikimr::NDDisk::TBlockSelector& selector,
+            const ui64 lsn,
+            const NKikimr::NDDisk::TWriteInstruction instruction,
+            const std::vector<NKikimrBlobStorage::NDDisk::TDDiskId>& persistentBufferIds,
+            const ui32 replyTimeoutMicroseconds,
+            const TGuardedSgList& data,
+            NWilson::TTraceId traceId)
+            : ServiceId(serviceId)
+            , Credentials(credentials)
+            , Selector(selector)
+            , Lsn(lsn)
+            , Instruction(instruction)
+            , PersistentBufferIds(persistentBufferIds)
+            , ReplyTimeoutMicroseconds(replyTimeoutMicroseconds)
+            , Data(data)
+            , TraceId(std::move(traceId))
+
+        {}
+
+        ~TWriteToPBuffers();
+    };
+
     enum EEvents
     {
         EvConnect,
@@ -229,6 +273,7 @@ struct TEvTransportPrivate
         EvReadFromDDisk,
         EvSyncWithPBuffer,
         EvListPBufferEntries,
+        EvWriteToPBuffers,
     };
 
     using TEvConnect = TRequestEvent<TConnect, EEvents::EvConnect>;
@@ -250,6 +295,9 @@ struct TEvTransportPrivate
 
     using TEvListPBufferEntries =
         TRequestEvent<TListPBufferEntries, EEvents::EvListPBufferEntries>;
+
+    using TEvWriteToPBuffers =
+        TRequestEvent<TWriteToPBuffers, EEvents::EvWriteToPBuffers>;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

@@ -56,6 +56,39 @@ TICStorageTransport::WriteToPBuffer(
     return future;
 }
 
+TFuture<NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult>
+TICStorageTransport::WriteToPBuffers(
+    const THostConnection& connection,
+    const NDDisk::TBlockSelector& selector,
+    const ui64 lsn,
+    const NDDisk::TWriteInstruction instruction,
+    const std::vector<NKikimrBlobStorage::NDDisk::TDDiskId>& persistentBufferIds,
+    const ui32 replyTimeoutMicroseconds,
+    const TGuardedSgList& data,
+    NWilson::TSpan& span)
+{
+    Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
+
+    auto request = std::make_unique<TEvTransportPrivate::TEvWriteToPBuffers>(
+        connection.GetServiceId(),
+        connection.Credentials,
+        selector,
+        lsn,
+        instruction,
+        persistentBufferIds,
+        replyTimeoutMicroseconds,
+        data,
+        span.GetTraceId());
+
+    auto future = request->Promise.GetFuture();
+
+    span.Event("Before_ActorSystem_Send");
+    ActorSystem->Send(ICStorageTransportActorId, request.release());
+    span.Event("After_ActorSystem_Send");
+
+    return future;
+}
+
 TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
 TICStorageTransport::EraseFromPBuffer(
     const THostConnection& connection,

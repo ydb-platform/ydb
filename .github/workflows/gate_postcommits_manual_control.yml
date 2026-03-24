@@ -51,19 +51,21 @@ jobs:
         fetch_runners_page() {
           local page=$1
           echo "Fetching runners page $page..."
-          local result=$(curl -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" -w "%{http_code}\n" \
+          local tmpfile=$(mktemp)
+          local http_code=$(curl -Ls -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -o "$tmpfile" -w "%{http_code}" \
             "https://api.github.com/repos/${{github.repository}}/actions/runners?per_page=100&page=$page")
           
-          local http_code=$(echo "$result" | tail -n 1)
           if [ "$http_code" != "200" ]; then
             echo "HTTP error fetching page $page: $http_code"
-            echo "$result"
+            cat "$tmpfile"
+            rm -f "$tmpfile"
             return 1
           fi
           
-          # Remove status code from the end
-          echo "$result" | sed '$d'
+          cat "$tmpfile"
+          rm -f "$tmpfile"
         }
         
         # Get all runners with pagination

@@ -791,6 +791,36 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     Y_UNIT_TEST_F(TestReceiveMessage, THttpProxyTestMock) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(true);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        auto body0 = "MessageBody-0";
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body0}});
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body0);
+
+        for (size_t i = 1; i <= 10; ++i) {
+            auto body = TStringBuilder() << "MessageBody-" << i;
+            SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
+        }
+
+        // TODO support approximate number of messages
+        // WaitQueueAttributes(queueUrl, 10, {{"ApproximateNumberOfMessages", "11"}});
+
+        Sleep(TDuration::Seconds(1));
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}, {"MaxNumberOfMessages", 10}});
+        Cerr << (TStringBuilder() << ">>>>> JSON: " << json.GetStringRobust() << Endl);
+        UNIT_ASSERT_GE(json["Messages"].GetArray().size(), 1);
+    }
+
+    Y_UNIT_TEST_F(TestReceiveMessage_TopicImplementation_Compatibility, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
 
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");

@@ -202,8 +202,7 @@ void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const 
         return;
     }
 
-    std::pair<TDistributedCommitHelper::ECurrentStep, bool> handleResult = Kqp->Handle(ev, ctx);
-    auto step = handleResult.first;
+    auto step = Kqp->Handle(ev, ctx);
     if (step == TDistributedCommitHelper::ECurrentStep::DONE) {
         Ydb::Topic::CommitOffsetResult result;
         Request().SendResult(result, Ydb::StatusIds::SUCCESS);

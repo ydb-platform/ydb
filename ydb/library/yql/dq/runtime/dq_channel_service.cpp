@@ -489,7 +489,9 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
 
 bool TOutputDescriptor::CheckGenMajor(ui64 genMajor, const TString& errorMessage) {
     auto prevGenMajor = GenMajor.exchange(genMajor);
-    if (prevGenMajor && prevGenMajor != genMajor) {
+    if (Aborted.load()) {
+        return false;
+    } else if (prevGenMajor && prevGenMajor != genMajor) {
         TStringBuilder builder;
         builder << "Descriptor.GenMajor=" << prevGenMajor << ", expected GenMajor=" << genMajor << ' ' << errorMessage;
         TString message = builder;
@@ -925,7 +927,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
     }
-#if !defined(NDEBUGG)
+#if !defined(NDEBUG)
     if (auto failCount = FailureLossSend.load(); failCount > 0) {
         FailureLossSend.store(failCount - 1);
     } else {
@@ -937,7 +939,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
         }
 #endif
         ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev.Release(), flags, item->SeqNo));
-#if !defined(NDEBUGG)
+#if !defined(NDEBUG)
     }
 #endif
     item->State.store(TOutputItem::EState::Sent);
@@ -1293,7 +1295,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 
 void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
-#if !defined(NDEBUGG)
+#if !defined(NDEBUG)
     if (auto failCount = FailureReconciliation.load(); failCount > 0) {
         FailureReconciliation.store(failCount - 1);
         StartReconciliation(true);
@@ -1330,7 +1332,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
         while (!Queue.empty()) {
             auto& item = Queue.front();
-            if (item->SeqNo > seqNo) {
+            if (item->SeqNo >= seqNo) {
                 break;
             }
             if (item->Descriptor->GenMajor.load() != GenMajor) {
@@ -1395,9 +1397,8 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             if (!Queue.empty()) {
                 LOG_D("DATA REPEAT, SeqNo=" << Queue.front()->SeqNo << '/' << Queue.back()->SeqNo << ", " << NodeActorId << " from peer " << PeerActorId);
                 for (auto item : Queue) {
-                    if (item->Descriptor->CheckGenMajor(GenMajor, "Abort by Resend")) {
-                        SendMessage(item);
-                    }
+                    SendMessage(item);
+                    item->Descriptor->CheckGenMajor(GenMajor, TStringBuilder() << "Abort by Repeat from SeqNo=" << Queue.front()->SeqNo << ", item->SeqNo=" << item->SeqNo);
                 }
             }
         }
@@ -1968,6 +1969,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
     if (node) {
         ui32 nodeId;
         if (TryFromString(node, nodeId)) {
+#if !defined(NDEBUG)
             auto failure = cgiParams.Get("fail");
             if (failure) {
                 if (auto it = ChannelService->NodeStates.find(nodeId); it != ChannelService->NodeStates.end()) {
@@ -1979,7 +1981,9 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         it->second->FailureReconciliation++;
                     }
                 }
-            } else {
+            } else
+#endif
+            {
                 TStringStream response;
                 response << "HTTP/1.1 307 Temporary Redirect\r\n";
                 response << "Location: /node/" << nodeId << "/actors/kqp_channels" << "\r\n";
@@ -2069,21 +2073,24 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                 }
             }
 
-            str << Endl << "Node Sessions:";
+            str << Endl << "Node " << ChannelService->NodeId << " Sessions:";
 
             TABLE_SORTABLE_CLASS ("table table-condensed") {
                 TABLEHEAD() {
                     TABLER() {
                         TABLEH() {str << "PeerNodeId";}
+#if !defined(NDEBUG)
                         TABLEH_ATTRS({{"title", "FailureLossSend"}}) {str << "F-";}
                         TABLEH_ATTRS({{"title", "FailureDoubleSend"}}) {str << "Fx";}
                         TABLEH_ATTRS({{"title", "FailureReconciliation"}}) {str << "FR";}
+#endif
                         TABLEH_ATTRS({{"title", "GenMajor"}}) {str << "GM";}
                         TABLEH_ATTRS({{"title", "GenMinor"}}) {str << "gm";}
                         TABLEH() {str << "SeqNo";}
-                        TABLEH() {str << "InflightBytes";}
-                        TABLEH() {str << "WaitersQueueSize";}
-                        TABLEH() {str << "WaitersMessages";}
+                        TABLEH_ATTRS({{"title", "Queue.front()->SeqNo"}}) {str << "front()";}
+                        TABLEH_ATTRS({{"title", "InflightBytes"}}) {str << "InflightB";}
+                        TABLEH_ATTRS({{"title", "WaitersQueueSize"}}) {str << "W/Queue";}
+                        TABLEH_ATTRS({{"title", "WaitersMessages"}}) {str << "W/Msg";}
                         TABLEH_ATTRS({{"title", "PeerGenMajor"}}) {str << "PM";}
                         TABLEH_ATTRS({{"title", "PeerGenMinor"}}) {str << "pm";}
                         TABLEH_ATTRS({{"title", "ConfirmedSeqNo"}}) {str << "C/SeqNo";}
@@ -2100,6 +2107,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                     str << nodeId;
                                 }
                             }
+#if !defined(NDEBUG)
                             TABLED() {
                                 HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "loss"}})) {
                                     str << state->FailureLossSend.load();
@@ -2115,9 +2123,15 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                     str << state->FailureDoubleSend.load();
                                 }
                             }
+#endif
                             TABLED() {str << state->GenMajor;}
                             TABLED() {str << state->GenMinor;}
                             TABLED() {str << state->SeqNo;}
+                            TABLED() {
+                                if (!state->Queue.empty()) {
+                                    str << state->Queue.front()->SeqNo;
+                                }
+                            }
                             TABLED() {str << state->InflightBytes;}
                             TABLED() {str << state->WaitersQueue.size();}
                             TABLED() {str << state->WaiterMessages.load();}

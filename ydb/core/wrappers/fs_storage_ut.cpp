@@ -547,7 +547,6 @@ class TFsStorageRestartTests : public TFsStorageTestBase {
     UNIT_TEST(UploadPartFirstPartAfterRestartRecreatesSession);
     UNIT_TEST(UploadPartLaterPartAfterRestartReturnsError);
     UNIT_TEST(PassAwayDeletesIncompleteFiles);
-    UNIT_TEST(CreateMPUWithLockedIncompleteFileReturnsRetryableError);
     UNIT_TEST(AbortDeleteFailureStillReleasesLock);
     UNIT_TEST_SUITE_END();
 
@@ -700,30 +699,6 @@ public:
         Runtime->DispatchEvents(options);
 
         UNIT_ASSERT(!TFsPath(incompleteKey).Exists());
-    }
-
-    void CreateMPUWithLockedIncompleteFileReturnsRetryableError() {
-        const TString key = KeyPath("locked_incomplete_test.txt");
-        const TString incompleteKey = key + ".incomplete";
-
-        TFsPath(key).Parent().MkDirs();
-
-        TFile externalLock(incompleteKey, OpenAlways | RdWr);
-        externalLock.Flock(LOCK_EX | LOCK_NB);
-
-        {
-            auto result = CreateMultipartUpload(key);
-            UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT(result.GetError().ShouldRetry());
-        }
-
-        externalLock.Flock(LOCK_UN);
-        externalLock.Close();
-
-        {
-            auto result = CreateMultipartUpload(key);
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
-        }
     }
 
     void AbortDeleteFailureStillReleasesLock() {

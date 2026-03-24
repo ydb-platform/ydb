@@ -886,39 +886,39 @@ message ReadReplicasSettings {
 }
 
 /**
- * The level at which metrics are aggregated and reported.
- */
-enum MetricsLevel {
-    /**
-     * The metrics level is not specified.
-     */
-    METRICS_LEVEL_UNSPECIFIED = 0;
-
-    /**
-     * All metrics are disabled.
-     */
-    METRICS_LEVEL_DISABLED = 1;
-
-    /**
-     * Metrics are aggregated and reported for the entire database.
-     */
-    METRICS_LEVEL_DATABASE = 2;
-
-    /**
-     * Metrics are aggregated and reported for individual tables.
-     */
-    METRICS_LEVEL_TABLE = 3;
-
-    /**
-     * Metrics are aggregated and reported for individual partitions.
-     */
-    METRICS_LEVEL_PARTITION = 4;
-}
-
-/**
  * The parameters for the detailed metrics for the given table.
  */
 message MetricsSettings {
+    /**
+     * The level at which metrics are aggregated and reported.
+     */
+    enum MetricsLevel {
+        /**
+         * The metrics level is not specified.
+         */
+        METRICS_LEVEL_UNSPECIFIED = 0;
+
+        /**
+         * All metrics are disabled.
+         */
+        METRICS_LEVEL_DISABLED = 1;
+
+        /**
+         * Metrics are aggregated and reported for the entire database.
+         */
+        METRICS_LEVEL_DATABASE = 2;
+
+        /**
+         * Metrics are aggregated and reported for individual tables.
+         */
+        METRICS_LEVEL_TABLE = 3;
+
+        /**
+         * Metrics are aggregated and reported for individual partitions.
+         */
+        METRICS_LEVEL_PARTITION = 4;
+    }
+
     /**
      * The level at which metrics are aggregated and reported.
      *

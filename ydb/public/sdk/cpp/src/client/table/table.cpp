@@ -2507,19 +2507,19 @@ std::optional<TMetricsSettings> TMetricsSettings::TMetricsSettings::FromProto(
     const Ydb::Table::MetricsSettings& proto
 ) {
     switch (proto.metrics_level()) {
-    case Ydb::Table::METRICS_LEVEL_UNSPECIFIED:
+    case Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED:
         return TMetricsSettings(TMetricsSettings::EMetricsLevel::Unspecified);
 
-    case Ydb::Table::METRICS_LEVEL_DISABLED:
+    case Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED:
         return TMetricsSettings(TMetricsSettings::EMetricsLevel::Disabled);
 
-    case Ydb::Table::METRICS_LEVEL_DATABASE:
+    case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
         return TMetricsSettings(TMetricsSettings::EMetricsLevel::Database);
 
-    case Ydb::Table::METRICS_LEVEL_TABLE:
+    case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
         return TMetricsSettings(TMetricsSettings::EMetricsLevel::Table);
 
-    case Ydb::Table::METRICS_LEVEL_PARTITION:
+    case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
         return TMetricsSettings(TMetricsSettings::EMetricsLevel::Partition);
 
     default:
@@ -2536,23 +2536,23 @@ std::optional<TMetricsSettings> TMetricsSettings::TMetricsSettings::FromProto(
 void TMetricsSettings::SerializeTo(Ydb::Table::MetricsSettings& proto) const {
     switch (GetMetricsLevel()) {
     case EMetricsLevel::Unspecified:
-        proto.set_metrics_level(Ydb::Table::METRICS_LEVEL_UNSPECIFIED);
+        proto.set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED);
         break;
 
     case EMetricsLevel::Disabled:
-        proto.set_metrics_level(Ydb::Table::METRICS_LEVEL_DISABLED);
+        proto.set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED);
         break;
 
     case EMetricsLevel::Database:
-        proto.set_metrics_level(Ydb::Table::METRICS_LEVEL_DATABASE);
+        proto.set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE);
         break;
 
     case EMetricsLevel::Table:
-        proto.set_metrics_level(Ydb::Table::METRICS_LEVEL_TABLE);
+        proto.set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE);
         break;
 
     case EMetricsLevel::Partition:
-        proto.set_metrics_level(Ydb::Table::METRICS_LEVEL_PARTITION);
+        proto.set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION);
         break;
     }
 }

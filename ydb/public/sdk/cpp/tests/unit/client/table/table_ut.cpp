@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(Table) {
         const auto verifyMetricsLevelFunc = [&](
             const TString& metricsLevelName,
             NTable::TMetricsSettings::EMetricsLevel metricsLevel,
-            Ydb::Table::MetricsLevel protoMetricsLevel
+            Ydb::Table::MetricsSettings::MetricsLevel protoMetricsLevel
         ) {
             auto requestFuture = tableSession->CreateTable(
                 "/Root/My/DB/test_table",
@@ -250,31 +250,31 @@ Y_UNIT_TEST_SUITE(Table) {
         verifyMetricsLevelFunc(
             "UNSPECIFIED",
             NTable::TMetricsSettings::EMetricsLevel::Unspecified,
-            Ydb::Table::METRICS_LEVEL_UNSPECIFIED
+            Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED
         );
 
         verifyMetricsLevelFunc(
             "DISABLED",
             NTable::TMetricsSettings::EMetricsLevel::Disabled,
-            Ydb::Table::METRICS_LEVEL_DISABLED
+            Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED
         );
 
         verifyMetricsLevelFunc(
             "DATABASE",
             NTable::TMetricsSettings::EMetricsLevel::Database,
-            Ydb::Table::METRICS_LEVEL_DATABASE
+            Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE
         );
 
         verifyMetricsLevelFunc(
             "TABLE",
             NTable::TMetricsSettings::EMetricsLevel::Table,
-            Ydb::Table::METRICS_LEVEL_TABLE
+            Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE
         );
 
         verifyMetricsLevelFunc(
             "PARTITION",
             NTable::TMetricsSettings::EMetricsLevel::Partition,
-            Ydb::Table::METRICS_LEVEL_PARTITION
+            Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION
         );
     }
 
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(Table) {
         const auto verifyMetricsLevelFunc = [&](
             const TString& metricsLevelName,
             NTable::TMetricsSettings::EMetricsLevel metricsLevel,
-            Ydb::Table::MetricsLevel protoMetricsLevel
+            Ydb::Table::MetricsSettings::MetricsLevel protoMetricsLevel
         ) {
             auto requestFuture = tableSession->AlterTable(
                 "/Root/My/DB/test_table",
@@ -428,31 +428,31 @@ Y_UNIT_TEST_SUITE(Table) {
         verifyMetricsLevelFunc(
             "UNSPECIFIED",
             NTable::TMetricsSettings::EMetricsLevel::Unspecified,
-            Ydb::Table::METRICS_LEVEL_UNSPECIFIED
+            Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED
         );
 
         verifyMetricsLevelFunc(
             "DISABLED",
             NTable::TMetricsSettings::EMetricsLevel::Disabled,
-            Ydb::Table::METRICS_LEVEL_DISABLED
+            Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED
         );
 
         verifyMetricsLevelFunc(
             "DATABASE",
             NTable::TMetricsSettings::EMetricsLevel::Database,
-            Ydb::Table::METRICS_LEVEL_DATABASE
+            Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE
         );
 
         verifyMetricsLevelFunc(
             "TABLE",
             NTable::TMetricsSettings::EMetricsLevel::Table,
-            Ydb::Table::METRICS_LEVEL_TABLE
+            Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE
         );
 
         verifyMetricsLevelFunc(
             "PARTITION",
             NTable::TMetricsSettings::EMetricsLevel::Partition,
-            Ydb::Table::METRICS_LEVEL_PARTITION
+            Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION
         );
     }
 }

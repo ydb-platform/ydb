@@ -212,7 +212,7 @@ public:
 
 int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories) {
     auto commandsRoot = MakeHolder<TClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), std::move(factories));
-    commandsRoot->Opts.SetTitle("YDB server daemon");
+    commandsRoot->Opts.SetTitle("YDB client/server binary");
     TClientCommand::TConfig config(argc, argv);
     // TODO: process flags from environment KIKIMR_FLAGS before command line processing
     return commandsRoot->Process(config);

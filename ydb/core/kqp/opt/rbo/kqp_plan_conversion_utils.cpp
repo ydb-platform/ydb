@@ -109,14 +109,36 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
             } else if (TKqpExistsSublink::Match(sublink.Get())) {
                 entry = TSubplanEntry(subplan, {}, ESubplanType::EXISTS, sublinkVar);
             } else /* In sublink */ {
-                auto tupleType = sublink->Child(TKqpInSublink::idx_InTuple);
-                Y_ENSURE(tupleType->IsCallable("StructType"));
+                auto lambda = link->Child(TKqpInSublink::idx_InLambda);
+
+                Y_ENSURE(lambda->IsLambda());
                 TVector<TInfoUnit> tuple;
 
-                //FIXME: Currently only a single element tuple in IN clause is supported, so we hardcode this case
-                auto tupleElement = tupleType->Child(0)->Child(0)->Content();
-                auto tupleElementIU = TInfoUnit(TString(tupleElement));
-                entry = TSubplanEntry(subplan, {TInfoUnit(TString(tupleElement))}, ESubplanType::IN_SUBPLAN, sublinkVar);
+                auto lambdaBody = lambda->Child(1);
+                //FIXME: Only YQL syntax is supported in this case, as we'll need to process the postgresql callable for equality
+                Y_ENSURE(lambdaBody->IsCallable("=="));
+                auto lhs = lambdaBody->Child(0);
+
+                // FIXME: current we only support a single member in IN clause
+                Y_ENSURE(lhs->IsCallable("Member"), "Only a single column reference in the IN clause is supported");
+                
+                if (lhs->IsCallable("Member")) {
+                    auto iu = TInfoUnit(TString(lhs->Child(1)->Content()));
+                    YQL_CLOG(TRACE, CoreDq) << "Processing: " << iu.GetFullName();
+
+                    tuple.push_back(iu);
+                } 
+
+                // else if (lhs->IsList()) {
+                //  for (const auto & member : lhs->Children()) {
+                //    Y_ENSURE(member->IsCallable("Member"));
+                //    tuple.push_back(TInfoUnit(TString(member->Child(1)->Content())));
+                //}
+                //} else {
+                //    Y_ENSURE(false, "Unsupported callable in IN sublink");
+                //}
+
+                entry = TSubplanEntry(subplan, tuple, ESubplanType::IN_SUBPLAN, sublinkVar);
             }
             PlanProps.Subplans.Add(sublinkVar, entry);
             TOptimizeExprSettings settings(&TypeCtx);

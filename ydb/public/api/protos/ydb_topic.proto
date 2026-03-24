@@ -846,7 +846,6 @@ message SharedConsumerType {
     google.protobuf.Duration default_processing_timeout = 11;
     // The dead letter policy for this consumer.
     DeadLetterPolicy dead_letter_policy = 12;
-    // Delay time for message (after sending)
     // Time to wait for message if queue empty and if this parameter is not set in receive request
     google.protobuf.Duration receive_message_wait_time = 13;
     // Default delay before messages become visible to ReceiveMessage after write (Amazon SQS DelaySeconds).

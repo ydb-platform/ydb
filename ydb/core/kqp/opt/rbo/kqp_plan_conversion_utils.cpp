@@ -1,4 +1,5 @@
 #include "kqp_plan_conversion_utils.h"
+#include "kqp_rbo_utils.h"
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -8,34 +9,107 @@ namespace NKqp {
 using namespace NYql;
 using namespace NNodes;
 
+using DependencyPairType = std::pair<TInfoUnit, const TTypeAnnotationNode*>;
+/**
+ * Computes dependent variables and updates the plan
+ */
+TVector<DependencyPairType> ComputeDependentVariables(TIntrusivePtr<IOperator> op, TPlanProps* props) {
+
+    TVector<DependencyPairType> subplanDependencies;
+
+    // Iterate over just the operator of the current plan/subplan
+    auto it = TOpIterator(op, nullptr);
+    for(; it != TOpIterator(nullptr); it++) {
+        auto currOp = (*it).Current;
+        auto subplanIUs = currOp->GetSubplanIUs(*props);
+
+        // If the current operator contains references to subplans:
+        // - Compute dependent variables of the subplan
+        // - Update the subplan list of dependent variables
+        // - Filter out variables that have into units that don't match current ius (these are inner dependencies)
+        // - Add new dependencies to the AddDepencies operator below the current, or create one if it doesn't exit
+        // - Return the full list of dependecies
+
+        if (subplanIUs.size()) {
+            auto unaryOp = CastOperator<IUnaryOperator>(currOp);
+
+            TVector<DependencyPairType> allOpDependencies;
+
+            for (const auto & subplanVar : subplanIUs) {
+                auto & subplanEntry = props->Subplans.PlanMap.at(subplanVar);
+                auto opDependencies = ComputeDependentVariables(CastOperator<IOperator>(subplanEntry.Plan), props);
+                if (opDependencies.size()) {
+                    for (const auto & [iu, type] : opDependencies) {
+                        subplanEntry.DependentIUs.push_back(iu);
+                    }
+                    AddUnique<DependencyPairType>(opDependencies, allOpDependencies);
+                }
+            }
+
+            auto outputIUs = unaryOp->GetInput()->GetOutputIUs();
+            TVector<DependencyPairType> filteredOpDependencies;
+            for (const auto & d : allOpDependencies) {
+                if (std::find(outputIUs.begin(), outputIUs.end(), d.first) == outputIUs.end()) {
+                    filteredOpDependencies.push_back(d);
+                }
+            }
+
+            if (filteredOpDependencies.size()) {
+                if (unaryOp->GetInput()->Kind != EOperator::AddDependencies) {
+                    auto addDeps = MakeIntrusive<TOpAddDependencies>(unaryOp->GetInput(), unaryOp->Pos, filteredOpDependencies);
+                    unaryOp->SetInput(addDeps);
+                } else {
+                    auto addDeps = CastOperator<TOpAddDependencies>(unaryOp->GetInput());
+                    auto depPairs = addDeps->GetDependencyPairs();
+                    AddUnique<DependencyPairType>(filteredOpDependencies, depPairs);
+                    addDeps->SetDependencyPairs(depPairs);
+                }
+            }
+
+            AddUnique<DependencyPairType>(filteredOpDependencies, subplanDependencies);
+        }
+
+        if (currOp->Kind == EOperator::AddDependencies) {
+            auto addDeps = CastOperator<TOpAddDependencies>(currOp);
+            auto depPairs = addDeps->GetDependencyPairs();
+            AddUnique<DependencyPairType>(depPairs, subplanDependencies);
+        }
+    }
+
+    return subplanDependencies;
+}
+
 TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
     auto lambda = TCoLambda(node);
     auto lambdaBody = lambda.Body().Ptr();
 
-    auto sublinks = FindNodes(lambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
-    if (sublinks.empty()) {
+    auto sublink = FindNode(lambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
+    if (!sublink) {
         return node;
     }
     else {
-        TNodeOnNodeOwnedMap replaceMap;
+        TExprNode::TPtr newLambdaBody = lambdaBody;
 
-        for (auto link : sublinks) {
+        while(sublink){
+            TNodeOnNodeOwnedMap replaceMap;
+
+            YQL_CLOG(TRACE, CoreDq) << "Replacing sublink: " << PrintRBOExpression(sublink, Ctx);
             auto sublinkVar = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++), true);
             // clang-format off
             auto member = Build<TCoMember>(Ctx, lambda.Pos())
                     .Struct(lambda.Args().Arg(0).Ptr())
                     .Name<TCoAtom>().Value(sublinkVar.GetFullName()).Build()
                     .Done().Ptr();
-            replaceMap[link.Get()] = member;
+            replaceMap[sublink.Get()] = member;
             // clang-format on
-            auto subplan = ExprNodeToOperator(TKqpSublinkBase(link).Subquery().Ptr());
+            auto subplan = ExprNodeToOperator(TKqpSublinkBase(sublink).Subquery().Ptr());
             TSubplanEntry entry;
-            if (TKqpExprSublink::Match(link.Get())) {
+            if (TKqpExprSublink::Match(sublink.Get())) {
                 entry = TSubplanEntry(subplan, {}, ESubplanType::EXPR, sublinkVar);
-            } else if (TKqpExistsSublink::Match(link.Get())) {
+            } else if (TKqpExistsSublink::Match(sublink.Get())) {
                 entry = TSubplanEntry(subplan, {}, ESubplanType::EXISTS, sublinkVar);
             } else /* In sublink */ {
-                auto tupleType = link->Child(TKqpInSublink::idx_InTuple);
+                auto tupleType = sublink->Child(TKqpInSublink::idx_InTuple);
                 Y_ENSURE(tupleType->IsCallable("StructType"));
                 TVector<TInfoUnit> tuple;
 
@@ -45,11 +119,11 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
                 entry = TSubplanEntry(subplan, {TInfoUnit(TString(tupleElement))}, ESubplanType::IN_SUBPLAN, sublinkVar);
             }
             PlanProps.Subplans.Add(sublinkVar, entry);
-        }
+            TOptimizeExprSettings settings(&TypeCtx);
+            RemapExpr(newLambdaBody, newLambdaBody, replaceMap, Ctx, settings);
 
-        TOptimizeExprSettings settings(&TypeCtx);
-        TExprNode::TPtr newLambdaBody;
-        RemapExpr(lambdaBody, newLambdaBody, replaceMap, Ctx, settings);
+            sublink = FindNode(newLambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
+        }
 
         // clang-format off
         return Build<TCoLambda>(Ctx, lambda.Pos())
@@ -80,6 +154,9 @@ TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
             exprRef.get().PlanProps = &(opRoot->PlanProps);
         }
     }
+
+    // For subplans, we need to compute dependent variables correctly
+    ComputeDependentVariables(opRoot, &opRoot->PlanProps);
 
    return opRoot;
 }
@@ -210,7 +287,9 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node
     auto input = ExprNodeToOperator(opFilter.Input().Ptr());
     auto lambda = opFilter.Lambda().Ptr();
     auto newLambda = RemoveSubplans(lambda);
-    return MakeIntrusive<TOpFilter>(input, node->Pos(), TExpression(newLambda, &Ctx));
+    auto filter = MakeIntrusive<TOpFilter>(input, node->Pos(), TExpression(newLambda, &Ctx));
+    YQL_CLOG(TRACE, CoreDq) << "Processed filter, new lambda " << filter->ToString(Ctx);
+    return filter;
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) {

@@ -18,7 +18,7 @@ bool TNodeState::AddRequest(TActorId executerId, TActorId queryManId, bool& canc
     return inserted;
 }
 
-bool TNodeState::UpdateRequest(TActorId executerId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TInstant startTime, TInstant deadline, std::vector<ui64>& tasks, ui64& taskCount) {
+bool TNodeState::UpdateRequest(TActorId executerId, ui64 txId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TInstant startTime, TInstant deadline, std::vector<ui64>& tasks, ui64& taskCount) {
     auto& bucket = GetBucketByExecuterId(executerId);
     TWriteGuard guard(bucket.Mutex);
 
@@ -26,11 +26,12 @@ bool TNodeState::UpdateRequest(TActorId executerId, NScheduler::NHdrf::NDynamic:
         if (requestIt->second.ExecutionCancelled) {
             return false;
         }
+        requestIt->second.TxId = txId;
         requestIt->second.Query = query;
         requestIt->second.StartTime = startTime;
         requestIt->second.Deadline = deadline;
         if (deadline) {
-            bucket.ExpiringRequests.emplace(std::make_tuple(deadline, 0, executerId));
+            bucket.ExpiringRequests.emplace(GetExpirationInfo(deadline, txId, executerId));
         }
         for(auto taskId : tasks) {
             const auto& [it, inserted] = requestIt->second.Tasks.try_emplace(taskId, std::nullopt);
@@ -87,6 +88,7 @@ void TNodeState::OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, boo
     auto requestIt = bucket.Requests.find(executerId);
     YQL_ENSURE(requestIt != bucket.Requests.end());
     auto& request = requestIt->second;
+    YQL_ENSURE(request.TxId == txId);
 
     if (auto taskIt = request.Tasks.find(taskId); taskIt != request.Tasks.end()) {
         request.Tasks.erase(taskIt);
@@ -94,7 +96,7 @@ void TNodeState::OnTaskFinished(ui64 txId, TActorId executerId, ui64 taskId, boo
     }
 
     if (request.Tasks.empty()) {
-        bucket.ExpiringRequests.erase(request.GetExpirationInfo());
+        bucket.ExpiringRequests.erase(GetExpirationInfo(request.Deadline, request.TxId, executerId));
 
         if (requestIt->second.Query) {
             auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
@@ -157,8 +159,8 @@ void TNodeState::DumpInfo(TStringStream& str, const TCgiParameters& cgiParams) c
                         TABLER() {
                             TABLED() {str << request.TxId;}
                             TABLED() {
-                                HREF(NActors::NMon::BuildActorsLink("kqp_node", cgiParams, {{"ex", ToString(request.ExecuterId)}, {"ca", ""}, {"sf", ""}})) {
-                                    str << request.ExecuterId;
+                                HREF(NActors::NMon::BuildActorsLink("kqp_node", cgiParams, {{"ex", ToString(executerId)}, {"ca", ""}, {"sf", ""}})) {
+                                    str << executerId;
                                 }
                             }
                             TABLED() {str << request.StartTime;}
@@ -188,8 +190,8 @@ void TNodeState::DumpInfo(TStringStream& str, const TCgiParameters& cgiParams) c
                             TABLER() {
                                 TABLED() {str << request.TxId;}
                                 TABLED() {
-                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", cgiParams, {{"ex", ToString(request.ExecuterId)}, {"ca", ""}, {"sf", ""}})) {
-                                        str << request.ExecuterId;
+                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", cgiParams, {{"ex", ToString(executerId)}, {"ca", ""}, {"sf", ""}})) {
+                                        str << executerId;
                                     }
                                 }
                                 TABLED() {str << taskId;}
@@ -229,9 +231,9 @@ bool TNodeState::ValidateComputeActorId(const TString& caId, TActorId& computeAc
 bool TNodeState::ValidateKqpExecuterId(const TString& exId, TActorId& kqpExecuterId) const {
     for (const auto& bucket : Buckets) {
         TReadGuard guard(bucket.Mutex);
-        for (const auto& [_, request] : bucket.Requests) {
-            if (ToString(request.ExecuterId) == exId) {
-                kqpExecuterId = request.ExecuterId;
+        for (const auto& [executerId, request] : bucket.Requests) {
+            if (ToString(executerId) == exId) {
+                kqpExecuterId = executerId;
                 return true;
             }
         }

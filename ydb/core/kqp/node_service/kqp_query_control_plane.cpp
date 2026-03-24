@@ -1,5 +1,4 @@
 #include "kqp_node_service.h"
-#include "kqp_node_state.h"
 #include "kqp_query_control_plane.h"
 
 #include <ydb/library/actors/async/wait_for_event.h>
@@ -43,7 +42,7 @@ public:
     }
 
     void HandleStart(TEvKqpNode::TEvStartKqpTasksRequest::TPtr ev) {
-        NWilson::TSpan createTasksSpan(TWilsonKqp::KqpNodeCreateTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan createTasksSpan(TWilsonKqp::KqpNodeCreateTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.CreateTasks", NWilson::EFlags::AUTO_END);
         NHPTimer::STime workHandlerStart = ev->SendTime;
         Counters_->NodeServiceStartEventDelivery->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
 
@@ -108,12 +107,12 @@ public:
         }
 
         ui64 taskCount = 0;
-        if (!State_->UpdateRequest(executerId, query, now, deadline, tasks, taskCount)) {
+        if (!State_->UpdateRequest(executerId, txId, query, now, deadline, tasks, taskCount)) {
             co_return ReplyError(executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR,
                 ev->Cookie, "Request was cancelled");
         }
 
-        STLOG_D(((tasks.size() == taskCount) ? "Created new request" : "dded tasks to existing request"),
+        STLOG_D(((tasks.size() == taskCount) ? "Created new request" : "Added tasks to existing request"),
                 (node_id, SelfId().NodeId()),
                 (tx_id, txId),
                 (tasks_count, tasks.size()),

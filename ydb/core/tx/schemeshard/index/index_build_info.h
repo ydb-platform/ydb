@@ -727,6 +727,10 @@ public:
         return BuildKind == EBuildKind::BuildColumns;
     }
 
+    virtual bool IsSetColumnConstraint() const {
+        return BuildKind == EBuildKind::SetColumnConstraint;
+    }
+
     virtual bool IsPreparing() const {
         return State == EState::AlterMainTable ||
                State == EState::Locking ||
@@ -768,10 +772,6 @@ public:
             return false;
         }
         return IndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
-    }
-
-    virtual bool IsSetColumnConstraint() const {
-        return BuildKind == EBuildKind::SetColumnConstraint;
     }
 
     void AddNotifySubscriber(const TActorId& actorID) {
@@ -860,6 +860,7 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     };
 
     EOperationState OperationState = EOperationState::Invalid;
+    std::vector<std::string> NotNullColumns;
 
     bool IsDone() const override {
         return OperationState == EOperationState::Done;

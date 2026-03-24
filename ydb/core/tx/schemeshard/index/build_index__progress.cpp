@@ -378,48 +378,35 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 {
     Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building AlterMainTablePropose");
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.AlterMainTableTxId), ss->TabletID());
-    propose->Record.SetFailOnExist(true);
+    auto doFunc = [](const TIndexBuildInfo& buildInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
+        for (const auto& colInfo : buildInfo.BuildColumns) {
+            auto col = modifyScheme.MutableAlterTable()->AddColumns();
+            NScheme::TTypeInfo typeInfo;
+            TString typeMod;
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!ExtractColumnTypeInfo(typeInfo, typeMod, colInfo.DefaultFromLiteral.type(), status, error)) {
+                // todo gvit fix that
+                Y_ENSURE(false, "failed to extract column type info");
+            }
 
-    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-    modifyScheme.SetInternal(true);
-    modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+            col->SetType(NScheme::TypeName(typeInfo, typeMod));
+            col->SetName(colInfo.ColumnName);
+            col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
+            col->SetIsBuildInProgress(true);
 
-    auto path = TPath::Init(buildInfo.TablePathId, ss);
-    modifyScheme.SetWorkingDir(path.Parent().PathString());
-    modifyScheme.MutableAlterTable()->SetName(path.LeafName());
+            if (!colInfo.FamilyName.empty()) {
+                col->SetFamilyName(colInfo.FamilyName);
+            }
 
-    for (const auto& colInfo : buildInfo.BuildColumns) {
-        auto col = modifyScheme.MutableAlterTable()->AddColumns();
-        NScheme::TTypeInfo typeInfo;
-        TString typeMod;
-        Ydb::StatusIds::StatusCode status;
-        TString error;
-        if (!ExtractColumnTypeInfo(typeInfo, typeMod, colInfo.DefaultFromLiteral.type(), status, error)) {
-            // todo gvit fix that
-            Y_ENSURE(false, "failed to extract column type info");
+            if (colInfo.NotNull) {
+                col->SetNotNull(colInfo.NotNull);
+            }
+
         }
+    };
 
-        col->SetType(NScheme::TypeName(typeInfo, typeMod));
-        col->SetName(colInfo.ColumnName);
-        col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
-        col->SetIsBuildInProgress(true);
-
-        if (!colInfo.FamilyName.empty()) {
-            col->SetFamilyName(colInfo.FamilyName);
-        }
-
-        if (colInfo.NotNull) {
-            col->SetNotNull(colInfo.NotNull);
-        }
-
-    }
-
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "AlterMainTablePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-
-    return propose;
+    return AlterMainTableProposeTemplate(ss, buildInfo, doFunc);
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareValidationPropose(

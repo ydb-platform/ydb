@@ -302,6 +302,32 @@ public:
 
 } // namespace NSetColumnConstraint
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWritesPropose(
+    TSchemeShard* ss, const TSetColumnConstraintOperationInfo& operationInfo)
+{
+    Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableLockPropose");
+
+    auto doFunc = [](const TSetColumnConstraintOperationInfo& operationInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
+        Y_UNUSED(operationInfo);
+        Y_UNUSED(modifyScheme);
+    };
+
+    return AlterMainTableProposeTemplate(ss, operationInfo, doFunc);
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWritesPropose(
+    TSchemeShard* ss, const TSetColumnConstraintOperationInfo& operationInfo)
+{
+    Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableLockPropose");
+
+    auto doFunc = [](const TSetColumnConstraintOperationInfo& operationInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
+        Y_UNUSED(operationInfo);
+        Y_UNUSED(modifyScheme);
+    };
+
+    return AlterMainTableProposeTemplate(ss, operationInfo, doFunc);
+}
+
 ITransaction* TSchemeShard::CreateTxSetColumnConstraintProgress(TIndexBuildId operationId) {
     return new TIndexBuilder::TTxProgressSetColumnConstraint(this, operationId);
 }

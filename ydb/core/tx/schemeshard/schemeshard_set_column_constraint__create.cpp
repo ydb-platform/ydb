@@ -95,6 +95,10 @@ public:
             return Reply(NKikimrScheme::StatusPreconditionFailed, "Cannot set constraint on index");
         }
 
+        std::vector<std::string> notNullColumns(settings.GetNotNullColumns().begin(), settings.GetNotNullColumns().end());
+
+        // todo(flown4qqqq) : check that columns with these names exist
+
         auto operationInfo = std::make_shared<TSetColumnConstraintOperationInfo>();
         operationInfo->Id = BuildId;
         operationInfo->Uid = uid;
@@ -104,6 +108,8 @@ public:
         operationInfo->CreateSender = Request->Sender;
         operationInfo->SenderCookie = Request->Cookie;
         operationInfo->StartTime = TAppData::TimeProvider->Now();
+
+        operationInfo->NotNullColumns = std::move(notNullColumns);
 
         if (request.HasUserSID()) {
             operationInfo->UserSID = request.GetUserSID();

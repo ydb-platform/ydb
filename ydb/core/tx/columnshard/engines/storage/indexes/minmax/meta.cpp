@@ -176,4 +176,13 @@ void TIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& prot
     *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
 }
 
+bool TIndexMeta::IsAvailableType(const NScheme::TTypeInfo type) {
+    auto dataTypeResult = NArrow::GetArrowType(type);
+    if (!dataTypeResult.ok()) {
+        return false;
+    }
+    auto typedId = (*dataTypeResult)->id();
+    return (arrow::is_primitive(typedId) || arrow::is_base_binary_like(typedId));
+}
+
 }   // namespace NKikimr::NOlap::NIndexes::NMinMax

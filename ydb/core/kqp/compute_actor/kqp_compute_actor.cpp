@@ -162,11 +162,11 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
     if (enableShardsSequentialScan) {
         maxInFlight = 1;
     } else if (hasGroupByWithFields) {
-        maxInFlight = ProtoConfig.GetAggregationGroupByLimit();
+        maxInFlight = AggregationGroupByLimit;
     } else if (hasGroupByWithNoFields) {
-        maxInFlight = ProtoConfig.GetAggregationNoGroupLimit();
+        maxInFlight = AggregationNoGroupLimit;
     } else {
-        maxInFlight = ProtoConfig.GetScanLimit();
+        maxInFlight = ScanLimit;
     }
 }
 

@@ -1018,10 +1018,10 @@ Y_UNIT_TEST_SUITE(TestShred) {
         shredConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
         shredConfig.SetInflightLimit(1);
 
-       auto info = CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController);
+        auto info = CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController);
         CreateTestBootstrapper(runtime, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
-                return new TFakeBSController(tablet, info);
-            });
+            return new TFakeBSController(tablet, info);
+        });
 
         auto sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);

@@ -609,6 +609,7 @@ public:
     }
 
     void Bootstrap() {
+        Become(&TDescribeResourceIdActor::StateFunc);
         Request();
         Promise.GetFuture().Subscribe([actorSystem = TlsActivationContext->ActorSystem(), selfId = SelfId()](const auto&) {
             actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
@@ -616,7 +617,7 @@ public:
     }
 
 private:
-    STRICT_STFUNC(StateWait,
+    STRICT_STFUNC(StateFunc,
         hFunc(NActors::TEvents::TEvWakeup, Handle)
         sFunc(NActors::TEvents::TEvPoison, PassAway)
     )

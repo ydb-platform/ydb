@@ -10,12 +10,12 @@ namespace NKikimr::NKll {
 
 namespace {
 
-/** Bernoulli(weight / w0); requires w0 > 2 * weight (same as w0 > weight && w0 - weight > weight). */
+/** Bernoulli(weight / w0); requires 0 < weight < w0. */
 inline bool TryAcceptSmallWeight(ui64 weight, ui64 w0, std::mt19937_64& rng) {
-    Y_ASSERT(weight > 0 && w0 > 0);
-    Y_ASSERT(w0 > weight && w0 - weight > weight);
-    // Single engine call when w0 is a power of two (typical: base weight 1, then 2,4,8,...).
-    if ((w0 & (w0 - 1)) == 0) {
+    Y_ASSERT(w0 > 0);
+    Y_ASSERT(weight > 0 && weight < w0);
+
+    if ((w0 & (w0 - 1)) == 0) { // w0 is power of two
         return (static_cast<ui64>(rng()) & (w0 - 1)) < weight;
     }
     std::uniform_int_distribution<ui64> dist(0, w0 - 1);
@@ -50,6 +50,7 @@ public:
         }
 
         Sketch_.N_ += weight;
+        EnsureMaxWeightAtLeast(placementWeight);
         size_t level = FindSuitableLevel(placementWeight);
         Sketch_.AddToLevel(level, x);
 
@@ -108,6 +109,15 @@ private:
         std::uniform_int_distribution<ui64> dist(0, d - 1);
         const ui64 u = dist(Sketch_.Rng_);
         return (u < gapAbove) ? iLo : iHi;
+    }
+
+    void EnsureMaxWeightAtLeast(ui64 w) {
+        if (Sketch_.Levels_.empty()) {
+            Sketch_.EnsureLevel(0);
+        }
+        while (Sketch_.Levels_.back().Weight < w) {
+            Sketch_.EnsureLevel(Sketch_.Levels_.size()); // add next level
+        }
     }
 
     TKllSketch<T> Sketch_;

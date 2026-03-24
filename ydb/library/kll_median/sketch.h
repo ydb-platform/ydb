@@ -6,7 +6,6 @@
 #include <util/system/types.h>
 
 #include <algorithm>
-#include <cmath>
 #include <random>
 #include <utility>
 
@@ -129,7 +128,7 @@ private:
 
         std::sort(buf.begin(), buf.end());
 
-        bool keepOne = (buf.size() % 2 == 1);
+        bool keepOne = (buf.size() % 2 == 1) && !force;
         T kept{};
         if (keepOne) {
             std::uniform_int_distribution<size_t> pick(0, buf.size() - 1);

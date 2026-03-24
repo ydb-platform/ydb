@@ -84,7 +84,7 @@ namespace NKikimr::NDDisk {
             PersistentBufferRestoreChunksInflight++;
 
 
-            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), Counters);
+            std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TPersistentBufferPartIoOp>();
             auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
             partOp->SetCookie(cookie);
             partOp->SetPartCookie(chunkIdx);
@@ -410,7 +410,7 @@ namespace NKikimr::NDDisk {
             const ui64 cookie = NextCookie++;
             inflightRecord.OperationCookies.insert(cookie);
             auto diskOffset = DiskFormat->Offset(chunkIdx, 0, offset);
-            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), Counters);
+            std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TPersistentBufferPartIoOp>();
             auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
             partOp->SetCookie(opCookie);
             partOp->SetPartCookie(cookie);
@@ -533,7 +533,7 @@ namespace NKikimr::NDDisk {
                     || pr.Sectors[first].SectorIdx + sectorIdx - first != pr.Sectors[sectorIdx].SectorIdx) {
                     const ui64 cookie = NextCookie++;
                     inflightIt->second.OperationCookies.emplace(cookie);
-                    std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), Counters);
+                    std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TPersistentBufferPartIoOp>();
                     auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
                     partOp->SetCookie(operationCookie);
                     partOp->SetPartCookie(cookie);
@@ -651,7 +651,7 @@ namespace NKikimr::NDDisk {
 
             auto chunkOffset = pr.Sectors[0].SectorIdx * SectorSize;
             auto diskOffset = DiskFormat->Offset(pr.Sectors[0].ChunkIdx, 0, chunkOffset);
-            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TPersistentBufferPartIoOp>(SelfId(), Counters);
+            std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TPersistentBufferPartIoOp>();
             auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
             partOp->SetCookie(batchEraseCookie);
             partOp->SetPartCookie(cookie);

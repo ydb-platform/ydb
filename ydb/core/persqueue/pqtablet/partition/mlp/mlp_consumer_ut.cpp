@@ -6,6 +6,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/library/actors/core/mon.h>
 #include <library/cpp/iterator/iterate_values.h>
+#include <util/string/split.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -522,6 +523,33 @@ Y_UNIT_TEST(HtmlApp_BadPartition) {
 
 Y_UNIT_TEST_SUITE(TMLPConsumerFIFOWithSplit) {
 
+
+static void CreateSetupFIFOTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName) {
+    auto status = CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
+        .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(10)
+            .BeginConfigureAutoPartitioningSettings()
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .UpUtilizationPercent(80)
+                .DownUtilizationPercent(20)
+                .StabilizationWindow(TDuration::Seconds(2))
+            .EndConfigureAutoPartitioningSettings()
+        .EndConfigurePartitioningSettings()
+        .BeginAddSharedConsumer("mlp-consumer")
+            .KeepMessagesOrder(true)
+            .DefaultProcessingTimeout(TDuration::Seconds(30))
+            .BeginDeadLetterPolicy()
+                .Enable()
+                .BeginCondition()
+                    .MaxProcessingAttempts(10)
+                .EndCondition()
+                .DeleteAction()
+            .EndDeadLetterPolicy()
+        .EndAddConsumer());
+    UNIT_ASSERT_VALUES_EQUAL_C(status.IsSuccess(), true, status.GetIssues().ToString());
+}
+
 static size_t WaitForPartitionCount(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, size_t expectedCount, size_t maxRetries = 300) {
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
@@ -656,7 +684,7 @@ TMap<TString, TMessageId> ReadAndCommitFIFOExceptLast(
                                     .TopicName = topicName,
                                     .Consumer = consumer,
                                     .WaitTime = TDuration::Seconds(3),
-                                    .ProcessingTimeout = TDuration::Seconds(3000),
+                                    .ProcessingTimeout = TDuration::Seconds(300),
                                     .MaxNumberOfMessage = 10});
         auto readResult = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL_C(readResult->Status, Ydb::StatusIds::SUCCESS, phase);
@@ -762,30 +790,7 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
                               desc.ReadBeforeSplit.ReadCount, desc.ReadBeforeSplit.CommitLast) << "\n";
     }
     Cerr << Endl;
-
-    auto status = CreateTopic(setup, "/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
-        .BeginConfigurePartitioningSettings()
-            .MinActivePartitions(1)
-            .MaxActivePartitions(10)
-            .BeginConfigureAutoPartitioningSettings()
-                .Strategy(EAutoPartitioningStrategy::ScaleUp)
-                .UpUtilizationPercent(80)
-                .DownUtilizationPercent(20)
-                .StabilizationWindow(TDuration::Seconds(2))
-            .EndConfigureAutoPartitioningSettings()
-        .EndConfigurePartitioningSettings()
-        .BeginAddSharedConsumer("mlp-consumer")
-            .KeepMessagesOrder(true)
-            .DefaultProcessingTimeout(TDuration::Seconds(30))
-            .BeginDeadLetterPolicy()
-                .Enable()
-                .BeginCondition()
-                    .MaxProcessingAttempts(10)
-                .EndCondition()
-                .DeleteAction()
-            .EndDeadLetterPolicy()
-        .EndAddConsumer());
-    UNIT_ASSERT_VALUES_EQUAL_C(status.IsSuccess(), true, status.GetIssues().ToString());
+    CreateSetupFIFOTopic(setup, "/Root/topic1");
 
     Cerr << ">>>>> Phase 2: Write messages to parent partition (partition 0)" << Endl;
 
@@ -832,7 +837,7 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
     Cerr << ">>>>> Phase 4: Force partition split" << Endl;
 
     ui64 txId = 1006;
-    NKikimr::NPQ::NTest::SplitPartition(runtime, txId, "/Root", "topic1", 0, "\x80");
+    NKikimr::NPQ::NTest::SplitPartition(runtime, ++txId, "/Root", "topic1", 0, "\x80");
 
     Cerr << ">>>>> Phase 4b: Wait for child partitions to be created and verify partition count" << Endl;
 
@@ -1144,6 +1149,310 @@ Y_UNIT_TEST(Order_UnrelatedGroup_Committed) {
         {"group-A", {.SizeBeforeSplit = 1, .SizeAfterSplit = 0, .ReadBeforeSplit = {.ReadCount = 1, .CommitLast = true}}},
         {"group-B", {.SizeBeforeSplit = 0, .SizeAfterSplit = 1}},
     });
+}
+
+// Helper: write groupCount groups x messagesPerGroup messages, starting from group index groupOffset.
+// Group names: "group-{0}", "group-{1}", ...
+// Message bodies: "{phaseIndex}-{messageIndex}"
+// Updates expectedCounts map with the number of messages written per group.
+static void WriteGroups(
+    NActors::TTestActorRuntime& runtime,
+    const TString& topicName,
+    size_t groupCount,
+    size_t messagesPerGroup,
+    size_t phaseIndex,
+    TMap<TString, size_t>& expectedCounts
+) {
+    Cerr << "Phase " << phaseIndex << " Write " << groupCount << " groups x " << messagesPerGroup << "\n";
+    for (size_t g = 0; g < groupCount; ++g) {
+        TString groupId = TStringBuilder() << "group-" << g;
+        std::vector<TWriterSettings::TMessage> messages;
+        for (size_t m = 0; m < messagesPerGroup; ++m) {
+            messages.push_back({
+                .Index = m,
+                .MessageBody = TStringBuilder() << LeftPad(phaseIndex, 10, '0') << "-" << LeftPad(m, 10, '0'),
+                .MessageGroupId = groupId,
+            });
+        }
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = topicName,
+            .Messages = std::move(messages),
+        });
+        auto writeResp = GetWriteResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL_C(writeResp->Messages.size(), messagesPerGroup,
+            "WriteGroups: phase=" << phaseIndex << " group=" << groupId);
+        for (auto& msg : writeResp->Messages) {
+            UNIT_ASSERT_VALUES_EQUAL_C(msg.Status, Ydb::StatusIds::SUCCESS,
+                "WriteGroups: phase=" << phaseIndex << " group=" << groupId);
+        }
+        expectedCounts[groupId] += messagesPerGroup;
+    }
+}
+
+struct TCollectedMessage {
+    TString GroupId;
+    TMessageId MessageId;
+    TString Data;
+};
+
+// Read all available messages in a loop, committing each batch.
+// Returns all collected messages in read order.
+// Verifies FIFO invariant: at most 1 message per group per read batch.
+static std::vector<TCollectedMessage> ReadAllAndCommit(
+    NActors::TTestActorRuntime& runtime,
+    const TString& topicName,
+    const TString& consumer,
+    TStringBuf phase,
+    int retries = 100
+) {
+    std::vector<TCollectedMessage> allMessages;
+    size_t batchIndex = 0;
+
+    for (int readIteration = 1; ; ++readIteration) {
+          {
+            TStringBuilder sb;
+            sb << phase << " ReadAllAndCommit iteration=" << readIteration << ", retries left=" << retries << ":\n";
+            /*
+            for (auto& [g, n] : remainingReads) {
+                sb << "  " << g << ": read=" << n << Endl;
+            }
+            */
+            sb << "\n";
+            Cerr << sb << Endl;
+        }
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = topicName,
+            .Consumer = consumer,
+            .WaitTime = TDuration::MilliSeconds(100),
+            .ProcessingTimeout = TDuration::Seconds(300),
+            .MaxNumberOfMessage = 20,
+        });
+        auto readResult = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL_C(readResult->Status, Ydb::StatusIds::SUCCESS, phase);
+
+        if (readResult->Messages.empty()) {
+            if (--retries < 0) {
+                break;
+            }
+            continue;
+        }
+        // Verify FIFO invariant: at most 1 message per group in a single read batch
+        THashSet<TString> seenGroupsInBatch;
+        std::vector<TMessageId> messagesToCommit;
+        for (auto& msg : readResult->Messages) {
+            Cerr << ">>>>> " << phase << " batch=" << batchIndex
+                 << " read: " << msg.Data
+                 << " group=" << msg.MessageGroupId
+                 << " partition=" << msg.MessageId.PartitionId
+                 << " offset=" << msg.MessageId.Offset << Endl;
+
+            UNIT_ASSERT_C(!seenGroupsInBatch.contains(msg.MessageGroupId),
+                phase << ": FIFO violation - duplicate group " << msg.MessageGroupId
+                << " in batch " << batchIndex);
+            seenGroupsInBatch.insert(msg.MessageGroupId);
+
+            allMessages.push_back({
+                .GroupId = msg.MessageGroupId,
+                .MessageId = msg.MessageId,
+                .Data = msg.Data,
+            });
+            messagesToCommit.push_back(msg.MessageId);
+        }
+
+        // Commit all messages in this batch
+        auto commitResult = Commit(runtime, topicName, consumer, messagesToCommit);
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult->Status, Ydb::StatusIds::SUCCESS, phase);
+
+        ++batchIndex;
+    }
+
+    return allMessages;
+}
+
+// Read once (single Read call), commit all returned messages, return collected messages.
+static std::vector<TCollectedMessage> ReadOnceAndCommit(
+    NActors::TTestActorRuntime& runtime,
+    const TString& topicName,
+    const TString& consumer,
+    TStringBuf phase
+) {
+    std::vector<TCollectedMessage> collected;
+
+    CreateReaderActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = topicName,
+        .Consumer = consumer,
+        .WaitTime = TDuration::Seconds(3),
+        .ProcessingTimeout = TDuration::Seconds(300),
+        .MaxNumberOfMessage = 20,
+    });
+    auto readResult = GetReadResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL_C(readResult->Status, Ydb::StatusIds::SUCCESS, phase);
+
+    if (readResult->Messages.empty()) {
+        return collected;
+    }
+
+    THashSet<TString> seenGroupsInBatch;
+    std::vector<TMessageId> messagesToCommit;
+
+    for (auto& msg : readResult->Messages) {
+        Cerr << ">>>>> " << phase << " ReadOnce: " << msg.Data
+             << " group=" << msg.MessageGroupId
+             << " partition=" << msg.MessageId.PartitionId
+             << " offset=" << msg.MessageId.Offset << Endl;
+
+        UNIT_ASSERT_C(!seenGroupsInBatch.contains(msg.MessageGroupId),
+            phase << ": FIFO violation - duplicate group " << msg.MessageGroupId
+            << " in ReadOnce batch");
+        seenGroupsInBatch.insert(msg.MessageGroupId);
+
+        collected.push_back({
+            .GroupId = msg.MessageGroupId,
+            .MessageId = msg.MessageId,
+            .Data = msg.Data,
+        });
+        messagesToCommit.push_back(msg.MessageId);
+    }
+
+    auto commitResult = Commit(runtime, topicName, consumer, messagesToCommit);
+    UNIT_ASSERT_VALUES_EQUAL_C(commitResult->Status, Ydb::StatusIds::SUCCESS, phase);
+
+    return collected;
+}
+
+// Verify FIFO ordering invariants on collected messages:
+// 1. Within each group, messages appear in write order (phase1 < phase2 < phase3, and within phase, index order)
+// 2. Each group has the expected total message count
+// 3. Across batches, group messages are strictly ordered (batch indices are monotonically increasing per group)
+static void VerifyFIFOOrdering(
+    const std::vector<TCollectedMessage>& messages,
+    const TMap<TString, size_t>& expectedCountPerGroup,
+    TStringBuf testName
+) {
+    TMap<TString, TVector<TString>> dataByGroup;
+    TMap<TString, size_t> groupSize;
+    for (const auto& msg : messages) {
+        dataByGroup[msg.GroupId].push_back(msg.Data);
+        groupSize[msg.GroupId] += 1;
+    }
+    for (const auto& [groupId, expectedCount] : expectedCountPerGroup) {
+        UNIT_ASSERT_VALUES_EQUAL_C(groupSize.Value(groupId, 0), expectedCount, testName << ": group " << groupId);
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(groupSize.size(), expectedCountPerGroup.size(), testName << ": unexpected group count");
+
+    for (const auto& [groupId, msgs] : dataByGroup) {
+        for (size_t i = 1; i < msgs.size(); ++i) {
+            const bool ordered = msgs[i - 1] < msgs[i - 0];
+            UNIT_ASSERT_C(ordered, testName << ": group " << groupId << " " << LabeledOutput(i, msgs[i - 1], msgs[i - 0]));
+        }
+    }
+}
+
+static size_t TotalExpectedMessages(const TMap<TString, size_t>& expectedCounts) {
+    return Accumulate(IterateValues(expectedCounts), size_t(0));
+}
+
+// Test 1: All writes happen first, then read+commit at the end.
+// Verifies all messages are read with correct FIFO ordering across two levels of splits.
+Y_UNIT_TEST(DoubleSplit_ReadCommitAtEnd) {
+    auto setup = CreateSetup();
+    CreateSetupFIFOTopic(setup, "/Root/topic1");
+    auto& runtime = setup->GetRuntime();
+
+    TMap<TString, size_t> expectedCounts;
+        Cerr << ">>>>> DoubleSplit Phase 1" << Endl;
+    WriteGroups(runtime, "/Root/topic1", 5, 2, 1, expectedCounts);
+    DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0});
+
+    Cerr << ">>>>> DoubleSplit Phase 2: Split partition 0 at 0x80" << Endl;
+    ui64 txId = 1006;
+    NKikimr::NPQ::NTest::SplitPartition(runtime, ++txId, "/Root", "topic1", 0, "\x80");
+
+    auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", 3);
+    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, 3, "Expected 3 partitions after first split");
+
+    Cerr << ">>>>> DoubleSplit Phase 2" << Endl;
+    WriteGroups(runtime, "/Root/topic1", 10, 2, 2, expectedCounts);
+    DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2});
+
+    Cerr << ">>>>> DoubleSplit Phase 3: Split partitions" << Endl;
+    NKikimr::NPQ::NTest::SplitPartitions(runtime, ++txId, "/Root", "topic1", {{1, "\x40"}, {2, "\xC0"}});
+    partitionCount = WaitForPartitionCount(setup, "/Root/topic1", 7);
+    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, 7, "Expected 7 partitions after double split");
+
+    Cerr << ">>>>> DoubleSplit Phase 4" << Endl;
+    WriteGroups(runtime, "/Root/topic1", 15, 2, 3, expectedCounts);
+    DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2, 3, 4, 5, 6});
+
+    Cerr << ">>>>> DoubleSplit_ReadCommitAtEnd: Reading and committing all messages" << Endl;
+    auto allMessages = ReadAllAndCommit(runtime, "/Root/topic1", "mlp-consumer", "DoubleSplit_ReadCommitAtEnd");
+
+    Cerr << ">>>>> DoubleSplit_ReadCommitAtEnd: Verifying FIFO ordering" << Endl;
+    size_t expectedTotal = TotalExpectedMessages(expectedCounts);
+    UNIT_ASSERT_VALUES_EQUAL_C(allMessages.size(), expectedTotal,
+        "DoubleSplit_ReadCommitAtEnd: expected " << expectedTotal << " messages but got " << allMessages.size());
+
+    VerifyFIFOOrdering(allMessages, expectedCounts, "DoubleSplit_ReadCommitAtEnd");
+
+}
+
+// Test 2: Same as Test 1, but one read+commit cycle after the first write (before first split).
+Y_UNIT_TEST(DoubleSplit_ReadAfterFirstWrite) {
+    auto setup = CreateSetup();
+    CreateSetupFIFOTopic(setup, "/Root/topic1");
+    auto& runtime = setup->GetRuntime();
+
+    TMap<TString, size_t> expectedCounts;
+
+    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 1: Write 5 groups x 2 messages to partition 0" << Endl;
+    WriteGroups(runtime, "/Root/topic1", 5, 2, 1, expectedCounts);
+    DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0});
+
+    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Early read + commit after first write" << Endl;
+    auto earlyMessages = ReadOnceAndCommit(runtime, "/Root/topic1", "mlp-consumer",
+        "DoubleSplit_ReadAfterFirstWrite_early");
+    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Early read got " << earlyMessages.size() << " messages" << Endl;
+    DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0});
+
+    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 2: Split partition 0 at 0x80" << Endl;
+    ui64 txId = 1006;
+    NKikimr::NPQ::NTest::SplitPartition(runtime, ++txId, "/Root", "topic1", 0, "\x80");
+    auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", 3);
+    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, 3, "Expected 3 partitions after first split");
+
+    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 2: Write 10 groups x 3 messages" << Endl;
+    WriteGroups(runtime, "/Root/topic1", 10, 3, 2, expectedCounts);
+    DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2});
+
+    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 3: Split partitions" << Endl;
+    NKikimr::NPQ::NTest::SplitPartitions(runtime, ++txId, "/Root", "topic1", {{1, "\x40"}, {2, "\xC0"}});
+    partitionCount = WaitForPartitionCount(setup, "/Root/topic1", 7);
+    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, 7, "Expected 7 partitions after double split");
+
+    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 3: Write 15 groups x 3 messages" << Endl;
+    WriteGroups(runtime, "/Root/topic1", 15, 3, 3, expectedCounts);
+    DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2, 3, 4, 5, 6});
+
+    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Reading and committing remaining messages" << Endl;
+    auto remainingMessages = ReadAllAndCommit(runtime, "/Root/topic1", "mlp-consumer",
+        "DoubleSplit_ReadAfterFirstWrite_remaining");
+    std::vector<TCollectedMessage> allMessages;
+    allMessages.insert(allMessages.end(), earlyMessages.begin(), earlyMessages.end());
+    allMessages.insert(allMessages.end(), remainingMessages.begin(), remainingMessages.end());
+
+    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Verifying FIFO ordering ("
+         << earlyMessages.size() << " early + " << remainingMessages.size() << " remaining = "
+         << allMessages.size() << " total)" << Endl;
+
+    size_t expectedTotal = TotalExpectedMessages(expectedCounts);
+    UNIT_ASSERT_VALUES_EQUAL_C(allMessages.size(), expectedTotal,
+        "DoubleSplit_ReadAfterFirstWrite: expected " << expectedTotal << " messages but got " << allMessages.size());
+
+    VerifyFIFOOrdering(allMessages, expectedCounts, "DoubleSplit_ReadAfterFirstWrite");
+
 }
 
 }

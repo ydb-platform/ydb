@@ -59,6 +59,14 @@ NThreading::TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
 {
     // VHost thread
 
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "Range %s, Region range %s, VChunk range %s",
+        request->Range.Print().c_str(),
+        request->RegionRange.Print().c_str(),
+        request->VChunkRange.Print().c_str());
+
     if (request->VChunkRange.Start >= BlocksCount) {
         return MakeFuture<TReadBlocksLocalResponse>(TReadBlocksLocalResponse{
             .Error = MakeError(E_ARGUMENT, "out of range")});
@@ -97,6 +105,14 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     NWilson::TTraceId traceId)
 {
     // VHost thread
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "Range %s, Region range %s, VChunk range %s",
+        request->Range.Print().c_str(),
+        request->RegionRange.Print().c_str(),
+        request->VChunkRange.Print().c_str());
 
     if (request->VChunkRange.Start >= BlocksCount) {
         return MakeFuture<TWriteBlocksLocalResponse>(TWriteBlocksLocalResponse{
@@ -254,6 +270,7 @@ void TVChunk::DoWriteBlocksLocal(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,
+        range,
         std::move(callContext),
         std::move(request),
         std::move(traceId));

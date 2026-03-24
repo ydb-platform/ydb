@@ -1,6 +1,6 @@
 # TLI logging
 
-[Transaction locks invalidation](../../../concepts/glossary.md#tli) (TLI) logging lets you identify which query had its locks broken **(the victim)** and which query broke them **(the breaker)**.
+[Transaction lock invalidation](../../../concepts/glossary.md#tli) (TLI) logging lets you identify which query had its locks broken **(the victim)** and which query broke them **(the breaker)**.
 
 ## Enabling logging
 

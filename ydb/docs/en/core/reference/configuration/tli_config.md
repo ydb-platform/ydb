@@ -1,6 +1,6 @@
 # tli_config
 
-The `tli_config` section contains configuration parameters for [transaction locks invalidation](../../concepts/glossary.md#tli) (TLI) diagnostics.
+The `tli_config` section contains configuration parameters for [transaction lock invalidation](../../concepts/glossary.md#tli) (TLI) diagnostics.
 
 TLI is a situation where one transaction (the breaker) breaks the [optimistic locks](../../concepts/glossary.md#optimistic-locking) of another transaction (the victim), forcing the victim to roll back and retry. For more information about TLI diagnostics, see [{#T}](../../troubleshooting/performance/queries/transaction-lock-invalidation.md).
 

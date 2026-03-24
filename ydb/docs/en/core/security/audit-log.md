@@ -404,7 +404,6 @@ audit_config:
 ```
 
 __Advanced configuration__. The following configuration demonstrates more advanced settings:
-
 * It sends the audit log to Unified Agent in `TXT` format with the `audit` label and also outputs it to `stderr` in `JSON` format.
 * The `Default` settings enable logging for all classes in the `Completed` phase.
 * Additionally, `ClusterAdmin` is configured to log the `Received` phase, and `DatabaseAdmin` is configured to exclude events from anonymous users:

@@ -156,7 +156,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -212,7 +212,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -412,7 +412,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -468,7 +468,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -539,16 +539,6 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"TableFullScan",
-                                            "table":"item"
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
                                             "op_name":"InnerJoin (Map)",
                                             "args":
                                               [
@@ -561,6 +551,16 @@
                                                   "table":"date_dim"
                                                 }
                                               ]
+                                          }
+                                        ]
+                                    },
+                                    {
+                                      "op_name":"HashShuffle",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"item"
                                           }
                                         ]
                                     }
@@ -668,7 +668,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -724,7 +724,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -936,7 +936,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -992,7 +992,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -1192,7 +1192,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -1248,7 +1248,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -1319,16 +1319,6 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"TableFullScan",
-                                            "table":"item"
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
                                             "op_name":"InnerJoin (Map)",
                                             "args":
                                               [
@@ -1341,6 +1331,16 @@
                                                   "table":"date_dim"
                                                 }
                                               ]
+                                          }
+                                        ]
+                                    },
+                                    {
+                                      "op_name":"HashShuffle",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"item"
                                           }
                                         ]
                                     }
@@ -1448,7 +1448,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -1504,7 +1504,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -1716,7 +1716,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -1772,7 +1772,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -1972,7 +1972,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -2028,7 +2028,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -2099,16 +2099,6 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"TableFullScan",
-                                            "table":"item"
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
                                             "op_name":"InnerJoin (Map)",
                                             "args":
                                               [
@@ -2121,6 +2111,16 @@
                                                   "table":"date_dim"
                                                 }
                                               ]
+                                          }
+                                        ]
+                                    },
+                                    {
+                                      "op_name":"HashShuffle",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"item"
                                           }
                                         ]
                                     }
@@ -2228,7 +2228,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -2284,7 +2284,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -2496,7 +2496,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -2552,7 +2552,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -2752,7 +2752,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -2808,7 +2808,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -2879,16 +2879,6 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"TableFullScan",
-                                            "table":"item"
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
                                             "op_name":"InnerJoin (Map)",
                                             "args":
                                               [
@@ -2901,6 +2891,16 @@
                                                   "table":"date_dim"
                                                 }
                                               ]
+                                          }
+                                        ]
+                                    },
+                                    {
+                                      "op_name":"HashShuffle",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"item"
                                           }
                                         ]
                                     }
@@ -3008,7 +3008,7 @@
                                                                                         [
                                                                                           {
                                                                                             "op_name":"TableFullScan",
-                                                                                            "table":"catalog_sales"
+                                                                                            "table":"web_sales"
                                                                                           }
                                                                                         ]
                                                                                     },
@@ -3064,7 +3064,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"web_sales"
+                                                                                      "table":"catalog_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -3272,7 +3272,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"catalog_sales"
+                                                                                      "table":"web_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -3328,7 +3328,7 @@
                                                                             [
                                                                               {
                                                                                 "op_name":"TableFullScan",
-                                                                                "table":"web_sales"
+                                                                                "table":"catalog_sales"
                                                                               }
                                                                             ]
                                                                         },
@@ -3528,7 +3528,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"catalog_sales"
+                                                                                      "table":"web_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -3584,7 +3584,7 @@
                                                                             [
                                                                               {
                                                                                 "op_name":"TableFullScan",
-                                                                                "table":"web_sales"
+                                                                                "table":"catalog_sales"
                                                                               }
                                                                             ]
                                                                         },
@@ -3655,16 +3655,6 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"TableFullScan",
-                                      "table":"item"
-                                    }
-                                  ]
-                              },
-                              {
-                                "op_name":"HashShuffle",
-                                "args":
-                                  [
-                                    {
                                       "op_name":"InnerJoin (Map)",
                                       "args":
                                         [
@@ -3677,6 +3667,16 @@
                                             "table":"date_dim"
                                           }
                                         ]
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"HashShuffle",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"item"
                                     }
                                   ]
                               }
@@ -3784,7 +3784,7 @@
                                                                                   [
                                                                                     {
                                                                                       "op_name":"TableFullScan",
-                                                                                      "table":"catalog_sales"
+                                                                                      "table":"web_sales"
                                                                                     }
                                                                                   ]
                                                                               },
@@ -3840,7 +3840,7 @@
                                                                             [
                                                                               {
                                                                                 "op_name":"TableFullScan",
-                                                                                "table":"web_sales"
+                                                                                "table":"catalog_sales"
                                                                               }
                                                                             ]
                                                                         },

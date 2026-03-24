@@ -13,6 +13,7 @@
 #include "log.h"
 #include "probes.h"
 #include "ask.h"
+#include "subsystems/stats.h"
 #include "thread_context.h"
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
@@ -25,6 +26,17 @@
 #include <ydb/library/actors/util/rc_buf.h>
 
 namespace NActors {
+
+    namespace {
+        template<class TCallback>
+        void ForEachSubSystem(std::vector<std::unique_ptr<ISubSystem>>& subsystems, TCallback&& callback) {
+            for (const auto& subsystem : subsystems) {
+                if (subsystem) {
+                    callback(*subsystem);
+                }
+            }
+        }
+    }
 
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -153,6 +165,10 @@ namespace NActors {
         , LoggerSettings0(loggerSettings)
     {
         ServiceMap.Reset(new TServiceMap());
+        SubSystems = std::move(SystemSetup->SubSystems);
+        if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
+            RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));
+        }
     }
 
     TActorSystem::~TActorSystem() {
@@ -451,22 +467,13 @@ namespace NActors {
         return ServiceMap->RegisterLocalService(serviceId, actorId);
     }
 
-    void TActorSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
-        CpuManager->GetPoolStats(poolId, poolStats, statsCopy);
-    }
-
-    void TActorSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const {
-        CpuManager->GetPoolStats(poolId, poolStats, statsCopy, sharedStatsCopy);
-    }
-
-    THarmonizerStats TActorSystem::GetHarmonizerStats() const {
-        return CpuManager->GetHarmonizerStats();
-
-    }
-
     void TActorSystem::Start() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start");
         Y_ABORT_UNLESS(!StartExecuted.exchange(true));
+
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnBeforeStart(*this);
+        });
 
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
         TVector<NSchedulerQueue::TReader*> scheduleReaders;
@@ -506,6 +513,10 @@ namespace NActors {
         CpuManager->Start();
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
         Scheduler->Start();
+
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnAfterStart(*this);
+        });
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: started");
     }
 
@@ -516,6 +527,10 @@ namespace NActors {
             return;
         }
 
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnBeforeStop(*this);
+        });
+
         for (auto&& fn : std::exchange(DeferredPreStop, {})) {
             fn();
         }
@@ -524,6 +539,10 @@ namespace NActors {
         CpuManager->PrepareStop();
         Scheduler->Stop();
         CpuManager->Shutdown();
+
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnAfterStop(*this);
+        });
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: stopped");
     }
 
@@ -539,12 +558,12 @@ namespace NActors {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: cleaned up");
     }
 
-    void TActorSystem::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {
-        CpuManager->GetExecutorPoolState(poolId, state);
+    float TActorSystem::GetPoolMaxThreadsCount(ui32 poolId) const {
+        return CpuManager->GetExecutorPool(poolId)->GetMaxThreadCount();
     }
 
-    void TActorSystem::GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const {
-        CpuManager->GetExecutorPoolStates(states);
+    TVector<IExecutorPool*> TActorSystem::GetBasicExecutorPools() const {
+        return CpuManager->GetBasicExecutorPools();
     }
 
 }

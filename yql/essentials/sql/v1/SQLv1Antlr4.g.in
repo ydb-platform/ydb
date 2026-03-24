@@ -1225,11 +1225,7 @@ create_secret_stmt: CREATE SECRET object_ref
 ;
 with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* COMMA? RPAREN;
 secret_setting_entry: an_id EQUALS secret_setting_value;
-secret_setting_value:
-      STRING_VALUE
-    | bool_value
-    | bind_parameter
-;
+secret_setting_value: expr;
 
 alter_secret_stmt: ALTER SECRET object_ref
     with_secret_settings

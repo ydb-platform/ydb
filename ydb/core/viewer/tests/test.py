@@ -296,6 +296,16 @@ def wait_for_cluster_ready():
     wait_good = wait_time < max_wait_time
     print('Wait for cluster to be ready took %s seconds' % wait_time)
 
+<<<<<<< HEAD
+=======
+    @classmethod
+    def test_waiting_for_cluster_ready(cls):
+        return {}
+
+    @classmethod
+    def test_whoami_root(cls):
+        return cls.get_viewer_normalized("/viewer/whoami")
+>>>>>>> 811a68a82d2 (enhance error handling for invalid acl change (#35735))
 
 wait_for_cluster_ready()
 
@@ -846,9 +856,148 @@ def test_scheme_directory():
         'database': dedicated_db,
         'path': dedicated_db + '/test_dir'
         })
+<<<<<<< HEAD
     result["3-get"] = get_viewer_normalized("/scheme/directory", {
         'database': dedicated_db,
         'path': dedicated_db
+=======
+        for name in cls.databases_and_no_database:
+            result['totals'][name]['TabletStateInfo'].sort(key=lambda x: x['Type'])
+        result['detailed'] = cls.get_viewer_db_normalized("/viewer/tabletinfo")
+        for name in cls.databases_and_no_database:
+            result['detailed'][name]['TabletStateInfo'].sort(key=lambda x: x['TabletId'])
+        return result
+
+    @classmethod
+    def test_viewer_describe(cls):
+        result = {}
+        for name in cls.databases:
+            result[name] = cls.get_viewer_normalized("/viewer/describe", {
+                'database': name,
+                'path': name
+                })
+        return result
+
+    @classmethod
+    def test_viewer_cluster(cls):
+        return cls.get_viewer_normalized("/viewer/cluster")
+
+    @classmethod
+    def test_viewer_tenantinfo(cls):
+        return cls.get_viewer_normalized("/viewer/tenantinfo")
+
+    @classmethod
+    def test_viewer_tenantinfo_db(cls):
+        return cls.get_viewer_db_normalized("/viewer/tenantinfo")
+
+    @classmethod
+    def test_viewer_healthcheck(cls):
+        result = cls.get_viewer_db_normalized("/viewer/healthcheck")
+        result = cls.normalize_result_healthcheck(result)
+        return result
+
+    @classmethod
+    def test_viewer_acl(cls):
+        db = cls.cluster.domain_name
+        return cls.get_viewer_db("/viewer/acl", {'path': db})
+
+    @classmethod
+    def test_viewer_acl_write(cls):
+        return [
+            cls.post_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            }, {
+                'AddAccess': [{
+                    'Subject': 'user1',
+                    'AccessRights': ['Read']
+                }]
+            }),
+            cls.get_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            }),
+            cls.post_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            }, {
+                'RemoveAccess': [{
+                    'Subject': 'user1',
+                    'AccessRights': ['Read']
+                }]
+            }),
+            cls.get_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            }),
+            cls.post_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            }, {
+                'ChangeOwnership': {
+                    'Subject': 'user1',
+                }
+            }),
+            cls.get_viewer("/viewer/acl", {
+                'database': cls.dedicated_db,
+                'path': cls.dedicated_db
+            })]
+
+    @classmethod
+    def test_viewer_acl_write_invalid(cls):
+        return cls.post_viewer("/viewer/acl", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db
+        }, headers={
+            'Cookie': 'ydb_session_id=XXX',
+        }, body={
+            'AddAccess': [{
+                'Subject': 'userX',
+                'AccessRights': ['Full']
+            }]
+        })
+
+    @classmethod
+    def test_viewer_autocomplete(cls):
+        result = {}
+        result['empty'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result['root'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root'})
+        result['dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'dedicated_db'})
+        result['root_dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root/dedicated_db'})
+        result['tab'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'tab'})
+        result['table1'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'table1'})
+        return result
+
+    @classmethod
+    def test_viewer_check_access(cls):
+        db = cls.cluster.domain_name
+        return cls.get_viewer_db("/viewer/check_access", {'path': db, 'permissions': 'read'})
+
+    @classmethod
+    def test_viewer_query(cls):
+        return cls.get_viewer_db("/viewer/query", {'query': 'select 7*6', 'schema': 'multi'})
+
+    @classmethod
+    def test_viewer_query_from_table(cls):
+        return cls.get_viewer_db_not_domain("/viewer/query", {'query': 'select * from table1', 'schema': 'multi'})
+
+    @classmethod
+    def test_viewer_query_from_table_different_schemas(cls):
+        result = {}
+        for schema in ['classic', 'multi', 'modern', 'ydb', 'ydb2']:
+            result[schema] = cls.get_viewer("/viewer/query", {
+                'database': cls.dedicated_db,
+                'query': 'select * from table1',
+                'schema': schema
+                })
+        return result
+
+    @classmethod
+    def test_viewer_query_issue_13757(cls):
+        return cls.get_viewer_db("/viewer/query", {
+            'query': 'SELECT CAST(<|one:"8912", two:42|> AS Struct<two:Utf8, three:Date?>);',
+            'schema': 'multi'
+>>>>>>> 811a68a82d2 (enhance error handling for invalid acl change (#35735))
         })
     result["4-delete"] = delete_viewer("/scheme/directory", {
         'database': dedicated_db,

@@ -432,9 +432,8 @@ struct TCommonAppOptions {
         opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
         opts.AddLongOption("node-kind", Sprintf("Kind of the node (affects list of services activated allowed values are {'%s', '%s'} )", NODE_KIND_YDB.data(), NODE_KIND_YQ.data()))
             .RequiredArgument("NAME").StoreResult(&NodeKind);
-        // Should be provided in yaml config: TTenantPoolConfig.NodeType
         opts.AddLongOption("node-type", "Type of the node")
-            .RequiredArgument("NAME").Hidden().StoreResult(&NodeType);
+            .RequiredArgument("NAME").StoreResult(&NodeType);
         opts.AddLongOption("cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
         opts.AddLongOption("grpc-cert", "Path to client certificate file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&GrpcSslSettings.PathToGrpcCertFile);
         opts.AddLongOption("ic-cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);

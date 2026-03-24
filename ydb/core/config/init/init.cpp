@@ -61,12 +61,15 @@ public:
     }
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) const override {
-        // Deprecated: should be provided in the corresponding section of yaml config
         for (const auto& [name, opt] : Opts) {
-            opts.AddLongOption(name, opt->Description)
-                .OptionalArgument("PATH")
-                .Hidden()
-                .StoreResult(&opt->ParsedOption);
+            auto& o = opts.AddLongOption(name, opt->Description)
+                .OptionalArgument("PATH");
+            // Most file options are deprecated: should be provided in yaml config.
+            // log-file and audit-file are still needed for dynamic nodes.
+            if (name != "log-file" && name != "audit-file") {
+                o.Hidden();
+            }
+            o.StoreResult(&opt->ParsedOption);
         }
     }
 

@@ -61,9 +61,11 @@ public:
     }
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) const override {
+        // Deprecated: should be provided in the corresponding section of yaml config
         for (const auto& [name, opt] : Opts) {
             opts.AddLongOption(name, opt->Description)
                 .OptionalArgument("PATH")
+                .Hidden()
                 .StoreResult(&opt->ParsedOption);
         }
     }

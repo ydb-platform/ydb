@@ -122,6 +122,7 @@ private:
 
     bool IsLocalMode() const;
     int GetFileCacheReplicationFactor() const;
+    TFileWriterOptions GetFileCacheWriterOptions() const;
 
     void CreateStorage() const;
 

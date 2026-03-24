@@ -1686,6 +1686,8 @@ message TEvLocalKMeansRequest {
     optional uint32 OverlapClusters = 24;
     optional double OverlapRatio = 25;
     optional bool OverlapOutForeign = 26;
+
+    optional NKikimrTx.TKeyRange KeyRange = 27;
 }
 
 message TEvLocalKMeansResponse {
@@ -1703,6 +1705,8 @@ message TEvLocalKMeansResponse {
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
     optional bool IsEmpty = 13;
+
+    optional bytes LastKeyAck = 14;
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1740,6 +1744,8 @@ message TEvReshuffleKMeansRequest {
     optional uint32 OverlapClusters = 18;
     optional double OverlapRatio = 19;
     optional bool OverlapOutForeign = 20;
+
+    optional NKikimrTx.TKeyRange KeyRange = 21;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1756,6 +1762,8 @@ message TEvReshuffleKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+
+    optional bytes LastKeyAck = 13;
 }
 
 message TEvRecomputeKMeansRequest {
@@ -1859,6 +1867,8 @@ message TEvPrefixKMeansRequest {
     optional uint32 OverlapClusters = 21;
     optional double OverlapRatio = 22;
     optional bool OverlapOutForeign = 23;
+
+    optional NKikimrTx.TKeyRange KeyRange = 24;
 }
 
 message TEvPrefixKMeansResponse {
@@ -1875,6 +1885,8 @@ message TEvPrefixKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+
+    optional bytes LastKeyAck = 13;
 }
 
 // Copy rows from an intermediate build table with more than <OverlapClusters> overlapping clusters

@@ -14,18 +14,15 @@ on:
         type: boolean
         required: false
         default: true
+
 jobs:
   main:
     name: Regression-run_stress
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
-    strategy:
-      fail-fast: false
-      matrix: 
-        build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/tests/stress/
-      branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || (startsWith(inputs.use_default_branches, 'false') && github.ref_name || '') }}
-      branches_config_path: '.github/config/stable_tests_branches.json'
-      build_preset: ${{ matrix.build_preset }}
+      config_path: '.github/config/stable_tests_branches.json'
+      workflow_presets: '["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]'
+      branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || (inputs.use_default_branches == false && github.ref_name || '') }}
       additional_ya_make_args: '--test-param stress_default_duration=180 --test-param stress_default_erasure=MIRROR_3_DC'

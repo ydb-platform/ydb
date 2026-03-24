@@ -42,6 +42,14 @@ public:
         }
     }
 
+    void AddToLevel(size_t lvl, const T& x) {
+        EnsureLevel_(lvl);
+        Levels_[lvl].push_back(x);
+        if (Levels_[lvl].size() > Cap_) {
+            CompactLevel(lvl);
+        }
+    }
+
     T Median() const {
         return Quantile(0.5L);
     }

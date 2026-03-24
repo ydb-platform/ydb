@@ -21,11 +21,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWrites
     Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableLockPropose");
 
     auto doFunc = [](const TSetColumnConstraintOperationInfo& operationInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
-        Y_UNUSED(operationInfo);
-        Y_UNUSED(modifyScheme);
+        for (const auto& columnName : operationInfo.NotNullColumns) {
+            auto col = modifyScheme.MutableAlterTable()->AddColumns();
+            col->SetName(TString(columnName));
+            col->SetNotNull(true);
+        }
     };
 
-    return AlterMainTableProposeTemplate(ss, operationInfo, doFunc);
+    return AlterMainTableProposeTemplate(ss, operationInfo, operationInfo.LockNullWritesTxId, doFunc);
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWritesPropose(
@@ -34,11 +37,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWrit
     Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableUnlockPropose");
 
     auto doFunc = [](const TSetColumnConstraintOperationInfo& operationInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
-        Y_UNUSED(operationInfo);
-        Y_UNUSED(modifyScheme);
+        for (const auto& columnName : operationInfo.NotNullColumns) {
+            auto col = modifyScheme.MutableAlterTable()->AddColumns();
+            col->SetName(TString(columnName));
+            col->SetNotNull(false);
+        }
     };
 
-    return AlterMainTableProposeTemplate(ss, operationInfo, doFunc);
+    return AlterMainTableProposeTemplate(ss, operationInfo, operationInfo.UnlockNullWritesTxId, doFunc);
 }
 
 struct TTxReplyAllocate : public TSchemeShard::TIndexBuilder::TTxBase {

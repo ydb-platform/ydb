@@ -19,10 +19,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose
 
 template<typename TOperationInfo, typename TDoFunc>
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableProposeTemplate(
-    TSchemeShard* ss, const TOperationInfo& operationInfo, TDoFunc&& doFunc)
+    TSchemeShard* ss, const TOperationInfo& operationInfo, TTxId txId, TDoFunc&& doFunc)
 {
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(
-        ui64(operationInfo.AlterMainTableTxId), ss->TabletID());
+        ui64(txId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();

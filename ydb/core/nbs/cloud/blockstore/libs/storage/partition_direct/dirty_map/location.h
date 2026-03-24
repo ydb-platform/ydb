@@ -53,6 +53,21 @@ constexpr std::array<ELocation, 10> AllLocations{
     ELocation::HOPBuffer0,
     ELocation::HOPBuffer1};
 
+constexpr std::array<ELocation, 5> DDiskLocations{
+    ELocation::DDisk0,
+    ELocation::DDisk1,
+    ELocation::DDisk2,
+    ELocation::HODDisk0,
+    ELocation::HODDisk1,
+};
+
+constexpr std::array<ELocation, 5> PBufferLocations{
+    ELocation::PBuffer0,
+    ELocation::PBuffer1,
+    ELocation::PBuffer2,
+    ELocation::HOPBuffer0,
+    ELocation::HOPBuffer1};
+
 bool IsDDisk(ELocation location);
 bool IsPBuffer(ELocation location);
 

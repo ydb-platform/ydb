@@ -872,9 +872,9 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
 
             NKqp::CompareYson(R"([
-                [[1];["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]];
-                [[2];["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]];
-                [[3];#]
+                [1;["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]];
+                [2;["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]];
+                [3;#]
             ])", StreamQueryToYson(client, R"(
                 SELECT Key, CAST(Value_Uuid AS String)
                 FROM `/Root/Uuid`

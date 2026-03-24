@@ -1186,7 +1186,7 @@ struct TEvPQ {
     };
 
     struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
-        explicit TEvGetWriteInfoRequest(bool skipSrcIdInfo) :
+        explicit TEvGetWriteInfoRequest(bool skipSrcIdInfo = false) :
             SkipSrcIdInfo(skipSrcIdInfo)
         {
         }

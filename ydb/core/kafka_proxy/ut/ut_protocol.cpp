@@ -1165,6 +1165,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             //generationId1 = msg->GenerationId;
         }
 
+        Sleep(TDuration::MilliSeconds(100));
+
         {
             // Check FETCH
             std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
@@ -3704,7 +3706,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         TListGroupsRequestData requestGroups;
         auto responseEmpty = clientA.ListGroups(requestGroups);
-        Cout << "Recieved TListGroupsRequestData with " << responseEmpty->Groups.size() << Endl;
+        Cout << "Received TListGroupsRequestData with " << responseEmpty->Groups.size() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(responseEmpty->Groups.size(), 0);
 
         std::vector<TString> topics = {topicName};
@@ -3717,16 +3719,16 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         auto response = clientA.ListGroups(requestGroups);
 
-        Cout << "Recieved TListGroupsRequestData with " << response->Groups.size() << Endl;
+        Cout << "Received TListGroupsRequestData with " << response->Groups.size() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(response->Groups.size(), 2);
         ui32 first_group_count = 0;
         ui32 second_group_count = 0;
 
         // check that all metadata is correct and groups are in "preparing rebalance" state
         for (auto group : response->Groups) {
-            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId recieved");
-            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState recieved");
-            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType recieved");
+            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId received");
+            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState received");
+            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType received");
             UNIT_ASSERT_C(*group.GroupId == groupId1 || *group.GroupId == groupId2,"Error, wrong GroupId name" << group.GroupId);
 
             if (*group.GroupId == groupId1) {
@@ -3755,14 +3757,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         TListGroupsRequestData requestGroups1;
         auto response1 = clientB.ListGroups(requestGroups1);
-        Cout << "Recieved TListGroupsRequestData with " << response1->Groups.size() << Endl;
+        Cout << "Received TListGroupsRequestData with " << response1->Groups.size() << Endl;
 
         first_group_count = 0;
         second_group_count = 0;
         for (auto group : response1->Groups) {
-            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId recieved");
-            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState recieved");
-            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType recieved");
+            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId received");
+            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState received");
+            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType received");
             UNIT_ASSERT_C(*group.GroupId == groupId1 || *group.GroupId == groupId2, "Error, wrong GroupId name" << group.GroupId);
 
             if (*group.GroupId == groupId1) {
@@ -3794,9 +3796,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         second_group_count = 0;
         UNIT_ASSERT_VALUES_EQUAL(responseStateFilter->Groups.size(), 1);
         for (auto group : responseStateFilter->Groups) {
-            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId recieved");
-            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState recieved");
-            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType recieved");
+            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId received");
+            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState received");
+            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType received");
             UNIT_ASSERT_C(*group.GroupId == groupId1 || *group.GroupId == groupId2,"Error, wrong GroupId name" << group.GroupId);
             UNIT_ASSERT_VALUES_EQUAL(*group.GroupId, groupId2);
             UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "PreparingRebalance");

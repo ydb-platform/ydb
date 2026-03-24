@@ -145,8 +145,8 @@ bool TMutDictCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    for (ui32 i = 0; i < Args_.size(); ++i) {
-        if (!Args_[i]->Init(ctx, src)) {
+    for (auto& arg : Args_) {
+        if (!arg->Init(ctx, src)) {
             return false;
         }
     }
@@ -169,8 +169,8 @@ bool TToMutDictBuiltin::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    for (ui32 i = 0; i < Args_.size(); ++i) {
-        if (!Args_[i]->Init(ctx, src)) {
+    for (auto& arg : Args_) {
+        if (!arg->Init(ctx, src)) {
             return false;
         }
     }

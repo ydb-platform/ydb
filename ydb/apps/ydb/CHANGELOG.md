@@ -1,3 +1,10 @@
+* When a profile is explicitly specified with the `-p`/`--profile` option, the active profile is no longer used: all options are taken only from the specified profile, environment variables, and command line. This avoids confusion when the chosen profile was unexpectedly supplemented with settings from the active profile.
+* Added `--tx-mode` option to `ydb workload * run` benchmark commands, allowing to set the transaction mode (e.g. `no-tx`, `serializable-rw`, `snapshot-rw`).
+
+## 2.29.0 ##
+
+* Fixed Out Of Memory issue in the `ydb workload query run` command for queries with large result sets.
+* Improved the `ydb init` and `ydb config profile` commands with interactive menus.
 * Added download progress bar to the `ydb update` command.
 * Improved progress bars: consistent MiB/GiB units, stable speed display, dual progress bar for the `ydb import file` command showing both in-progress and confirmed bytes.
 * Interactive mode enhancements:

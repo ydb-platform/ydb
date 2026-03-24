@@ -35,7 +35,7 @@
          "extraneous characters after end of JSON object");
    }
 +  if (s.ok() && !message->IsInitialized()) {
-+    s = absl::InvalidArgumentError("Not all fileds are sets");
++    s = absl::InvalidArgumentError("Not all fields are set");
 +  }
  
    PROTOBUF_DLOG(INFO) << "json2/status: " << s;

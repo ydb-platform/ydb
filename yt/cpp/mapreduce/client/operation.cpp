@@ -2291,7 +2291,7 @@ public:
     }
 
     const TOperationId& GetId() const;
-    TString GetWebInterfaceUrl() const;
+    TString GetWebInterfaceUrl(const TClientPtr& client) const;
 
     void OnPrepared();
     void SetDelayedStartFunction(std::function<TOperationId()> start);
@@ -2434,10 +2434,10 @@ const TOperationId& TOperation::TOperationImpl::GetId() const
     return *Id_;
 }
 
-TString TOperation::TOperationImpl::GetWebInterfaceUrl() const
+TString TOperation::TOperationImpl::GetWebInterfaceUrl(const TClientPtr& client) const
 {
     ValidateOperationStarted();
-    return GetOperationWebInterfaceUrl(Context_.ServerName, *Id_);
+    return GetOperationWebInterfaceUrl(Context_.ServerName, *Id_, client);
 }
 
 void TOperation::TOperationImpl::OnPrepared()
@@ -2938,7 +2938,7 @@ const TOperationId& TOperation::GetId() const
 
 TString TOperation::GetWebInterfaceUrl() const
 {
-    return Impl_->GetWebInterfaceUrl();
+    return Impl_->GetWebInterfaceUrl(Client_);
 }
 
 void TOperation::OnPrepared()

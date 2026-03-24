@@ -7,12 +7,15 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 TEST_SRCS(
+    test_bloom_index.py
     test_rename_table.py
+    test_compression.py
 )
 
 SIZE(LARGE)
 REQUIREMENTS(cpu:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+TAG(ya:manual)
 
 
 DEPENDS(

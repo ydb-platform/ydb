@@ -66,6 +66,8 @@ bool NeedToRunLocally(const TTask& task) {
                 // We need to run compute actor locally if it uses buffer actor.
                 return true;
             }
+        } else if (output.Transform && output.Transform->Type == NYql::KqpTableSinkName) {
+            return true;
         }
     }
     return false;
@@ -573,6 +575,8 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
             case TTaskMeta::TTaskType::Scan:
                 TasksPerNode[task.Meta.NodeId].emplace_back(task.Id);
                 nScanTasks++;
+                break;
+            default:
                 break;
         }
     }

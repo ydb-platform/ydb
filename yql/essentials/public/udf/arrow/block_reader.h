@@ -10,8 +10,7 @@
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_value_utils.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class IBlockReader: private TNonCopyable {
 public:
@@ -403,8 +402,8 @@ public:
 
     size_t GetChildrenDefaultDataWeight() const {
         size_t size = 0;
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            size += Children_[i]->GetDefaultValueWeight();
+        for (const auto& child : Children_) {
+            size += child->GetDefaultValueWeight();
         }
         return size;
     }
@@ -734,5 +733,4 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
     Y_ENSURE(false, "Unsupported type");
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

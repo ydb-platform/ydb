@@ -192,14 +192,14 @@ NThreading::TFuture<void> TTerminal::Run() {
                 ss << ", backtrace: " << ex.BackTrace()->PrintToString();
             }
             LOG_E(ss.Str());
-            RequestStop();
+            RequestStopWithError();
             co_return;
         } catch (const std::exception& ex) {
             TStringStream ss;
             ss << "Terminal " << Context.TerminalID << " got exception while " << transaction.Name << " execution: "
                 << ex.what();
             LOG_E(ss.Str());
-            RequestStop();
+            RequestStopWithError();
             co_return;
         }
 

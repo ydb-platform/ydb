@@ -66,6 +66,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Applying = 50,
         Unlocking = 60,
         AlterSequence = 61,
+        PrepareValidation = 62,
         Done = 200,
 
         Cancellation_Applying = 350,
@@ -85,6 +86,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         // Filling
         UniqIndexValidation = 100,
+        PrepareValidation = 101,
+        UniqConsistentValidation = 102,
 
         // Fulltext
         FulltextIndexStats = 200,
@@ -746,15 +749,14 @@ public:
     }
 
     bool IsValidatingUniqueIndex() const {
-        return SubState == ESubState::UniqIndexValidation;
+        return SubState == ESubState::UniqIndexValidation || SubState == ESubState::UniqConsistentValidation;
     }
 
     bool IsFlatRelevanceFulltext() const {
         if (BuildKind != EBuildKind::BuildFulltext) {
             return false;
         }
-        auto settings = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription).GetSettings();
-        return settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+        return IndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
     }
 
     void AddNotifySubscriber(const TActorId& actorID) {
@@ -785,13 +787,13 @@ public:
         if (IsBuildVectorIndex()) {
             const auto inProgress = InProgressShards.size();
             const auto toUpload = ToUploadShards.size();
-            Y_ENSURE(KMeans.Level != 0);
+            Y_ENSURE(KMeans.Level != 0 && KMeans.Levels != 0);
             if (!KMeans.NeedsAnotherLevel() && !KMeans.NeedsAnotherParent()
                 && toUpload == 0 && inProgress == 0) {
                 return 100.f;
             }
-            // TODO(mbkkt) more detailed progress?
-            return (100.f * (KMeans.Level - 1)) / KMeans.Levels;
+            const float shardProgress = total > 0 ? static_cast<float>(done) / total : 0.f;
+            return 100.f * (KMeans.Level - 1 + shardProgress) / static_cast<float>(KMeans.Levels);
         }
         if (Shards) {
             return (100.f * done) / total;

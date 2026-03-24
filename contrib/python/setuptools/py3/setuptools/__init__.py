@@ -108,11 +108,13 @@ def _fetch_build_eggs(dist: Distribution):
         raise
 
 
-def setup(**attrs):
+def setup(**attrs) -> Distribution:
     logging.configure()
     # Make sure we have any requirements needed to interpret 'attrs'.
     _install_setup_requires(attrs)
-    return distutils.core.setup(**attrs)
+    # Override return type of distutils.core.Distribution with setuptools.dist.Distribution
+    # (implicitly implemented via `setuptools.monkey.patch_all`).
+    return distutils.core.setup(**attrs)  # type: ignore[return-value]
 
 
 setup.__doc__ = distutils.core.setup.__doc__
@@ -165,6 +167,12 @@ class Command(_Command):
     command_consumes_arguments = False
     distribution: Distribution  # override distutils.dist.Distribution with setuptools.dist.Distribution
 
+    dry_run = False  # type: ignore[assignment] # pyright: ignore[reportAssignmentType] (until #4689; see #4872)
+    """
+    For compatibility with vendored bdist_wheel.
+    https://github.com/pypa/setuptools/pull/4872/files#r1986395142
+    """
+
     def __init__(self, dist: Distribution, **kw) -> None:
         """
         Construct the command for dist, updating
@@ -176,14 +184,14 @@ class Command(_Command):
     @overload
     def reinitialize_command(
         self, command: str, reinit_subcommands: bool = False, **kw
-    ) -> _Command: ...
+    ) -> Command: ...  # override distutils.cmd.Command with setuptools.Command
     @overload
     def reinitialize_command(
         self, command: _CommandT, reinit_subcommands: bool = False, **kw
     ) -> _CommandT: ...
     def reinitialize_command(
         self, command: str | _Command, reinit_subcommands: bool = False, **kw
-    ) -> _Command:
+    ) -> Command | _Command:
         cmd = _Command.reinitialize_command(self, command, reinit_subcommands)
         vars(cmd).update(kw)
         return cmd  # pyright: ignore[reportReturnType] # pypa/distutils#307

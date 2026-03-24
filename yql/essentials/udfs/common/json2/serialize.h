@@ -75,13 +75,13 @@ private:
 };
 
 template <>
-const TStringRef& TSerialize<EDataSlot::Json>::Name() {
+inline const TStringRef& TSerialize<EDataSlot::Json>::Name() {
     static auto Name = TStringRef::Of("Serialize");
     return Name;
 }
 
 template <>
-const TStringRef& TSerialize<EDataSlot::JsonDocument>::Name() {
+inline const TStringRef& TSerialize<EDataSlot::JsonDocument>::Name() {
     static auto Name = TStringRef::Of("SerializeToJsonDocument");
     return Name;
 }

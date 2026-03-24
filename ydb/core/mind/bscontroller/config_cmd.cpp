@@ -289,22 +289,23 @@ namespace NKikimr::NBsController {
                     }
                 }
 
-                if (Success && Cmd.GetRollback()) {
-                    Rollback();
-                }
-
                 if (Success && SelfHeal && !Self->SelfHealEnable) {
                     Success = false;
                     Error = "SelfHeal is disabled, transaction rollback";
                 }
 
-                const bool doLogCommand = Success && State->Changed();
-                Success = Success && Self->CommitConfigUpdates(*State, Cmd.GetIgnoreGroupFailModelChecks(),
-                    Cmd.GetIgnoreDegradedGroupsChecks(), Cmd.GetIgnoreDisintegratedGroupsChecks(), txc, &Error,
-                    Response);
+                const bool hasChanges = Success && State->Changed() && !Cmd.GetRollback();
+                Success = Success && Self->ValidateConfigUpdates(*State, Cmd.GetIgnoreGroupFailModelChecks(),
+                    Cmd.GetIgnoreDegradedGroupsChecks(), Cmd.GetIgnoreDisintegratedGroupsChecks(), &Error, Response);
+
+                if (Success && Cmd.GetRollback()) {
+                    Rollback();
+                } else if (Success) {
+                    Self->CommitConfigUpdates(*State, txc);
+                }
 
                 Finish();
-                if (doLogCommand) {
+                if (Success && hasChanges) {
                     LogCommand(txc, TDuration::Seconds(timer.Passed()));
                 }
 

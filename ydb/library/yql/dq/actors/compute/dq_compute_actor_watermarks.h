@@ -26,6 +26,7 @@ class TDqComputeActorWatermarks
 {
 public:
     explicit TDqComputeActorWatermarks(const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters = {});
+    TDqComputeActorWatermarks(const TDqComputeActorWatermarks& parent, bool);
 
     void RegisterAsyncInput(ui64 inputId, TDuration idleTimeout = TDuration::Max(), TInstant systemTime = TInstant::Now());
     void RegisterInputChannel(ui64 inputId, TDuration idleTimeout = TDuration::Max(), TInstant systemTime = TInstant::Now());
@@ -33,11 +34,16 @@ public:
     void UnregisterAsyncInput(ui64 inputId, bool silent = false);
     void UnregisterInputChannel(ui64 inputId, bool silent = false);
 
+    void TransferInput(TDqComputeActorWatermarks &otherTracker, ui64 inputId, bool isChannel);
+
     // Will return true, if local watermark inside this async input was moved forward.
     bool NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime = TInstant::Now());
 
     // Will return true, if local watermark inside this input channel was moved forward.
     bool NotifyInChannelWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime = TInstant::Now());
+
+    using TNotifyHandler = std::function<void()>;
+    void SetNotifyHandler(TNotifyHandler notifyHandler);
 
     // Will return true, if pending watermark completed.
     bool NotifyWatermarkWasSent(TInstant watermark);
@@ -51,8 +57,8 @@ public:
     // Return watermark that was generated after input idleness processing
     TMaybe<TInstant> HandleIdleness(TInstant systemTime);
 
-    // Return idleness check that should be scheduled or Nothing()
-    [[nodiscard]] TMaybe<TInstant> PrepareIdlenessCheck();
+    [[nodiscard]] TMaybe<TInstant> GetNextIdlenessCheckAt() const;
+    [[nodiscard]] bool AddScheduledIdlenessCheck(TInstant notifyTime);
     // Return true if idleness check should be performed
     [[nodiscard]] bool ProcessIdlenessCheck(TInstant notifyTime);
 
@@ -63,6 +69,7 @@ public:
     void RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout = TDuration::Max(), TInstant systemTime = TInstant::Now());
     void UnregisterInput(ui64 inputId, bool isChannel, bool silent = false);
     bool NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime = TInstant::Now());
+    TDuration GetMaxIdleTimeout() const;
 
 private:
     TString LogPrefix;
@@ -72,6 +79,7 @@ private:
 
     TMaybe<TInstant> PendingWatermark;
     TMaybe<TInstant> MaxWatermark;
+    TNotifyHandler NotifyHandler;
 };
 
 } // namespace NYql::NDq

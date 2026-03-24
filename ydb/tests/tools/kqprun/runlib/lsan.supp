@@ -1,0 +1,6 @@
+leak:Py_InitializeEx
+leak:RegisterYqlPythonUdf
+leak:PyBytes_FromStringAndSize
+leak:PyUnicode_New
+leak:_PyObject_MallocWithType
+leak:init_interp_main

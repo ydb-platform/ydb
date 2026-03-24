@@ -23,6 +23,25 @@ std::vector<std::shared_ptr<TAllocationInfo>> TGrouppedAllocations::AllocatePoss
     return result;
 }
 
+TString TGrouppedAllocations::DebugString() const {
+    TStringBuilder sb;
+    sb << "TGrouppedAllocations{" << Endl
+       << "  AllocationsCount=" << Allocations.size() << Endl
+       << "  Allocations=[" << Endl;
+    
+    bool first = true;
+    for (const auto& [id, allocation] : Allocations) {
+        if (!first) {
+            sb << "," << Endl;
+        }
+        first = false;
+        sb << "    {Id=" << id << ";Info=" << allocation->DebugString() << "}";
+    }
+    
+    sb << Endl << "  ]" << Endl << "}";
+    return sb;
+}
+
 bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemoryScope& scope, const ui32 allocationsLimit) {
     AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "try_allocation")("limit", allocationsLimit)(
         "external_process_id", scope.ExternalProcessId)("external_scope_id", scope.ExternalScopeId)(
@@ -74,6 +93,25 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
         }
     }
     return allocationsCount;
+}
+
+TString TAllocationGroups::DebugString() const {
+    TStringBuilder sb;
+    sb << "TAllocationGroups{" << Endl
+       << "  GroupsCount=" << Groups.size() << Endl
+       << "  Groups=[" << Endl;
+    
+    bool first = true;
+    for (const auto& [groupId, groupedAllocations] : Groups) {
+        if (!first) {
+            sb << "," << Endl;
+        }
+        first = false;
+        sb << "    {GroupId=" << groupId << ";Group=" << groupedAllocations.DebugString() << "}";
+    }
+    
+    sb << Endl << "  ]" << Endl << "}";
+    return sb;
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

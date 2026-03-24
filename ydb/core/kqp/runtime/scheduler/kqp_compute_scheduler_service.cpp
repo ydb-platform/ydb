@@ -307,7 +307,7 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
         query->Update(attrs);
     } else {
         bool allowMinFairShare = (!pool->Limit || *pool->Limit > 0)
-            && (FairShareMode == NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+            && (FairShareMode >= NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
         query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
         pool->AddQuery(query);
         Y_ENSURE(Queries.emplace(queryId, query).second);

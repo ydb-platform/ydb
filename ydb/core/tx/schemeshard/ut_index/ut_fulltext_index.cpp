@@ -19,7 +19,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {
@@ -85,7 +84,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {
@@ -128,7 +126,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text1"
                 analyzers: {
@@ -179,7 +176,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {
@@ -222,7 +218,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text_wrong"
                 analyzers: {
@@ -265,7 +260,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
         )";
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
@@ -301,7 +295,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {

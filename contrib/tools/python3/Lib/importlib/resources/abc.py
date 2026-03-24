@@ -82,11 +82,11 @@ class Traversable(Protocol):
         with self.open('rb') as strm:
             return strm.read()
 
-    def read_text(self, encoding: Optional[str] = None) -> str:
+    def read_text(self, encoding: Optional[str] = None, errors: str ='strict') -> str:
         """
         Read contents of self as text
         """
-        with self.open(encoding=encoding) as strm:
+        with self.open(encoding=encoding, errors=errors) as strm:
             return strm.read()
 
     @abc.abstractmethod

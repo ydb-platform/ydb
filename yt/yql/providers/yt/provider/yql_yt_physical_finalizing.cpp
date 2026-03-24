@@ -387,6 +387,25 @@ public:
             }
         }
 
+
+        if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS) &&
+            State_->Configuration->FuseMapToMapReduce.Get().GetOrElse(DEFAULT_FUSE_MAP_TO_MAPREDUCE) == EFuseMapToMapReduceMode::Late)
+        {
+            auto getParents = [&]() {
+                return &parentsMap;
+            };
+            status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
+                if (TYtMapReduce::Match(node.Get()) && !node->StartsExecution()) {
+                    auto res = FuseMapToMapReduce(TExprBase(node), ctx, getParents, State_);
+                    return res ? res.Cast().Ptr() : TExprNode::TPtr();
+                }
+                return node;
+            }, ctx, TOptimizeExprSettings(State_->Types));
+            if (status.Level != TStatus::Ok) {
+                return status;
+            }
+        }
+
         if (const auto mode = State_->Configuration->ColumnGroupMode.Get().GetOrElse(EColumnGroupMode::Disable); mode != EColumnGroupMode::Disable) {
             status = CalculateColumnGroups(input, output, opDepsOrder, opDeps, mode, ctx);
             if (status.Level != TStatus::Ok) {
@@ -1657,7 +1676,10 @@ private:
                         continue;
                     }
 
-                    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic; })) {
+                    if (AnyOf(section.Paths(), [](const TYtPath& path) {
+                        auto meta = TYtTableBaseInfo::GetMeta(path.Table());
+                        return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || meta->IsDynamic || meta->HasRLS;
+                    })) {
                         continue;
                     }
                     // Dependency on more than 1 operation

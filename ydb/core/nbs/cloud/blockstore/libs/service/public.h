@@ -4,7 +4,7 @@
 
 #include <memory>
 
-namespace NYdb::NBS {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -37,4 +37,4 @@ using IDeviceHandlerFactoryPtr = std::shared_ptr<IDeviceHandlerFactory>;
 
 using TStorageBuffer = std::shared_ptr<char>;
 
-}   // namespace NYdb::NBS
+}   // namespace NYdb::NBS::NBlockStore

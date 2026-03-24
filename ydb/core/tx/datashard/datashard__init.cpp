@@ -291,6 +291,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::TxVolatileParticipants);
         PRECHARGE_SYS_TABLE(Schema::CdcStreamScans);
         PRECHARGE_SYS_TABLE(Schema::CdcStreamHeartbeats);
+        PRECHARGE_SYS_TABLE(Schema::MultiTxIds);
+        PRECHARGE_SYS_TABLE(Schema::MultiTxIdGraph);
 
         if (!ready)
             return false;
@@ -652,6 +654,12 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::CdcStreamHeartbeats::TableId)) {
         if (!Self->CdcStreamHeartbeatManager.Load(db)) {
+            return false;
+        }
+    }
+
+    if (Self->State != TShardState::Offline) {
+        if (!Self->MultiTxIdManager.Load(db)) {
             return false;
         }
     }

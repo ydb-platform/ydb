@@ -292,11 +292,7 @@ public:
 
         const auto timezone = TzDate ? GetterForTimezone(context, startv, block) : ConstantInt::get(Type::getInt16Ty(context), 0);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListFromRangeWrapper::MakeList>());
-        const auto signature = FunctionType::get(valueType, {ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false);
-        const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-        const auto output = CallInst::Create(signature, creator, {ctx.Ctx, start, end, step, timezone}, "output", block);
-        return output;
+        return EmitFunctionCall<&TListFromRangeWrapper::MakeList>(valueType, {ctx.Ctx, start, end, step, timezone}, ctx, block);
     }
 #endif
 private:

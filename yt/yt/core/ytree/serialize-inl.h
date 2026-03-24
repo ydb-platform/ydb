@@ -506,8 +506,8 @@ void Serialize(
     consumer->OnStringScalar(message.SerializeAsStringOrThrow());
 }
 
-template <class T, class TTag>
-void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer)
+template <class T, class TTag, TStrongTypedefOptions Options>
+void Serialize(const TStrongTypedef<T, TTag, Options>& value, NYson::IYsonConsumer* consumer)
 {
     Serialize(value.Underlying(), consumer);
 }
@@ -648,14 +648,17 @@ void Deserialize(google::protobuf::RepeatedField<T>& value, INodePtr node)
 template <class T>
 void Deserialize(TErrorOr<T>& error, NYTree::INodePtr node)
 {
-    TError& justError = error;
+    TError justError = error;
     Deserialize(justError, node);
-    if (error.IsOK()) {
+    if (justError.IsOK()) {
+        error = TErrorOr(T());
         auto mapNode = node->AsMap();
         auto valueNode = mapNode->FindChild("value");
         if (valueNode) {
             Deserialize(error.Value(), std::move(valueNode));
         }
+    } else {
+        error = std::move(justError);
     }
 }
 
@@ -732,8 +735,8 @@ void Deserialize(
     message.ParseFromStringOrThrow(string);
 }
 
-template <class T, class TTag>
-void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node)
+template <class T, class TTag, TStrongTypedefOptions Options>
+void Deserialize(TStrongTypedef<T, TTag, Options>& value, INodePtr node)
 {
     Deserialize(value.Underlying(), node);
 }

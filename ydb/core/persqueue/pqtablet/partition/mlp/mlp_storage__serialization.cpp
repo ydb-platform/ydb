@@ -578,10 +578,15 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
         if (wal.HasFirstDLQSeqNo()) {
             auto firstSeqNo = wal.GetFirstDLQSeqNo();
             while(!DLQQueue.empty() && DLQQueue.front().SeqNo < firstSeqNo) {
+                auto it = DLQMessages.find(DLQQueue.front().Offset);
+                if (it != DLQMessages.end() && it->second <= DLQQueue.front().SeqNo) {
+                    DLQMessages.erase(it);
+                }
                 DLQQueue.pop_front();
             }
         } else {
             DLQQueue.clear();
+            DLQMessages.clear();
         }
 
         TDeserializer<TDLQMessageV1> deserializer(wal.GetAddedToDLQMessages());
@@ -735,6 +740,8 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         auto firstSeqNo = Storage->DLQQueue.begin()->SeqNo;
         wal.SetFirstDLQSeqNo(firstSeqNo);
 
+        auto retentionDeadlineDelta = Storage->GetRetentionDeadlineDelta();
+
         TSerializer<TDLQMessageV1> serializer;
         for (auto [offset, seqNo] : AddedToDLQ) {
             if (seqNo < firstSeqNo) {
@@ -744,6 +751,14 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
             if (it == Storage->DLQMessages.end() || it->second != seqNo) {
                 continue;
             }
+            auto [msg, _] = Storage->GetMessageInt(offset, EMessageStatus::DLQ);
+            if (!msg) {
+                continue;
+            }
+            if (retentionDeadlineDelta && msg->WriteTimestampDelta <= retentionDeadlineDelta.value()) {
+                continue;
+            }
+
             serializer.Add({
                 .Offset = offset,
                 .SeqNo = seqNo

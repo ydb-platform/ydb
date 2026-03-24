@@ -23,6 +23,7 @@ PEERDIR(
 
 SRCS(
     ../sqs_topic_ut.cpp
+    ../sqs_topic_cdc_ut.cpp
     inside_ydb_ut.cpp
 )
 

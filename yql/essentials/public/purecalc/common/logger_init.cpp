@@ -4,8 +4,7 @@
 
 #include <atomic>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 
 namespace {
 std::atomic_bool Initialized;
@@ -28,5 +27,4 @@ void EnsureLoggingInitialized() {
     InitLogging(TLoggingOptions());
 }
 
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

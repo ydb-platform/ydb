@@ -6,7 +6,6 @@ from pathlib import Path
 import re
 import click
 
-
 TestCase = namedtuple('TestCase', 'statements successful ratio')
 
 

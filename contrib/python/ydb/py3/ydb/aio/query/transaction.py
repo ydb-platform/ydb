@@ -15,12 +15,15 @@ from ...query.transaction import (
 
 if TYPE_CHECKING:
     from .session import QuerySession
+    from ...aio.driver import Driver as AsyncDriver
 
 logger = logging.getLogger(__name__)
 
 
-class QueryTxContext(BaseQueryTxContext):
-    def __init__(self, driver, session: "QuerySession", tx_mode: base.BaseQueryTxMode):
+class QueryTxContext(BaseQueryTxContext["AsyncDriver"]):
+    """Asynchronous transaction context."""
+
+    def __init__(self, driver: "AsyncDriver", session: "QuerySession", tx_mode: base.BaseQueryTxMode):
         """
         An object that provides a simple transaction context manager that allows statements execution
         in a transaction. You don't have to open transaction explicitly, because context manager encapsulates

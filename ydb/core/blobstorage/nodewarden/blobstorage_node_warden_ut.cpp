@@ -74,10 +74,13 @@ void FormatPDiskRandomKeys(TString path, ui32 diskSize, ui32 chunkSize, ui64 gui
         SafeEntropyPoolRead(&guid, sizeof(guid));
     }
 
+    TFormatOptions options;
+    options.SectorMap = sectorMap;
+    options.EnableSmallDiskOptimization = enableSmallDiskOptimization;
+
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize,
             guid, chunkKey, logKey,
-            sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Test",
-            false, false, sectorMap, enableSmallDiskOptimization);
+            sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Test", options);
 }
 
 void SetupLogging(TTestActorRuntime& runtime) {
@@ -240,9 +243,12 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
             ui64 pDiskGuid = 1;
             static ui64 iteration = 0;
             ++iteration;
+            TFormatOptions options;
+            options.SectorMap = sectorMap;
+            options.EnableSmallDiskOptimization = false;
             ::NKikimr::FormatPDisk(pDiskPath0, 0, 4 << 10, 32u << 20u, pDiskGuid,
                 0x1234567890 + iteration, 0x4567890123 + iteration, 0x7890123456 + iteration,
-                NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap, false);
+                NPDisk::YdbDefaultPDiskSequence, "", options);
 
 
             // Magic path from testlib, do not change it
@@ -1304,6 +1310,108 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         CheckVDiskStateUpdate(runtime, fakeWhiteboard, groupId, 1, 0u);
         block.Stop().Unblock();
         CheckVDiskStateUpdate(runtime, fakeWhiteboard, groupId, 2, 2u);
+    }
+
+    struct TStaticGroupProxyTestSetup {
+        TTestActorSystem Runtime;
+        ui32 NodeId = 1;
+        ui32 StaticGroupId;
+        TActorId NodeWardenId;
+
+        TStaticGroupProxyTestSetup(ui32 maxStaticNodeId)
+            : Runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>())
+            , StaticGroupId(TGroupID(EGroupConfigurationType::Static, 1, 0).GetRaw())
+        {
+            Runtime.Start();
+
+            auto& appData = *Runtime.GetNode(1)->AppData;
+            appData.DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", 1).Release());
+            appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig();
+            appData.DynamicNameserviceConfig->MaxStaticNodeId = maxStaticNodeId;
+
+            TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(
+                static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
+            ObtainStaticKey(&nodeWardenConfig->StaticKey);
+
+            auto* serviceSet = nodeWardenConfig->BlobStorageConfig.MutableServiceSet();
+            auto* group = serviceSet->AddGroups();
+            group->SetGroupID(StaticGroupId);
+            group->SetGroupGeneration(1);
+            group->SetErasureSpecies(TErasureType::ErasureNone);
+            auto* ring = group->AddRings();
+            auto* failDomain = ring->AddFailDomains();
+            auto* vdiskLoc = failDomain->AddVDiskLocations();
+            vdiskLoc->SetNodeID(NodeId);
+            vdiskLoc->SetPDiskID(1);
+            vdiskLoc->SetVDiskSlotID(0);
+            vdiskLoc->SetPDiskGuid(12345);
+
+            IActor* ac = CreateBSNodeWarden(nodeWardenConfig.Release());
+            NodeWardenId = Runtime.Register(ac, NodeId);
+            Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), NodeWardenId);
+        }
+
+        void Bootstrap() {
+            Runtime.WrapInActorContext(NodeWardenId, [](IActor* wardenActor) {
+                auto& warden = *dynamic_cast<NStorage::TNodeWarden*>(wardenActor);
+                warden.Bootstrap();
+            });
+        }
+
+        bool HasGroupProxy() {
+            bool result = false;
+            Runtime.WrapInActorContext(NodeWardenId, [this, &result](IActor* wardenActor) {
+                auto& warden = *dynamic_cast<NStorage::TNodeWarden*>(wardenActor);
+                result = warden.HasGroupProxy(StaticGroupId);
+            });
+            return result;
+        }
+
+        void SimulateForwardedRequest() {
+            Runtime.WrapInActorContext(NodeWardenId, [this](IActor* wardenActor) {
+                auto& warden = *dynamic_cast<NStorage::TNodeWarden*>(wardenActor);
+                TActorId sender = Runtime.AllocateEdgeActor(NodeId);
+                TActorId proxyId = MakeBlobStorageProxyID(StaticGroupId);
+                auto ev = std::make_unique<TEvBlobStorage::TEvStatus>(TInstant::Max());
+                TAutoPtr<IEventHandle> handle(new IEventHandle(
+                    warden.SelfId(),
+                    sender,
+                    ev.release(),
+                    IEventHandle::FlagForwardOnNondelivery,
+                    0,
+                    &proxyId
+                ));
+                warden.HandleForwarded(handle);
+            });
+        }
+    };
+
+    Y_UNIT_TEST(TestDynamicNodeLazyStaticGroupProxyCreation) {
+        // MaxStaticNodeId = 0 means node 1 is a dynamic node
+        TStaticGroupProxyTestSetup setup(0);
+        setup.Bootstrap();
+
+        UNIT_ASSERT_C(!setup.HasGroupProxy(),
+            "Static group proxy should not be created at startup on dynamic node");
+
+        setup.SimulateForwardedRequest();
+
+        UNIT_ASSERT_C(setup.HasGroupProxy(),
+            "Static group proxy should be created on-demand after a request on dynamic node");
+    }
+
+    Y_UNIT_TEST(TestStaticNodeLazyStaticGroupProxyCreation) {
+        // MaxStaticNodeId = 100 means node 1 is a static node
+        TStaticGroupProxyTestSetup setup(100);
+        setup.Bootstrap();
+
+        UNIT_ASSERT_C(!setup.HasGroupProxy(),
+            "Static group proxy should NOT be created at startup even on static node");
+
+        setup.SimulateForwardedRequest();
+
+        UNIT_ASSERT_C(setup.HasGroupProxy(),
+            "Static group proxy should be created on-demand after a request on static node");
     }
 
 }

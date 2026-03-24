@@ -35,17 +35,25 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort",
+                                                "Node Type": "TopSort-LeftJoin (Lookup)",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Limit": "1001",
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": "[Arg.a.Group,Arg.a.Count0,Arg.t.Value]"
+                                                    },
                                                     {
                                                         "Inputs": [
                                                             {
                                                                 "ExternalPlanNodeId": 7
                                                             }
                                                         ],
-                                                        "Limit": "1001",
-                                                        "Name": "TopSort",
-                                                        "TopSortBy": "[Arg.a.Group,Arg.a.Count0,Arg.t.Value]"
+                                                        "Name": "LeftJoin (Lookup)"
                                                     }
                                                 ],
                                                 "PlanNodeId": 8,

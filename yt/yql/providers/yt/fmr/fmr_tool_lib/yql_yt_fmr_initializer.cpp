@@ -8,10 +8,26 @@ TFmrInitializationOptions GetFmrInitializationInfoFromConfig(
     const TFmrInstance& fmrConfiguration,
     const google::protobuf::RepeatedPtrField<TFmrFileRemoteCache>& fileCacheConfigurations
 ) {
+    // initializing tvm
+
+    TMaybe<TFmrTvmGatewaySettings> tvmSettings = Nothing();
+    if (fmrConfiguration.HasTvmConfig()) {
+        YQL_CLOG(DEBUG, FastMapReduce) << "Found tvm config " << fmrConfiguration.GetTvmConfig().DebugString() << " for fmr";
+        tvmSettings = TFmrTvmGatewaySettings{
+            .CoordinatorTvmId = static_cast<TTvmId>(fmrConfiguration.GetTvmConfig().GetCoordinatorTvmId()),
+            .GatewayTvmId = static_cast<TTvmId>(fmrConfiguration.GetTvmConfig().GetGatewayTvmId()),
+            .TvmDiskCacheDir = fmrConfiguration.GetTvmConfig().GetTvmDiskCacheDir()
+        };
+
+        TString gatewayTvmSecretFile = fmrConfiguration.GetTvmConfig().GetGatewayTvmSecretFile();
+        YQL_ENSURE(NFs::Exists(gatewayTvmSecretFile), "Gateway tvm secret file should exist, if it is set in gateways.conf");
+        tvmSettings->GatewayTvmSecret = StripStringRight(TFileInput(gatewayTvmSecretFile).ReadLine());
+    }
+
     // initializing fmr file metadata and upload services
     TString coordinatorUrl = fmrConfiguration.GetCoordinatorUrl();
     if (!fmrConfiguration.HasFileRemoteCacheName()) {
-        return TFmrInitializationOptions{coordinatorUrl, nullptr, nullptr};
+        return TFmrInitializationOptions{coordinatorUrl, nullptr, nullptr, TFmrDistributedCacheSettings(), tvmSettings};
     }
     TString fmrRemoteCacheName = fmrConfiguration.GetFileRemoteCacheName();
 
@@ -62,7 +78,8 @@ TFmrInitializationOptions GetFmrInitializationInfoFromConfig(
         .FmrCoordinatorUrl = coordinatorUrl,
         .FmrFileMetadataService =  NFmr::MakeYtFileMetadataService(metadataOptions),
         .FmrFileUploadService = NFmr::MakeYtFileUploadService(uploadOptions),
-        .FmrDistributedCacheSettings = fmrDistCacheSettings
+        .FmrDistributedCacheSettings = fmrDistCacheSettings,
+        .FmrTvmSettings = tvmSettings
     };
 }
 
@@ -74,6 +91,8 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         auto fmrOperationSpec = NYT::NodeFromYsonStream(&input);
         coordinatorSettings.DefaultFmrOperationSpec = fmrOperationSpec;
     }
+
+    auto tvmSettings = fmrServices->TvmSettings;
 
     ITableDataService::TPtr tableDataService = nullptr;
     bool disableLocalFmrWorker = fmrServices->DisableLocalFmrWorker;
@@ -95,7 +114,19 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         }
         coordinatorClientSettings.Port = parsedUrl.GetPort();
         coordinatorClientSettings.Host = parsedUrl.GetHost();
-        coordinator = MakeFmrCoordinatorClient(coordinatorClientSettings);
+        IFmrTvmClient::TPtr coordinatorTvmClient = nullptr;
+
+        if (tvmSettings) {
+            coordinatorClientSettings.DestinationTvmId = tvmSettings->CoordinatorTvmId;
+            TFmrTvmApiSettings gatewayTvmSettings{
+                .SourceTvmId = tvmSettings->GatewayTvmId,
+                .TvmSecret = tvmSettings->GatewayTvmSecret,
+                .TvmDiskCacheDir = tvmSettings->TvmDiskCacheDir,
+                .DestinationTvmIds = {tvmSettings->CoordinatorTvmId}
+            };
+            coordinatorTvmClient = MakeFmrTvmClient(gatewayTvmSettings);
+        }
+        coordinator = MakeFmrCoordinatorClient(coordinatorClientSettings, coordinatorTvmClient);
         YQL_CLOG(INFO, FastMapReduce) << "Created client to connect to coordinator server with host " << parsedUrl.GetHost() << " and port " << parsedUrl.GetPort();
     } else {
         // creating local coordinator since url was not passed via services

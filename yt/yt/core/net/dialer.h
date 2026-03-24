@@ -20,8 +20,8 @@ struct TDialerContext final
 {
     //! Host is used for TlsDialer.
     std::optional<TString> Host;
-    //! BypassTLS is used by HTTPS client for plain HTTP connections.
-    bool BypassTLS = false;
+    //! BypassTls is used by HTTPS client for plain HTTP connections.
+    bool BypassTls = false;
 };
 
 DEFINE_REFCOUNTED_TYPE(TDialerContext)

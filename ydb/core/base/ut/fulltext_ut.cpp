@@ -7,6 +7,50 @@ namespace NKikimr::NFulltext {
 
 Y_UNIT_TEST_SUITE(NFulltext) {
 
+    Y_UNIT_TEST(TokenizeJson) {
+        TString error;
+
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"invalid json", error), TVector<TString>{});
+        UNIT_ASSERT(!error.empty());
+
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"literal string\"", error), TVector<TString>{TString("\0\3literal string", 16)});
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        TString obj = "{\"id\":42042,\"brand\":\"bricks\",\"part_count\":1401,\"price\":null,\"parts\":"
+            "[{\"id\":32526,\"count\":7,\"name\":\"3x5\"},{\"id\":32523,\"count\":17,\"name\":\"1x3\"}]}";
+        auto tokens = TokenizeJson(obj, error);
+        std::sort(tokens.begin(), tokens.end());
+        UNIT_ASSERT_VALUES_EQUAL(tokens, (TVector<TString>{
+            TString("\2id\0\4\0\0\0\0@\x87\xE4@", 13),
+            TString("\5brand\0\3bricks", 14),
+            TString("\5parts\2id\0\4\0\0\0\0\x80\xC3\xDF@", 19),
+            TString("\5parts\2id\0\4\0\0\0\0\xC0\xC2\xDF@", 19),
+            TString("\5parts\4name\0\0031x3", 16),
+            TString("\5parts\4name\0\0033x5", 16),
+            TString("\5parts\5count\0\4\0\0\0\0\0\0\x1C@", 22),
+            TString("\5parts\5count\0\4\0\0\0\0\0\0001@", 22),
+            TString("\5price\0\2", 8),
+            TString("\npart_count\0\4\0\0\0\0\0\xE4\x95@", 21)
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        TString emptyKeyObj = "{\"\":{\"a\":\"b\"}}";
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson(emptyKeyObj, error), (TVector<TString>{
+            TString("\0\1a\0\3b", 6)
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        TString longKey;
+        longKey.resize(100000);
+        for (size_t i = 0; i < longKey.size(); i++)
+            longKey[i] = 'a';
+        TString longKeyObj = "{\""+longKey+"\":{\"short\":\"b\"}}";
+        UNIT_ASSERT(TokenizeJson(longKeyObj, error) == TVector<TString>{
+            "\xA0\x8D\6"+longKey+TString("\5short\0\3b", 9)
+        });
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+    }
+
     Y_UNIT_TEST(ValidateColumnsMatches) {
         TString error;
         
@@ -306,6 +350,56 @@ Y_UNIT_TEST_SUITE(NFulltext) {
 
         analyzers.clear_language();
         UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);
+    }
+
+    Y_UNIT_TEST(BuildNgramsUtf8) {
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("abc023", 3, 3, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"abc", "bc0", "c02", "023"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("◌̧◌̇◌̣", 3, 3, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"◌̧◌", "\u0327◌̇", "◌̇◌", "\u0307◌̣"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("﷽‎؈ۻ", 2, 2, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"﷽‎", "‎؈", "؈ۻ"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("异体字異體字", 3, 3, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"异体字", "体字異", "字異體", "異體字"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("ä̸̱b̴̪͛", 3, 3, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"a\u0338\u0308", "\u0338\u0308\u0331", "\u0308\u0331b", "\u0331b\u0334", "b\u0334\u035B", "\u0334\u035B\u032A"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("😢🐶🐕🐈", 2, 2, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"😢🐶", "🐶🐕", "🐕🐈"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("4️⃣🐕‍🦺🐈‍⬛", 3, 3, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"4️⃣", "\uFE0F\u20E3🐕", "\u20E3🐕\u200D", "🐕‍🦺", "\u200D\U0001F9BA🐈", "\U0001F9BA🐈\u200D", "🐈‍⬛"}));
+        }
+
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("👨‍👩‍👧‍👦🇦🇨", 2, 2, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"👨\u200D", "\u200D👩", "👩\u200D", "\u200D👧", "👧\u200D", "\u200D👦", "👦🇦", "🇦🇨"}));
+        }
     }
 }
 

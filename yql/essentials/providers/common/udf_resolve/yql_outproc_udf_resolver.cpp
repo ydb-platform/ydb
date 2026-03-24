@@ -22,9 +22,9 @@
 #include <util/string/split.h>
 
 #include <regex>
+#include <utility>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -49,14 +49,23 @@ void RunResolver(
     }
 
     TShellCommand shell(resolverPath, args, shellOptions);
+    auto status = shell.Run().GetStatus();
+    auto exitCode = shell.GetExitCode();
+    TStringBuilder formattedExitcode;
+    formattedExitcode << "Exit code: ";
+    if (exitCode) {
+        formattedExitcode << *exitCode;
+    } else {
+        formattedExitcode << "(empty)";
+    }
 
-    switch (shell.Run().GetStatus()) {
+    switch (status) {
         case TShellCommand::SHELL_INTERNAL_ERROR:
             ythrow yexception() << "Udf resolver internal error: "
                                 << shell.GetInternalError();
         case TShellCommand::SHELL_ERROR:
-            ythrow yexception() << "Udf resolver shell error: "
-                                << StripString(shell.GetError());
+            ythrow yexception() << "Udf resolver shell error. " << formattedExitcode
+                                << " StdErr: " << StripString(shell.GetError());
         case TShellCommand::SHELL_FINISHED:
             break;
         default:
@@ -103,14 +112,14 @@ TString ExtractSharedObjectNameFromErrorMessage(const char* message) {
 class TOutProcUdfResolver: public IUdfResolver {
 public:
     TOutProcUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-                        const TFileStoragePtr& fileStorage, const TString& resolverPath,
+                        TFileStoragePtr fileStorage, TString resolverPath,
                         const TString& user, const TString& group, bool filterSyscalls,
-                        const TString& udfDependencyStubPath, const TMap<TString, TString>& path2md5)
+                        TString udfDependencyStubPath, const TMap<TString, TString>& path2md5)
         : FunctionRegistry_(functionRegistry)
         , TypeInfoHelper_(new TTypeInfoHelper)
-        , FileStorage_(fileStorage)
-        , ResolverPath_(resolverPath)
-        , UdfDependencyStubPath_(udfDependencyStubPath)
+        , FileStorage_(std::move(fileStorage))
+        , ResolverPath_(std::move(resolverPath))
+        , UdfDependencyStubPath_(std::move(udfDependencyStubPath))
         , Path2Md5_(path2md5)
     {
         if (user) {
@@ -418,5 +427,4 @@ IUdfResolver::TPtr CreateOutProcUdfResolver(
     return new TOutProcUdfResolver(functionRegistry, fileStorage, resolverPath, user, group, filterSyscalls, udfDependencyStubPath, path2md5);
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

@@ -1,16 +1,10 @@
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 
-    <tmp_path>/program.sql:<main>:20:5: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple
-    	    a
-	    ^
-        <tmp_path>/program.sql:<main>: Warning: At tuple
-        
-            <tmp_path>/program.sql:<main>:20:5: Warning: At tuple, At function: YqlResultItem, At lambda
-            	    a
-	    ^
-                <tmp_path>/program.sql:<main>:6:12: Warning: At function: /
-                	    Sum(b) / Count(b) AS avg2
+    <tmp_path>/program.sql:<main>: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple, At tuple, At tuple, At function: YqlResultItem, At lambda
+    
+        <tmp_path>/program.sql:<main>:6:12: Warning: At function: /
+        	    Sum(b) / Count(b) AS avg2
 	           ^
-                    <tmp_path>/program.sql:<main>:6:12: Warning: Integral type implicit bitcast: Int64 and Uint64
-                    	    Sum(b) / Count(b) AS avg2
+            <tmp_path>/program.sql:<main>:6:12: Warning: Integral type implicit bitcast: Int64 and Uint64
+            	    Sum(b) / Count(b) AS avg2
 	           ^

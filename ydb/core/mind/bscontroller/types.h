@@ -200,7 +200,7 @@ namespace NKikimr {
                 pb->SetDDiskSlotId(DDiskSlotId);
             }
 
-            friend std::strong_ordering operator <=>(const TDDiskId &x, const TDDiskId &y) { return x.GetKey() <=> y.GetKey(); }
+            friend constexpr std::strong_ordering operator <=>(const TDDiskId& x, const TDDiskId& y) = default;
         };
 
         template<typename TKey, typename TValue>
@@ -458,6 +458,16 @@ namespace NKikimr {
                 TIterator res = Overlay.emplace_hint(it, baseIt->first, MakeHolder<TValue>(*baseIt->second));
                 baseIt->second->OnClone(res->second);
                 return res;
+            }
+        };
+
+        struct TConfigTxFlags {
+            bool SuppressFailModelChecking = false;
+            bool SuppressDegradedGroupsChecking = false;
+            bool SuppressDisintegratedGroupsChecking = false;
+
+            static TConfigTxFlags SuppressAll() {
+                return {true, true, true};
             }
         };
 

@@ -9,6 +9,8 @@
 #include <util/charset/utf8.h>
 #include <util/string/cast.h>
 
+#include <utility>
+
 using namespace re2;
 using namespace NKikimr;
 using namespace NUdf;
@@ -79,7 +81,7 @@ enum EOptionsField: ui32 {
 
 struct TOptionsSchema {
     TType* StructType;
-    ui32 Indices[EOptionsField::Count];
+    std::array<ui32, EOptionsField::Count> Indices;
 };
 
 RE2::Options ExtractOptions(std::string_view pattern, TUnboxedValuePod optionsValue, const TOptionsSchema& schema, bool posix) {
@@ -124,11 +126,11 @@ public:
             const TOptionsSchema& optionsSchema,
             TSourcePosition pos,
             NYql::TLangVersion currentlangVersion,
-            const TRegexpGroups& regexpGroups = TRegexpGroups())
+            TRegexpGroups regexpGroups = TRegexpGroups())
             : Mode_(mode)
             , OptionsSchema_(optionsSchema)
             , Pos_(pos)
-            , RegexpGroups_(regexpGroups)
+            , RegexpGroups_(std::move(regexpGroups))
             , CurrentLangVersion_(currentlangVersion)
         {
         }
@@ -210,6 +212,7 @@ public:
             }
 
             if (mode == EMode::CAPTURE) {
+                // NOLINTNEXTLINE(modernize-avoid-c-arrays)
                 Captured_ = std::make_unique<StringPiece[]>(Regexp_->NumberOfCapturingGroups() + 1);
             }
 
@@ -300,7 +303,7 @@ private:
     std::unique_ptr<RE2> Regexp_;
     const TRegexpGroups RegexpGroups_;
     EMode Mode_;
-    std::unique_ptr<StringPiece[]> Captured_;
+    std::unique_ptr<StringPiece[]> Captured_; // NOLINT(modernize-avoid-c-arrays)
     const TOptionsSchema OptionsSchema_;
     TSourcePosition Pos_;
     NYql::TLangVersion CurrentLangVersion_;

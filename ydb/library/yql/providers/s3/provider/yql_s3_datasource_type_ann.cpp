@@ -437,11 +437,11 @@ public:
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (const auto* filterLambdaType = filterLambda->GetTypeAnn()) {
+        if (const auto filterLambdaType = filterLambda->GetTypeAnn()) {
             if (filterLambdaType->GetKind() != ETypeAnnotationKind::Data) {
                 return IGraphTransformer::TStatus::Error;
             }
-            const TDataExprType* dataExprType = static_cast<const TDataExprType*>(filterLambdaType);
+            auto dataExprType = filterLambdaType->Cast<TDataExprType>();
             if (dataExprType->GetSlot() != EDataSlot::Bool) {
                 return IGraphTransformer::TStatus::Error;
             }

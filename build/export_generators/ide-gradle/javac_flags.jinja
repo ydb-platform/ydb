@@ -8,7 +8,7 @@
 {%-         set compiler_jvm_flags = target_javac_flags|select('startsWith', '-J') -%}
 {%-     endif -%}
 
-{%-     if javac_flags|length or compiler_jvm_flags|length or with_errorprone %}
+{%-     if javac_flags|length or compiler_jvm_flags|length or has_errorprone %}
 
 tasks.{{ task }}.configure {
 {%-         if javac_flags|length -%}
@@ -21,7 +21,7 @@ tasks.{{ task }}.configure {
     options.isFork = true
     options.forkOptions.jvmArgs = listOf(
 {%-             for compiler_jvm_flag in compiler_jvm_flags|unique %}
-        "{{ compiler_jvm_flag|replace("-J", "") }}",
+        {{ PatchRoots(compiler_jvm_flag|replace("-J", ""), true) }},
 {%-             endfor %}
     )
 {%          endif -%}

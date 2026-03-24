@@ -70,6 +70,7 @@ const size_t MAX_PARSE_ERRORS = 100;
     THolderFactory HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get());                         \
     TDefaultValueBuilder ValueBuilder(HolderFactory);
 
+// NOLINTNEXTLINE(misc-use-anonymous-namespace)
 Y_CPU_BENCHMARK(JsonPath, iface) {
     PREPARE()
 
@@ -84,6 +85,7 @@ Y_CPU_BENCHMARK(JsonPath, iface) {
     }
 }
 
+// NOLINTNEXTLINE(misc-use-anonymous-namespace)
 Y_CPU_BENCHMARK(JsonPathLikeRegexWithCompile, iface) {
     PREPARE()
 
@@ -98,6 +100,7 @@ Y_CPU_BENCHMARK(JsonPathLikeRegexWithCompile, iface) {
     }
 }
 
+// NOLINTNEXTLINE(misc-use-anonymous-namespace)
 Y_CPU_BENCHMARK(JsonPathLikeRegex, iface) {
     PREPARE()
 

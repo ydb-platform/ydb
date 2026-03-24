@@ -157,7 +157,8 @@ TRuntimeNode BuildParseCall(
     const auto* finalItemStructType = static_cast<TStructType*>(finalItemType);
 
     if (useBlocks) {
-        return ctx.ProgramBuilder.BlockExpandChunked(ctx.ProgramBuilder.ExpandMap(
+        return ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.BlockExpandChunked(
+            ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.ExpandMap(
             ctx.ProgramBuilder.ToFlow(input), [&](TRuntimeNode item) {
                 auto parsedData = (extraColumnsByPathIndex || !metadataColumns.empty())
                                       ? ctx.ProgramBuilder.Nth(item, 0)
@@ -203,7 +204,7 @@ TRuntimeNode BuildParseCall(
 
                 fields.push_back(blockLengthName);
                 return fields;
-            }));
+            }))));
     }
 
     if (!compression.empty()) {

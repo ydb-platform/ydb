@@ -31,6 +31,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             TString(DefaultKikimrPublicClusterName), // cluster
             Database, // database
             "", // database id
+            UserToken->GetUserSID(), // user sid
             SchemeQuery, // query text
             querySettings, // query settings
             nullptr, // query parameter types

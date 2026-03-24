@@ -7,11 +7,12 @@
 namespace NYql {
 
 bool IsRangeWindowFrameEnabled(TTypeAnnotationContext& types) {
-    return IsWindowNewPipelineEnabled(types) && types.LangVer >= MakeLangVersion(2025, 5);
+    static_assert(GetMaxLangVersion() == MakeLangVersion(2026, 1), "Max lang version must be 2026.1");
+    return IsWindowNewPipelineEnabled(types) && types.LangVer >= MakeLangVersion(2026, 1);
 }
 
 bool IsWindowNewPipelineEnabled(TTypeAnnotationContext& types) {
-    if (types.WindowNewPipeline && NKikimr::NMiniKQL::RuntimeVersion >= 72u) {
+    if (types.WindowNewPipeline && NKikimr::NMiniKQL::RuntimeVersion >= 73u) {
         // The new window pipeline generates code that is not robust to the absence of ForbidConstantDepends.
         // Therefore, we must ensure that it is enabled.
         YQL_ENSURE(IsForbidConstantDependsEnabled(types), "This feature must be enabled.");

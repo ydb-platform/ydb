@@ -121,8 +121,8 @@ namespace NKikimr {
         // PDISK INTERACTION
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        std::optional<TRcBuf> Read(const TDiskPart& part);
-        bool IsReadable(const TDiskPart& part);
+        std::optional<TRcBuf> Read(const TDiskPart& part, TLogoBlobID hugeBlobId);
+        bool IsReadable(const TDiskPart& part, TLogoBlobID hugeBlobId);
         void Write(const TDiskPart& part, TString data);
 
         template<typename T>

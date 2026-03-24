@@ -78,6 +78,7 @@ def start(argv):
     if networks:
         subnets = set()
 
+        yatest.common.execute(["docker", "network", "prune", "-f", "--filter", "label=docker_compose_recipe"], cwd=cwd)
         for net_name, net_config in six.iteritems(networks):
             while True:
                 subnet = "fc00:420:%04x::/48" % random.randrange(16**4)
@@ -86,7 +87,7 @@ def start(argv):
 
             subnets.add(subnet)
 
-            net_args = ["docker", "network", "create", "--subnet", subnet]
+            net_args = ["docker", "network", "create", "--subnet", subnet, "--label", "docker_compose_recipe"]
             if net_config and net_config.get("ipv6", False):
                 net_args.append("--ipv6")
             net_args.append(net_name)
@@ -287,7 +288,7 @@ def _setup_test_host(test_host_name, yml_path, env):
     for service, settings in six.iteritems(data["services"]):
         if service == test_host_name:
             overwritten_yml_path = yatest.common.work_path("docker_compose_for_test.yml")
-            if "env" not in settings:
+            if "environment" not in settings:
                 settings["environment"] = []
             for env_key, env_value in six.iteritems(env):
                 settings["environment"].append("{}={}".format(env_key, env_value))
@@ -303,7 +304,7 @@ def _setup_test_host(test_host_name, yml_path, env):
 
             if "user" in settings:
                 raise DockerComposeRecipeException("Test hosting service '{}' has `user` section which is not supported by testing framework".format(test_host_name))
-            settings["user"] = "$CURRENT_USER"
+            settings["user"] = "${CURRENT_USER}"
 
             if "build" in settings:
                 conext = settings["build"].get("context")

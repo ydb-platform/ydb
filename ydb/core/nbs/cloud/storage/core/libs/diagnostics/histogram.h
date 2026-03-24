@@ -1,13 +1,13 @@
 #pragma once
 
-//#include "public.h"
+// #include "public.h"
 
 #include <library/cpp/histogram/hdr/histogram.h>
 
 #include <util/datetime/base.h>
 #include <util/system/sanitizers.h>
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -96,8 +96,7 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TLatencyHistogram
-    : public THistogramBase
+class TLatencyHistogram: public THistogramBase
 {
 public:
     TLatencyHistogram(TDuration max = TDuration::Seconds(10), int precision = 3)
@@ -117,13 +116,12 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSizeHistogram
-    : public THistogramBase
+class TSizeHistogram: public THistogramBase
 {
 public:
-    TSizeHistogram(ui32 max = 64*1024*1024, int precision = 3)
+    TSizeHistogram(ui32 max = 64 * 1024 * 1024, int precision = 3)
         : THistogramBase(1, max, precision)
     {}
 };
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

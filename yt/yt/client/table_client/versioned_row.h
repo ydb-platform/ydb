@@ -102,7 +102,7 @@ static_assert(
 ////////////////////////////////////////////////////////////////////////////////
 
 size_t GetByteSize(const TVersionedValue& value);
-size_t GetDataWeight(const TVersionedValue& value);
+i64 GetDataWeight(const TVersionedValue& value);
 
 size_t ReadValue(const char* input, TVersionedValue* value);
 size_t WriteValue(char* output, const TVersionedValue& value);
@@ -271,7 +271,7 @@ static_assert(
     sizeof(TVersionedRow) == sizeof(intptr_t),
     "TVersionedRow size must match that of a pointer.");
 
-size_t GetDataWeight(TVersionedRow row);
+i64 GetDataWeight(TVersionedRow row);
 
 //! Checks that #row is a valid client-side versioned data row. Throws on failure.
 /*!

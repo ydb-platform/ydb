@@ -285,30 +285,30 @@ const NPq::NConfigurationManager::IClient::TPtr& TPqSession::GetConfigManagerCli
 }
 
 NDataStreams::V1::TDataStreamsClient& TPqSession::GetDsClient(const TString& cluster, const TString& database, const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
-    const auto clientIt = ClusterDsClients.find(cluster);
-    if (clientIt != ClusterDsClients.end()) {
+    const auto clientIt = ClusterDbDsClients.find(std::pair(cluster, database));
+    if (clientIt != ClusterDbDsClients.end()) {
         return clientIt->second;
     }
     Y_VALIDATE(cfg.GetEndpoint(), "Can't get data streams client for cluster `" << cluster << "`: no endpoint");
-    return ClusterDsClients.emplace(cluster, NDataStreams::V1::TDataStreamsClient(YdbDriver, GetDsClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+    return ClusterDbDsClients.emplace(std::pair(cluster, database), NDataStreams::V1::TDataStreamsClient(YdbDriver, GetDsClientOptions(database, cfg, credentialsProviderFactory))).first->second;
 }
 
 TFederatedTopicClient& TPqSession::GetYdbFederatedPqClient(const TString& cluster, const TString& database, const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
-    const auto clientIt = ClusterYdbFederatedPqClients.find(cluster);
-    if (clientIt != ClusterYdbFederatedPqClients.end()) {
+    const auto clientIt = ClusterDbYdbFederatedPqClients.find(std::pair(cluster, database));
+    if (clientIt != ClusterDbYdbFederatedPqClients.end()) {
         return clientIt->second;
     }
     Y_VALIDATE(cfg.GetEndpoint(), "Can't get federated topic client for cluster `" << cluster << "`: no endpoint");
-    return ClusterYdbFederatedPqClients.emplace(cluster, TFederatedTopicClient(YdbDriver, GetYdbFederatedPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+    return ClusterDbYdbFederatedPqClients.emplace(std::pair(cluster, database), TFederatedTopicClient(YdbDriver, GetYdbFederatedPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
 }
 
 TTopicClient& TPqSession::GetYdbPqClient(const TString& cluster, const TString& database, const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
-    const auto clientIt = ClusterYdbPqClients.find(cluster);
-    if (clientIt != ClusterYdbPqClients.end()) {
+    const auto clientIt = ClusterDbYdbPqClients.find(std::pair(cluster, database));
+    if (clientIt != ClusterDbYdbPqClients.end()) {
         return clientIt->second;
     }
     Y_VALIDATE(cfg.GetEndpoint(), "Can't get topic client for cluster `" << cluster << "`: no endpoint");
-    return ClusterYdbPqClients.emplace(cluster, TTopicClient(YdbDriver, GetYdbPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+    return ClusterDbYdbPqClients.emplace(std::pair(cluster, database), TTopicClient(YdbDriver, GetYdbPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
 }
 
 } // namespace NYql

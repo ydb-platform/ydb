@@ -38,6 +38,7 @@ SRCS(
     log_priority_mute_checker.h
     memory_tracker.cpp
     memory_tracker.h
+    numerical_maybe.h
     operation_queue.h
     page_map.cpp
     pb.h
@@ -47,6 +48,7 @@ SRCS(
     random.cpp
     simple_cache.h
     source_location.cpp
+    spsc_circular_queue.h
     stlog.cpp
     stlog.h
     text.cpp

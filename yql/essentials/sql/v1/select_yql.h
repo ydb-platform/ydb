@@ -56,20 +56,43 @@ struct TYqlValuesArgs {
     TVector<TVector<TNodePtr>> Rows;
 };
 
-struct TYqlSelectArgs {
+struct TYqlSetItemArgs {
+    TPosition Position;
     TProjection Projection;
     TMaybe<TYqlJoin> Source;
     TMaybe<TNodePtr> Where;
-    TMaybe<TNodePtr> Limit;
-    TMaybe<TNodePtr> Offset;
     TMaybe<TGroupBy> GroupBy;
     TMaybe<TNodePtr> Having;
     TMaybe<TOrderBy> OrderBy;
+    TMaybe<TNodePtr> Limit;
+    TMaybe<TNodePtr> Offset;
 };
+
+enum class EYqlSetOp {
+    Push = 0,
+    Union,
+    UnionAll,
+    Except,
+    ExceptAll,
+    Intersect,
+    IntersectAll,
+};
+
+struct TYqlSelectArgs {
+    TVector<TYqlSetItemArgs> SetItems;
+    TVector<EYqlSetOp> SetOps;
+    TMaybe<TOrderBy> OrderBy;
+    TMaybe<TNodePtr> Limit;
+    TMaybe<TNodePtr> Offset;
+};
+
+EYqlSetOp AllQualified(EYqlSetOp op);
 
 TNodePtr GetYqlSource(const TNodePtr& node);
 
 TNodePtr ToTableExpression(TNodePtr source);
+
+TYqlSelectArgs DestructYqlSelect(TNodePtr node);
 
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
 

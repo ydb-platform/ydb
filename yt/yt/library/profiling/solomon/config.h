@@ -56,6 +56,8 @@ struct TSolomonExporterConfig
     bool MarkAggregates;
     // Enable support of all available solomon aggregation methods.
     bool EnableSolomonAggregates;
+    // Export all global metrics as memonly.
+    bool ExportGlobalsAsMemOnly;
 
     bool StripSensorsNamePrefix;
 

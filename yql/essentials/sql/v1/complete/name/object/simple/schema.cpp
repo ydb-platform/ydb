@@ -21,6 +21,8 @@ private:
     }
 
     static auto FilterEntriesByTypes(const TListFilter& filter) {
+        // TODO(YQL-20095): Explore real problem to fix this.
+        // NOLINTNEXTLINE(bugprone-exception-escape)
         return [filter](auto f) mutable {
             TVector<TFolderEntry> entries = f.ExtractValue();
             EraseIf(entries, [filter = std::move(filter)](const TFolderEntry& entry) {

@@ -23,7 +23,7 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
 
         for (TForceTraversalOperation& operation : Self->ForceTraversals) {
             if (operation.CreatedAt + Self->AnalyzeDeadline < now) {
-                SA_LOG_E("[" << Self->TabletID() << "] Delete long analyze operation, OperationId=" << operation.OperationId);
+                SA_LOG_E("[" << Self->TabletID() << "] Delete long analyze operation, OperationId=" << operation.OperationId.Quote());
 
                 OperationId = operation.OperationId;
                 ReplyToActorId = operation.ReplyToActorId;
@@ -41,13 +41,15 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
         if (OperationId) {
             if (ReplyToActorId) {
                 SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeDeadline::Complete. " <<
-                    "Send TEvAnalyzeResponse for deleted operation, OperationId=" << OperationId << ", ActorId=" << ReplyToActorId);
+                    "Send TEvAnalyzeResponse for deleted operation, OperationId=" << OperationId.Quote() << ", ActorId=" << ReplyToActorId);
                 auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
                 response->Record.SetOperationId(OperationId);
                 response->Record.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+                NYql::IssueToMessage(
+                    NYql::TIssue("ANALYZE deadline exceeded"), response->Record.AddIssues());
                 ctx.Send(ReplyToActorId, response.release());
             } else {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeDeadline::Complete. No ActorId to send reply. OperationId=" << OperationId);
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeDeadline::Complete. No ActorId to send reply. OperationId=" << OperationId.Quote());
             }
             ctx.Send(Self->SelfId(), new TEvPrivate::TEvAnalyzeDeadline());
         } else {

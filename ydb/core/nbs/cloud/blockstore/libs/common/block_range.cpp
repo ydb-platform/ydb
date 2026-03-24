@@ -4,7 +4,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
-namespace NCloud::NBlockStore {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -58,7 +58,7 @@ TString DescribeRange(const TVector<TBlockIndex>& blocks)
 {
     if (blocks) {
         return TStringBuilder()
-            << "[" << blocks.front() << ".." << blocks.back() << "]";
+               << "[" << blocks.front() << ".." << blocks.back() << "]";
     }
     return "<none>";
 }
@@ -66,4 +66,4 @@ TString DescribeRange(const TVector<TBlockIndex>& blocks)
 template TString DescribeRange(const TVector<ui32>& blocks);
 template TString DescribeRange(const TVector<ui64>& blocks);
 
-}   // namespace NCloud::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore

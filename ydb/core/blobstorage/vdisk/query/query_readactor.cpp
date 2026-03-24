@@ -30,8 +30,10 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(!Result->GlueReads.empty());
 
             TReplQuoter::TPtr quoter;
+            NMonitoring::TDynamicCounters::TCounterPtr quoterThrottledCounter;
             if (IsRepl) {
                 quoter = Ctx->VCtx->ReplPDiskReadQuoter;
+                quoterThrottledCounter = Ctx->ReplMonGroup.ReplPDiskReadThrottledMicrosecondsPtr();
             }
 
             // make read requests
@@ -41,15 +43,17 @@ namespace NKikimr {
 
                 // create request
                 std::unique_ptr<NPDisk::TEvChunkRead> msg(new NPDisk::TEvChunkRead(Ctx->PDiskCtx->Dsk->Owner,
-                            Ctx->PDiskCtx->Dsk->OwnerRound, it->Part.ChunkIdx, it->Part.Offset, it->Part.Size,
-                            Priority, cookie));
+                    Ctx->PDiskCtx->Dsk->OwnerRound, it->Part.ChunkIdx, it->Part.Offset, it->Part.Size,
+                    Priority, cookie));
+
+                msg->BlobId = it->HugeBlobId;
 
                 LOG_DEBUG(ctx, BS_VDISK_GET,
                     VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));
 
                 // send request
                 TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(),
-                    msg.release(), 0, 0, nullptr, Span.GetTraceId()), it->Part.Size);
+                    msg.release(), 0, 0, nullptr, Span.GetTraceId()), it->Part.Size, 0, quoterThrottledCounter);
 
                 Counter++;
             }

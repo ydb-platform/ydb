@@ -12,7 +12,7 @@
 #include <concepts>
 #include <optional>
 
-namespace NCloud::NBlockStore {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -32,7 +32,6 @@ struct TBlockRange
     static constexpr TBlockIndex MaxIndex = ::Max<TBlockIndex>();
 
     TBlockRange() = default;
-
 
     // Create range [0, std::numeric_limits<TBlockRange>::max()]
     static TBlockRange Max()
@@ -159,6 +158,27 @@ struct TBlockRange
         return {start, end};
     }
 
+    // Split the range into pieces, the boundaries of which are multiples of the
+    // stripe size.
+    [[nodiscard]] TVector<TBlockRange> Split(TBlockIndex stripeSize) const
+    {
+        if (stripeSize == 0) {
+            return {*this};
+        }
+
+        const ui64 firstStripe = Start / stripeSize;
+        const ui64 lastStripe = End / stripeSize;
+
+        TVector<TBlockRange> result;
+        result.reserve(lastStripe - firstStripe + 1);
+        for (TBlockIndex stripe = firstStripe; stripe <= lastStripe; ++stripe) {
+            const TBlockRange stripeRange =
+                TBlockRange::WithLength(stripe * stripeSize, stripeSize);
+            result.push_back(Intersect(stripeRange));
+        }
+        return result;
+    }
+
     friend bool operator==(const TBlockRange& lhs, const TBlockRange& rhs)
     {
         return lhs.Start == rhs.Start && lhs.End == rhs.End;
@@ -212,7 +232,8 @@ public:
     void OnBlock(TBlockIndex blockIndex)
     {
         // TODO(drbasic). Handle out-of-order blockIndex.
-        // Y_DEBUG_ABORT_UNLESS(Ranges.empty() || Ranges.back().End <= blockIndex);
+        // Y_DEBUG_ABORT_UNLESS(Ranges.empty() || Ranges.back().End <=
+        // blockIndex);
 
         if (Ranges.empty()) {
             Ranges.push_back(
@@ -273,4 +294,4 @@ IOutputStream& operator<<(IOutputStream& out, const TBlockRange<T>& rhs)
     return out;
 }
 
-}   // namespace NCloud::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore

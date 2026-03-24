@@ -15,6 +15,6 @@ date: 2024-02-07T11:13:39+03:00
 +        return PyGILState_Check();
 +    }
 +#endif
-     _PyRuntimeState *runtime = tstate->interp->runtime;
      /* Must be the tstate for this thread */
-     assert(tstate == gilstate_tss_get(runtime));
+     assert(tstate == gilstate_tss_get(tstate->interp->runtime));
+     return tstate == current_fast_get();

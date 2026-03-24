@@ -1,14 +1,19 @@
 #include "ydb_benchmark.h"
 #include "benchmark_utils.h"
+
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/duration.h>
+
 #include <library/cpp/json/json_writer.h>
+
+#include <util/folder/path.h>
+#include <util/generic/serialized_enum.h>
+#include <util/random/shuffle.h>
 #include <util/stream/null.h>
 #include <util/string/printf.h>
-#include <util/folder/path.h>
-#include <util/random/shuffle.h>
+#include <util/thread/pool.h>
 
 namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
@@ -99,6 +104,9 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
 
     config.Opts->AddLongOption('t', "threads", "Number of parallel threads in workload")
         .StoreResult(&Threads).DefaultValue(Threads).RequiredArgument("COUNT");
+
+    config.Opts->AddLongOption("tx-mode", TStringBuilder() << "Transaction mode (" << GetEnumAllNames<BenchmarkUtils::ETxMode>() << ")")
+        .RequiredArgument("STRING").StoreResult(&TxMode).DefaultValue(TxMode);
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
@@ -345,6 +353,9 @@ public:
                     if (Owner.PlanFileName) {
                         settings.PlanFileName = TStringBuilder() << Owner.PlanFileName << "." << QueryName << "." << ToString(Iteration) << ".in_progress";
                     }
+                    // Store max(DefaultMaxRowsPerResultIndex, lines in expected) rows per result index
+                    settings.MaxRowsPerResultIndex = std::max<size_t>(StringSplitter(Expected.c_str()).Split('\n').Count(), BenchmarkUtils::DefaultMaxRowsPerResultIndex);
+
                     Result = Execute(Query, Expected, *Owner.QueryClient, settings);
                 } else {
                     Result = Explain(Query, *Owner.QueryClient, settings);
@@ -500,7 +511,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
                 ++successIteration;
                 if (successIteration == 1) {
                     outFStream << iterExec->GetQueryName() << ": " << Endl;
-                    PrintResult(iterExec->GetResult(), outFStream, iterExec->GetExpected());
+                    PrintResult(iterExec->GetResult(), outFStream);
                 }
                 const auto resHash = iterExec->GetResult().CalcHash();
                 if ((!prevResult || *prevResult != resHash) && iterExec->GetResult().GetDiffErrors()) {
@@ -509,7 +520,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
                             << iterExec->GetQuery() << Endl << Endl <<
                             "UNEXPECTED DIFF: " << Endl
                             << "RESULT: " << Endl;
-                    PrintResult(iterExec->GetResult(), outFStream, iterExec->GetExpected());
+                    PrintResult(iterExec->GetResult(), outFStream);
                     outFStream << Endl
                             << "EXPECTATION: " << Endl << iterExec->GetExpected() << Endl;
                     prevResult = resHash;
@@ -575,16 +586,22 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
     return (queriesWithSomeFails || queriesWithDiff) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
-void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const {
-    TResultSetPrinter printer(TResultSetPrinter::TSettings()
-        .SetOutput(&out)
-        .SetMaxRowsCount(std::max(StringSplitter(expected.c_str()).Split('\n').Count(), (size_t)100))
-        .SetFormat(EDataFormat::Pretty).SetMaxWidth(GetBenchmarkTableWidth())
-    );
-    for (const auto& [i, rr]: res.GetRawResults()) {
-        for(const auto& r: rr) {
+void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out) const {
+    for (const auto& [i, resultData]: res.GetRawResults()) {
+        TResultSetPrinter printer(TResultSetPrinter::TSettings()
+            .SetOutput(&out)
+            .SetFormat(EDataFormat::Pretty)
+            .SetMaxWidth(GetBenchmarkTableWidth())
+        );
+        size_t printedRows = 0;
+        for (const auto& r: resultData.ResultSets) {
             printer.Print(r);
+            printedRows += r.RowsCount();
             printer.Reset();
+        }
+        // Show message if there are more rows than printed
+        if (printedRows < resultData.TotalRowsRead) {
+            out << "And " << (resultData.TotalRowsRead - printedRows) << " more lines, total " << resultData.TotalRowsRead << Endl;
         }
     }
     out << Endl << Endl;
@@ -631,6 +648,7 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
 BenchmarkUtils::TQueryBenchmarkSettings TWorkloadCommandBenchmark::GetBenchmarkSettings(bool withProgress) const {
     BenchmarkUtils::TQueryBenchmarkSettings result;
     result.WithProgress = withProgress;
+    result.TxMode = TxMode;
     result.RetrySettings = RetrySettings;
     if (GlobalDeadline != TInstant::Max()) {
         result.Deadline.Deadline = GlobalDeadline;

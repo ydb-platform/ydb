@@ -33,7 +33,7 @@ namespace {
 } // anonymous namespace
 
 
-TParserFragmentListIndex::TParserFragmentListIndex(TStringBuf data, const TVector<TString>& keyColumns)
+TParserFragmentListIndex::TParserFragmentListIndex(TStringBuf data, const std::vector<TString>& keyColumns)
     : Pos_(data.begin())
     , DataStart_(data.begin())
     , DataEnd_(data.end())

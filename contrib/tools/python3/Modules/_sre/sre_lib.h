@@ -209,6 +209,7 @@ SRE(count)(SRE_STATE* state, const SRE_CODE* pattern, Py_ssize_t maxcount)
     const SRE_CHAR* ptr = (const SRE_CHAR *)state->ptr;
     const SRE_CHAR* end = (const SRE_CHAR *)state->end;
     Py_ssize_t i;
+    INIT_TRACE(state);
 
     /* adjust end */
     if (maxcount < end - ptr && maxcount != SRE_MAXREPEAT)
@@ -372,6 +373,19 @@ SRE(count)(SRE_STATE* state, const SRE_CODE* pattern, Py_ssize_t maxcount)
         state->lastindex = ctx->lastindex; \
     } while (0)
 
+#define LAST_PTR_PUSH()     \
+    do { \
+        TRACE(("push last_ptr: %zd", \
+                PTR_TO_INDEX(ctx->u.rep->last_ptr))); \
+        DATA_PUSH(&ctx->u.rep->last_ptr); \
+    } while (0)
+#define LAST_PTR_POP()  \
+    do { \
+        DATA_POP(&ctx->u.rep->last_ptr); \
+        TRACE(("pop last_ptr: %zd", \
+                PTR_TO_INDEX(ctx->u.rep->last_ptr))); \
+    } while (0)
+
 #define RETURN_ERROR(i) do { return i; } while(0)
 #define RETURN_FAILURE do { ret = 0; goto exit; } while(0)
 #define RETURN_SUCCESS do { ret = 1; goto exit; } while(0)
@@ -448,8 +462,27 @@ do { \
 #define DATA_LOOKUP_AT(t,p,pos) \
     DATA_STACK_LOOKUP_AT(state,t,p,pos)
 
+#define PTR_TO_INDEX(ptr) \
+    ((ptr) ? ((char*)(ptr) - (char*)state->beginning) / state->charsize : -1)
+
+#if VERBOSE
+#  define MARK_TRACE(label, lastmark) \
+    do if (DO_TRACE) { \
+        TRACE(("%s %d marks:", (label), (lastmark)+1)); \
+        for (int j = 0; j <= (lastmark); j++) { \
+            if (j && (j & 1) == 0) { \
+                TRACE((" ")); \
+            } \
+            TRACE((" %zd", PTR_TO_INDEX(state->mark[j]))); \
+        } \
+        TRACE(("\n")); \
+    } while (0)
+#else
+#  define MARK_TRACE(label, lastmark)
+#endif
 #define MARK_PUSH(lastmark) \
     do if (lastmark >= 0) { \
+        MARK_TRACE("push", (lastmark)); \
         size_t _marks_size = (lastmark+1) * sizeof(void*); \
         DATA_STACK_PUSH(state, state->mark, _marks_size); \
     } while (0)
@@ -457,16 +490,19 @@ do { \
     do if (lastmark >= 0) { \
         size_t _marks_size = (lastmark+1) * sizeof(void*); \
         DATA_STACK_POP(state, state->mark, _marks_size, 1); \
+        MARK_TRACE("pop", (lastmark)); \
     } while (0)
 #define MARK_POP_KEEP(lastmark) \
     do if (lastmark >= 0) { \
         size_t _marks_size = (lastmark+1) * sizeof(void*); \
         DATA_STACK_POP(state, state->mark, _marks_size, 0); \
+        MARK_TRACE("pop keep", (lastmark)); \
     } while (0)
 #define MARK_POP_DISCARD(lastmark) \
     do if (lastmark >= 0) { \
         size_t _marks_size = (lastmark+1) * sizeof(void*); \
         DATA_STACK_POP_DISCARD(state, _marks_size); \
+        MARK_TRACE("pop discard", (lastmark)); \
     } while (0)
 
 #define JUMP_NONE            0
@@ -582,6 +618,7 @@ SRE(match)(SRE_STATE* state, const SRE_CODE* pattern, int toplevel)
 
     SRE(match_context)* ctx;
     SRE(match_context)* nextctx;
+    INIT_TRACE(state);
 
     TRACE(("|%p|%p|ENTER\n", pattern, state->ptr));
 
@@ -1160,11 +1197,11 @@ dispatch:
                 LASTMARK_SAVE();
                 MARK_PUSH(ctx->lastmark);
                 /* zero-width match protection */
-                DATA_PUSH(&ctx->u.rep->last_ptr);
+                LAST_PTR_PUSH();
                 ctx->u.rep->last_ptr = state->ptr;
                 DO_JUMP(JUMP_MAX_UNTIL_2, jump_max_until_2,
                         ctx->u.rep->pattern+3);
-                DATA_POP(&ctx->u.rep->last_ptr);
+                LAST_PTR_POP();
                 if (ret) {
                     MARK_POP_DISCARD(ctx->lastmark);
                     RETURN_ON_ERROR(ret);
@@ -1245,11 +1282,11 @@ dispatch:
 
             ctx->u.rep->count = ctx->count;
             /* zero-width match protection */
-            DATA_PUSH(&ctx->u.rep->last_ptr);
+            LAST_PTR_PUSH();
             ctx->u.rep->last_ptr = state->ptr;
             DO_JUMP(JUMP_MIN_UNTIL_3,jump_min_until_3,
                     ctx->u.rep->pattern+3);
-            DATA_POP(&ctx->u.rep->last_ptr);
+            LAST_PTR_POP();
             if (ret) {
                 RETURN_ON_ERROR(ret);
                 RETURN_SUCCESS;
@@ -1675,6 +1712,7 @@ SRE(search)(SRE_STATE* state, SRE_CODE* pattern)
     SRE_CODE* charset = NULL;
     SRE_CODE* overlap = NULL;
     int flags = 0;
+    INIT_TRACE(state);
 
     if (ptr > end)
         return 0;

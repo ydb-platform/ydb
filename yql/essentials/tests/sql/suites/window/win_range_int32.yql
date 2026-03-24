@@ -27,7 +27,7 @@ $win_result = (
                 b
             ORDER BY
                 a ASC
-            RANGE BETWEEN int32('50000') PRECEDING AND CURRENT ROW
+            RANGE BETWEEN int32('50000') PRECEDING AND 0 PRECEDING
         ),
         w2 AS (
             PARTITION COMPACT BY
@@ -43,10 +43,10 @@ $str = ($x) -> {
 };
 
 SELECT
-    Ensure(sum1, sum1 IS NOT DISTINCT FROM actual_sum1, $str(actual_sum1)),
-    Ensure(count1, count1 IS NOT DISTINCT FROM actual_count1, $str(actual_count1)),
-    Ensure(sum2, sum2 IS NOT DISTINCT FROM actual_sum2, $str(actual_sum2)),
-    Ensure(count2, count2 IS NOT DISTINCT FROM actual_count2, $str(actual_count2))
+    Ensure(actual_sum1, sum1 IS NOT DISTINCT FROM actual_sum1, $str(actual_sum1)),
+    Ensure(actual_count1, count1 IS NOT DISTINCT FROM actual_count1, $str(actual_count1)),
+    Ensure(actual_sum2, sum2 IS NOT DISTINCT FROM actual_sum2, $str(actual_sum2)),
+    Ensure(actual_count2, count2 IS NOT DISTINCT FROM actual_count2, $str(actual_count2))
 FROM
     $win_result
 ;

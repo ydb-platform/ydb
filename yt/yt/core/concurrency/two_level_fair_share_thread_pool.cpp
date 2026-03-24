@@ -1,6 +1,6 @@
 #include "two_level_fair_share_thread_pool.h"
-#include "private.h"
 #include "notify_manager.h"
+#include "private.h"
 #include "profiling_helpers.h"
 #include "scheduler_thread.h"
 #include "thread_pool_detail.h"
@@ -10,9 +10,8 @@
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/hazard_ptr.h>
 #include <yt/yt/core/misc/heap.h>
-#include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
-#include <yt/yt/core/misc/range_formatters.h>
+#include <yt/yt/core/misc/ring_queue.h>
 
 #include <yt/yt/library/profiling/sensor.h>
 
@@ -20,15 +19,18 @@
 
 #include <library/cpp/yt/memory/public.h>
 
+#include <library/cpp/yt/misc/range_formatters.h>
 #include <library/cpp/yt/misc/tls.h>
 
-#include <util/system/spinlock.h>
-
 #include <util/generic/xrange.h>
+
+#include <util/system/spinlock.h>
 
 namespace NYT::NConcurrency {
 
 using namespace NProfiling;
+
+const TFairShareThreadPoolTag DefaultExecutionTag = "default";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -42,8 +44,14 @@ DECLARE_REFCOUNTED_CLASS(TBucket)
 
 struct TExecutionPool;
 
+struct TThreadCookie
+{
+    TTwoLevelFairShareQueue* Queue = nullptr;
+    int ThreadIndex = -1;
+};
+
 // High 16 bits is thread index and 48 bits for thread pool ptr.
-YT_DEFINE_THREAD_LOCAL(TPackedPtr, ThreadCookie, 0);
+YT_DEFINE_THREAD_LOCAL(TThreadCookie, ThreadCookie);
 
 constexpr auto LogDurationThreshold = TDuration::Seconds(1);
 
@@ -227,7 +235,7 @@ struct TAction
     TClosure Callback;
     TBucketPtr BucketHolder;
 
-    TPackedPtr EnqueuedThreadCookie = 0;
+    TThreadCookie EnqueuedThreadCookie;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -291,7 +299,7 @@ bool operator<(const TExecutionPool& lhs, const TExecutionPool& rhs)
     return lhs.ExcessTime < rhs.ExcessTime;
 }
 
-using TExecutionPoolPtr = ::NYT::TIntrusivePtr<TExecutionPool>;
+using TExecutionPoolPtr = TIntrusivePtr<TExecutionPool>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -362,7 +370,7 @@ public:
 
     bool CheckAffinity(const IInvokerPtr& invoker) const override
     {
-        return invoker.Get() == this;
+        return invoker == this;
     }
 
     void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
@@ -425,10 +433,10 @@ public:
 
         auto [bucketIt, bucketInserted] = BucketMapping_.emplace(std::pair(poolName, bucketName), nullptr);
 
-        auto bucket = bucketIt->second ? DangerousGetPtr(bucketIt->second) : nullptr;
+        auto bucket = bucketIt->second.Lock();
         if (!bucket) {
             bucket = New<TBucket>(bucketName, poolName, MakeStrong(this));
-            bucketIt->second = bucket.Get();
+            bucketIt->second = bucket;
             bucket->Pool = GetOrRegisterPool(bucket->PoolName);
         }
 
@@ -439,8 +447,8 @@ public:
     void RemoveBucket(TBucket* bucket)
     {
         auto guard = Guard(MappingLock_);
-        auto bucketIt = BucketMapping_.find(std::pair(bucket->PoolName, bucket->BucketName));
 
+        auto bucketIt = BucketMapping_.find(std::pair(bucket->PoolName, bucket->BucketName));
         if (bucketIt != BucketMapping_.end() && bucketIt->second == bucket) {
             BucketMapping_.erase(bucketIt);
         }
@@ -562,7 +570,7 @@ private:
     const TDuration PoolRetentionTime_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, MappingLock_);
-    THashMap<std::pair<std::string, std::string>, TBucket*> BucketMapping_;
+    THashMap<std::pair<std::string, std::string>, TWeakPtr<TBucket>> BucketMapping_;
     THashMap<std::string, TExecutionPool*> PoolMapping_;
 
     TPoolQueue RetainPoolQueue_;
@@ -609,13 +617,18 @@ public:
         , CumulativeSchedulingTimeCounter_(Profiler_
             .WithTags(GetThreadTags(ThreadNamePrefix_))
             .TimeCounter("/time/scheduling_cumulative"))
-        , PoolWeightProvider_(options.PoolWeightProvider)
         , VerboseLogging_(options.VerboseLogging)
+        , PoolWeightProvider_(options.PoolWeightProvider)
     { }
 
     ~TTwoLevelFairShareQueue()
     {
         Shutdown();
+    }
+
+    void SetWeightProvider(IPoolWeightProviderPtr weightProvider)
+    {
+        PoolWeightProvider_ = std::move(weightProvider);
     }
 
     void Configure(int threadCount)
@@ -674,6 +687,9 @@ public:
     // Invoke is lock free on a fast path (a.k.a. no shutdown).
     void Invoke(TClosure callback, TBucket* bucket) override
     {
+        YT_VERIFY(bucket);
+        YT_VERIFY(NYT::GetRefCounter(bucket)->GetRefCount() > 0);
+
         // We can't guarantee read of |true| in time anyway
         // So relaxed order is enough.
         if (Stopped_.load(std::memory_order::relaxed)) {
@@ -821,9 +837,9 @@ private:
     const std::string ThreadNamePrefix_;
     const TProfiler Profiler_;
     const NProfiling::TTimeCounter CumulativeSchedulingTimeCounter_;
-    const IPoolWeightProviderPtr PoolWeightProvider_;
     const bool VerboseLogging_;
 
+    IPoolWeightProviderPtr PoolWeightProvider_;
     std::atomic<bool> Stopped_ = false;
     TMpscStack<TAction> InvokeQueue_;
     char Padding0_[CacheLineSize - sizeof(TMpscStack<TAction>)];
@@ -1110,10 +1126,9 @@ private:
 
             int threadIndex = -1;
 
-            auto unpackedCookie = TTaggedPtr<TTwoLevelFairShareQueue>::Unpack(action.EnqueuedThreadCookie);
             // TODO(lukyan): Check also wait time. If it is too high, no matter where to schedule.
-            if (unpackedCookie.Ptr == this) {
-                threadIndex = unpackedCookie.Tag;
+            if (action.EnqueuedThreadCookie.Queue == this) {
+                threadIndex = action.EnqueuedThreadCookie.ThreadIndex;
             }
 
             if (threadIndex != -1 && threadRequests[threadIndex]) {
@@ -1284,7 +1299,7 @@ protected:
 
     void Initialize()
     {
-        ThreadCookie() = TTaggedPtr(Queue_.Get(), static_cast<ui16>(Index_)).Pack();
+        ThreadCookie() = {.Queue = Queue_.Get(), .ThreadIndex = Index_};
     }
 
     void StopPrologue() override
@@ -1355,6 +1370,11 @@ public:
     {
         EnsureStarted();
         return Queue_->GetInvoker(poolName, bucketName);
+    }
+
+    void SetWeightProvider(IPoolWeightProviderPtr weightProvider) override
+    {
+        Queue_->SetWeightProvider(std::move(weightProvider));
     }
 
     void Shutdown() override

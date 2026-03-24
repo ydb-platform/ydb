@@ -125,6 +125,10 @@ public:
             }
         }
 
+        if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
+            config->_KqpEnableSpilling = false;
+        }
+
         config->FreezeDefaults();
 
         return config;
@@ -337,7 +341,7 @@ private:
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
         counters->Counters = Counters;
         counters->DbCounters = DbCounters;
-        counters->TxProxyMon = new NTxProxy::TTxProxyMon(AppData(ctx)->Counters);
+        counters->TxProxyMon = Counters->TxProxyMon;
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
                 QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup);

@@ -169,6 +169,43 @@ void CollectQueryStats(const TActorContext& ctx, const TKqpQueryStats* queryStat
         parametersSize, database, type, requestUnits);
 }
 
+// Attribute LocksBrokenAsVictim to the original query that acquired the locks
+void SendVictimStats(const TActorContext& ctx, ui64 locksBrokenAsVictim,
+    const TString& victimQueryText, const TString& database)
+{
+    if (locksBrokenAsVictim == 0 || victimQueryText.empty()) {
+        return;
+    }
+
+    auto collectEv = MakeHolder<NSysView::TEvSysView::TEvCollectQueryStats>();
+    collectEv->Database = database;
+
+    auto& stats = collectEv->QueryStats;
+
+    auto nodeId = ctx.SelfID.NodeId();
+    stats.SetNodeId(nodeId);
+    stats.SetEndTimeMs(TInstant::Now().MilliSeconds());
+    // Set minimal duration to indicate this is a stats update
+    stats.SetDurationMs(0);
+
+    // Hash on full text (before truncation) to match the original stats entry
+    stats.SetQueryTextHash(MurmurHash<ui64>(victimQueryText.data(), victimQueryText.size()));
+    if (victimQueryText.size() > QUERY_TEXT_LIMIT) {
+        auto limitedText = victimQueryText.substr(0, QUERY_TEXT_LIMIT);
+        stats.SetQueryText(limitedText);
+    } else {
+        stats.SetQueryText(victimQueryText);
+    }
+
+    // Set query type to match the original query (victim queries are typically DML)
+    stats.SetType("data");
+
+    // Only set the victim stats - this is a minimal stats update
+    stats.SetLocksBrokenAsVictim(locksBrokenAsVictim);
+
+    ctx.Send(NSysView::MakeSysViewServiceID(nodeId), std::move(collectEv));
+}
+
 template <typename T>
 ui64 CalcRequestUnitImpl(const T& stats) {
     TDuration totalCpuTime;

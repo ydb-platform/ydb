@@ -105,6 +105,7 @@ message TEvModifySchemeTransactionResult {
     optional uint64 PathCreateTxId = 6;
     optional uint64 PathDropTxId = 7;
     repeated Ydb.Issue.IssueMessage Issues = 8;
+    optional string OperationId = 9;
 }
 
 message TEvDescribeSchemeResult {

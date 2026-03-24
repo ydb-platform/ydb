@@ -27,6 +27,7 @@ protected:
         return NArrow::TStatusValidator::GetValid(Array->GetScalar(index));
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
+    virtual TMinMax DoGetMinMaxScalars() const override;
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
         return std::make_shared<TTrivialArray>(Array->Slice(offset, count));
     }
@@ -38,7 +39,6 @@ protected:
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override;
 
 public:
-
     virtual void Reallocate() override;
 
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
@@ -53,7 +53,8 @@ public:
 
     TTrivialArray(const std::shared_ptr<arrow::Array>& data)
         : TBase(data->length(), EType::Array, data->type())
-        , Array(data) {
+        , Array(data)
+    {
     }
 
     static std::shared_ptr<arrow::Array> BuildArrayFromScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
@@ -66,7 +67,8 @@ public:
 
     TTrivialArray(const std::shared_ptr<arrow::Scalar>& scalar)
         : TBase(1, EType::Array, TValidator::CheckNotNull(scalar)->type)
-        , Array(BuildArrayFromScalar(scalar)) {
+        , Array(BuildArrayFromScalar(scalar))
+    {
     }
 
     template <class TArrowDataType = arrow::StringType>
@@ -153,11 +155,13 @@ protected:
         return std::make_shared<TTrivialChunkedArray>(Array->Slice(offset, count));
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
+    virtual TMinMax DoGetMinMaxScalars() const override;
 
 public:
     TTrivialChunkedArray(const std::shared_ptr<arrow::ChunkedArray>& data)
         : TBase(data->length(), EType::ChunkedArray, data->type())
-        , Array(data) {
+        , Array(data)
+    {
     }
 };
 

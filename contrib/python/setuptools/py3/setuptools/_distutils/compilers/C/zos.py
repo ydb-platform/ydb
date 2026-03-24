@@ -136,8 +136,8 @@ class Compiler(unix.Compiler):
 
         return zos_compilers.get(zos_compiler_names[0], 'ibm-openxl')
 
-    def __init__(self, verbose=False, dry_run=False, force=False):
-        super().__init__(verbose, dry_run, force)
+    def __init__(self, verbose=False, force=False):
+        super().__init__(verbose, force=force)
         self.zos_compiler = self._get_zos_compiler_name()
         sysconfig.customize_compiler(self)
 

@@ -32,16 +32,28 @@ struct TStatEqWidthHistogram {
     std::shared_ptr<TEqWidthHistogram> Data;
 };
 
-enum EStatType {
+struct TStatTableSummary {
+    std::optional<NKikimrStat::TTableSummaryStatistics> Data;
+};
+
+// NB: enum values are serialized into the .metadata/_statistics table.
+enum class EStatType {
+    // Simple table statistics calculated by aggregating shard statistics reports
+    // (row count may be incorrect if the table is not fully compacted as it counts all row versions).
     SIMPLE = 0,
+    // Simple column statistics (number of distinct values, min/max).
     SIMPLE_COLUMN = 1,
+    // Count-min sketch column statistics.
     COUNT_MIN_SKETCH = 2,
+    // Equi-width histogram column statistics.
     EQ_WIDTH_HISTOGRAM = 3,
+    // Correct table row count calculated during ANALYZE.
+    TABLE_SUMMARY = 4,
 };
 
 struct TRequest {
     TPathId PathId;
-    std::optional<ui32> ColumnTag; // not used for simple stat
+    std::optional<ui32> ColumnTag; // not used for SIMPLE or TABLE_SUMMARY stats
 };
 
 struct TResponse {
@@ -51,6 +63,7 @@ struct TResponse {
     TStatSimpleColumn SimpleColumn;
     TStatCountMinSketch CountMinSketch;
     TStatEqWidthHistogram EqWidthHistogram;
+    TStatTableSummary TableSummary;
 };
 
 // A single item of columnar statistics ready to be saved in the internal table.
@@ -111,7 +124,9 @@ struct TEvStatistics {
         EvAggregateKeepAlive,
         EvAggregateKeepAliveAck,
 
-        EvFinishTraversal,
+        EvAnalyzeActorResult,
+
+        EvAnalyzeCancel,
 
         EvEnd
     };
@@ -275,6 +290,12 @@ struct TEvStatistics {
         EvAnalyzeStatusResponse>
     {};
 
+    struct TEvAnalyzeCancel : public TEventPB<
+        TEvAnalyzeCancel,
+        NKikimrStat::TEvAnalyzeCancel,
+        EvAnalyzeCancel>
+    {};
+
     struct TEvAnalyzeShard : public TEventPB<
         TEvAnalyzeShard,
         NKikimrStat::TEvAnalyzeShard,
@@ -299,8 +320,8 @@ struct TEvStatistics {
         EvStatisticsResponse>
     {};
 
-    struct TEvFinishTraversal : public TEventLocal<
-        TEvFinishTraversal, EvFinishTraversal>
+    struct TEvAnalyzeActorResult : public TEventLocal<
+        TEvAnalyzeActorResult, EvAnalyzeActorResult>
     {
         enum class EStatus {
             Success,
@@ -308,14 +329,17 @@ struct TEvStatistics {
             TableNotFound,
         };
         EStatus Status;
+        NYql::TIssues Issues;
         std::vector<TStatisticsItem> Statistics;
+        bool Final; // Indicates that the actor has finished.
 
-        explicit TEvFinishTraversal(std::vector<TStatisticsItem> statistics)
+        TEvAnalyzeActorResult(std::vector<TStatisticsItem> statistics, bool final)
             : Status(EStatus::Success)
             , Statistics(std::move(statistics))
+            , Final(final)
         {}
 
-        explicit TEvFinishTraversal(EStatus status) : Status(status) {}
+        explicit TEvAnalyzeActorResult(EStatus status) : Status(status), Final(true) {}
     };
 };
 

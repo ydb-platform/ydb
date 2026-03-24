@@ -80,7 +80,7 @@ namespace NKikimr {
             // fourth step: sanity check
             Y_VERIFY_S(!destLen, LogPrefix);
 
-            std::optional<TRcBuf> data = Read(part);
+            std::optional<TRcBuf> data = Read(part, {});
             if (!data) {
                 STLOGX(GetActorContext(), PRI_WARN, BS_VDISK_SCRUB, VDS13, VDISKP(LogPrefix, "index is corrupt, restoring"),
                     (SstId, sst->AssignedSstId), (Location, part));
@@ -88,7 +88,7 @@ namespace NKikimr {
                 ui32 offset = part.Offset - part.Offset % ScrubCtx->PDiskCtx->Dsk->AppendBlockSize;
                 if (const ui32 prefixLen = part.Offset - offset) {
                     // restore prefixLen bytes of data before the index
-                    std::optional<TRcBuf> data = Read(TDiskPart(part.ChunkIdx, offset, prefixLen));
+                    std::optional<TRcBuf> data = Read(TDiskPart(part.ChunkIdx, offset, prefixLen), {});
                     if (data) {
                         regen = TStringBuf(*data) + regen;
                         part.Offset = offset;
@@ -158,7 +158,7 @@ namespace NKikimr {
             TDiskPart interval;
             auto doCheck = [&] {
                 if (interval != TDiskPart()) {
-                    const bool intervalReadable = IsReadable(interval);
+                    const bool intervalReadable = IsReadable(interval, {});
                     STLOGX(GetActorContext(), intervalReadable ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDS04,
                         VDISKP(LogPrefix, "small blob interval checked"), (Interval, interval),
                         (IsReadable, intervalReadable), (NumBlobsOfInterest, pendingBlobs.size()));
@@ -166,7 +166,7 @@ namespace NKikimr {
                     MonGroup.SmallBlobIntervalBytesRead() += interval.Size;
 
                     for (TBlobOnDisk *blob : pendingBlobs) {
-                        const bool blobReadable = intervalReadable || IsReadable(blob->Part);
+                        const bool blobReadable = intervalReadable || IsReadable(blob->Part, {});
                         if (!intervalReadable) {
                             STLOGX(GetActorContext(), blobReadable ? PRI_INFO : PRI_ERROR, BS_VDISK_SCRUB, VDS12,
                                 VDISKP(LogPrefix, "small blob from unreadable interval checked"),
@@ -219,12 +219,12 @@ namespace NKikimr {
                 NMatrix::TVectorType needed = blob.Needed;
                 Y_VERIFY_S(!needed.Empty(), LogPrefix);
 
-                STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS11, VDISKP(LogPrefix, "reading out blob"), (SstId, SstId),
-                    (Id, blob.Id));
+                STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS11, VDISKP(LogPrefix, "reading out blob"),
+                    (SstId, SstId), (Id, blob.Id));
 
                 for (const TBlobOnDisk& replica : merger.BlobsOnDisk) {
                     if (!(replica.Local & needed).Empty()) {
-                        const bool blobReadable = IsReadable(replica.Part);
+                        const bool blobReadable = IsReadable(replica.Part, {});
                         STLOGX(GetActorContext(), blobReadable ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDS16,
                             VDISKP(LogPrefix, "read replica"), (SstId, SstId), (Id, blob.Id), (Location, replica.Part),
                             (Local, replica.Local), (IsReadable, blobReadable));

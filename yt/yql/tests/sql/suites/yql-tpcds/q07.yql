@@ -1,0 +1,36 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    i_item_id,
+    Avg(ss_quantity) AS agg1,
+    Avg(ss_list_price) AS agg2,
+    Avg(ss_coupon_amt) AS agg3,
+    Avg(ss_sales_price) AS agg4
+FROM
+    plato.store_sales
+,
+    plato.customer_demographics
+,
+    plato.date_dim
+,
+    plato.item
+,
+    plato.promotion
+WHERE
+    ss_sold_date_sk == d_date_sk
+    AND ss_item_sk == i_item_sk
+    AND ss_cdemo_sk == cd_demo_sk
+    AND ss_promo_sk == p_promo_sk
+    AND cd_gender == 'F'
+    AND cd_marital_status == 'W'
+    AND cd_education_status == 'Primary'
+    AND (p_channel_email == 'N' OR p_channel_event == 'N')
+    AND d_year == 1998
+GROUP BY
+    i_item_id
+ORDER BY
+    i_item_id
+LIMIT 100;

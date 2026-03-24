@@ -8882,6 +8882,79 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
         }
     }
 
+    Y_UNIT_TEST(TruncateGarbageCollection) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        // Start the first tablet
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        // Init schema
+        {
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+            env.SendSync(rows.MakeScheme(std::move(policy)));
+        }
+
+        Cerr << "...inserting initial rows" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxLambda(
+            OpWrite(1, "value1"),
+            OpWrite(2, "value2"))
+        });
+
+        Cerr << "...compacting table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        // Sleep a little, tablet may collect some older compacted garbage
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        size_t doNotKeep = 0;
+        auto garbageCollectObserver = env->AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](auto& ev) {
+            auto* msg = ev->Get();
+            Cerr << "gc " << msg->ToString() << Endl;
+            if (msg->DoNotKeep) {
+                doNotKeep += msg->DoNotKeep->size();
+            }
+        });
+        auto putObserver = env->AddObserver<TEvBlobStorage::TEvPut>([&](auto& ev) {
+            auto* msg = ev->Get();
+            Cerr << "put " << msg->Id << Endl;
+        });
+
+        Cerr << "!!! truncate begin !!!" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxLambda(
+            OpTruncate())
+        });
+        Cerr << "!!! truncate end !!!" << Endl;
+
+        // Sleep a little, tablet is expected to collect truncated garbage
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(doNotKeep > 0, "Tablet did not collect any blobs");
+
+        // Verify tablet doesn't collect any important data and successfully restarts
+        Cerr << "...restarting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_SensitiveColumns) {
@@ -8984,6 +9057,149 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_SensitiveColumns) {
 
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_CorruptedBlobs) {
+
+    static constexpr ui32 TableId = 200;
+    static constexpr ui32 KeyColumnId = 1;
+    static constexpr ui32 ValueColumnId = 2;
+
+    struct TTxSchema : public ITransaction {
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            txc.DB.Alter()
+                .AddTable("test_data", TableId)
+                .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false, false)
+                .AddColumnToKey(TableId, 1);
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxWriteRow : public ITransaction {
+        i64 Key;
+        TString Value;
+
+        TTxWriteRow(i64 key, TString value) : Key(key), Value(std::move(value)) {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            const auto keyCell = NScheme::TInt64::TInstance(Key);
+
+            const auto valueCell = NScheme::TString::TInstance(Value);
+            NTable::TUpdateOp ops{ ValueColumnId, NTable::ECellOp::Set, valueCell };
+
+            txc.DB.Update(TableId, NTable::ERowOp::Upsert, { keyCell }, { ops });
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(TestCorruptedSchemaBlob) {
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        // Initialize table schema
+        env.SendSync(new NFake::TEvExecute{ new TTxSchema });
+
+        THashSet<TLogoBlobID> corruptedBlobs;
+        auto getResultObserver = env->AddObserver<TEvBlobStorage::TEvGetResult>([&](auto& ev) {
+            if (env->FindActorName(ev->GetRecipientRewrite()) != "FLAT_EXECUTOR") {
+                return;
+            }
+            auto* msg = ev->Get();
+            for (ui32 i = 0; i < msg->ResponseSz; ++i) {
+                auto& res = msg->Responses[i];
+                // Corrupt RedoLz4 blobs
+                if (res.Id.Cookie() == 0x2000 && corruptedBlobs.insert(res.Id).second) {
+                    Cerr << "... corrupting blob " << res.Id << Endl;
+                    TString data;
+                    data.resize(res.Buffer.size());
+                    for (size_t i = 0; i < data.size(); ++i) {
+                        data[i] = char((i + 1) & 0xff);
+                    }
+                    res.Buffer = TRope(std::move(data));
+                }
+            }
+        });
+
+        Cerr << "... rebooting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(corruptedBlobs.size() > 0, "did not corrupt any blobs");
+
+        env.WaitForGone();
+    }
+
+    Y_UNIT_TEST(TestCorruptedRedoCommit) {
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        // Initialize table schema
+        env.SendSync(new NFake::TEvExecute{ new TTxSchema });
+
+        // Write a large string value, which will become a large redo commit
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(1, TString(size_t(65536), 'x')) });
+
+        THashSet<TLogoBlobID> corruptedBlobs;
+        auto getResultObserver = env->AddObserver<TEvBlobStorage::TEvGetResult>([&](auto& ev) {
+            if (env->FindActorName(ev->GetRecipientRewrite()) != "FLAT_EXECUTOR") {
+                return;
+            }
+            auto* msg = ev->Get();
+            for (ui32 i = 0; i < msg->ResponseSz; ++i) {
+                auto& res = msg->Responses[i];
+                // Corrupt RedoLz4 blobs
+                if (res.Id.Cookie() == 0x6000 && corruptedBlobs.insert(res.Id).second) {
+                    Cerr << "... corrupting blob " << res.Id << Endl;
+                    TString data;
+                    data.resize(res.Buffer.size());
+                    for (size_t i = 0; i < data.size(); ++i) {
+                        data[i] = char((i + 1) & 0xff);
+                    }
+                    res.Buffer = TRope(std::move(data));
+                }
+            }
+        });
+
+        Cerr << "... rebooting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(corruptedBlobs.size() > 0, "did not corrupt any blobs");
+
+        env.WaitForGone();
+    }
+
 }
 
 }

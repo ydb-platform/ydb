@@ -70,7 +70,7 @@ NYql::NNodes::TExprBase MakeRowsFromTupleDict(const NYql::NNodes::TDqPhyPrecompu
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TDqCnUnionAll> MakeConditionalInsertRows(const NYql::NNodes::TExprBase& input,
     const NYql::TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumn, bool abortOnError,
-    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
 
 enum class TKqpPhyUpsertIndexMode {
     Upsert,
@@ -83,7 +83,8 @@ NYql::NNodes::TMaybeNode<NYql::NNodes::TExprList> KqpPhyUpsertIndexEffectsImpl(T
     const NYql::NNodes::TCoAtomList& returningColumns,
     const NYql::NNodes::TCoAtomList& columnsWithDefaults,
     const NYql::NNodes::TExprBase& tableExpr,
-    const NYql::TKikimrTableDescription& table, const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings,
+    const NYql::TKikimrTableDescription& table, const bool isBatch,
+    const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
 
 

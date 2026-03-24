@@ -40,8 +40,8 @@ NYql::TExprNode::TPtr MakeUniqCheckDict(const TCoLambda& selector,
 class TInsertUniqBuildHelper : public TUniqBuildHelper {
 public:
     TInsertUniqBuildHelper(const NYql::TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumns,
-        NYql::TPositionHandle pos, NYql::TExprContext& ctx)
-    : TUniqBuildHelper(table, inputColumns, nullptr, pos, ctx, true)
+        NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+    : TUniqBuildHelper(table, inputColumns, nullptr, pos, ctx, kqpCtx, true)
     {}
 
 private:
@@ -122,8 +122,8 @@ private:
 class TUpsertUniqBuildHelper : public TUniqBuildHelper {
 public:
     TUpsertUniqBuildHelper(const NYql::TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumns, const THashSet<TString>& usedIndexes,
-        NYql::TPositionHandle pos, NYql::TExprContext& ctx)
-    : TUniqBuildHelper(table, inputColumns, &usedIndexes, pos, ctx, false)
+        NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+    : TUniqBuildHelper(table, inputColumns, &usedIndexes, pos, ctx, kqpCtx, false)
     , PkDict(MakeUniqCheckDict(MakeTableKeySelector(table.Metadata, pos, ctx), RowsListArg, pos, ctx))
     {}
 
@@ -258,7 +258,7 @@ TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoAr
 
     // make uniq check for each uniq constraint
     for (size_t i = 0; i < table.Metadata->Indexes.size(); i++) {
-        if (table.Metadata->Indexes[i].State != TIndexDescription::EIndexState::Ready)
+        if (!EnableOnlineAddUniqueIndex && table.Metadata->Indexes[i].State != TIndexDescription::EIndexState::Ready)
             continue;
         if (table.Metadata->Indexes[i].Type != TIndexDescription::EType::GlobalSyncUnique)
             continue;
@@ -346,9 +346,10 @@ static TExprNode::TPtr CreateRowsToPass(const TCoArgument& rowsListArg, const TM
 }
 
 TUniqBuildHelper::TUniqBuildHelper(const TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumns, const THashSet<TString>* usedIndexes,
-    TPositionHandle pos, TExprContext& ctx, bool insertMode)
+    TPositionHandle pos, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, bool insertMode)
     : RowsListArg(ctx.NewArgument(pos, "rows_list"))
     , False(MakeBool(pos, false, ctx))
+    , EnableOnlineAddUniqueIndex(kqpCtx.Config->FeatureFlags.GetEnableOnlineAddUniqueIndex())
     , Checks(Prepare(RowsListArg, table, inputColumns, usedIndexes, pos, ctx, insertMode))
     , RowsToPass(CreateRowsToPass(RowsListArg, inputColumns, pos, ctx))
 {}
@@ -569,16 +570,17 @@ namespace NKikimr::NKqp::NOpt {
 
 TUniqBuildHelper::TPtr CreateInsertUniqBuildHelper(const NYql::TKikimrTableDescription& table,
     const TMaybe<THashSet<TStringBuf>>& inputColumns, NYql::TPositionHandle pos,
-    NYql::TExprContext& ctx)
+    NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    return std::make_unique<TInsertUniqBuildHelper>(table, inputColumns, pos, ctx);
+    return std::make_unique<TInsertUniqBuildHelper>(table, inputColumns, pos, ctx, kqpCtx);
 }
 
 TUniqBuildHelper::TPtr CreateUpsertUniqBuildHelper(const NYql::TKikimrTableDescription& table,
     const TMaybe<THashSet<TStringBuf>>& inputColumns,
-    const THashSet<TString>& usedIndexes, NYql::TPositionHandle pos, NYql::TExprContext& ctx)
+    const THashSet<TString>& usedIndexes, NYql::TPositionHandle pos, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx)
 {
-    return std::make_unique<TUpsertUniqBuildHelper>(table, inputColumns, usedIndexes, pos, ctx);
+    return std::make_unique<TUpsertUniqBuildHelper>(table, inputColumns, usedIndexes, pos, ctx, kqpCtx);
 }
 
 }

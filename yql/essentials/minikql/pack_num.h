@@ -4,6 +4,8 @@
 #include <util/system/defaults.h>
 #include <util/system/unaligned_mem.h>
 
+#include <array>
+
 namespace NKikimr {
 
 constexpr size_t MAX_PACKED32_SIZE = 5;
@@ -21,7 +23,7 @@ Y_FORCE_INLINE size_t GetPack32Length(ui32 value) {
     }
 }
 
-[[nodiscard]] Y_FORCE_INLINE size_t Pack32(ui32 value, char buffer[MAX_PACKED32_SIZE]) {
+[[nodiscard]] Y_FORCE_INLINE size_t Pack32(ui32 value, char* buffer /* [MAX_PACKED32_SIZE] */) {
     if (value < 0x80) {
         buffer[0] = value << 0x1;
         return 1;
@@ -90,7 +92,7 @@ Y_FORCE_INLINE size_t GetPack64Length(ui64 value) {
     }
 }
 
-[[nodiscard]] Y_FORCE_INLINE size_t Pack64(ui64 value, char buffer[MAX_PACKED64_SIZE]) {
+[[nodiscard]] Y_FORCE_INLINE size_t Pack64(ui64 value, char* buffer /* [MAX_PACKED64_SIZE] */) {
     if (value < 0x80) {
         buffer[0] = value << 1;
         return 1;

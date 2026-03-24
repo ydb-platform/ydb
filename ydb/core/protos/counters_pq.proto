@@ -186,6 +186,7 @@ enum EClientLabeledCounters {
 
     METRIC_READ_QUOTA_PER_CONSUMER_USAGE = 26                        [(LabeledCounterOpts) = {Name: "PartitionMaxReadQuotaUsage" AggrFunc : EAF_MAX SVName: "topic.partition.read.throttled_microseconds_max"}];
     METRIC_TOTAL_COMMIT_MESSAGE_LAG = 27                             [(LabeledCounterOpts) = {Name: "TotalMessageLagByCommitted" AggrFunc : EAF_SUM SVName: "topic.committed_lag_messages"}];
+    METRIC_IN_FLIGHT_LIMIT_REACHED_DURATION_MS = 28                  [(LabeledCounterOpts) = {Name: "InFlightLimitReachedDurationMs" AggrFunc : EAF_MAX SVName: "topic.partition.read.inflight_limit_reached_duration_milliseconds"}];
 }
 
 
@@ -279,7 +280,7 @@ enum EMLPConsumerLabeledCounters {
     METRIC_INFLIGHT_LOCKED_COUNT = 1                              [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.inflight.locked_messages"}];
     METRIC_INFLIGHT_DELAYED_COUNT = 2                             [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.inflight.delayed_messages"}];
     METRIC_INFLIGHT_UNLOCKED_COUNT = 3                            [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.inflight.unlocked_messages"}];
-    METRIC_SCHEDULED_TO_DLQ_COUNT = 4                             [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.scheduled_to_dlq_messages"}]; // TODO name
+    METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT = 4                    [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.inflight.scheduled_to_dlq_messages"}]; // TODO name
 
     METRIC_COMMITTED_COUNT = 5                                    [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.committed_messages"}];
     METRIC_PURGED_COUNT = 6                                       [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.purged_messages"}];

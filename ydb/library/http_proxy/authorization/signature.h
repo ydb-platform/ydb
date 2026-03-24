@@ -29,6 +29,8 @@ public:
 
     TString CalcSignature(const TString& secretKey) const;
 
+    bool Empty() const;
+
 private:
     void Process(const THttpInput& input, const TParsedHttpFull& parsed, const TMaybe<TBuffer>& inputData);
     void ParseAuthorization(const THttpInput& input);
@@ -47,6 +49,7 @@ private:
     TString AwsRegion_;
     TString AwsService_;
     TString AwsRequest_ = "aws4_request";
+    bool Empty_ = true;
 };
 
 } // namespace NKikimr::NSQS

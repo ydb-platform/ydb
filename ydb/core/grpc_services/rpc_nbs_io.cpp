@@ -39,7 +39,7 @@ public:
         tabletId.Parse(diskIdStr.data(), diskIdStr.size());
 
         // Construct WriteBlocks request event from the protobuf request
-        auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
+        auto request = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksRequest>();
         request->Record.SetDiskId(protoRequest->GetDiskId());
         request->Record.SetStartIndex(protoRequest->GetStartIndex());
 
@@ -60,11 +60,11 @@ public:
 private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NYdb::NBS::TEvService::TEvWriteBlocksResponse, Handle);
+            hFunc(NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksResponse, Handle);
         }
     }
 
-    void Handle(NYdb::NBS::TEvService::TEvWriteBlocksResponse::TPtr& ev) {
+    void Handle(NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksResponse::TPtr& ev) {
         LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
             "Grpc service: received WriteBlocksResponse from partition: %s",
             ev->Sender.ToString().data());
@@ -93,7 +93,7 @@ public:
         tabletId.Parse(diskIdStr.data(), diskIdStr.size());
 
         // Construct ReadBlocks request event from the protobuf request
-        auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+        auto request = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksRequest>();
         request->Record.SetDiskId(protoRequest->GetDiskId());
         request->Record.SetStartIndex(protoRequest->GetStartIndex());
         request->Record.SetBlocksCount(protoRequest->GetBlocksCount());
@@ -109,11 +109,11 @@ public:
 private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NYdb::NBS::TEvService::TEvReadBlocksResponse, Handle);
+            hFunc(NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksResponse, Handle);
         }
     }
 
-    void Handle(NYdb::NBS::TEvService::TEvReadBlocksResponse::TPtr& ev) {
+    void Handle(NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksResponse::TPtr& ev) {
         LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
             "Grpc service: received ReadBlocksResponse from partition: %s",
             ev->Sender.ToString().data());

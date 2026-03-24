@@ -47,8 +47,9 @@ Y_UNIT_TEST_SUITE(TSgListIterTest)
             TSgListIter iter(sgList);
             size_t read = iter.Copy(buffer.data(), buffer.size());
             UNIT_ASSERT_VALUES_EQUAL(read, 8);
-            UNIT_ASSERT_VALUES_EQUAL(TStringBuf(buffer.data(), read),
-                                     "abcdefgh");
+            UNIT_ASSERT_VALUES_EQUAL(
+                TStringBuf(buffer.data(), read),
+                "abcdefgh");
 
             read = iter.Copy(buffer.data(), buffer.size());
             UNIT_ASSERT_VALUES_EQUAL(read, 0);

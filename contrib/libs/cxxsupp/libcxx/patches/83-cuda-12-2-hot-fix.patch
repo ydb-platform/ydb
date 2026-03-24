@@ -1,8 +1,8 @@
 diff --git a/include/__type_traits/datasizeof.h b/include/__type_traits/datasizeof.h
-index 0c1ed94..c131287 100644
+index 54735cd..61b763b 100644
 --- a/include/__type_traits/datasizeof.h
 +++ b/include/__type_traits/datasizeof.h
-@@ -33,7 +33,10 @@ inline const size_t __datasizeof_v = __datasizeof(_Tp);
+@@ -31,7 +31,10 @@ inline const size_t __datasizeof_v = __datasizeof(_Tp);
  #else
  template <class _Tp>
  struct _FirstPaddingByte {

@@ -1,0 +1,28 @@
+From b987651396d2219094f151b3e6e96801c2544fa3 Mon Sep 17 00:00:00 2001
+From: Yuriy Chernyshov <thegeorg@yandex-team.com>
+Date: Sat, 28 Feb 2026 10:11:51 +0100
+Subject: [PATCH] Fix clang-cl compilation
+
+Fix the following error:
+
+```
+#error "Never use <avx2intrin.h> directly; include <immintrin.h> instead."
+```
+---
+ source/xxhash.c | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/source/xxhash.c b/source/xxhash.c
+index 505e969..2937df1 100644
+--- a/source/xxhash.c
++++ b/source/xxhash.c
+@@ -46,9 +46,6 @@
+ #        elif defined(__clang__) && defined(_MSC_VER) /* clang-cl.exe */
+ #            include <emmintrin.h>                    /* SSE2 */
+ #            if XXH_DISPATCH_AVX2 || XXH_DISPATCH_AVX512
+-#                include <avx2intrin.h>
+-#                include <avx512fintrin.h>
+-#                include <avxintrin.h>
+ #                include <immintrin.h> /* AVX2, AVX512F */
+ #                include <smmintrin.h>
+ #            endif

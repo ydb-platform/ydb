@@ -261,7 +261,7 @@ struct TCustomGreater: public TAggrGreater {
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto res = CallBinaryUnboxedValueFunction<&CompareCustoms<Slot>>(Type::getInt32Ty(context), left, right, ctx.Codegen, block);
+        const auto res = EmitFunctionCall<&CompareCustoms<Slot>>(Type::getInt32Ty(context), {left, right}, ctx, block);
         const auto comp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, res, ConstantInt::get(res->getType(), 0), "greater", block);
         ValueCleanup(EValueRepresentation::String, left, ctx, block);
         ValueCleanup(EValueRepresentation::String, right, ctx, block);

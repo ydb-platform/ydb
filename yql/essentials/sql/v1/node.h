@@ -24,6 +24,7 @@
 
 #include <array>
 #include <functional>
+#include <utility>
 #include <variant>
 
 namespace NSQLTranslationV1 {
@@ -46,7 +47,7 @@ enum class ENodeState {
     Failed,
     End,
 };
-typedef TEnumBitSet<ENodeState, static_cast<int>(ENodeState::Begin), static_cast<int>(ENodeState::End)> TNodeState;
+using TNodeState = TEnumBitSet<ENodeState, static_cast<int>(ENodeState::Begin), static_cast<int>(ENodeState::End)>;
 
 enum class ESQLWriteColumnMode {
     InsertInto,
@@ -91,7 +92,7 @@ class ITableKeys;
 class ISource;
 class IAggregation;
 class TObjectOperatorContext;
-typedef TIntrusivePtr<IAggregation> TAggregationPtr;
+using TAggregationPtr = TIntrusivePtr<IAggregation>;
 class TColumnNode;
 class TTupleNode;
 class TCallNode;
@@ -99,10 +100,10 @@ class TStructNode;
 class TAccessNode;
 class TLambdaNode;
 class TUdfNode;
-typedef TIntrusivePtr<ISource> TSourcePtr;
+using TSourcePtr = TIntrusivePtr<ISource>;
 
 struct TScopedState;
-typedef TIntrusivePtr<TScopedState> TScopedStatePtr;
+using TScopedStatePtr = TIntrusivePtr<TScopedState>;
 
 inline TString DotJoin(const TString& lhs, const TString& rhs) {
     TStringBuilder sb;
@@ -115,7 +116,7 @@ TString ErrorDistinctWithoutCorrelation(const TString& column);
 
 class INode: public TSimpleRefCount<INode> {
 public:
-    typedef TIntrusivePtr<INode> TPtr;
+    using TPtr = TIntrusivePtr<INode>;
 
     struct TIdPart {
         TString Name;
@@ -123,15 +124,15 @@ public:
 
         // Is so heavily used
         // NOLINTNEXTLINE(google-explicit-constructor)
-        TIdPart(const TString& name)
-            : Name(name)
+        TIdPart(TString name)
+            : Name(std::move(name))
         {
         }
 
         // Is so heavily used
         // NOLINTNEXTLINE(google-explicit-constructor)
         TIdPart(TPtr expr)
-            : Expr(expr)
+            : Expr(std::move(expr))
         {
         }
 
@@ -195,7 +196,7 @@ public:
     virtual TVector<INode::TPtr>* ContentListPtr();
     virtual TAstNode* Translate(TContext& ctx) const = 0;
     virtual TAggregationPtr GetAggregation() const;
-    virtual void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs);
+    virtual bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs);
     virtual TPtr WindowSpecFunc(const TPtr& type) const;
     virtual bool SetViewName(TContext& ctx, TPosition pos, const TString& view);
     virtual bool SetPrimaryView(TContext& ctx, TPosition pos);
@@ -299,7 +300,7 @@ protected:
     bool AsInner_ = false;
     bool DisableSort_ = false;
 };
-typedef INode::TPtr TNodePtr;
+using TNodePtr = INode::TPtr;
 
 bool Init(TContext& ctx, ISource* src, const TVector<TNodePtr>& nodes);
 
@@ -311,9 +312,9 @@ TNodePtr Unwrap(TNodeResult result);
 
 class IProxyNode: public INode {
 public:
-    IProxyNode(TPosition pos, const TNodePtr& parent)
+    IProxyNode(TPosition pos, TNodePtr parent)
         : INode(pos)
-        , Inner_(parent)
+        , Inner_(std::move(parent))
     {
     }
 
@@ -341,7 +342,7 @@ protected:
     ISource* GetSource() override;
     TVector<INode::TPtr>* ContentListPtr() override;
     TAggregationPtr GetAggregation() const override;
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
     TPtr WindowSpecFunc(const TPtr& type) const override;
     bool SetViewName(TContext& ctx, TPosition pos, const TString& view) override;
     bool SetPrimaryView(TContext& ctx, TPosition pos) override;
@@ -409,7 +410,7 @@ TTableHints CloneContainer(const TTableHints& hints);
 
 class TAstAtomNode: public INode {
 public:
-    TAstAtomNode(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg);
+    TAstAtomNode(TPosition pos, TString content, ui32 flags, bool isOptionalArg);
 
     ~TAstAtomNode() override;
 
@@ -483,7 +484,8 @@ class TAstListNodeImpl final: public TAstListNode {
 public:
     explicit TAstListNodeImpl(TPosition pos);
     TAstListNodeImpl(TPosition pos, TVector<TNodePtr> nodes);
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    const TString* GetSourceName() const override;
 
 protected:
     TNodePtr DoClone() const final;
@@ -491,7 +493,7 @@ protected:
 
 class TCallNode: public TAstListNode {
 public:
-    TCallNode(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
+    TCallNode(TPosition pos, TString opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
     TCallNode(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
         : TCallNode(pos, opName, args.size(), args.size(), args)
     {
@@ -508,7 +510,7 @@ protected:
     bool DoInit(TContext& ctx, ISource* src) override;
     bool ValidateArguments(TContext& ctx) const;
     TString GetCallExplain() const;
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
 
 protected:
     TString OpName_;
@@ -583,9 +585,9 @@ using TFunctionConfig = TMap<TString, TNodePtr>;
 
 class TExternalFunctionConfig final: public TAstListNode {
 public:
-    TExternalFunctionConfig(TPosition pos, const TFunctionConfig& config)
+    TExternalFunctionConfig(TPosition pos, TFunctionConfig config)
         : TAstListNode(pos)
-        , Config_(config)
+        , Config_(std::move(config))
     {
     }
 
@@ -721,7 +723,7 @@ struct TTopicRef {
     TNodePtr Keys;
 
     TTopicRef() = default;
-    TTopicRef(const TString& refName, const TDeferredAtom& cluster, TNodePtr keys);
+    TTopicRef(TString refName, TDeferredAtom cluster, TNodePtr keys);
     TTopicRef(const TTopicRef&) = default;
     TTopicRef& operator=(const TTopicRef&) = default;
 };
@@ -730,9 +732,9 @@ struct TIdentifier {
     TPosition Pos;
     TString Name;
 
-    TIdentifier(TPosition pos, const TString& name)
-        : Pos(pos)
-        , Name(name)
+    TIdentifier(TPosition pos, TString name)
+        : Pos(std::move(pos))
+        , Name(std::move(name))
     {
     }
 };
@@ -741,11 +743,17 @@ struct TCompression {
     TMap<TString, TNodePtr> Entries;
 };
 
+struct TEncoding {
+    TString Name;
+    TMap<TString, TNodePtr> Entries;
+};
+
 struct TColumnOptions {
     TNodePtr DefaultExpr;
     TVector<TIdentifier> Families;
     TMaybe<TCompression> Compression;
     bool Nullable = true;
+    TMaybe<TVector<TEncoding>> ColumnEncoding;
 };
 
 struct TColumnSchema {
@@ -755,6 +763,9 @@ struct TColumnSchema {
         SetNotNullConstraint,
         SetFamily,
         SetCompression,
+        SetDefault,
+        DropDefault,
+        SetEncoding,
     };
 
     TPosition Pos;
@@ -766,6 +777,7 @@ struct TColumnSchema {
     const ETypeOfChange TypeOfChange = ETypeOfChange::Nothing;
     bool Nullable = false;
     bool Serial = false;
+    TMaybe<TVector<TEncoding>> ColumnEncoding;
 };
 
 struct TColumns: public TSimpleRefCount<TColumns> {
@@ -798,7 +810,7 @@ public:
 private:
     const TNodePtr CleanOrderExpr_;
 };
-typedef TIntrusivePtr<TSortSpecification> TSortSpecificationPtr;
+using TSortSpecificationPtr = TIntrusivePtr<TSortSpecification>;
 
 enum EFrameType {
     FrameByRows,
@@ -828,7 +840,7 @@ struct TFrameBound: public TSimpleRefCount<TFrameBound> {
     ~TFrameBound() {
     }
 };
-typedef TIntrusivePtr<TFrameBound> TFrameBoundPtr;
+using TFrameBoundPtr = TIntrusivePtr<TFrameBound>;
 
 struct TFrameSpecification: public TSimpleRefCount<TFrameSpecification> {
     EFrameType FrameType = FrameByRows;
@@ -840,7 +852,7 @@ struct TFrameSpecification: public TSimpleRefCount<TFrameSpecification> {
     ~TFrameSpecification() {
     }
 };
-typedef TIntrusivePtr<TFrameSpecification> TFrameSpecificationPtr;
+using TFrameSpecificationPtr = TIntrusivePtr<TFrameSpecification>;
 
 struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec> {
     TNodePtr TimeExtractor;
@@ -853,7 +865,7 @@ struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec
     ~TLegacyHoppingWindowSpec() {
     }
 };
-typedef TIntrusivePtr<TLegacyHoppingWindowSpec> TLegacyHoppingWindowSpecPtr;
+using TLegacyHoppingWindowSpecPtr = TIntrusivePtr<TLegacyHoppingWindowSpec>;
 
 struct TWindowSpecification: public TSimpleRefCount<TWindowSpecification> {
     TMaybe<TString> ExistingWindowName;
@@ -867,8 +879,8 @@ struct TWindowSpecification: public TSimpleRefCount<TWindowSpecification> {
     ~TWindowSpecification() {
     }
 };
-typedef TIntrusivePtr<TWindowSpecification> TWindowSpecificationPtr;
-typedef TMap<TString, TWindowSpecificationPtr> TWinSpecs;
+using TWindowSpecificationPtr = TIntrusivePtr<TWindowSpecification>;
+using TWinSpecs = TMap<TString, TWindowSpecificationPtr>;
 
 TWinSpecs CloneContainer(const TWinSpecs& specs);
 
@@ -884,8 +896,8 @@ struct TWriteSettings {
 
 class TColumnNode final: public INode {
 public:
-    TColumnNode(TPosition pos, const TString& column, const TString& source, bool maybeType);
-    TColumnNode(TPosition pos, const TNodePtr& column, const TString& source);
+    TColumnNode(TPosition pos, TString column, TString source, bool maybeType);
+    TColumnNode(TPosition pos, TNodePtr column, TString source);
 
     ~TColumnNode() override;
     bool IsAsterisk() const override;
@@ -931,7 +943,7 @@ private:
 
 class TArgPlaceholderNode final: public INode {
 public:
-    TArgPlaceholderNode(TPosition pos, const TString& name);
+    TArgPlaceholderNode(TPosition pos, TString name);
 
     TAstNode* Translate(TContext& ctx) const override;
 
@@ -959,7 +971,7 @@ public:
     TNodePtr DoClone() const final;
 
 private:
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
     const TString* GetSourceName() const override;
 
     const TVector<TNodePtr> Exprs_;
@@ -978,7 +990,7 @@ public:
     const TStructNode* GetStructNode() const override;
 
 private:
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
     const TString* GetSourceName() const override;
 
     const TVector<TNodePtr> Exprs_;
@@ -1052,7 +1064,7 @@ private:
     virtual TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const = 0;
 
 protected:
-    IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode mode);
+    IAggregation(TPosition pos, TString name, TString func, EAggregateMode mode);
     TAstNode* Translate(TContext& ctx) const override;
     TNodePtr WrapIfOverState(const TNodePtr& input, bool overState, bool many, TContext& ctx) const;
     TNodePtr GetExtractor(bool many, TContext& ctx) const;
@@ -1106,9 +1118,9 @@ private:
 class TLiteralNode: public TAstListNode {
 public:
     TLiteralNode(TPosition pos, bool isNull);
-    TLiteralNode(TPosition pos, const TString& type, const TString& value);
-    TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags);
-    TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags, const TString& type);
+    TLiteralNode(TPosition pos, TString type, TString value);
+    TLiteralNode(TPosition pos, TString value, ui32 nodeFlags);
+    TLiteralNode(TPosition pos, TString value, ui32 nodeFlags, TString type);
     bool IsNull() const override;
     const TString* GetLiteral(const TString& type) const override;
     void DoUpdateState() const override;
@@ -1194,14 +1206,14 @@ struct TTtlSettings {
         TNodePtr EvictionDelay;
         std::optional<TIdentifier> StorageName;
 
-        explicit TTierSettings(const TNodePtr& evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
+        explicit TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
     };
 
     TIdentifier ColumnName;
     std::vector<TTierSettings> Tiers;
     TMaybe<EUnit> ColumnUnit;
 
-    TTtlSettings(const TIdentifier& columnName, const std::vector<TTierSettings>& tiers, const TMaybe<EUnit>& columnUnit = {});
+    TTtlSettings(TIdentifier columnName, const std::vector<TTierSettings>& tiers, const TMaybe<EUnit>& columnUnit = {});
 };
 
 struct TTableSettings {
@@ -1233,8 +1245,8 @@ struct TTableSettings {
 };
 
 struct TFamilyEntry {
-    explicit TFamilyEntry(const TIdentifier& name)
-        : Name(name)
+    explicit TFamilyEntry(TIdentifier name)
+        : Name(std::move(name))
     {
     }
 
@@ -1252,7 +1264,10 @@ struct TIndexDescription {
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
         GlobalFulltextPlain,
-        GlobalFulltextRelevance
+        GlobalFulltextRelevance,
+        LocalBloomFilter,
+        LocalBloomNgramFilter,
+        GlobalJson
     };
 
     struct TIndexSetting {
@@ -1262,8 +1277,8 @@ struct TIndexDescription {
         TPosition ValuePosition;
     };
 
-    explicit TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)
-        : Name(name)
+    explicit TIndexDescription(TIdentifier name, EType type = EType::GlobalSync)
+        : Name(std::move(name))
         , Type(type)
     {
     }
@@ -1286,6 +1301,8 @@ struct TChangefeedSettings {
     TNodePtr Mode;
     TNodePtr Format;
     TNodePtr InitialScan;
+    TNodePtr UserSIDs;
+    TNodePtr TraceIds;
     TNodePtr VirtualTimestamps;
     TNodePtr BarriersInterval;
     TNodePtr SchemaChanges;
@@ -1298,8 +1315,8 @@ struct TChangefeedSettings {
 };
 
 struct TChangefeedDescription {
-    explicit TChangefeedDescription(const TIdentifier& name)
-        : Name(name)
+    explicit TChangefeedDescription(TIdentifier name)
+        : Name(std::move(name))
         , Disable(false)
     {
     }
@@ -1336,6 +1353,11 @@ struct TAnalyzeParams {
     TVector<TString> Columns;
 };
 
+struct TCompactEntry {
+    TNodePtr Cascade;
+    TNodePtr MaxShardsInFlight;
+};
+
 struct TAlterTableParameters {
     TVector<TColumnSchema> AddColumns;
     TVector<TString> DropColumns;
@@ -1352,9 +1374,24 @@ struct TAlterTableParameters {
     TVector<TChangefeedDescription> AlterChangefeeds;
     TVector<TIdentifier> DropChangefeeds;
     ETableType TableType = ETableType::Table;
+    TMaybe<TCompactEntry> Compact;
 
     bool IsEmpty() const {
-        return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty() && AddColumnFamilies.empty() && AlterColumnFamilies.empty() && !TableSettings.IsSet() && AddIndexes.empty() && AlterIndexes.empty() && DropIndexes.empty() && !RenameIndexTo.Defined() && !RenameTo.Defined() && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
+        return AddColumns.empty() &&
+               DropColumns.empty() &&
+               AlterColumns.empty() &&
+               AddColumnFamilies.empty() &&
+               AlterColumnFamilies.empty() &&
+               !TableSettings.IsSet() &&
+               AddIndexes.empty() &&
+               AlterIndexes.empty() &&
+               DropIndexes.empty() &&
+               !RenameIndexTo.Defined() &&
+               !RenameTo.Defined() &&
+               AddChangefeeds.empty() &&
+               AlterChangefeeds.empty() &&
+               DropChangefeeds.empty() &&
+               !Compact.Defined();
     }
 };
 
@@ -1408,11 +1445,17 @@ struct TTopicConsumerSettings {
     NYql::TResetableSetting<TNodePtr, void> AvailabilityPeriod;
     NYql::TResetableSetting<TNodePtr, void> ReadFromTs;
     NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
+    TNodePtr Type;
+    TNodePtr KeepMessagesOrder;
+    TNodePtr DefaultProcessingTimeout;
+    TNodePtr MaxProcessingAttempts;
+    TNodePtr DeadLetterPolicy;
+    TNodePtr DeadLetterQueue;
 };
 
 struct TTopicConsumerDescription {
-    explicit TTopicConsumerDescription(const TIdentifier& name)
-        : Name(name)
+    explicit TTopicConsumerDescription(TIdentifier name)
+        : Name(std::move(name))
     {
     }
 

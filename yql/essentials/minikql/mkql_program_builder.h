@@ -10,8 +10,7 @@
 
 #include <functional>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class IFunctionRegistry;
 class TBuiltinFunctionRegistry;
@@ -333,22 +332,22 @@ public:
         TRuntimeNode script,
         const std::string_view& file = std::string_view(""), ui32 row = 0, ui32 column = 0);
 
-    typedef std::function<TRuntimeNode()> TZeroLambda;
-    typedef std::function<TRuntimeNode(TRuntimeNode)> TUnaryLambda;
-    typedef std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)> TBinaryLambda;
-    typedef std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode, TRuntimeNode)> TTernaryLambda;
-    typedef std::function<TRuntimeNode(const TArrayRef<const TRuntimeNode>& args)> TArrayLambda;
+    using TZeroLambda = std::function<TRuntimeNode()>;
+    using TUnaryLambda = std::function<TRuntimeNode(TRuntimeNode)>;
+    using TBinaryLambda = std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)>;
+    using TTernaryLambda = std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode, TRuntimeNode)>;
+    using TArrayLambda = std::function<TRuntimeNode(const TArrayRef<const TRuntimeNode>& args)>;
 
-    typedef std::function<TRuntimeNodePair(TRuntimeNode)> TUnarySplitLambda;
-    typedef std::function<TRuntimeNodePair(TRuntimeNode, TRuntimeNode)> TBinarySplitLambda;
+    using TUnarySplitLambda = std::function<TRuntimeNodePair(TRuntimeNode)>;
+    using TBinarySplitLambda = std::function<TRuntimeNodePair(TRuntimeNode, TRuntimeNode)>;
 
-    typedef std::function<TRuntimeNode::TList(TRuntimeNode)> TExpandLambda;
-    typedef std::function<TRuntimeNode::TList(TRuntimeNode::TList)> TWideLambda;
-    typedef std::function<TRuntimeNode::TList(TRuntimeNode::TList, TRuntimeNode::TList)> TBinaryWideLambda;
-    typedef std::function<TRuntimeNode::TList(TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList)> TTernaryWideLambda;
-    typedef std::function<TRuntimeNode(TRuntimeNode::TList)> TNarrowLambda;
+    using TExpandLambda = std::function<TRuntimeNode::TList(TRuntimeNode)>;
+    using TWideLambda = std::function<TRuntimeNode::TList(TRuntimeNode::TList)>;
+    using TBinaryWideLambda = std::function<TRuntimeNode::TList(TRuntimeNode::TList, TRuntimeNode::TList)>;
+    using TTernaryWideLambda = std::function<TRuntimeNode::TList(TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList)>;
+    using TNarrowLambda = std::function<TRuntimeNode(TRuntimeNode::TList)>;
 
-    typedef std::function<TRuntimeNode(TRuntimeNode::TList, TRuntimeNode::TList)> TWideSwitchLambda;
+    using TWideSwitchLambda = std::function<TRuntimeNode(TRuntimeNode::TList, TRuntimeNode::TList)>;
 
     TRuntimeNode Apply(TRuntimeNode callableNode, const TArrayRef<const TRuntimeNode>& args, ui32 dependentCount = 0);
     TRuntimeNode Apply(TRuntimeNode callableNode, const TArrayRef<const TRuntimeNode>& args,
@@ -725,12 +724,12 @@ public:
 
     TRuntimeNode Nop(TRuntimeNode value, TType* returnType);
 
-    typedef TRuntimeNode (TProgramBuilder::*UnaryFunctionMethod)(TRuntimeNode);
-    typedef TRuntimeNode (TProgramBuilder::*BinaryFunctionMethod)(TRuntimeNode, TRuntimeNode);
-    typedef TRuntimeNode (TProgramBuilder::*TernaryFunctionMethod)(TRuntimeNode, TRuntimeNode, TRuntimeNode);
-    typedef TRuntimeNode (TProgramBuilder::*ArrayFunctionMethod)(const TArrayRef<const TRuntimeNode>&);
-    typedef TRuntimeNode (TProgramBuilder::*ProcessFunctionMethod)(TRuntimeNode, const TUnaryLambda&);
-    typedef TRuntimeNode (TProgramBuilder::*NarrowFunctionMethod)(TRuntimeNode, const TNarrowLambda&);
+    using UnaryFunctionMethod = TRuntimeNode (TProgramBuilder::*)(TRuntimeNode);
+    using BinaryFunctionMethod = TRuntimeNode (TProgramBuilder::*)(TRuntimeNode, TRuntimeNode);
+    using TernaryFunctionMethod = TRuntimeNode (TProgramBuilder::*)(TRuntimeNode, TRuntimeNode, TRuntimeNode);
+    using ArrayFunctionMethod = TRuntimeNode (TProgramBuilder::*)(const TArrayRef<const TRuntimeNode>&);
+    using ProcessFunctionMethod = TRuntimeNode (TProgramBuilder::*)(TRuntimeNode, const TUnaryLambda&);
+    using NarrowFunctionMethod = TRuntimeNode (TProgramBuilder::*)(TRuntimeNode, const TNarrowLambda&);
 
     TRuntimeNode PgConst(TPgType* pgType, const std::string_view& value, TRuntimeNode typeMod = {});
     TRuntimeNode PgResolvedCall(bool useContext, const std::string_view& name, ui32 id,
@@ -907,5 +906,4 @@ protected:
 bool CanExportType(TType* type, const TTypeEnvironment& env);
 void EnsureDataOrOptionalOfData(TRuntimeNode node);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

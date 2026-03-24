@@ -11,6 +11,7 @@
 #include <aws/common/uuid.h>
 #include <aws/io/channel_bootstrap.h>
 #include <aws/io/event_loop.h>
+#include <aws/mqtt/private/mqtt_iot_metrics.h>
 #include <aws/mqtt/private/v5/mqtt5_client_impl.h>
 #include <aws/mqtt/private/v5/mqtt5_utils.h>
 #include <aws/mqtt/v5/mqtt5_client.h>
@@ -634,7 +635,9 @@ void aws_mqtt5_packet_connect_storage_clean_up(struct aws_mqtt5_packet_connect_s
     aws_byte_buf_clean_up_secure(&storage->storage);
 }
 
-static size_t s_aws_mqtt5_packet_connect_compute_storage_size(const struct aws_mqtt5_packet_connect_view *view) {
+static size_t s_aws_mqtt5_packet_connect_compute_storage_size(
+    const struct aws_mqtt5_packet_connect_view *view,
+    const struct aws_mqtt5_client_options_storage *options) {
     if (view == NULL) {
         return 0;
     }
@@ -643,7 +646,18 @@ static size_t s_aws_mqtt5_packet_connect_compute_storage_size(const struct aws_m
 
     storage_size += view->client_id.len;
     if (view->username != NULL) {
-        storage_size += view->username->len;
+        if (options) {
+            size_t username_size = 0;
+            aws_mqtt_append_sdk_metrics_to_username(
+                aws_default_allocator(),
+                view->username,
+                options->metrics_storage ? &options->metrics_storage->storage_view : NULL,
+                NULL,
+                &username_size);
+            storage_size += username_size;
+        } else {
+            storage_size += view->username->len;
+        }
     }
     if (view->password != NULL) {
         storage_size += view->password->len;
@@ -666,12 +680,13 @@ static size_t s_aws_mqtt5_packet_connect_compute_storage_size(const struct aws_m
 int aws_mqtt5_packet_connect_storage_init(
     struct aws_mqtt5_packet_connect_storage *storage,
     struct aws_allocator *allocator,
-    const struct aws_mqtt5_packet_connect_view *view) {
+    const struct aws_mqtt5_packet_connect_view *view,
+    const struct aws_mqtt5_client_options_storage *client_options_storage) {
     AWS_ZERO_STRUCT(*storage);
 
     struct aws_mqtt5_packet_connect_view *storage_view = &storage->storage_view;
 
-    size_t storage_capacity = s_aws_mqtt5_packet_connect_compute_storage_size(view);
+    size_t storage_capacity = s_aws_mqtt5_packet_connect_compute_storage_size(view, client_options_storage);
     if (aws_byte_buf_init(&storage->storage, allocator, storage_capacity)) {
         return AWS_OP_ERR;
     }
@@ -686,10 +701,29 @@ int aws_mqtt5_packet_connect_storage_init(
 
     if (view->username != NULL) {
         storage->username = *view->username;
-        if (aws_byte_buf_append_and_update(&storage->storage, &storage->username)) {
-            return AWS_OP_ERR;
+        struct aws_byte_buf metrics_username_buf;
+        AWS_ZERO_STRUCT(metrics_username_buf);
+
+        /* Apply metrics to username if configured */
+        if (client_options_storage) {
+            struct aws_byte_cursor username_cur = storage->username;
+            if (aws_mqtt_append_sdk_metrics_to_username(
+                    allocator,
+                    &username_cur,
+                    client_options_storage->metrics_storage ? &client_options_storage->metrics_storage->storage_view
+                                                            : NULL,
+                    &metrics_username_buf,
+                    NULL)) {
+                return AWS_OP_ERR;
+            }
+            storage->username = aws_byte_cursor_from_buf(&metrics_username_buf);
         }
 
+        int result = aws_byte_buf_append_and_update(&storage->storage, &storage->username);
+        aws_byte_buf_clean_up(&metrics_username_buf);
+        if (result == AWS_OP_ERR) {
+            return AWS_OP_ERR;
+        }
         storage_view->username = &storage->username;
     }
 
@@ -811,7 +845,8 @@ static void s_destroy_operation_connect(void *object) {
 
 struct aws_mqtt5_operation_connect *aws_mqtt5_operation_connect_new(
     struct aws_allocator *allocator,
-    const struct aws_mqtt5_packet_connect_view *connect_options) {
+    const struct aws_mqtt5_packet_connect_view *connect_options,
+    const struct aws_mqtt5_client_options_storage *options_storage) {
     AWS_PRECONDITION(allocator != NULL);
     AWS_PRECONDITION(connect_options != NULL);
 
@@ -832,7 +867,8 @@ struct aws_mqtt5_operation_connect *aws_mqtt5_operation_connect_new(
     aws_priority_queue_node_init(&connect_op->base.priority_queue_node);
     connect_op->base.impl = connect_op;
 
-    if (aws_mqtt5_packet_connect_storage_init(&connect_op->options_storage, allocator, connect_options)) {
+    if (aws_mqtt5_packet_connect_storage_init(
+            &connect_op->options_storage, allocator, connect_options, options_storage)) {
         goto error;
     }
 
@@ -3385,6 +3421,13 @@ int aws_mqtt5_client_options_validate(const struct aws_mqtt5_client_options *opt
         }
     }
 
+    if (options->metrics != NULL) {
+        if (aws_mqtt_validate_iot_metrics(options->metrics)) {
+            AWS_LOGF_ERROR(AWS_LS_MQTT5_GENERAL, "invalid metrics in mqtt5 client configuration");
+            return aws_raise_error(AWS_ERROR_MQTT5_CLIENT_OPTIONS_VALIDATION);
+        }
+    }
+
     return AWS_OP_SUCCESS;
 }
 
@@ -3743,6 +3786,7 @@ void aws_mqtt5_client_options_storage_destroy(struct aws_mqtt5_client_options_st
         aws_mem_release(options_storage->connect->allocator, options_storage->connect);
     }
 
+    aws_mqtt_iot_metrics_storage_destroy(options_storage->metrics_storage);
     aws_mem_release(options_storage->allocator, options_storage);
 }
 
@@ -3807,6 +3851,7 @@ struct aws_mqtt5_client_options_storage *aws_mqtt5_client_options_storage_new(
     }
 
     options_storage->port = options->port;
+
     options_storage->bootstrap = aws_client_bootstrap_acquire(options->bootstrap);
 
     if (options->socket_options != NULL) {
@@ -3929,8 +3974,9 @@ struct aws_mqtt5_client_options_storage *aws_mqtt5_client_options_storage_new(
     }
 
     options_storage->connect = aws_mem_calloc(allocator, 1, sizeof(struct aws_mqtt5_packet_connect_storage));
+    // We pass in a NULL client option as we don't want to store extra metrics info in the connect storage here
     int connect_storage_result =
-        aws_mqtt5_packet_connect_storage_init(options_storage->connect, allocator, &connect_options);
+        aws_mqtt5_packet_connect_storage_init(options_storage->connect, allocator, &connect_options, NULL);
 
     aws_byte_buf_clean_up(&auto_assign_id_buf);
     if (connect_storage_result != AWS_OP_SUCCESS) {
@@ -3953,6 +3999,8 @@ struct aws_mqtt5_client_options_storage *aws_mqtt5_client_options_storage_new(
         options_storage->host_resolution_override.resolve_frequency_ns = aws_timestamp_convert(
             options_storage->max_reconnect_delay_ms, AWS_TIMESTAMP_MILLIS, AWS_TIMESTAMP_NANOS, NULL);
     }
+
+    options_storage->metrics_storage = aws_mqtt_iot_metrics_storage_new(allocator, options->metrics);
 
     return options_storage;
 

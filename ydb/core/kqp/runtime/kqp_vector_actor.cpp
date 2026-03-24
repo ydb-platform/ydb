@@ -230,6 +230,10 @@ private:
                 auto & clusterIds = (IsPrefixed || ResolvedLevel > 0 ? CurClusterIds : RootClusterIds);
                 for (size_t rowNum: LevelClusters[cluster]) {
                     auto embedding = PendingRows[rowNum].GetElement(Settings.GetVectorColumnIndex());
+                    if (!embedding.IsString() && !embedding.IsEmbedded()) {
+                        // Skip invalid values, the only legitimate one here is NULL
+                        continue;
+                    }
                     clusters->FindClusters(embedding.AsStringRef(), TmpClusters, OverlapClusters, OverlapRatio);
                     for (auto& cluster: TmpClusters) {
                         NextClusters[rowNum].push_back(std::make_pair(clusterIds[cluster.first], cluster.second));
@@ -296,6 +300,9 @@ private:
         }
         if (Settings.HasLockNodeId()) {
             src->SetLockNodeId(Settings.GetLockNodeId());
+        }
+        if (Settings.HasQuerySpanId()) {
+            src->SetQuerySpanId(Settings.GetQuerySpanId());
         }
 
         // Level table key is parent+id
@@ -441,6 +448,11 @@ private:
             i64 rowSize = 0;
             auto& row = PendingRows[PendingRows.size()-1];
             auto& rowClusters = PrevClusters[PendingRows.size()-1];
+            if (!rowClusters.size()) {
+                PendingRows.pop_back();
+                PrevClusters.pop_back();
+                continue;
+            }
 
             NUdf::TUnboxedValue* rowItems = nullptr;
             // Output columns: Cluster ID + Source table PK [ + Data Columns ]

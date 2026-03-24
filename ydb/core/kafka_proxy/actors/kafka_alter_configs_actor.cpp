@@ -96,7 +96,8 @@ public:
                 groupConfig.MutablePQTabletConfig(),
                 compConsumer,
                 NKikimr::NGRpcProxy::V1::GetSupportedClientServiceTypes(pqConfig),
-                pqConfig);
+                pqConfig,
+                nullptr);
         }
     }
 private:

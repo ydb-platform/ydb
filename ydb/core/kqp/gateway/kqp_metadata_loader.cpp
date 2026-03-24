@@ -129,7 +129,8 @@ template<typename TIndexProto>
 void CheckWritesAreDisabled(const TIndexProto& indexes, NYql::TKikimrTableMetadataPtr tableMeta) {
     TStringBuilder disableReason;
     for (const NKikimrSchemeOp::TIndexDescription& index : indexes) {
-        if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique && index.GetState() != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+        if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique &&
+            index.GetState() != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
             if (disableReason) {
                 disableReason << ", ";
             }
@@ -148,7 +149,8 @@ TString GetTypeName(const NScheme::TTypeInfoMod& typeInfoMod) {
 }
 
 TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
-        const TString& cluster, const TString& tableName, std::optional<TString> queryName = std::nullopt) {
+    const TString& cluster, const TString& tableName, std::optional<TString> queryName,
+    bool enableOnlineAddUniqueIndex = false) {
     using EKind = NSchemeCache::TSchemeCacheNavigate::EKind;
 
     TTableMetadataResult result;
@@ -257,7 +259,9 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
     IndexProtoToMetadata(entry.Indexes, tableMeta);
 
     // Check if we have unique indexes that are not built
-    CheckWritesAreDisabled(entry.Indexes, tableMeta);
+    if (!enableOnlineAddUniqueIndex) {
+        CheckWritesAreDisabled(entry.Indexes, tableMeta);
+    }
 
     return result;
 }
@@ -406,7 +410,7 @@ TTableMetadataResult GetSysViewMetadataResult(const NSchemeCache::TSchemeCacheNa
 }
 
 TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& cluster,
-    const TString& database, const TString& topicName)
+    const TString& database, const TString& topicName, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
 {
     auto metadata = MakeIntrusive<NYql::TKikimrTableMetadata>();
     metadata->DoesExist = true;
@@ -430,6 +434,10 @@ TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavi
     auto& properties = *source.Properties.mutable_properties();
     properties.emplace("database_name", database);
 
+    if (userToken && userToken->GetSerializedToken()) {
+        properties.emplace("transient_token", userToken->GetSerializedToken());
+    }
+
     TTableMetadataResult result = {.Metadata = metadata};
     result.SetSuccess();
     return result;
@@ -437,7 +445,8 @@ TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavi
 
 TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
     const TString& cluster, const TString& mainCluster, const TString& database, const TString& tableName,
-    std::optional<TString> queryName = std::nullopt)
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, std::optional<TString> queryName = std::nullopt,
+    bool enableOnlineAddUniqueIndex = false)
 {
     using TResult = NYql::IKikimrGateway::TTableMetadataResult;
     using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
@@ -492,10 +501,10 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             result = GetSysViewMetadataResult(entry, cluster, tableName);
             break;
         case EKind::KindTopic:
-            result = GetTopicMetadataResult(entry, cluster, database, tableName);
+            result = GetTopicMetadataResult(entry, cluster, database, tableName, userToken);
             break;
         default:
-            result = GetTableMetadataResult(entry, cluster, tableName, queryName);
+            result = GetTableMetadataResult(entry, cluster, tableName, queryName, enableOnlineAddUniqueIndex);
     }
     return result;
 }
@@ -977,12 +986,15 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     const auto schemeCacheId = MakeSchemeCacheID();
 
+    const bool enableOnlineAddUniqueIndex = Config && Config->FeatureFlags.GetEnableOnlineAddUniqueIndex();
+
     auto ptr = weak_from_base();
     auto future = SendActorRequest<TRequest, TResponse, TResult>(
         ActorSystem,
         schemeCacheId,
         ev.Release(),
-        [userToken, database, cluster, mainCluster = Cluster, table, settings, expectedSchemaVersion, ptr, queryName, externalPath]
+        [userToken, database, cluster, mainCluster = Cluster, table, settings,
+            expectedSchemaVersion, ptr, queryName, externalPath, enableOnlineAddUniqueIndex]
             (TPromise<TResult> promise, TResponse&& response) mutable
         {
             try {
@@ -993,7 +1005,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 auto& entry = InferEntry(navigate.ResultSet);
 
                 if (entry.Status != EStatus::Ok) {
-                    promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table));
+                    promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table, userToken,
+                        std::nullopt, enableOnlineAddUniqueIndex));
                     return;
                 }
 
@@ -1031,7 +1044,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                 switch (entry.Kind) {
                     case EKind::KindExternalDataSource: {
-                        auto externalDataSourceMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table);
+                        auto externalDataSourceMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table,
+                            userToken, std::nullopt, enableOnlineAddUniqueIndex);
                         if (!externalDataSourceMetadata.Success() || !settings.RequestAuthInfo_) {
                             promise.SetValue(externalDataSourceMetadata);
                             return;
@@ -1135,7 +1149,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     case EKind::KindExternalTable: {
                         YQL_ENSURE(entry.ExternalTableInfo, "expected external table info");
                         const auto& dataSourcePath = entry.ExternalTableInfo->Description.GetDataSourcePath();
-                        auto externalTableMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table);
+                        auto externalTableMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table, userToken,
+                            std::nullopt, enableOnlineAddUniqueIndex);
                         if (!externalTableMetadata.Success()) {
                             promise.SetValue(externalTableMetadata);
                             return;
@@ -1168,7 +1183,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         break;
                     }
                     default: {
-                        promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table, queryName));
+                        promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table, userToken, queryName, enableOnlineAddUniqueIndex));
                     }
                 }
             }

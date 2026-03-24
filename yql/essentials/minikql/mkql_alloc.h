@@ -198,7 +198,14 @@ struct TMkqlArrowHeader {
     ui64 Size;
     ui64 Offset;
     std::atomic<ui64> UseCount;
-    char Padding[ArrowAlignment - sizeof(TAllocState::TListEntry) - sizeof(ui64) - sizeof(ui64) - sizeof(std::atomic<ui64>)];
+    std::array<
+        char,
+        ArrowAlignment -
+            sizeof(TAllocState::TListEntry) -
+            sizeof(ui64) -
+            sizeof(ui64) -
+            sizeof(std::atomic<ui64>)>
+        Padding;
 };
 
 static_assert(sizeof(TMkqlArrowHeader) == ArrowAlignment);
@@ -300,12 +307,13 @@ public:
         other.CurrentPages_ = TAllocState::EmptyCurrentPages;
     }
 
-    void operator=(const TPagedArena&) = delete;
-    void operator=(TPagedArena&& other) noexcept {
+    TPagedArena& operator=(const TPagedArena&) = delete;
+    TPagedArena& operator=(TPagedArena&& other) noexcept {
         Clear();
         PagePool_ = other.PagePool_;
         CurrentPages_ = other.CurrentPages_;
         other.CurrentPages_ = TAllocState::EmptyCurrentPages;
+        return *this;
     }
 
     ~TPagedArena() noexcept {
@@ -349,6 +357,7 @@ inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemor
     if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
         if (!ret) {
+            // NOLINTNEXTLINE(hicpp-exception-baseclass)
             throw TMemoryLimitExceededException();
         }
 
@@ -389,6 +398,7 @@ inline void* MKQLAllocFastWithSizeImpl(size_t sz, TAllocState* state, const EMem
         state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
         if (!ret) {
+            // NOLINTNEXTLINE(hicpp-exception-baseclass)
             throw TMemoryLimitExceededException();
         }
 
@@ -567,13 +577,13 @@ T* AllocateOn(TAllocState* state, Args&&... args)
 
 template <typename Type, EMemorySubPool MemoryPool = EMemorySubPool::Default>
 struct TMKQLAllocator {
-    typedef Type value_type;
-    typedef Type* pointer;
-    typedef const Type* const_pointer;
-    typedef Type& reference;
-    typedef const Type& const_reference;
-    typedef size_t size_type;
-    typedef ptrdiff_t difference_type;
+    using value_type = Type;
+    using pointer = Type*;
+    using const_pointer = const Type*;
+    using reference = Type&;
+    using const_reference = const Type&;
+    using size_type = size_t;
+    using difference_type = ptrdiff_t;
 
     TMKQLAllocator() noexcept = default;
     ~TMKQLAllocator() noexcept = default;
@@ -585,7 +595,7 @@ struct TMKQLAllocator {
 
     template <typename U>
     struct rebind { // NOLINT(readability-identifier-naming)
-        typedef TMKQLAllocator<U, MemoryPool> other;
+        using other = TMKQLAllocator<U, MemoryPool>;
     };
     template <typename U>
     bool operator==(const TMKQLAllocator<U, MemoryPool>&) const {
@@ -612,13 +622,13 @@ using TWithTemporaryMiniKQLAlloc = TWithMiniKQLAlloc<EMemorySubPool::Temporary>;
 
 template <typename Type>
 struct TMKQLHugeAllocator {
-    typedef Type value_type;
-    typedef Type* pointer;
-    typedef const Type* const_pointer;
-    typedef Type& reference;
-    typedef const Type& const_reference;
-    typedef size_t size_type;
-    typedef ptrdiff_t difference_type;
+    using value_type = Type;
+    using pointer = Type*;
+    using const_pointer = const Type*;
+    using reference = Type&;
+    using const_reference = const Type&;
+    using size_type = size_t;
+    using difference_type = ptrdiff_t;
 
     TMKQLHugeAllocator() noexcept = default;
     ~TMKQLHugeAllocator() noexcept = default;

@@ -65,11 +65,19 @@ public:
             return;
         }
 
+        std::optional<ui32> followerId = GetFollowerId(ctx);
         LOG_TRACE_S(ctx, NKikimrServices::CMS,
-                    "TJsonProxyBase send request to " << GetTabletName() << " tablet " << tid);
+                    "TJsonProxyBase send request to " << GetTabletName()
+                        << " tablet " << tid
+                        << ", followerId " << ((followerId) ? ToString(*followerId) : TString("(undefined)"))
+        );
 
         NTabletPipe::TClientConfig pipeConfig;
+
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
+        pipeConfig.AllowFollower = (followerId && (*followerId != 0));
+        pipeConfig.FollowerId = followerId;
+
         Pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tid, pipeConfig));
         NTabletPipe::SendData(ctx, Pipe, request.Release());
 
@@ -77,7 +85,8 @@ public:
     }
 
     virtual TAutoPtr<TRequestEvent> PrepareRequest(const TActorContext &ctx) = 0;
-    virtual ui64 GetTabletId(const TActorContext &ctx) const = 0;
+    virtual ui64 GetTabletId(const TActorContext& ctx) const = 0;
+    virtual std::optional<ui32> GetFollowerId(const TActorContext& ctx) const = 0;
     virtual TString GetTabletName() const = 0;
 
 protected:
@@ -242,8 +251,12 @@ public:
     {
     }
 
-    ui64 GetTabletId(const TActorContext& /*ctx*/) const override {
+    ui64 GetTabletId(const TActorContext&) const override {
         return useConsole ? MakeConsoleID() : MakeCmsID();
+    }
+
+    std::optional<ui32> GetFollowerId(const TActorContext&) const override {
+        return std::optional<ui32>(); // Do not force a specific leader/follower
     }
 
     TString GetTabletName() const override {

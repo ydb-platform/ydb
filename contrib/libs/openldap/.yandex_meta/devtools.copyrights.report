@@ -32,7 +32,7 @@
 KEEP     COPYRIGHT_SERVICE_LABEL 10fecba34876a6c4c145ae945f484192
 BELONGS ya.make
     License text:
-         * Copyright 1998-2024 The OpenLDAP Foundation.
+         * Copyright 1998-2026 The OpenLDAP Foundation.
          * Portions Copyright 1998 A. Hartgers.
          * All rights reserved.
     Scancode info:
@@ -41,6 +41,21 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         libraries/libldap/util-int.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1668e480e8ccadb196ab8972610c5829
+BELONGS ya.make
+    License text:
+         * Copyright 2004-2026 The OpenLDAP Foundation.
+         * Portions Copyright 2004 Hewlett-Packard Company.
+         * Portions Copyright 2004 Howard Chu, Symas Corp.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libraries/libldap/account_usability.c [4:7]
+        libraries/libldap/ppolicy.c [4:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 16ed76d63a9c46131af23245e9ca696b
 BELONGS ya.make
@@ -81,10 +96,10 @@ BELONGS ya.make
     Files with this license:
         libraries/liblunicode/ucdata/MUTTUCData.txt [4:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 1f6f85e2b7283ab6f0caf820d5dbe651
+KEEP     COPYRIGHT_SERVICE_LABEL 25d24f11b8ec29e81036dd69380cab3d
 BELONGS ya.make
     License text:
-         * Copyright 1999-2024 The OpenLDAP Foundation.
+         * Copyright 1999-2026 The OpenLDAP Foundation.
          * Portions Copyright 1999-2003 Kurt D. Zeilenga.
          * All rights reserved.
     Scancode info:
@@ -122,6 +137,18 @@ BELONGS libraries/liblber/ya.make
     Files with this license:
         libraries/liblber/bprint.c [16:17]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 3ad506c49a895820d20172783d43be82
+BELONGS ya.make
+    License text:
+         * Copyright 2019-2026 The OpenLDAP Foundation.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/openldap.h [4:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 3e59f5d2cb9d2ff82d584e3ebbeea8d5
 BELONGS ya.make
     License text:
@@ -134,21 +161,6 @@ BELONGS ya.make
         libraries/libldap/sortctrl.c [15:15]
         libraries/libldap/utf-8-conv.c [15:15]
         libraries/libldap/vlvctrl.c [15:15]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 44238b1f388b28e36a4476340b8cb966
-BELONGS ya.make
-    License text:
-         * Copyright 2004-2024 The OpenLDAP Foundation.
-         * Portions Copyright 2004 Hewlett-Packard Company.
-         * Portions Copyright 2004 Howard Chu, Symas Corp.
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        libraries/libldap/account_usability.c [4:7]
-        libraries/libldap/ppolicy.c [4:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 474098e3482a9d93b2bc2512a17c5ba3
 BELONGS ya.make
@@ -164,10 +176,148 @@ BELONGS ya.make
     Files with this license:
         COPYRIGHT [28:31]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 4a9ca22fd6144ada2a6375705fff6923
+KEEP     COPYRIGHT_SERVICE_LABEL 4f36f8b838e59932450a7b6e23b18de4
+BELONGS ya.make
+    License text:
+        /* Portions Copyright (c) 1994 Regents of the University of Michigan.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ldap_defaults.h [15:16]
+        libraries/libldap/getdn.c [15:16]
+        libraries/libldap/sort.c [16:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 52d04947d1b5663f48469dd954686f7f
+BELONGS libraries/liblmdb/ya.make ya.make
+    License text:
+        Copyright 1999-2003 The OpenLDAP Foundation, Redwood City, California, USA.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [45:47]
+        libraries/liblmdb/LICENSE [45:47]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 589a43a9c2e53a720e7da6d65fa0e174
+BELONGS ya.make
+    License text:
+        /* Copyright 2001 Computing Research Labs, New Mexico State University
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libraries/liblunicode/ucdata/ucdata.h [15:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5a8988879d981f6ba2dad9f77c0034c9
+BELONGS ya.make
+    License text:
+        Copyright 1999-2026 The OpenLDAP Foundation, Redwood City, California, USA.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ANNOUNCEMENT [97:99]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5cadc257181d30cab2e858eb8fa17022
+BELONGS ya.make
+    License text:
+         * Copyright 2001-2026 The OpenLDAP Foundation.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ldap_queue.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 67b423ce32f828260daae06e234c8268
+BELONGS ya.make
+    License text:
+         * Copyright 2004-2026 The OpenLDAP Foundation.
+         * Portions Copyright 2004 Hewlett-Packard Company.
+         * Portions Copyright 2004 Howard Chu, Symas Corp.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libraries/libldap/account_usability.c [4:7]
+        libraries/libldap/ppolicy.c [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a884a43643ef02b365b69fc23d5f4a9
+BELONGS libraries/liblmdb/ya.make
+    License text:
+         * Copyright 2000-2026 The OpenLDAP Foundation.
+         * Portions Copyright 2001-2021 Howard Chu, Symas Corp.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libraries/liblmdb/midl.c [6:8]
+        libraries/liblmdb/midl.h [14:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7d72c184db348106fd03bc0cbf8d7fc8
+BELONGS ya.make
+    License text:
+        /* Portions Copyright (c) 1993 Regents of the University of Michigan.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ldap_avl.h [16:17]
+        libraries/libldap/avl.c [16:17]
+        libraries/libldap/sbind.c [15:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7f793d5c010fbf7d12764dc7b9910843
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYRIGHT [39:44]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7fcfc60a528476aa0d8813dc5520e954
+BELONGS libraries/liblmdb/ya.make
+    License text:
+         * Copyright (c) 2009, 2010 Martin Hedenfalk <martin@bzero.se>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libraries/liblmdb/lmdb.h [151:151]
+        libraries/liblmdb/mdb.c [21:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 81ec6d0d7120511fa0c4a8aeed23721a
+BELONGS ya.make
+    License text:
+         * Copyright 2005-2026 The OpenLDAP Foundation.
+         * Portions Copyright 2005-2006 SysNet s.n.c.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libraries/libldap/dds.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 845d5677909f46029f20b15c22cc924c
 BELONGS libraries/liblber/ya.make ya.make
     License text:
-        Copyright 1998-2024 The OpenLDAP Foundation
+        Copyright 1998-2026 The OpenLDAP Foundation
         All rights reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -297,73 +447,10 @@ BELONGS libraries/liblber/ya.make ya.make
         libraries/libldap/whoami.c [4:5]
         libraries/liblunicode/ucdata/ucdata.h [4:5]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 4ecb1fb667d48212f6eaeb71bc35eab9
+KEEP     COPYRIGHT_SERVICE_LABEL 878e3c990312433bd020db6e3bf75992
 BELONGS ya.make
     License text:
-         * Copyright 2019-2024 The OpenLDAP Foundation.
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/openldap.h [4:5]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 4f36f8b838e59932450a7b6e23b18de4
-BELONGS ya.make
-    License text:
-        /* Portions Copyright (c) 1994 Regents of the University of Michigan.
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/ldap_defaults.h [15:16]
-        libraries/libldap/getdn.c [15:16]
-        libraries/libldap/sort.c [16:17]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 52d04947d1b5663f48469dd954686f7f
-BELONGS libraries/liblmdb/ya.make ya.make
-    License text:
-        Copyright 1999-2003 The OpenLDAP Foundation, Redwood City, California, USA.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        LICENSE [45:47]
-        libraries/liblmdb/LICENSE [45:47]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 589a43a9c2e53a720e7da6d65fa0e174
-BELONGS ya.make
-    License text:
-        /* Copyright 2001 Computing Research Labs, New Mexico State University
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        libraries/liblunicode/ucdata/ucdata.h [15:15]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 60920e00f7e677f131274793192b2895
-BELONGS libraries/liblmdb/ya.make
-    License text:
-         * Copyright 2000-2024 The OpenLDAP Foundation.
-         * Portions Copyright 2001-2021 Howard Chu, Symas Corp.
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        libraries/liblmdb/midl.c [6:8]
-        libraries/liblmdb/midl.h [14:16]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 65e09e06d6bc2090a1c935fb80a2c31f
-BELONGS ya.make
-    License text:
-         * Copyright 2008-2024 The OpenLDAP Foundation.
+         * Copyright 2008-2026 The OpenLDAP Foundation.
          * All rights reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -373,84 +460,6 @@ BELONGS ya.make
         libraries/libldap/ldap-tls.h [5:6]
         libraries/libldap/tls_g.c [5:6]
         libraries/libldap/tls_o.c [5:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 67b423ce32f828260daae06e234c8268
-BELONGS ya.make
-    License text:
-         * Copyright 2004-2024 The OpenLDAP Foundation.
-         * Portions Copyright 2004 Hewlett-Packard Company.
-         * Portions Copyright 2004 Howard Chu, Symas Corp.
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        libraries/libldap/account_usability.c [4:7]
-        libraries/libldap/ppolicy.c [4:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 6a884a43643ef02b365b69fc23d5f4a9
-BELONGS libraries/liblmdb/ya.make
-    License text:
-         * Copyright 2000-2024 The OpenLDAP Foundation.
-         * Portions Copyright 2001-2021 Howard Chu, Symas Corp.
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        libraries/liblmdb/midl.c [6:8]
-        libraries/liblmdb/midl.h [14:16]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 7d72c184db348106fd03bc0cbf8d7fc8
-BELONGS ya.make
-    License text:
-        /* Portions Copyright (c) 1993 Regents of the University of Michigan.
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/ldap_avl.h [16:17]
-        libraries/libldap/avl.c [16:17]
-        libraries/libldap/sbind.c [15:16]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 7f793d5c010fbf7d12764dc7b9910843
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        COPYRIGHT [39:44]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 7fcfc60a528476aa0d8813dc5520e954
-BELONGS libraries/liblmdb/ya.make
-    License text:
-         * Copyright (c) 2009, 2010 Martin Hedenfalk <martin@bzero.se>
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        libraries/liblmdb/lmdb.h [151:151]
-        libraries/liblmdb/mdb.c [21:21]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 81ec6d0d7120511fa0c4a8aeed23721a
-BELONGS ya.make
-    License text:
-         * Copyright 2005-2024 The OpenLDAP Foundation.
-         * Portions Copyright 2005-2006 SysNet s.n.c.
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        libraries/libldap/dds.c [4:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8c252a7894bef33534212921edd5f61e
 BELONGS ya.make
@@ -495,40 +504,10 @@ BELONGS ya.make
     Files with this license:
         libraries/libldap/modrdn.c [18:18]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 941e366d375411e2a1c8895a31758d26
-BELONGS ya.make
-    License text:
-         * Copyright 2003-2024 The OpenLDAP Foundation.
-         * Portions Copyright 2003 IBM Corporation.
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        libraries/libldap/rq.c [4:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 94b3e4fe5ccbcbe0b494e96737611fc6
-BELONGS ya.make
-    License text:
-         * Copyright 2005-2024 The OpenLDAP Foundation.
-         * Portions Copyright 2005-2006 SysNet s.n.c.
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        libraries/libldap/dds.c [4:6]
-        libraries/libldap/ldap_thr_debug.h [5:6]
-        libraries/libldap/tavl.c [5:7]
-        libraries/libldap/thr_debug.c [5:6]
-        libraries/libldap/turn.c [4:5]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 94c9dac23e71d90c852b083ebdd0fdca
 BELONGS ya.make
     License text:
-         * Copyright 1998-2024 The OpenLDAP Foundation.
+         * Copyright 1998-2026 The OpenLDAP Foundation.
          * Portions Copyright 1999 Lars Uffmann.
          * All rights reserved.
     Scancode info:
@@ -552,7 +531,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 967cee5a77ea51cee48ec519ecc2854e
 BELONGS ya.make
     License text:
-         * Copyright 2003-2024 The OpenLDAP Foundation.
+         * Copyright 2003-2026 The OpenLDAP Foundation.
          * Portions Copyright 2003 IBM Corporation.
          * All rights reserved.
     Scancode info:
@@ -571,18 +550,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         COPYRIGHT [39:44]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 9eef2a8a1c60eacf44bcc535e54f879a
-BELONGS ya.make
-    License text:
-         * Copyright 2001-2024 The OpenLDAP Foundation.
-         * All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/ldap_queue.h [5:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b2076f05f106f2f83859dbf8164c6679
 BELONGS libraries/liblber/ya.make ya.make
@@ -618,6 +585,20 @@ BELONGS libraries/liblber/ya.make ya.make
         libraries/libldap/search.c [15:16]
         libraries/libldap/unbind.c [15:16]
 
+KEEP     COPYRIGHT_SERVICE_LABEL b2d3dca2f4518a266aa93cabf97bc8fc
+BELONGS libraries/liblmdb/ya.make
+    License text:
+         * Copyright 2000-2026 The OpenLDAP Foundation.
+         * Portions Copyright 2001-2021 Howard Chu, Symas Corp.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libraries/liblmdb/midl.c [6:8]
+        libraries/liblmdb/midl.h [14:16]
+
 KEEP     COPYRIGHT_SERVICE_LABEL b317e8f85d7987567b9d8896b2d8a940
 BELONGS ya.make
     License text:
@@ -635,7 +616,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL b7ba8878339411a39bcabc35d90c4854
 BELONGS ya.make
     License text:
-         * Copyright 1998-2024 The OpenLDAP Foundation.
+         * Copyright 1998-2026 The OpenLDAP Foundation.
          * Copyright 2006 Hans Leidekker
          * All rights reserved.
     Scancode info:
@@ -661,7 +642,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL c117ad1ac5d03de5ebf080e8028a8390
 BELONGS ya.make
     License text:
-         * Copyright 1998-2024 The OpenLDAP Foundation.
+         * Copyright 1998-2026 The OpenLDAP Foundation.
          * Portions Copyright 2007 Pierangelo Masarati.
          * All rights reserved.
     Scancode info:
@@ -713,7 +694,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL cef777b8c3b5e0316f4fce15d66fe325
 BELONGS ya.make
     License text:
-         * Copyright 2005-2024 The OpenLDAP Foundation.
+         * Copyright 2005-2026 The OpenLDAP Foundation.
          * Portions Copyright (c) 2005 by Howard Chu, Symas Corp.
          * All rights reserved.
     Scancode info:
@@ -723,10 +704,23 @@ BELONGS ya.make
     Files with this license:
         libraries/libldap/tavl.c [5:7]
 
+KEEP     COPYRIGHT_SERVICE_LABEL cff398ecb23a1fb1c8364d4b2453ccfd
+BELONGS ya.make
+    License text:
+         * Copyright 2003-2026 The OpenLDAP Foundation.
+         * Portions Copyright 2003 IBM Corporation.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        libraries/libldap/rq.c [4:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL d1ce7fea230cfd2b5b551e8addbd4aee
 BELONGS ya.make
     License text:
-         * Copyright 1998-2024 The OpenLDAP Foundation.
+         * Copyright 1998-2026 The OpenLDAP Foundation.
          * Portions Copyright 2008 Pierangelo Masarati.
          * All rights reserved.
     Scancode info:
@@ -746,10 +740,10 @@ BELONGS ya.make
     Files with this license:
         COPYRIGHT [39:44]
 
-KEEP     COPYRIGHT_SERVICE_LABEL d4b0238daf6af29a9c4017f8d7867db4
+KEEP     COPYRIGHT_SERVICE_LABEL d71ab9be6a24f1520d8b0b0e4865e28b
 BELONGS ya.make
     License text:
-         * Copyright 2006-2024 The OpenLDAP Foundation.
+         * Copyright 2006-2026 The OpenLDAP Foundation.
          * All rights reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -773,21 +767,27 @@ BELONGS libraries/liblmdb/ya.make
         libraries/liblmdb/lmdb.h [138:138]
         libraries/liblmdb/mdb.c [8:9]
 
-KEEP     COPYRIGHT_SERVICE_LABEL dea1cd481f24ec9b605b9ba11cf6e11f
+KEEP     COPYRIGHT_SERVICE_LABEL db19efbcd40fd1bdf3aea2588714d078
 BELONGS ya.make
     License text:
-        Copyright 1999-2024 The OpenLDAP Foundation, Redwood City, California, USA.
+         * Copyright 2005-2026 The OpenLDAP Foundation.
+         * Portions Copyright 2005-2006 SysNet s.n.c.
+         * All rights reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        ANNOUNCEMENT [97:99]
+        libraries/libldap/dds.c [4:6]
+        libraries/libldap/ldap_thr_debug.h [5:6]
+        libraries/libldap/tavl.c [5:7]
+        libraries/libldap/thr_debug.c [5:6]
+        libraries/libldap/turn.c [4:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL dfaa805c08b43aba09caea300317cc14
 BELONGS ya.make
     License text:
-         * Copyright 1998-2024 The OpenLDAP Foundation.
+         * Copyright 1998-2026 The OpenLDAP Foundation.
          * Portions Copyright 2018 Howard Chu.
          * All rights reserved.
     Scancode info:
@@ -800,7 +800,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL e57daa64897ec61965859aecb7cddefa
 BELONGS ya.make
     License text:
-         * Copyright 2004-2024 The OpenLDAP Foundation.
+         * Copyright 2004-2026 The OpenLDAP Foundation.
          * Portions Copyright 2004 Hewlett-Packard Company.
          * Portions Copyright 2004 Howard Chu, Symas Corp.
          * All rights reserved.
@@ -829,7 +829,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL fda2f0af1bc60d4970969a942d16c2ed
 BELONGS ya.make
     License text:
-         * Copyright 1999-2024 The OpenLDAP Foundation.
+         * Copyright 1999-2026 The OpenLDAP Foundation.
          * Portions Copyright 1999-2003 Kurt D. Zeilenga.
          * All rights reserved.
     Scancode info:

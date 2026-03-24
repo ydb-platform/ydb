@@ -4,11 +4,9 @@
 
 #include <util/generic/vector.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 using TUdfModuleWrapperList = TVector<TUdfModuleWrapper>;
 const TUdfModuleWrapperList& GetStaticUdfModuleWrapperList();
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

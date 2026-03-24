@@ -42,12 +42,12 @@ std::shared_ptr<arrow::Buffer> MakeZeroBuffer(size_t byteLen) {
 
     constexpr size_t NullWordCount = (MaxBlockSizeInBytes + sizeof(ui64) - 1) / sizeof(ui64);
     constexpr size_t ExtraAlignWords = (ArrowMemoryAlignment > sizeof(ui64)) ? (ArrowMemoryAlignment / sizeof(ui64) - 1) : 0;
-    static const ui64 Nulls[NullWordCount + ExtraAlignWords] = {0};
+    static const std::array<ui64, NullWordCount + ExtraAlignWords> Nulls = {0};
 
     // round all buffer length to 64 bytes
     size_t capacity = AlignUp(byteLen, size_t(64));
     if (capacity <= NullWordCount * sizeof(ui64)) {
-        return std::make_shared<arrow::Buffer>(AlignUp(reinterpret_cast<const ui8*>(Nulls), ArrowMemoryAlignment), byteLen);
+        return std::make_shared<arrow::Buffer>(AlignUp(reinterpret_cast<const ui8*>(Nulls.data()), ArrowMemoryAlignment), byteLen);
     }
 
     auto result = AllocateResizableBuffer(byteLen, GetYqlMemoryPool());

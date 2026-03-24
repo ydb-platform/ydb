@@ -388,11 +388,8 @@ namespace NKikimr::NBsController {
                     Y_DEBUG_ABORT();
                     return TGroupGeometryInfo();
                 });
-                TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update", (VirtualGroupId, GroupId), (Error, error));
-                    State->Rollback();
-                    State.reset();
+                if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update", (VirtualGroupId, GroupId), (Error, *error));
                 }
                 return true;
             }
@@ -430,11 +427,8 @@ namespace NKikimr::NBsController {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 const size_t n = State->BlobDepotDeleteQueue.Unshare().erase(GroupId);
                 Y_ABORT_UNLESS(n == 1);
-                TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG17, "failed to commit update", (VirtualGroupId, GroupId), (Error, error));
-                    State->Rollback();
-                    State.reset();
+                if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG17, "failed to commit update", (VirtualGroupId, GroupId), (Error, *error));
                 }
                 return true;
             }
@@ -494,7 +488,7 @@ namespace NKikimr::NBsController {
                     break;
 
                 case NKikimrBlobStorage::EVirtualGroupState::WORKING:
-                    if (group->NeedAlter.GetOrElse(false)) {
+                    if (group->NeedAlter.GetOrElse(false) || group->AppliedGroupGeneration != group->Generation) {
                         return ConfigureBlobDepot();
                     }
                     [[fallthrough]];
@@ -548,6 +542,7 @@ namespace NKikimr::NBsController {
         bool TenantHiveInvalidated = false;
         bool TenantHiveInvalidateInProgress = false;
         bool IsDecommittingGroup = false;
+        ui32 AppliedGroupGeneration = 0;
 
         void HiveCreate(TGroupInfo *group) {
             auto& config = GetConfig(group);
@@ -855,6 +850,8 @@ namespace NKikimr::NBsController {
                 NTabletPipe::TClientRetryPolicy::WithRetries()));
             auto ev = std::make_unique<TEvBlobDepot::TEvApplyConfig>();
             ev->Record.MutableConfig()->CopyFrom(config);
+            SerializeGroupInfo(ev->Record.MutableGroupInfo(), *group, Self->StoragePools);
+            AppliedGroupGeneration = group->Generation;
             NTabletPipe::SendData(SelfId(), BlobDepotPipeId, ev.release());
         }
 
@@ -891,6 +888,7 @@ namespace NKikimr::NBsController {
                 Y_ABORT_UNLESS(config.HasTabletId());
                 group.BlobDepotId = config.GetTabletId();
                 group.NeedAlter = false;
+                group.AppliedGroupGeneration = AppliedGroupGeneration;
                 if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING) {
                     group.DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS;
                     state.GroupContentChanged.insert(GroupId);
@@ -1041,11 +1039,8 @@ namespace NKikimr::NBsController {
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 Action(*State);
-                TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-                    STLOG(PRI_INFO, BS_CONTROLLER, BSCVG09, "failed to commit update", (Error, error));
-                    State->Rollback();
-                    State.reset();
+                if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+                    STLOG(PRI_INFO, BS_CONTROLLER, BSCVG09, "failed to commit update", (Error, *error));
                 }
                 return true;
             }

@@ -406,7 +406,7 @@ public:
         , SaveHandler_(saveHandler)
     { }
 
-    TVirtualFieldSaveRegistrar(TVirtualFieldSaveRegistrar<TThis, TContext>&& other)
+    TVirtualFieldSaveRegistrar(TVirtualFieldSaveRegistrar<TThis, TContext>&& other) noexcept
         : This_(other.This_)
         , Context_(other.Context_)
         , SaveHandler_(other.SaveHandler_)
@@ -614,7 +614,7 @@ public:
         , LoadHandler_(loadHandler)
     { }
 
-    TVirtualFieldLoadRegistrar(TVirtualFieldLoadRegistrar<TThis, TContext>&& other)
+    TVirtualFieldLoadRegistrar(TVirtualFieldLoadRegistrar<TThis, TContext>&& other) noexcept
         : This_(other.This_)
         , Context_(other.Context_)
         , Name_(other.Name_)

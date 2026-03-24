@@ -5,7 +5,6 @@ import os
 import platform
 import collections
 import re
-import tempfile
 
 
 def fix_win_bin_name(name):
@@ -42,6 +41,11 @@ def main():
         skip_nocxxinc = True
     except ValueError:
         skip_nocxxinc = False
+
+    sanitize = False
+    if '--y_sanitize' in sys.argv:
+        sanitize = True
+        sys.argv.remove('--y_sanitize')
 
     spl = sys.argv.index('--cflags')
     cmd = 1
@@ -107,11 +111,10 @@ def main():
     cflags = [x for x in cflags if x not in skip_list]
 
     skip_prefix_list = [
-        '-fsanitize=',
-        '-fsanitize-coverage=',
-        '-fsanitize-blacklist=',
         '--system-header-prefix',
     ]
+    if not sanitize:
+        skip_prefix_list.extend(['-fsanitize=', '-fsanitize-coverage=', '-fsanitize-blacklist='])
     new_cflags = []
     for flag in cflags:
         if all(not flag.startswith(skip_prefix) for skip_prefix in skip_prefix_list):
@@ -175,11 +178,6 @@ def main():
     if compiler_args:
         command += ['--compiler-options', ','.join(compiler_args)]
 
-    # --keep is necessary to prevent nvcc from embedding nvcc pid in generated
-    # symbols.  It makes nvcc use the original file name as the prefix in the
-    # generated files (otherwise it also prepends tmpxft_{pid}_00000000-5), and
-    # cicc derives the module name from its {input}.cpp1.ii file name.
-    command += ['--keep', '--keep-dir', tempfile.mkdtemp(prefix='compile_cuda.py.')]
     # nvcc generates symbols like __fatbinwrap_{len}_{basename}_{hash}_{pid} where
     # {basename} is {input}.cpp1.ii with non-C chars translated to _, {len} is
     # {basename} length, {hash} is the hash of first exported symbol in

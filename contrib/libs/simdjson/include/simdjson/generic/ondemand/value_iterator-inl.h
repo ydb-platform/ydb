@@ -94,7 +94,6 @@ simdjson_warn_unused simdjson_inline error_code value_iterator::end_container() 
 
 simdjson_warn_unused simdjson_inline simdjson_result<bool> value_iterator::has_next_field() noexcept {
   assert_at_next();
-
   // It's illegal to call this unless there are more tokens: anything that ends in } or ] is
   // obligated to verify there are more tokens if they are not the top level.
   switch (*_json_iter->return_current_and_advance()) {
@@ -516,9 +515,13 @@ simdjson_warn_unused simdjson_inline simdjson_result<std::string_view> value_ite
 template <typename string_type>
 simdjson_warn_unused simdjson_inline error_code value_iterator::get_string(string_type& receiver, bool allow_replacement) noexcept {
   std::string_view content;
+  // Save the string buffer location so that we can restore it after get_string
+  auto saved_string_buf_loc = _json_iter->string_buf_loc();
   auto err = get_string(allow_replacement).get(content);
   if (err) { return err; }
   receiver = content;
+  // Restore the string buffer location, effectively discarding any temporary string storage
+  _json_iter->string_buf_loc() = saved_string_buf_loc;
   return SUCCESS;
 }
 simdjson_warn_unused simdjson_inline simdjson_result<std::string_view> value_iterator::get_wobbly_string() noexcept {
@@ -658,9 +661,13 @@ simdjson_warn_unused simdjson_inline simdjson_result<std::string_view> value_ite
 template <typename string_type>
 simdjson_warn_unused simdjson_inline error_code value_iterator::get_root_string(string_type& receiver, bool check_trailing, bool allow_replacement) noexcept {
   std::string_view content;
+  // Save the string buffer location so that we can restore it after get_string
+  auto saved_string_buf_loc = _json_iter->string_buf_loc();
   auto err = get_root_string(check_trailing, allow_replacement).get(content);
   if (err) { return err; }
   receiver = content;
+  // Restore the string buffer location, effectively discarding any temporary string storage
+  _json_iter->string_buf_loc() = saved_string_buf_loc;
   return SUCCESS;
 }
 simdjson_warn_unused simdjson_inline simdjson_result<std::string_view> value_iterator::get_root_wobbly_string(bool check_trailing) noexcept {
@@ -967,6 +974,9 @@ simdjson_inline bool value_iterator::is_at_key() const noexcept {
   // Keys are at the same depth as the object.
   // Note here that we could be safer and check that we are within an object,
   // but we do not.
+  //
+  // As long as we are at the object's depth, in a valid document,
+  // we will only ever be at { , : or the actual string key: ".
   return _depth == _json_iter->_depth && *_json_iter->peek() == '"';
 }
 

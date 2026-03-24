@@ -6,7 +6,7 @@
 
 #include <memory>
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,8 +29,7 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAffinityGuard
-    : private TMoveOnly
+class TAffinityGuard: private TMoveOnly
 {
 private:
     struct TImpl;
@@ -43,4 +42,4 @@ public:
     void Release();
 };
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

@@ -356,6 +356,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             return true;
         }
 
+        if (!Self->Tables.contains(pathId)) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Row table not found: " << pathId);
+            return true;
+        }
+
         table = Self->Tables[pathId];
         table->UpdateShardStatsForFollower(followerId, shardIdx, newStats);
 
@@ -421,6 +426,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     TDiskSpaceUsageDelta diskSpaceUsageDelta;
 
     if (isDataShard) {
+        if (!Self->Tables.contains(pathId)) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Row table not found: " << pathId);
+            return true;
+        }
+
         table = Self->Tables[pathId];
         table->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
 
@@ -443,6 +453,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
         Self->PersistTablePartitionStats(db, pathId, shardIdx, table);
     } else if (isOlapStore) {
+        if (!Self->OlapStores.contains(pathId)) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Olap store not found: " << pathId);
+            return true;
+        }
+
         TOlapStoreInfo::TPtr olapStore = Self->OlapStores[pathId];
         olapStore->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
         updateSubdomainInfo = true;
@@ -473,6 +488,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         );
 
     } else if (isColumnTable) {
+        if (!Self->ColumnTables.contains(pathId)) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Column table not found: " << pathId);
+            return true;
+        }
+
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" << rec.GetTables().size());
 

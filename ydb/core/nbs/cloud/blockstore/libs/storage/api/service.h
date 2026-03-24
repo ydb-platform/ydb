@@ -1,32 +1,38 @@
 #pragma once
 
-#include <ydb/core/base/events.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/kikimr/events.h>
 #include <ydb/core/nbs/cloud/blockstore/public/api/protos/io.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/public/api/protos/partition.pb.h>
+
+#include <ydb/core/base/events.h>
+
 #include <ydb/library/actors/core/actorid.h>
 
+namespace NYdb::NBS::NBlockStore {
 
-namespace NYdb::NBS {
+struct TEvService
+{
+    //
+    // Events declaration
+    //
 
-    struct TEvService {
+    enum EEvents
+    {
+        EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_NBS_V2_SERVICE),
 
-        //
-        // Events declaration
-        //
+        EvReadBlocksRequest,
+        EvReadBlocksResponse,
 
-        enum EEvents
-        {
-            EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_NBS_V2),
+        EvWriteBlocksRequest,
+        EvWriteBlocksResponse,
 
-            EvReadBlocksRequest,
-            EvReadBlocksResponse,
-
-            EvWriteBlocksRequest,
-            EvWriteBlocksResponse,
-        };
-
-        BLOCKSTORE_DECLARE_PROTO_EVENTS(WriteBlocks)
-        BLOCKSTORE_DECLARE_PROTO_EVENTS(ReadBlocks)
+        EvGetLoadActorAdapterActorIdRequest,
+        EvGetLoadActorAdapterActorIdResponse,
     };
 
-} // namespace NYdb::NBS
+    BLOCKSTORE_DECLARE_PROTO_EVENTS(WriteBlocks)
+    BLOCKSTORE_DECLARE_PROTO_EVENTS(ReadBlocks)
+    BLOCKSTORE_DECLARE_PROTO_EVENTS(GetLoadActorAdapterActorId)
+};
+
+}   // namespace NYdb::NBS::NBlockStore

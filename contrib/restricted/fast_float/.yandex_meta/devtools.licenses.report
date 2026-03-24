@@ -39,7 +39,7 @@ BELONGS ya.make
         Match type      : TAG
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [627:627]
+        README.md [630:630]
 
 KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
 BELONGS ya.make
@@ -87,7 +87,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [626:627]
+        README.md [629:630]
 
 SKIP     MS-PL AND Apache-2.0 8e323df87a93aeef26d1be5e9c2b5585
 BELONGS ya.make
@@ -101,14 +101,14 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.microsoft.com/opensource/licenses.mspx#Ms-PL, https://spdx.org/licenses/MS-PL
     Files with this license:
-        README.md [634:635]
+        README.md [637:638]
     Scancode info:
         Original SPDX id: Apache-2.0
         Score           : 34.00
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [634:635]
+        README.md [637:638]
 
 KEEP     BSL-1.0 AND BSL-1.0  a8fd7a0ddc7793219e50dfdeb4742dfc
 BELONGS ya.make
@@ -120,14 +120,14 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        README.md [628:628]
+        README.md [631:631]
     Scancode info:
         Original SPDX id: BSL-1.0
         Score           : 99.00
         Match type      : REFERENCE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        README.md [628:628]
+        README.md [631:631]
 
 KEEP     Apache-2.0           c48d93dbb5419f7a8844879928a2fda7
 BELONGS ya.make
@@ -139,7 +139,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [616:616]
+        README.md [619:619]
 
 KEEP     Apache-2.0 OR MIT OR BSL-1.0 dbfbb7aa50e4925e728f16d4a8adf7d9
 BELONGS ya.make
@@ -151,14 +151,14 @@ BELONGS ya.make
         Match type      : INTRO
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        README.md [626:626]
+        README.md [629:629]
     Scancode info:
         Original SPDX id: Apache-2.0
         Score           : 90.00
         Match type      : TAG
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [626:626]
+        README.md [629:629]
 
 KEEP     Apache-2.0           fb21a7d67961597593aefff800484f8d
 BELONGS ya.make

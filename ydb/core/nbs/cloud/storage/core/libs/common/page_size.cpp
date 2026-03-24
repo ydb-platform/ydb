@@ -2,7 +2,7 @@
 
 #include <unistd.h>
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -20,4 +20,4 @@ size_t GetPlatformPageSize()
     return size;
 }
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

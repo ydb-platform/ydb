@@ -39,7 +39,7 @@ bool AllowPullUpExtendOverEquiJoin(const TOptimizeContext& optCtx) {
 bool AllowPayloadRenameOverWindow(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
     static const char OptName[] = "PayloadRenameOverWindow";
-    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
+    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 bool CheckWindowFramesFieldSubsetEnabled(const TOptimizeContext& optCtx) {
@@ -49,7 +49,7 @@ bool CheckWindowFramesFieldSubsetEnabled(const TOptimizeContext& optCtx) {
     }
     YQL_ENSURE(optCtx.Types);
     static const char OptName[] = "CheckWindowFramesFieldSubset";
-    return IsOptimizerEnabled<OptName>(*optCtx.Types) || !IsOptimizerDisabled<OptName>(*optCtx.Types);
+    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 THashSet<TStringBuf> GetAggregationInputKeys(const TCoAggregate& node) {
@@ -879,8 +879,8 @@ bool IsFlatmapSuitableForPullUpOverEquiJoin(const TCoFlatMapBase& flatMap, TVect
             continue;
         }
         const auto& renames = renamesByLabel[label];
-        for (auto it = renames.begin(); it != renames.end(); ++it) {
-            if (it->first != it->second) {
+        for (const auto & rename : renames) {
+            if (rename.first != rename.second) {
                 renamesAreIdentical = false;
                 break;
             }
@@ -1036,8 +1036,8 @@ TVector<TExprNode::TPtr> BuildOutputFlattenMembersArg(const TCoEquiJoinInput& in
             .Build();
 
         TVector<TExprNode::TPtr> args;
-        for (ui32 i = 0; i < labels.size(); ++i) {
-            TString prefix = TString::Join(labels[i], ".");
+        for (const auto& label : labels) {
+            TString prefix = TString::Join(label, ".");
             auto arg = ctx.Builder(input.Pos())
                 .List()
                    .Atom(0, prefix)

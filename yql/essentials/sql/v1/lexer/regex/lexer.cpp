@@ -37,8 +37,8 @@ TTokenMatcher ANSICommentMatcher(TString name, TTokenMatcher defaultComment) {
         size_t ll1Length = MatchANSIMultilineComment(prefix);
         TStringBuf ll1Content = prefix.SubString(0, ll1Length);
 
-        Y_ENSURE(ll1Content == 0 || basic->Content <= ll1Content);
-        if (ll1Content == 0) {
+        Y_ENSURE(ll1Content == nullptr || basic->Content <= ll1Content);
+        if (ll1Content == nullptr) {
             return basic;
         }
 
@@ -160,7 +160,7 @@ TGenericLexerGrammar MakeGenericLexerGrammar(
     generic.emplace_back(PuntuationMatcher(grammar));
 
     for (const auto& [name, regex] : regexByOtherName) {
-        generic.emplace_back(Compile(name, {regex}));
+        generic.emplace_back(Compile(name, {.Body = regex}));
         if (name == "COMMENT" && ansi) {
             generic.back() = ANSICommentMatcher(name, std::move(generic.back()));
         }

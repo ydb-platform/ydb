@@ -350,10 +350,10 @@ index 58f706c..1a5b0aa 100644
      return false;
    }
 diff --git a/tcmalloc/tcmalloc.cc b/tcmalloc/tcmalloc.cc
-index 4335459..ce7257b 100644
+index 7332d4f..b930ec9 100644
 --- a/tcmalloc/tcmalloc.cc
 +++ b/tcmalloc/tcmalloc.cc
-@@ -392,6 +392,13 @@ void TCMallocPostFork() {
+@@ -394,6 +394,13 @@ void TCMallocPostFork() {
    Static::sampled_allocation_recorder().ReleaseInternalLocks();
  }
  

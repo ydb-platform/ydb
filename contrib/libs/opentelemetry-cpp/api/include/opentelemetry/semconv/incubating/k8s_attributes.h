@@ -366,6 +366,29 @@ static constexpr const char *kK8sNodeUid = "k8s.node.uid";
 static constexpr const char *kK8sPodAnnotation = "k8s.pod.annotation";
 
 /**
+  Specifies the hostname of the Pod.
+  <p>
+  The K8s Pod spec has an optional hostname field, which can be used to specify a hostname.
+  Refer to <a
+  href="https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-hostname-and-subdomain-field">K8s
+  docs</a> for more information about this field. <p> This attribute aligns with the @code hostname
+  @endcode field of the <a
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#podspec-v1-core">K8s
+  PodSpec</a>.
+ */
+static constexpr const char *kK8sPodHostname = "k8s.pod.hostname";
+
+/**
+  IP address allocated to the Pod.
+  <p>
+  This attribute aligns with the @code podIP @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#podstatus-v1-core">K8s
+  PodStatus</a>.
+ */
+static constexpr const char *kK8sPodIp = "k8s.pod.ip";
+
+/**
   The label placed on the Pod, the @code <key> @endcode being the label name, the value being the
   label value. <p> Examples: <ul> <li>A label @code app @endcode with value @code my-app @endcode
   SHOULD be recorded as the @code k8s.pod.label.app @endcode attribute with value @code "my-app"
@@ -390,6 +413,19 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kK8sPodLabels = "k8s.pod.l
   The name of the Pod.
  */
 static constexpr const char *kK8sPodName = "k8s.pod.name";
+
+/**
+  The start timestamp of the Pod.
+  <p>
+  Date and time at which the object was acknowledged by the Kubelet.
+  This is before the Kubelet pulled the container image(s) for the pod.
+  <p>
+  This attribute aligns with the @code startTime @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#podstatus-v1-core">K8s
+  PodStatus</a>, in ISO 8601 (RFC 3339 compatible) format.
+ */
+static constexpr const char *kK8sPodStartTime = "k8s.pod.start_time";
 
 /**
   The phase for the pod. Corresponds to the @code phase @endcode field of the: <a

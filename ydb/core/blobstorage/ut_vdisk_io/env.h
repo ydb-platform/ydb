@@ -131,16 +131,18 @@ namespace NKikimr {
             TString filePath = "/pdisk.dat";
             if (!SectorMapByPath[filePath]) {
                 SectorMapByPath[filePath].Reset(new NPDisk::TSectorMap(diskSizeBytes));
+                TFormatOptions options;
+                options.SectorMap = SectorMapByPath[filePath];
+                options.EnableSmallDiskOptimization = false;
                 FormatPDisk(filePath, diskSizeBytes, 4 << 10, chunkSize, pDiskGuid,
-                        0x123, 0x456, 0x789, mainKey, "", false, false,
-                        SectorMapByPath[filePath], false);
+                        0x123, 0x456, 0x789, mainKey, "", options);
             }
 
             TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(filePath, pDiskGuid, 1, pDiskCategory);
             pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
             pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
             pDiskConfig->SectorMap = SectorMapByPath[filePath];
-            pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
+            pDiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(!pDiskConfig->SectorMap);
 
             NPDisk::TMainKey mainKeys = NPDisk::TMainKey{ .Keys = { mainKey }, .IsInitialized = true };
 

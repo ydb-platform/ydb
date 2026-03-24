@@ -7,6 +7,7 @@ SRCS(
     yql_yt_table_data_service_reader_ut.cpp
     yql_yt_table_data_service_writer_ut.cpp
     yql_yt_sorted_merge_reader_ut.cpp
+    yql_yt_sorting_reader_ut.cpp
 )
 
 PEERDIR(
@@ -14,6 +15,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/job/impl
     yt/yql/providers/yt/fmr/process
     yt/yql/providers/yt/fmr/request_options/proto_helpers
+    yt/yql/providers/yt/fmr/test_tools/fmr_block_iterator
     yt/yql/providers/yt/fmr/test_tools/table_data_service
     yt/yql/providers/yt/fmr/test_tools/yson
     yt/yql/providers/yt/fmr/utils

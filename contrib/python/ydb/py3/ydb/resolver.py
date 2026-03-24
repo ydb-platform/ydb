@@ -7,6 +7,7 @@ import threading
 import random
 import itertools
 import typing
+from typing import Any, ContextManager, List, Optional, Iterator
 from . import connection as conn_impl, driver, issues, settings as settings_impl, _apis
 
 
@@ -85,7 +86,7 @@ class EndpointInfo(object):
 
 def _list_endpoints_request_factory(connection_params: driver.DriverConfig) -> _apis.ydb_discovery.ListEndpointsRequest:
     request = _apis.ydb_discovery.ListEndpointsRequest()
-    request.database = connection_params.database
+    request.database = connection_params.database or ""
     return request
 
 
@@ -113,38 +114,40 @@ class DiscoveryResult(object):
         issues._process_response(response.operation)
         message = _apis.ydb_discovery.ListEndpointsResult()
         response.operation.result.Unpack(message)
-        unique_local_endpoints = set()
-        unique_different_endpoints = set()
+        unique_local_set: set[EndpointInfo] = set()
+        unique_different_set: set[EndpointInfo] = set()
         for info in message.endpoints:
             if info.location == message.self_location:
-                unique_local_endpoints.add(EndpointInfo(info))
+                unique_local_set.add(EndpointInfo(info))
             else:
-                unique_different_endpoints.add(EndpointInfo(info))
+                unique_different_set.add(EndpointInfo(info))
 
-        result = []
-        unique_local_endpoints = list(unique_local_endpoints)
-        unique_different_endpoints = list(unique_different_endpoints)
+        result: List[EndpointInfo] = []
+        local_endpoints = list(unique_local_set)
+        different_endpoints = list(unique_different_set)
         if use_all_nodes:
-            result.extend(unique_local_endpoints)
-            result.extend(unique_different_endpoints)
+            result.extend(local_endpoints)
+            result.extend(different_endpoints)
             random.shuffle(result)
         else:
-            random.shuffle(unique_local_endpoints)
-            random.shuffle(unique_different_endpoints)
-            result.extend(unique_local_endpoints)
-            result.extend(unique_different_endpoints)
+            random.shuffle(local_endpoints)
+            random.shuffle(different_endpoints)
+            result.extend(local_endpoints)
+            result.extend(different_endpoints)
 
         return cls(message.self_location, result)
 
 
 class DiscoveryEndpointsResolver(object):
+    _lock: ContextManager[Any]  # Can be threading.Lock or _FakeLock in async subclass
+
     def __init__(self, driver_config: driver.DriverConfig):
         self.logger = logger.getChild(self.__class__.__name__)
         self._driver_config = driver_config
         self._ready_timeout = getattr(self._driver_config, "discovery_request_timeout", 10)
         self._lock = threading.Lock()
         self._debug_details_history_size = 20
-        self._debug_details_items = []
+        self._debug_details_items: List[str] = []
         self._endpoints = []
         self._endpoints.append(driver_config.endpoint)
         self._endpoints.extend(driver_config.endpoints)
@@ -166,12 +169,12 @@ class DiscoveryEndpointsResolver(object):
         with self._lock:
             return "\n".join(self._debug_details_items)
 
-    def resolve(self) -> typing.ContextManager[typing.Optional[DiscoveryResult]]:
+    def resolve(self) -> Optional[DiscoveryResult]:
         with self.context_resolve() as result:
             return result
 
     @contextlib.contextmanager
-    def context_resolve(self) -> typing.ContextManager[typing.Optional[DiscoveryResult]]:
+    def context_resolve(self) -> Iterator[Optional[DiscoveryResult]]:
         self.logger.debug("Preparing initial endpoint to resolve endpoints")
         endpoint = next(self._endpoints_iter)
         initial = conn_impl.Connection.ready_factory(endpoint, self._driver_config, ready_timeout=self._ready_timeout)
@@ -179,7 +182,7 @@ class DiscoveryEndpointsResolver(object):
             self._add_debug_details(
                 'Failed to establish connection to YDB discovery endpoint: "%s". Check endpoint correctness.' % endpoint
             )
-            yield
+            yield None
             return
 
         self.logger.debug("Resolving endpoints for database %s", self._driver_config.database)
@@ -209,7 +212,7 @@ class DiscoveryEndpointsResolver(object):
                 e,
             )
 
-            yield
+            yield None
 
         finally:
             initial.close()

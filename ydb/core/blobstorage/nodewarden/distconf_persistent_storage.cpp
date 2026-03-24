@@ -202,7 +202,7 @@ namespace NKikimr::NStorage {
         if (!PersistQ.empty()) {
             auto& front = PersistQ.front();
             WriteConfig(std::move(front.MetadataByPath));
-        } else {
+        } else if (!PathsToRetry.empty()) {
             // no pending writes -- retry failed ones
             TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvRetryPersistConfig,
                 0, SelfId(), {}, nullptr, 0));

@@ -823,6 +823,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
             sourceInfo.ResumeByWatermark(watermark);
         }
+        // sources or input channels was unpaused, trigger new poll
+        ResumeExecution(EResumeSource::CAResumeByWatermark);
     }
 
     void ResumeInputsByCheckpoint() override final {
@@ -831,6 +833,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 channelInfo.ResumeByCheckpoint();
             }
         }
+        // sources or input channels was unpaused, trigger new poll
+        ResumeExecution(EResumeSource::CAResumeByCheckpoint);
     }
 
 protected:
@@ -1127,10 +1131,9 @@ protected:
                     inputChannel->Channel->Bind(peer, this->SelfId());
                 } else {
                     Channels->SetInputChannelPeer(channelUpdate.GetId(), peer);
-                    // bind is noop here
-                    // if (inputChannel->Channel) {
-                    //     inputChannel->Channel->Bind(this->SelfId(), peer);
-                    // }
+                    if (inputChannel->Channel) {
+                        inputChannel->Channel->Bind(this->SelfId(), peer);
+                    }
                 }
 
                 continue;
@@ -1398,9 +1401,11 @@ protected:
             DUMP(info, FreeSpace);
             html << "IsPaused: " << info.IsPaused() << "<br />";
 
-            if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
-                DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
-                DUMP_PREFIXED("InputChannelStats.", (*channelStats), ResentMessages);
+            if (Channels) {
+                if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
+                    DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
+                    DUMP_PREFIXED("InputChannelStats.", (*channelStats), ResentMessages);
+                }
             }
 
             auto channel = info.Channel;
@@ -1597,29 +1602,44 @@ protected:
 #undef DUMP_PREFIXED
     }
 
-    virtual void TaskRunnerMonitoringInfo(TStringStream& str) {
+    virtual void ExtraMonitoringInfo(TStringStream& str, const TCgiParameters& cgi) {
         Y_UNUSED(str);
+        Y_UNUSED(cgi);
     }
 
-    void DefaultMonitoringPage(TStringStream& str, TCgiParameters cgi) {
+    void DefaultMonitoringPage(TStringStream& str, const TCgiParameters& cgi) {
         HTML(str) {
             PRE() {
                 str << "TDqComputeActorBase, SelfId=" << this->SelfId() << ' ';
-                cgi.ReplaceUnescaped("view", "dump");
-                HREF(TStringBuilder() << "?" << cgi.Print()) {
+                HREF(NActors::NMon::BuildActorsLink("", cgi, {{"view", "dump"}})) {
                     str << "Dump";
                 }
                 str << ' ';
-                cgi.ReplaceUnescaped("view", "run");
-                HREF(TStringBuilder() << "?" << cgi.Print()) {
+                HREF(NActors::NMon::BuildActorsLink("", cgi, {{"view", "run"}})) {
                     str << "Run";
                 }
                 str << Endl;
                 str << "  TaskId: " << Task.GetId() << Endl;
                 str << "  StageId: " << Task.GetStageId() << Endl;
                 str << "  State: " << NDqProto::EComputeState_Name(State) << Endl;
-
-                TaskRunnerMonitoringInfo(str);
+                str << "  ExecuterId: ";
+                HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"ex", ToString(ExecuterId)}, {"ca", ""}, {"sf", ""}, {"view", ""}}))  {
+                    str << ExecuterId;
+                }
+                str << Endl;
+                if (auto stats = GetTaskRunnerStats()) {
+                    str << "  CurrentWaitInputStartTime: ";
+                    if (stats->CurrentWaitInputStartTime) {
+                        str << stats->CurrentWaitInputStartTime;
+                    }
+                    str << Endl
+                        << "  CurrentWaitOutputStartTime: ";
+                    if (stats->CurrentWaitOutputStartTime) {
+                        str << stats->CurrentWaitOutputStartTime;
+                    }
+                    str << Endl;
+                }
+                ExtraMonitoringInfo(str, cgi);
 
                 COLLAPSED_BUTTON_CONTENT("ProcessOutputsState", TStringBuilder() << "ProcessOutputsState: " << ProcessOutputsState.LastRunTime << ' ' << ProcessOutputsState.LastRunStatus) {
                     str << "  Inflight: " << ProcessOutputsState.Inflight << Endl;
@@ -1634,7 +1654,7 @@ protected:
 
                 str << Endl;
                 if (Task.GetDqChannelVersion() >= 2u) {
-                    HREF(TStringBuilder() << "/node/" << this->SelfId().NodeId() << "/actors/kqp_channels") {
+                    HREF("kqp_channels") {
                         str << "Input Channels:" << Endl;
                     }
                 } else {
@@ -1665,7 +1685,7 @@ protected:
                                 TABLED() {str << info.InputIndex;}
                                 TABLED() {
                                     if (info.HasPeer) {
-                                        HREF(TStringBuilder() << "/node/" << info.PeerId.NodeId() << "/actors/kqp_node?ca=" << info.PeerId)  {
+                                        HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"ca", ToString(info.PeerId)}, {"view", ""}}))  {
                                             str << info.PeerId;
                                         }
                                     } else {
@@ -1715,7 +1735,7 @@ protected:
 
                 str << Endl;
                 if (Task.GetDqChannelVersion() >= 2u) {
-                    HREF(TStringBuilder() << "/node/" << this->SelfId().NodeId() << "/actors/kqp_channels") {
+                    HREF("kqp_channels") {
                         str << "Output Channels:" << Endl;
                     }
                 } else {
@@ -1744,7 +1764,7 @@ protected:
                                 TABLED() {str << info.DstStageId;}
                                 TABLED() {
                                     if (info.HasPeer) {
-                                        HREF(TStringBuilder() << "/node/" << info.PeerId.NodeId() << "/actors/kqp_node?ca=" << info.PeerId)  {
+                                        HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"ca", ToString(info.PeerId)}, {"view", ""}}))  {
                                             str << info.PeerId;
                                         }
                                     } else {
@@ -1990,6 +2010,8 @@ protected:
                         .TaskParams = taskParams,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
+                        .Alloc = Alloc,
+                        .TraceId = ComputeActorSpan.GetTraceId()
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create output transform " << outputDesc.GetTransform().GetType() << ": " << ex.what();
@@ -2139,7 +2161,16 @@ protected:
     void HandleCheckIdleness(const TEvPrivate::TEvCheckIdleness::TPtr& ev) {
         auto checkTime = Max(ev->Get()->CheckTime, TInstant::Now());
         if (WatermarksTracker.ProcessIdlenessCheck(checkTime)) {
-            auto idleWatermark = WatermarksTracker.HandleIdleness(checkTime);
+            TMaybe<TInstant> idleWatermark;
+            if constexpr (!std::is_same_v<TDerived, TDqAsyncComputeActor>) {
+                for (const auto& [id, _]: InputTransformsMap) {
+                    auto transformWatermarksTracker = GetInputTransformWatermarksTracker(id);
+                    if (transformWatermarksTracker) {
+                        idleWatermark = Max(idleWatermark, transformWatermarksTracker->HandleIdleness(checkTime));
+                    }
+                }
+            }
+            idleWatermark = Max(idleWatermark, WatermarksTracker.HandleIdleness(checkTime));
             if (idleWatermark) {
                 CA_LOG_T("Idleness watermark " << idleWatermark);
                 ResumeExecution(EResumeSource::CAWatermarkIdleness);
@@ -2149,7 +2180,23 @@ protected:
     }
 
     void ScheduleIdlenessCheck() {
-        if (auto checkTime = WatermarksTracker.PrepareIdlenessCheck()) {
+        TMaybe<TInstant> checkTime = WatermarksTracker.GetNextIdlenessCheckAt();
+        if constexpr (!std::is_same_v<TDerived, TDqAsyncComputeActor>) {
+            for (const auto& [id, _]: InputTransformsMap) {
+                auto transformWatermarksTracker = GetInputTransformWatermarksTracker(id);
+                if (transformWatermarksTracker) {
+                    auto transformCheckTime = transformWatermarksTracker->GetNextIdlenessCheckAt();
+                    if (transformCheckTime) {
+                        if (checkTime) {
+                            checkTime = Min(*checkTime, *transformCheckTime);
+                        } else {
+                            checkTime = *transformCheckTime;
+                        }
+                    }
+                }
+            }
+        }
+        if (checkTime && WatermarksTracker.AddScheduledIdlenessCheck(*checkTime)) {
             CA_LOG_T("Schedule next idleness check at " << checkTime);
             this->Schedule(*checkTime, new TEvPrivate::TEvCheckIdleness(*checkTime));
         }

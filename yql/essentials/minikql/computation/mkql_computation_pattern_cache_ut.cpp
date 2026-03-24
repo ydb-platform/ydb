@@ -16,8 +16,7 @@
 
 #include <util/datetime/cputimer.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NYql::NUdf;
 
@@ -857,5 +856,4 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
 }
 } // Y_UNIT_TEST_SUITE(ComputationPatternCache)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

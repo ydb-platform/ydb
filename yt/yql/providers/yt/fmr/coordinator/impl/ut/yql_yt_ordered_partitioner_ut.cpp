@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_ordered_partitioner.h>
+#include <yt/yql/providers/yt/fmr/coordinator/partitioner/yql_yt_ordered_partitioner.h>
 #include <yt/yql/providers/yt/fmr/test_tools/fmr_coordinator_service_helper/yql_yt_mock_coordinator_service.h>
 #include <algorithm>
 
@@ -611,12 +611,7 @@ Y_UNIT_TEST_SUITE(OrderedPartitionerTests) {
                 TFmrTableInputRef{
                     .TableId = table.FmrTableId.Id,
                     .TableRanges = {
-                        TTableRange{.PartId = FirstPartId, .MinChunk = 0, .MaxChunk = 1}
-                    }
-                },
-                TFmrTableInputRef{
-                    .TableId = table.FmrTableId.Id,
-                    .TableRanges = {
+                        TTableRange{.PartId = FirstPartId, .MinChunk = 0, .MaxChunk = 1},
                         TTableRange{.PartId = SecondPartId, .MinChunk = 0, .MaxChunk = 1}
                     }
                 }
@@ -666,7 +661,7 @@ Y_UNIT_TEST_SUITE(OrderedPartitionerTests) {
         );
 
         auto partitionResult = PartitionInputTablesIntoTasksOrdered(inputTables, partitioner, ytService, {});
-        UNIT_ASSERT_EQUAL(partitionResult.PartitionStatus, true);
+        UNIT_ASSERT(!partitionResult.Error);
 
         std::vector<TTaskTableInputRef> expected;
         // yt1 partitions
@@ -725,7 +720,7 @@ Y_UNIT_TEST_SUITE(OrderedPartitionerTests) {
         );
 
         auto partitionResult = PartitionInputTablesIntoTasksOrdered(inputTables, partitioner, ytService, {});
-        UNIT_ASSERT_EQUAL(partitionResult.PartitionStatus, true);
+        UNIT_ASSERT(!partitionResult.Error);
 
         std::vector<TTaskTableInputRef> expected;
         // FMR scope before YT: both tables in one task due to carry (25 + 25 = 50)
@@ -785,7 +780,7 @@ Y_UNIT_TEST_SUITE(OrderedPartitionerTests) {
         );
 
         auto partitionResult = PartitionInputTablesIntoTasksOrdered(inputTables, partitioner, ytService, {});
-        UNIT_ASSERT_EQUAL(partitionResult.PartitionStatus, true);
+        UNIT_ASSERT(!partitionResult.Error);
 
         std::vector<TTaskTableInputRef> expected;
         // FMR1 scope (flushed by YT): must be its own task

@@ -5,6 +5,7 @@ SRCS(
     validators.cpp
     auth_config_validator.cpp
     column_shard_config_validator.cpp
+    monitoring_config_validator.cpp
 )
 
 PEERDIR(

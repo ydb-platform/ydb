@@ -1377,7 +1377,8 @@ private:
             outTableInfos.back().Name = name;
         }
 
-        TFsQueryCacheItem queryCacheItem(*options.Config(), cluster, Services_->GetTmpDir(), options.OperationHash(), outTablePaths);
+        TFsQueryCacheItem queryCacheItem(*options.Config(), cluster, Services_->GetTmpDir(), options.OperationHash(),
+             outTablePaths, options.OutputHash());
         if (!queryCacheItem.Lookup(FakeQueue_)) {
             TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());

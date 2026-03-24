@@ -23,6 +23,7 @@ private:
     std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema_; // Destination schema (allow shrink and reorder)
     IRowWriter& RowWriter_;
     bool AllowInfDouble_;
+    bool WithConversion_;
 
     template <typename TArray>
     TCell MakeCellFromValue(const std::shared_ptr<arrow::Array>& column, i64 row) {
@@ -57,18 +58,26 @@ private:
         return MakeCellFromView<arrow::Decimal128Array>(column, row);
     }
 
+    template <>
+    TCell MakeCell<arrow::FixedSizeBinaryArray>(const std::shared_ptr<arrow::Array>& column, i64 row) {
+        return MakeCellFromView<arrow::FixedSizeBinaryArray>(column, row);
+    }
+
 public:
     static bool NeedDataConversion(const NScheme::TTypeInfo& colType);
+    
+    bool NeedDataConversionWithSettings(const NScheme::TTypeInfo& colType);
 
     static bool NeedInplaceConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType);
 
     static bool NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType);
 
     TArrowToYdbConverter(
-        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter, const bool allowInfDouble = false)
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter, const bool allowInfDouble = false, const bool withConversion = true)
         : YdbSchema_(ydbSchema)
         , RowWriter_(rowWriter)
-        , AllowInfDouble_(allowInfDouble) {
+        , AllowInfDouble_(allowInfDouble)
+        , WithConversion_(withConversion) {
     }
 
     bool Process(const arrow::RecordBatch& batch, TString& errorMessage);

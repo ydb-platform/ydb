@@ -1231,7 +1231,7 @@ public:
             }
         }
 
-        if (decoder.Dynamic) {
+        if (decoder.Dynamic || decoder.RLS) {
             RowIndex_.Clear();
         } else if (spec.SystemFields_.HasFlags(TMkqlIOSpecs::ESystemField::RowIndex)) {
             auto cmd = Buf_.Read();

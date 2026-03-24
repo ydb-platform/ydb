@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: pyparsing
-Version: 3.3.1
+Version: 3.3.2
 Summary: pyparsing - Classes and methods to define and execute parsing grammars
 Author-email: Paul McGuire <ptmcg.gm+pyparsing@gmail.com>
 Requires-Python: >=3.9
@@ -27,7 +27,9 @@ Classifier: Typing :: Typed
 License-File: LICENSE
 Requires-Dist: railroad-diagrams ; extra == "diagrams"
 Requires-Dist: jinja2 ; extra == "diagrams"
+Project-URL: Documentation, https://pyparsing-docs.readthedocs.io/en/latest/
 Project-URL: Homepage, https://github.com/pyparsing/pyparsing/
+Project-URL: Source, https://github.com/pyparsing/pyparsing.git
 Provides-Extra: diagrams
 
 PyParsing -- A Python Parsing Module
@@ -98,8 +100,8 @@ AI Instructions
 There are also instructions for AI agents to use when helping you to create your parser. They can
 be pulled from the GitHub project repository, at pyparsing/ai/best_practices.md. You can also tell
 the AI to access them programmatically after installing pyparsing, either from the CLI with
-`python -m pyparsing.ai.show_best_practices` or within python with
-`import pyparsing; pyparsing.show_best_practices()`.
+``python -m pyparsing.ai.show_best_practices`` or within python with
+``import pyparsing; pyparsing.show_best_practices()``.
 
 
 License

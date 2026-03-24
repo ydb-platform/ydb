@@ -96,6 +96,11 @@ void FillSpec(NYT::TNode& spec,
         spec = std::move(tmpSpec);
     }
 
+    const auto supportRLSTables = settings->_EnableRLSTablesSupport.Get(cluster).GetOrElse(DEFAULT_ENABLE_RLS_TABLES_SUPPORT);
+    if (supportRLSTables && AnyOf(execCtx.InputTables_, [](const auto& input) { return input.RLS; })) {
+        spec["omit_inaccessible_rows"] = true;
+    }
+
     auto& sampling = execCtx.Sampling;
     auto maxRowWeight = settings->MaxRowWeight.Get(cluster);
     auto maxKeyWeight = settings->MaxKeyWeight.Get(cluster);

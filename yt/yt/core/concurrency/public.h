@@ -71,8 +71,6 @@ DEFINE_ENUM(EExecutionStackKind,
 
 constexpr auto DefaultExecutionStackKind = EExecutionStackKind::Small;
 
-class TExecutionStack;
-
 template <class TSignature>
 class TCoroutine;
 
@@ -130,6 +128,8 @@ DECLARE_REFCOUNTED_STRUCT(ICallbackProvider)
 class TPropagatingStorage;
 
 YT_DECLARE_RECONFIGURABLE_SINGLETON(TFiberManagerConfig, TFiberManagerDynamicConfig);
+
+extern const TFairShareThreadPoolTag DefaultExecutionTag;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -6,9 +7,7 @@ using namespace NKikimrSchemeOp;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSequenceReboots) {
-
-    Y_UNIT_TEST(CreateSequence) {
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS(CreateSequence) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
@@ -30,8 +29,7 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
         });
     }
 
-    void DoCreateMultipleSequences(bool withInitialSequenceShard) {
-        TTestWithReboots t(false);
+    void DoCreateMultipleSequences(TTestWithReboots& t, bool withInitialSequenceShard) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
@@ -77,16 +75,15 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateMultipleSequencesNoInitialSequenceShard) {
-        DoCreateMultipleSequences(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateMultipleSequencesNoInitialSequenceShard, 2, 1, false) {
+        DoCreateMultipleSequences(t, false);
     }
 
-    Y_UNIT_TEST(CreateMultipleSequencesHaveInitialSequenceShard) {
-        DoCreateMultipleSequences(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateMultipleSequencesHaveInitialSequenceShard, 2, 1, false) {
+        DoCreateMultipleSequences(t, true);
     }
 
-    Y_UNIT_TEST(CreateDropRecreate) {
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDropRecreate, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
@@ -132,8 +129,7 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateSequencesWithIndexedTable) {
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateSequencesWithIndexedTable, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
@@ -186,8 +182,7 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyTableWithSequence) {
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableWithSequence, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
@@ -232,8 +227,7 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterSequence) {
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS(AlterSequence) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
@@ -261,6 +255,61 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestLs(runtime, "/MyRoot/seq", false, NLs::PathExist);
+            }
+        });
+    }
+
+    // Issue #33764: ConsistentCopyTables + DropTable with sequences and reboots
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ConsistentCopyThenDropTableWithSequenceAndReboots, 8, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableDescription {
+                        Name: "Table"
+                        Columns { Name: "key" Type: "Uint64" DefaultFromSequence: "myseq" }
+                        Columns { Name: "value" Type: "Utf8" }
+                        KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                        Name: "ValueIndex"
+                        KeyColumnNames: ["value"]
+                    }
+                    SequenceDescription {
+                        Name: "myseq"
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                ConsistentCopyTablesRequest(++t.TxId, "/", R"(
+                    CopyTableDescriptions {
+                        SrcPath: "/MyRoot/Table"
+                        DstPath: "/MyRoot/TableCopy"
+                    }
+                )"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropTableRequest(++t.TxId, "/MyRoot", "Table"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications,
+                 NKikimrScheme::StatusPathDoesNotExist});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"),
+                                   {NLs::PathExist});
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex"),
+                                   {NLs::PathExist});
+                TestLs(runtime, "/MyRoot/TableCopy/myseq",
+                    TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+                TestLs(runtime, "/MyRoot/Table", false, NLs::PathNotExist);
             }
         });
     }

@@ -331,6 +331,7 @@ public:
                 .WithSchemaVersion(table->GetTableSchemaVersion())
                 .WithBody(body.SerializeAsString())
                 .WithSource(TChangeRecord::ESource::InitialScan)
+                .WithUserSID(BUILTIN_ACL_CDC_INITIAL_SCAN)
                 .Build();
 
             const auto& record = *recordPtr;

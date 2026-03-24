@@ -1,0 +1,8 @@
+dstool -e <endpoint> --mon-port <mon_port> group list -H --columns GroupId SizeInUnits VDiskSlotUsage VDiskRawUsage NormalizedOccupancy UsedSize TotalSize CapacityAlert
+Exit Status: 0
+===== stdout =====
+┌────────────┬─────────────┬──────────┬───────────┬────────────────┬───────────────┬──────────────────────┬───────────────┐
+│ GroupId    │ SizeInUnits │ UsedSize │ TotalSize │ VDiskSlotUsage │ VDiskRawUsage │ NormalizedOccupancy  │ CapacityAlert │
+├────────────┼─────────────┼──────────┼───────────┼────────────────┼───────────────┼──────────────────────┼───────────────┤
+│ 2181038080 │ 0           │ 0        │ 7.42 GB   │ 0.0%           │ 0.0%          │ 0.004273504273504274 │ GREEN         │
+└────────────┴─────────────┴──────────┴───────────┴────────────────┴───────────────┴──────────────────────┴───────────────┘

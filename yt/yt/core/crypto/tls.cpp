@@ -637,7 +637,7 @@ public:
         : Context_(std::move(ctx))
         , Underlying_(std::move(dialer))
         , Poller_(std::move(poller))
-        , AllowBypassTLS_(config->AllowBypassTLS)
+        , AllowBypassTls_(config->AllowBypassTls)
     { }
 
     TFuture<IConnectionPtr> Dial(const TNetworkAddress& remoteAddress, TDialerContextPtr context) override
@@ -647,10 +647,10 @@ public:
                 ctx = Context_,
                 poller = Poller_,
                 context = std::move(context),
-                allowBypassTLS = AllowBypassTLS_,
+                allowBypassTls = AllowBypassTls_,
                 insecureSkipVerify = Context_->IsInsecureSkipVerify()
             ] (const IConnectionPtr& underlying) -> IConnectionPtr {
-                if (allowBypassTLS && context->BypassTLS) {
+                if (allowBypassTls && context->BypassTls) {
                     return underlying;
                 }
                 auto connection = New<TTlsConnection>(ctx, poller, underlying);
@@ -666,7 +666,7 @@ private:
     const TSslContextImplPtr Context_;
     const IDialerPtr Underlying_;
     const IPollerPtr Poller_;
-    const bool AllowBypassTLS_;
+    const bool AllowBypassTls_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -190,7 +190,7 @@ void TFacadeRunOptions::ParseProtoConfig(const TString& cfgFile, google::protobu
     }
 }
 
-void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
+void TFacadeRunOptions::Parse(int argc, const char** argv) {
     User = GetUsername();
 
     if (EnableCredentials) {
@@ -357,6 +357,7 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         }
     });
     opts.AddLongOption("full-stat", "Output full execution statistics").Optional().NoArgument().SetFlag(&FullStatistics);
+    opts.AddLongOption("diagnostics", "Output diagnostics").Optional().NoArgument().SetFlag(&PrintDiagnostics);
 
     opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&SqlFlags, ',');
     opts.AddLongOption("syntax-version", "SQL syntax version").StoreResult(&SyntaxVersion).DefaultValue(1);
@@ -433,6 +434,8 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         opts.AddLongOption("test-syntax-ambiguity", "Check syntax ambiguities").NoArgument().SetFlag(&TestSyntaxAmbiguities);
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
         opts.AddLongOption("test-partial-typecheck", "Check partial AST typecheck").NoArgument().SetFlag(&TestPartialTypecheck);
+        opts.AddLongOption("fuzz-untyped-lambda", "Enable fuzzing by substituting untyped lambdas for callable children").NoArgument().SetFlag(&FuzzUntypedLambda);
+        opts.AddLongOption("fuzz-universal", "Enable fuzzing by substituting universal for callable children").NoArgument().SetFlag(&FuzzUniversal);
     }
 
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([this](const TString& str) {
@@ -540,7 +543,7 @@ TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> TFacadeRunner::GetFuncRegist
     return FuncRegistry_;
 }
 
-int TFacadeRunner::Main(int argc, const char* argv[]) {
+int TFacadeRunner::Main(int argc, const char** argv) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
     EnableKikimrBacktraceFormat();
@@ -553,7 +556,7 @@ int TFacadeRunner::Main(int argc, const char* argv[]) {
     }
 }
 
-int TFacadeRunner::DoMain(int argc, const char* argv[]) {
+int TFacadeRunner::DoMain(int argc, const char** argv) {
     Y_UNUSED(NUdf::GetStaticSymbols());
 
     RunOptions_.Parse(argc, argv);
@@ -661,8 +664,8 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
                     return false;
                 }
 
-                constexpr bool isIdempotencyChecked = true;
-                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, settings, issues, isIdempotencyChecked)) {
+                constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
+                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, convergence)) {
                     auto issue = TIssue(TPosition(0, 0, fileName), "Format failed");
                     for (const auto& i : issues) {
                         issue.AddSubIssue(MakeIntrusive<TIssue>(i));
@@ -814,6 +817,14 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         program->SetEnableLineage();
     }
 
+    if (RunOptions_.FuzzUntypedLambda) {
+        program->SetFuzzUntypedLambda();
+    }
+
+    if (RunOptions_.FuzzUniversal) {
+        program->SetFuzzUniversal();
+    }
+
     program->SetOperationId(RunOptions_.OperationId);
 
     bool fail = false;
@@ -840,14 +851,14 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         }
         if (!fail && RunOptions_.TestSqlFormat && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
-            constexpr bool isIdempotencyChecked = true;
-            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), settings, issues, isIdempotencyChecked)) {
+            constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
+            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), program->AstRoot(), settings, issues, convergence)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
             }
         }
-        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion) {
+        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion && !settings.PgParser) {
             TIssues issues;
             if (!NSQLTranslationV1::CheckLexers({}, program->GetSourceCode(), issues)) {
                 *RunOptions_.ErrStream << "Lexers mismatched" << Endl;
@@ -1026,6 +1037,14 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     if (RunOptions_.StatStream) {
         if (auto st = program->GetStatistics(!RunOptions_.FullStatistics)) {
             *RunOptions_.StatStream << *st;
+        }
+    }
+
+    if (RunOptions_.PrintDiagnostics) {
+        if (auto diag = program->GetDiagnostics()) {
+            RunOptions_.PrintInfo("Diagnostics:");
+            TStringInput diagStream(*diag);
+            NYson::ReformatYsonStream(&diagStream, &Cerr, NYT::NYson::EYsonFormat::Pretty);
         }
     }
 

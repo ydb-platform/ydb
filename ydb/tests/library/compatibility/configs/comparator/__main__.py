@@ -235,8 +235,8 @@ function showBranches(event) {
     <td><button class="tablinks" onclick="openDescr(event, 'english')">Description</button></td>
     <td>Show lines:
       <input id="showAll" class="showSwitch" type="radio" name="show" value={Resolution.OK.value} onchange="showSwitchChanged()"><label for="showAll">All</label>
-      <input id="showChanged" class="showSwitch" type="radio" name="show" value={Resolution.INFO.value} onchange="showSwitchChanged()"><label for="showChanged">Changed</label>
-      <input id="showSuspicious" class="showSwitch" type="radio" name="show" value={Resolution.WARNING.value} onchange="showSwitchChanged()" checked><label for="showSuspicious">Suspicious</label>
+      <input id="showChanged" class="showSwitch" type="radio" name="show" value={Resolution.INFO.value} onchange="showSwitchChanged()" checked><label for="showChanged">Changed</label>
+      <input id="showSuspicious" class="showSwitch" type="radio" name="show" value={Resolution.WARNING.value} onchange="showSwitchChanged()"><label for="showSuspicious">Suspicious</label>
     </td>
     {'\n'.join([f'<td><button class="branchbutton active" onclick="showBranches(event)" value={b + 1}>{self.branches[b]["branch_name"]}</button></td>' for b in range(len(self.branches))])}
   </tr></table>

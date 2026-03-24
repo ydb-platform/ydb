@@ -3,9 +3,14 @@ import logging
 import enum
 import functools
 from typing import (
+    Any,
+    Awaitable,
+    Generic,
     Iterable,
     Optional,
     TYPE_CHECKING,
+    Union,
+    overload,
 )
 
 from .. import (
@@ -15,12 +20,15 @@ from .. import (
 from .._grpc.grpcwrapper import ydb_topic as _ydb_topic
 from .._grpc.grpcwrapper import ydb_query as _ydb_query
 from ..connection import _RpcState as RpcState
+from .._typing import DriverT
 
 from . import base
 from ..settings import BaseRequestSettings
 
 if TYPE_CHECKING:
     from .session import BaseQuerySession
+    from ..driver import Driver as SyncDriver
+    from ..aio.driver import Driver as AsyncDriver
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +90,10 @@ def reset_tx_id_handler(func):
 
 
 class QueryTxState:
+    tx_id: Optional[str]
+    tx_mode: base.BaseQueryTxMode
+    _state: QueryTxStateEnum
+
     def __init__(self, tx_mode: base.BaseQueryTxMode):
         """
         Holds transaction context manager info
@@ -115,6 +127,8 @@ def _construct_tx_settings(tx_state: QueryTxState) -> _ydb_query.TransactionSett
 def _create_begin_transaction_request(
     session: "BaseQuerySession", tx_state: QueryTxState
 ) -> _apis.ydb_query.BeginTransactionRequest:
+    if session.session_id is None:
+        raise RuntimeError("Session is not initialized")
     request = _ydb_query.BeginTransactionRequest(
         session_id=session.session_id,
         tx_settings=_construct_tx_settings(tx_state),
@@ -125,6 +139,10 @@ def _create_begin_transaction_request(
 def _create_commit_transaction_request(
     session: "BaseQuerySession", tx_state: QueryTxState
 ) -> _apis.ydb_query.CommitTransactionRequest:
+    if session.session_id is None:
+        raise RuntimeError("Session is not initialized")
+    if tx_state.tx_id is None:
+        raise RuntimeError("Transaction is not started")
     request = _apis.ydb_query.CommitTransactionRequest()
     request.tx_id = tx_state.tx_id
     request.session_id = session.session_id
@@ -134,6 +152,10 @@ def _create_commit_transaction_request(
 def _create_rollback_transaction_request(
     session: "BaseQuerySession", tx_state: QueryTxState
 ) -> _apis.ydb_query.RollbackTransactionRequest:
+    if session.session_id is None:
+        raise RuntimeError("Session is not initialized")
+    if tx_state.tx_id is None:
+        raise RuntimeError("Transaction is not started")
     request = _apis.ydb_query.RollbackTransactionRequest()
     request.tx_id = tx_state.tx_id
     request.session_id = session.session_id
@@ -149,7 +171,8 @@ def wrap_tx_begin_response(
     tx: "BaseQueryTxContext",
 ) -> "BaseQueryTxContext":
     message = _ydb_query.BeginTransactionResponse.from_proto(response_pb)
-    issues._process_response(message.status)
+    if message.status is not None:
+        issues._process_response(message.status)
     tx_state._change_state(QueryTxStateEnum.BEGINED)
     tx_state.tx_id = message.tx_meta.tx_id
     return tx
@@ -165,7 +188,8 @@ def wrap_tx_commit_response(
     tx: "BaseQueryTxContext",
 ) -> "BaseQueryTxContext":
     message = _ydb_query.CommitTransactionResponse.from_proto(response_pb)
-    issues._process_response(message.status)
+    if message.status is not None:
+        issues._process_response(message.status)
     tx_state._change_state(QueryTxStateEnum.COMMITTED)
     return tx
 
@@ -180,13 +204,20 @@ def wrap_tx_rollback_response(
     tx: "BaseQueryTxContext",
 ) -> "BaseQueryTxContext":
     message = _ydb_query.RollbackTransactionResponse.from_proto(response_pb)
-    issues._process_response(message.status)
+    if message.status is not None:
+        issues._process_response(message.status)
     tx_state._change_state(QueryTxStateEnum.ROLLBACKED)
     return tx
 
 
-class BaseQueryTxContext(base.CallbackHandler):
-    def __init__(self, driver, session: "BaseQuerySession", tx_mode: base.BaseQueryTxMode):
+class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
+    """Generic transaction context - parametrized by driver type for proper typing."""
+
+    _driver: DriverT
+    _prev_stream: Any  # SyncResponseContextIterator or AsyncResponseContextIterator
+    _external_error: Optional[BaseException]
+
+    def __init__(self, driver: DriverT, session: "BaseQuerySession", tx_mode: base.BaseQueryTxMode):
         """
         An object that provides a simple transaction context manager that allows statements execution
         in a transaction. You don't have to open transaction explicitly, because context manager encapsulates
@@ -203,8 +234,7 @@ class BaseQueryTxContext(base.CallbackHandler):
          1) QuerySerializableReadWrite() which is default mode;
          2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
          3) QuerySnapshotReadOnly();
-         4) QuerySnapshotReadWrite();
-         5) QueryStaleReadOnly().
+         4) QueryStaleReadOnly().
         """
 
         self._driver = driver
@@ -215,7 +245,7 @@ class BaseQueryTxContext(base.CallbackHandler):
         self._last_query_stats = None
 
     @property
-    def session_id(self) -> str:
+    def session_id(self) -> Optional[str]:
         """
         A transaction's session id
 
@@ -239,6 +269,8 @@ class BaseQueryTxContext(base.CallbackHandler):
     def _tx_identity(self) -> _ydb_topic.TransactionIdentity:
         if not self.tx_id:
             raise RuntimeError("Unable to get tx identity without started tx.")
+        if not self.session_id:
+            raise RuntimeError("Unable to get tx identity without session.")
         return _ydb_topic.TransactionIdentity(self.tx_id, self.session_id)
 
     def _set_external_error(self, exc: BaseException) -> None:
@@ -249,7 +281,23 @@ class BaseQueryTxContext(base.CallbackHandler):
             return
         raise issues.ClientInternalError("Transaction was failed by external error.") from self._external_error
 
-    def _begin_call(self, settings: Optional[BaseRequestSettings]) -> "BaseQueryTxContext":
+    # Overloads for _begin_call - sync driver returns value, async driver returns Awaitable
+    @overload
+    def _begin_call(
+        self: "BaseQueryTxContext[SyncDriver]", settings: Optional[BaseRequestSettings]
+    ) -> "BaseQueryTxContext[SyncDriver]":
+        ...
+
+    @overload
+    def _begin_call(
+        self: "BaseQueryTxContext[AsyncDriver]", settings: Optional[BaseRequestSettings]
+    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]:
+        ...
+
+    def _begin_call(
+        self, settings: Optional[BaseRequestSettings]
+    ) -> "Union[BaseQueryTxContext[Any], Awaitable[BaseQueryTxContext[Any]]]":
+        """Begin transaction. Returns Awaitable in async context."""
         self._tx_state._check_invalid_transition(QueryTxStateEnum.BEGINED)
 
         return self._driver(
@@ -262,7 +310,23 @@ class BaseQueryTxContext(base.CallbackHandler):
             preferred_endpoint=self.session._endpoint_key,
         )
 
-    def _commit_call(self, settings: Optional[BaseRequestSettings]) -> "BaseQueryTxContext":
+    # Overloads for _commit_call
+    @overload
+    def _commit_call(
+        self: "BaseQueryTxContext[SyncDriver]", settings: Optional[BaseRequestSettings]
+    ) -> "BaseQueryTxContext[SyncDriver]":
+        ...
+
+    @overload
+    def _commit_call(
+        self: "BaseQueryTxContext[AsyncDriver]", settings: Optional[BaseRequestSettings]
+    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]:
+        ...
+
+    def _commit_call(
+        self, settings: Optional[BaseRequestSettings]
+    ) -> "Union[BaseQueryTxContext[Any], Awaitable[BaseQueryTxContext[Any]]]":
+        """Commit transaction. Returns Awaitable in async context."""
         self._check_external_error_set()
         self._tx_state._check_invalid_transition(QueryTxStateEnum.COMMITTED)
 
@@ -276,7 +340,23 @@ class BaseQueryTxContext(base.CallbackHandler):
             preferred_endpoint=self.session._endpoint_key,
         )
 
-    def _rollback_call(self, settings: Optional[BaseRequestSettings]) -> "BaseQueryTxContext":
+    # Overloads for _rollback_call
+    @overload
+    def _rollback_call(
+        self: "BaseQueryTxContext[SyncDriver]", settings: Optional[BaseRequestSettings]
+    ) -> "BaseQueryTxContext[SyncDriver]":
+        ...
+
+    @overload
+    def _rollback_call(
+        self: "BaseQueryTxContext[AsyncDriver]", settings: Optional[BaseRequestSettings]
+    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]:
+        ...
+
+    def _rollback_call(
+        self, settings: Optional[BaseRequestSettings]
+    ) -> "Union[BaseQueryTxContext[Any], Awaitable[BaseQueryTxContext[Any]]]":
+        """Rollback transaction. Returns Awaitable in async context."""
         self._check_external_error_set()
         self._tx_state._check_invalid_transition(QueryTxStateEnum.ROLLBACKED)
 
@@ -289,6 +369,41 @@ class BaseQueryTxContext(base.CallbackHandler):
             (self.session, self._tx_state, self),
             preferred_endpoint=self.session._endpoint_key,
         )
+
+    # Overloads for _execute_call
+    @overload
+    def _execute_call(
+        self: "BaseQueryTxContext[SyncDriver]",
+        query: str,
+        parameters: Optional[dict],
+        commit_tx: Optional[bool],
+        syntax: Optional[base.QuerySyntax],
+        exec_mode: Optional[base.QueryExecMode],
+        stats_mode: Optional[base.QueryStatsMode],
+        schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode],
+        result_set_format: Optional[base.QueryResultSetFormat],
+        arrow_format_settings: Optional[base.ArrowFormatSettings],
+        concurrent_result_sets: Optional[bool],
+        settings: Optional[BaseRequestSettings],
+    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
+        ...
+
+    @overload
+    def _execute_call(
+        self: "BaseQueryTxContext[AsyncDriver]",
+        query: str,
+        parameters: Optional[dict],
+        commit_tx: Optional[bool],
+        syntax: Optional[base.QuerySyntax],
+        exec_mode: Optional[base.QueryExecMode],
+        stats_mode: Optional[base.QueryStatsMode],
+        schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode],
+        result_set_format: Optional[base.QueryResultSetFormat],
+        arrow_format_settings: Optional[base.ArrowFormatSettings],
+        concurrent_result_sets: Optional[bool],
+        settings: Optional[BaseRequestSettings],
+    ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]:
+        ...
 
     def _execute_call(
         self,
@@ -303,9 +418,15 @@ class BaseQueryTxContext(base.CallbackHandler):
         arrow_format_settings: Optional[base.ArrowFormatSettings],
         concurrent_result_sets: Optional[bool],
         settings: Optional[BaseRequestSettings],
-    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
+    ) -> Union[
+        Iterable[_apis.ydb_query.ExecuteQueryResponsePart],
+        Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]],
+    ]:
         self._tx_state._check_tx_ready_to_use()
         self._check_external_error_set()
+
+        if self.session.session_id is None:
+            raise RuntimeError("Session is not initialized")
 
         self._last_query_stats = None
 
@@ -345,8 +466,10 @@ class BaseQueryTxContext(base.CallbackHandler):
         self._tx_state._change_state(QueryTxStateEnum.COMMITTED)
 
 
-class QueryTxContext(BaseQueryTxContext):
-    def __init__(self, driver, session: "BaseQuerySession", tx_mode: base.BaseQueryTxMode):
+class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
+    """Synchronous transaction context."""
+
+    def __init__(self, driver: "SyncDriver", session: "BaseQuerySession", tx_mode: base.BaseQueryTxMode):
         """
         An object that provides a simple transaction context manager that allows statements execution
         in a transaction. You don't have to open transaction explicitly, because context manager encapsulates

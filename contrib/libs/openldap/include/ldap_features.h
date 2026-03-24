@@ -2,7 +2,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -22,10 +22,10 @@
 #define _LDAP_FEATURES_H 1
 
 /* OpenLDAP API version macros */
-#define LDAP_VENDOR_VERSION 20610
+#define LDAP_VENDOR_VERSION 20612
 #define LDAP_VENDOR_VERSION_MAJOR 2
 #define LDAP_VENDOR_VERSION_MINOR 6
-#define LDAP_VENDOR_VERSION_PATCH 10
+#define LDAP_VENDOR_VERSION_PATCH 12
 
 /*
 ** WORK IN PROGRESS!

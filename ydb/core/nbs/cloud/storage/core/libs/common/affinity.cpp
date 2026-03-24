@@ -6,7 +6,7 @@
 #include <sched.h>
 #endif
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 namespace {
 
@@ -142,5 +142,4 @@ void TAffinityGuard::Release()
     Impl->Release();
 }
 
-
-}   // namespace NCloud
+}   // namespace NYdb::NBS

@@ -7,11 +7,11 @@
 
 #include <memory>
 
-namespace NCloud::NBlockStore {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct ICachingAllocator;
 using ICachingAllocatorPtr = std::shared_ptr<ICachingAllocator>;
 
-}   // namespace NCloud::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore

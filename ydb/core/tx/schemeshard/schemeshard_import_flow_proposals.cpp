@@ -16,6 +16,32 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+static bool FillDefaultValues(
+    const NKikimr::NSchemeShard::TImportInfo::TItem& item,
+    ::NKikimrSchemeOp::TIndexedTableCreationConfig& indexedTable,
+    TString& error)
+{
+    for (const auto& column : item.Table->columns()) {
+        switch (column.default_value_case()) {
+            case Ydb::Table::ColumnMeta::kFromSequence: {
+                const auto& fromSequence = column.from_sequence();
+                Ydb::StatusIds::StatusCode status;
+                auto* seqDesc = indexedTable.MutableSequenceDescription()->Add();
+                if (!FillSequenceDescription(*seqDesc, fromSequence, status, error)) {
+                    return false;
+                }
+
+                break;
+            }
+            case Ydb::Table::ColumnMeta::kFromLiteral:
+                break;
+            default:
+                break;
+        }
+    }
+    return true;
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -31,7 +57,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     auto& record = propose->Record;
 
     auto& modifyScheme = *record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
+    const bool isColumnTable = item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN;
+    modifyScheme.SetOperationType(isColumnTable ? NKikimrSchemeOp::ESchemeOpCreateColumnTable : NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
     modifyScheme.SetInternal(true);
 
     const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
@@ -43,37 +70,34 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
     modifyScheme.SetWorkingDir(wdAndPath.first);
 
-    auto* indexedTable = modifyScheme.MutableCreateIndexedTable();
-    auto& tableDesc = *(indexedTable->MutableTableDescription());
-    tableDesc.SetName(wdAndPath.second);
-    tableDesc.SetIsRestore(true);
+    if (isColumnTable) {
+        auto& tableDesc = *modifyScheme.MutableCreateColumnTable();
+        tableDesc.SetName(wdAndPath.second);
+        tableDesc.SetIsRestore(true);
 
-    Y_ABORT_UNLESS(ss->TableProfilesLoaded);
-    Ydb::StatusIds::StatusCode status;
-    if (!FillTableDescription(modifyScheme, *item.Table, ss->TableProfiles, status, error, true)) {
-        return nullptr;
-    }
+        Y_ABORT_UNLESS(ss->TableProfilesLoaded);
+        Ydb::StatusIds::StatusCode status;
+        if (!FillColumnTableDescription(modifyScheme, *item.Table, status, error)) {
+            return nullptr;
+        }
+    } else {
+        auto& indexedTable = *modifyScheme.MutableCreateIndexedTable();
+        auto& tableDesc = *indexedTable.MutableTableDescription();
+        tableDesc.SetName(wdAndPath.second);
+        tableDesc.SetIsRestore(true);
 
-    if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(*indexedTable, *item.Table, status, error)) {
-        return nullptr;
-    }
+        Y_ABORT_UNLESS(ss->TableProfilesLoaded);
+        Ydb::StatusIds::StatusCode status;
+        if (!FillTableDescription(modifyScheme, *item.Table, ss->TableProfiles, status, error, true)) {
+            return nullptr;
+        }
 
-    for(const auto& column: item.Table->columns()) {
-        switch (column.default_value_case()) {
-            case Ydb::Table::ColumnMeta::kFromSequence: {
-                const auto& fromSequence = column.from_sequence();
+        if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(indexedTable, *item.Table, status, error)) {
+            return nullptr;
+        }
 
-                auto* seqDesc = indexedTable->MutableSequenceDescription()->Add();
-                if (!FillSequenceDescription(*seqDesc, fromSequence, status, error)) {
-                    return nullptr;
-                }
-
-                break;
-            }
-            case Ydb::Table::ColumnMeta::kFromLiteral: {
-                break;
-            }
-            default: break;
+        if (!FillDefaultValues(item, indexedTable, error)) {
+            return nullptr;
         }
     }
 
@@ -111,7 +135,32 @@ static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, 
     auto record = desc->GetRecord();
 
     Y_ABORT_UNLESS(record.HasPathDescription());
-    Y_ABORT_UNLESS(record.GetPathDescription().HasTable());
+    const auto& pathDesc = record.GetPathDescription();
+    Y_ABORT_UNLESS(pathDesc.HasTable() || pathDesc.HasColumnTableDescription());
+
+    if (pathDesc.HasColumnTableDescription()) {
+        NKikimrSchemeOp::TTableDescription result;
+        const auto& columnTable = pathDesc.GetColumnTableDescription();
+        THashMap<TString, ui32> columnIds;
+        for (const auto& column : columnTable.GetSchema().GetColumns()) {
+            auto& dstColumn = *result.add_columns();
+            dstColumn.set_name(column.GetName());
+            dstColumn.set_type(column.GetType());
+            dstColumn.set_typeid_(column.GetTypeId());
+            dstColumn.set_id(column.GetId());
+            columnIds[column.GetName()] = column.GetId();
+        }
+
+        result.MutableKeyColumnNames()->CopyFrom(columnTable.GetSchema().GetKeyColumnNames());
+        for (const auto& keyColumnName : columnTable.GetSchema().GetKeyColumnNames()) {
+            auto it = columnIds.find(keyColumnName);
+            Y_ABORT_UNLESS(it != columnIds.end());
+            result.AddKeyColumnIds(it->second);
+        }
+
+        result.MutablePartitionConfig()->MutablePartitioningPolicy()->SetMinPartitionsCount(columnTable.GetColumnShardCount());
+        return result;
+    }
 
     return record.GetPathDescription().GetTable();
 }
@@ -122,6 +171,7 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
 ) {
     NKikimrSchemeOp::TTableDescription tableDesc;
     tableDesc.MutableKeyColumnNames()->CopyFrom(src.GetKeyColumnNames());
+    tableDesc.MutableKeyColumnIds()->CopyFrom(src.GetKeyColumnIds());
 
     THashMap<TString, ui32> columnNameToIdx;
     for (ui32 i = 0; i < src.ColumnsSize(); ++i) {
@@ -137,6 +187,21 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
     }
 
     return tableDesc;
+}
+
+template <typename TSettings>
+void FillRestoreEncryptionSettings(
+    NKikimrSchemeOp::TRestoreTask& task,
+    const TSettings& settings,
+    const TImportInfo::TItem& item)
+{
+    if (settings.has_encryption_settings()) {
+        auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
+        *taskEncryptionSettings.MutableSymmetricKey() = settings.encryption_settings().symmetric_key();
+        if (item.ExportItemIV) {
+            taskEncryptionSettings.SetIV(item.ExportItemIV->GetBinaryString());
+        }
+    }
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
@@ -169,15 +234,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     case TImportInfo::EKind::S3:
         {
             auto settings = importInfo.GetS3Settings();
-            
-            if (settings.has_encryption_settings()) {
-                auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
-                *taskEncryptionSettings.MutableSymmetricKey() = settings.encryption_settings().symmetric_key();
-                if (item.ExportItemIV) {
-                    taskEncryptionSettings.SetIV(item.ExportItemIV->GetBinaryString());
-                }
-            }
-
+            FillRestoreEncryptionSettings(task, settings, item);
             task.SetNumberOfRetries(settings.number_of_retries());
             auto& restoreSettings = *task.MutableS3Settings();
             restoreSettings.SetEndpoint(settings.endpoint());
@@ -207,6 +264,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     case TImportInfo::EKind::FS:
         {
             auto settings = importInfo.GetFsSettings();
+            FillRestoreEncryptionSettings(task, settings, item);
             task.SetNumberOfRetries(settings.number_of_retries());
             auto& restoreSettings = *task.MutableFSSettings();
             restoreSettings.SetBasePath(settings.base_path());
@@ -323,9 +381,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     Y_ABORT_UNLESS(!tableDesc.GetKeyColumnIds().empty());
     const auto& keyId = tableDesc.GetKeyColumnIds()[0];
     bool isPartitioningAvailable = false;
-    
+
     // Explicit specification of the number of partitions when creating CDC
-    // is possible only if the first component of the primary key 
+    // is possible only if the first component of the primary key
     // of the source table is Uint32 or Uint64
     for (const auto& column : tableDesc.GetColumns()) {
         if (column.GetId() == keyId) {

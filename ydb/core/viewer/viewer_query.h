@@ -33,6 +33,7 @@ class TJsonQuery : public TViewerPipeClient {
     TDuration StatsPeriod;
     TDuration KeepAlive = TDuration::MilliSeconds(10000);
     TInstant LastSendTime;
+    TInstant QueryStartTime;
     TInstant Deadline;
     static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
 
@@ -278,7 +279,6 @@ public:
     }
 
     void InitConfig(const TCgiParameters& params) {
-        Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -341,6 +341,11 @@ public:
         if (params.Has("stats_period")) {
             StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
         }
+        if (Streaming == EStreamingType::None || params.Has("timeout")) {
+            Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
+        } else {
+            Timeout = TDuration::Max(); // no timeout for streaming queries by default
+        }
     }
 
     TJsonQuery(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
@@ -385,7 +390,6 @@ public:
         if (Streaming != EStreamingType::None && QueryId.empty()) {
             QueryId = CreateGuidAsString();
         }
-        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         if (Timeout) {
             Deadline = TActivationContext::Now() + Timeout;
         }
@@ -394,6 +398,7 @@ public:
         if (Timeout || KeepAlive || Long || Action == "fetch-long-query") {
             Schedule(WakeupPeriod, new TEvents::TEvWakeup());
         }
+        QueryStartTime = TActivationContext::Now();
         LastSendTime = TActivationContext::Now();
     }
 
@@ -421,13 +426,7 @@ public:
 
     void Cancelled() {
         CancelQuery();
-        PassAway();
-    }
-
-    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
-            Cancelled();
-        }
+        TBase::Cancelled();
     }
 
     void PassAway() override {
@@ -452,8 +451,9 @@ public:
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
             hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
-            hFunc(TEvents::TEvUndelivered, Undelivered);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -1219,7 +1219,7 @@ private:
 
     void HandleWakeup() {
         auto now = TActivationContext::Now();
-        if (Timeout && (now - LastSendTime > Timeout)) {
+        if (Timeout && (now - QueryStartTime > Timeout)) {
             return ReplyWithTimeoutError();
         }
         if (KeepAlive && (now - LastSendTime > KeepAlive)) {
@@ -1527,10 +1527,9 @@ public:
                 default: true
               - name: timeout
                 in: query
-                description: timeout in ms
+                description: timeout in ms, for synchronous queries it's 60s by default, for streaming queries it's off by default
                 type: integer
                 required: false
-                default: 60000
               - name: ui64
                 in: query
                 description: return ui64 as number to avoid 56-bit js rounding

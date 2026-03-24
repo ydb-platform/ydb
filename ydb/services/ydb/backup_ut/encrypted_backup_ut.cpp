@@ -1,8 +1,10 @@
 #include "s3_backup_test_base.h"
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/wrappers/ut_helpers/fs_mock.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 
+#include <util/folder/tempdir.h>
 #include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/buffer.h>
@@ -29,15 +31,17 @@ public:
                 PRIMARY KEY (Key)
             ) WITH (
                 STORE = {store}
+                {partition_count}
             );
-        )sql", "store"_a = isOlap ? "COLUMN" : "ROW"), NQuery::TTxControl::NoTx()).GetValueSync();
+        )sql", "store"_a = isOlap ? "COLUMN" : "ROW"
+        , "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
     void MakeFullExport(bool encrypted = false) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
         if (encrypted) {
-            settings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+            settings.SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
         }
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
         WaitOpSuccess(res);
@@ -50,9 +54,6 @@ public:
 Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParamsValidationTestFixture<true>)
 {
     Y_UNIT_TEST_TWIN(BadSourcePath, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
 
         settings.SourcePath("unknown").DestinationPrefix("dest");
@@ -70,9 +71,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
     }
 
     Y_UNIT_TEST_TWIN(NoDestination, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
         UNIT_ASSERT_C(!res.Status().IsSuccess(), "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
@@ -88,9 +86,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
     }
 
     Y_UNIT_TEST_TWIN(NoItemDestination, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         settings.AppendItem({"/Root/ExportParamsValidation/dir1/Table1", ""});
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
@@ -115,9 +110,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
     }
 
     Y_UNIT_TEST_TWIN(NoCommonDestination, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         settings.AppendItem({"/Root/ExportParamsValidation/dir1/Table1", "dest"});
         settings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
@@ -135,9 +127,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
     }
 
     Y_UNIT_TEST_TWIN(IncorrectKeyLengthExport, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         settings.DestinationPrefix("encrypted_export");
         settings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::CHACHA_20_POLY_1305, "123");
@@ -155,9 +144,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
     }
 
     Y_UNIT_TEST_TWIN(NoSourcePrefix, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         MakeFullExport();
 
         NImport::TImportFromS3Settings settings = MakeImportSettings("", "");
@@ -186,9 +172,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
     }
 
     Y_UNIT_TEST_TWIN(EmptyImportItem, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         MakeFullExport();
 
         NImport::TImportFromS3Settings settings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
@@ -211,9 +194,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
     }
 
     Y_UNIT_TEST_TWIN(IncorrectKeyImport, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         MakeFullExport(true);
 
         NImport::TImportFromS3Settings settings = MakeImportSettings("Prefix", "Root//RestorePrefix/");
@@ -234,9 +214,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
     }
 
     Y_UNIT_TEST_TWIN(EncryptionSettingsWithoutKeyImport, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         MakeFullExport(true);
 
         NImport::TImportFromS3Settings settings = MakeImportSettings("Prefix", "Root//RestorePrefix/");
@@ -259,9 +236,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
     }
 
     Y_UNIT_TEST_TWIN(NoSourcePrefixEncrypted, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         MakeFullExport(true);
 
         NImport::TImportFromS3Settings settings = MakeImportSettings("", "/Root/RestorePath");
@@ -361,8 +335,10 @@ class TBackupEncryptionTestFixture : public TS3BackupTestFixture {
                 PRIMARY KEY (Key)
             ) WITH (
                 STORE = {store}
+                {partition_count}
             );
-        )sql", "store"_a = isOlap ? "COLUMN" : "ROW"), NQuery::TTxControl::NoTx()).GetValueSync();
+        )sql", "store"_a = isOlap ? "COLUMN" : "ROW"
+        , "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
         InsertData();
@@ -398,9 +374,6 @@ protected:
 Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
     Y_UNIT_TEST_TWIN(EncryptedExportAndImport, IsOlap)
     {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1", "EncryptedExport");
             exportSettings
@@ -440,9 +413,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(EncryptionAndCompression, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2", "Prefix");
             settings
@@ -483,9 +453,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(EncryptionAndChecksum, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
 
         {
@@ -536,9 +503,6 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(EncryptionChecksumAndCompression, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
 
         {
@@ -589,10 +553,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ChangefeedEncryption, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(ChangefeedEncryption) {
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
@@ -660,7 +621,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         UNIT_ASSERT_C(changeFeed2Describe.IsSuccess(), changeFeed2Describe.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(TopicEncryption, IsOlap) {
+    Y_UNIT_TEST(TopicEncryption) {
         TString query = R"sql(
             CREATE TOPIC `/Root/EncryptedExportAndImport/dir1/dir2/dir3/Topic` (
                 CONSUMER Consumer
@@ -883,8 +844,8 @@ class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixtu
     }
 
 protected:
-    bool NotEncryptedFileName(const TString& key) {
-        return key.EndsWith(".sha256") || key == "/test_bucket/Prefix/metadata.json";
+    bool NotEncryptedFileName(const TString& key, const TString& metadataPrefix) {
+        return key.EndsWith(".sha256") || key == metadataPrefix + "metadata.json";
     }
 
     TString ReencryptWithDifferentIV(const TString& source, NBackup::TEncryptionKey& encryptionKey, const std::string& algorithm) {
@@ -899,11 +860,16 @@ protected:
         return TString(encrypted.Data(), encrypted.Size());
     }
 
-    void TestCommonEncryptionRequirements(bool isOlap, bool useSchemaSecrets) {
-        if (isOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    void TestCommonEncryptionRequirements(bool useSchemaSecrets, bool isFsBackup = false) {
         using namespace ::fmt::literals;
+
+        THolder<TTempDir> tempDirHolder;
+        TString basePath;
+        if (isFsBackup) {
+            tempDirHolder = MakeHolder<TTempDir>();
+            basePath = tempDirHolder->Path();
+            Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        }
         // Create different objects with names that are expected to be hidden (anonymized) in encrypted exports
         // Create two object of each type in order to verify that we don't duplicate IVs
         {
@@ -920,8 +886,7 @@ protected:
                         )
                         WITH (
                             AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
-                            PARTITION_AT_KEYS = (42),
-                            STORE = {store}
+                            PARTITION_AT_KEYS = (42)
                         );
 
                         CREATE TABLE `/Root/Anonymized_Dir/Anonymized_Table2` (
@@ -931,8 +896,6 @@ protected:
                             PRIMARY KEY (Key),
                             INDEX `Anonymized_Index` GLOBAL ON (`Value`),
                             INDEX `Anonymized_Index2` GLOBAL ON (`Value2`)
-                        ) WITH (
-                            STORE = {store}
                         );
 
                         ALTER TABLE `/Root/Anonymized_Dir/Anonymized_Table`
@@ -1009,7 +972,6 @@ protected:
                             LOCATION="/"
                         );
                     )sql",
-                    "store"_a = isOlap ? "COLUMN" : "ROW",
                     "secret_param_name_1"_a = useSchemaSecrets ? "AWS_ACCESS_KEY_ID_SECRET_PATH" : "AWS_ACCESS_KEY_ID_SECRET_NAME",
                     "secret_param_name_2"_a = useSchemaSecrets ? "AWS_SECRET_ACCESS_KEY_SECRET_PATH" : "AWS_SECRET_ACCESS_KEY_SECRET_NAME"
                 ),
@@ -1050,7 +1012,15 @@ protected:
         }
 
         // Create recursive export
-        {
+        if (isFsBackup) {
+            NExport::TExportToFsSettings settings;
+            settings
+                .BasePath(basePath)
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+
+            auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+            WaitOpSuccess(res);
+        } else {
             NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
             settings
                 .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
@@ -1059,17 +1029,26 @@ protected:
             WaitOpSuccess(res);
         }
 
-        Cerr << "Export files:\n";
-        for (const auto& [key, _] : S3Mock().GetData()) {
-            Cerr << key << Endl;
-        }
-
         NBackup::TEncryptionKey encryptionKey("Cool random key!");
         THashSet<TString> ivs;
         THashSet<TString> allKeyNames;
-        for (const auto& [key, content] : S3Mock().GetData()) {
-            // Nonencrypted keys
-            if (NotEncryptedFileName(key)) {
+
+        THolder<NKikimr::NWrappers::NTestHelpers::TFsMock> fsMockOwner;
+        if (isFsBackup) {
+            fsMockOwner = MakeHolder<NKikimr::NWrappers::NTestHelpers::TFsMock>(basePath);
+            fsMockOwner->Refresh();
+        }
+        auto& mock = isFsBackup
+            ? static_cast<NKikimr::NWrappers::NTestHelpers::TBackupMock&>(*fsMockOwner)
+            : static_cast<NKikimr::NWrappers::NTestHelpers::TBackupMock&>(S3Mock());
+
+        const TString metadataPrefix = isFsBackup ? "" : "/test_bucket/Prefix/";
+
+        Cerr << "Export files:\n";
+        for (const auto& [key, content] : mock.GetData()) {
+            Cerr << key << Endl;
+
+            if (NotEncryptedFileName(key, metadataPrefix)) {
                 continue;
             }
 
@@ -1094,6 +1073,12 @@ protected:
             UNIT_ASSERT_C(key.find("anonymized") == TString::npos, key); // user/group
         }
 
+        if (isFsBackup) {
+            // TODO: FS import with encryption and recursive mode is not yet fully implemented
+            // Skip import tests for FS backups for now
+            Cerr << "Skipping import tests for FS backup (not yet fully implemented)" << Endl;
+            return;
+        }
 
         NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
         importSettings
@@ -1145,11 +1130,19 @@ protected:
 };
 
 Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonRequirementsTestFixture) {
-    Y_UNIT_TEST_TWIN(CommonEncryptionRequirements, IsOlap) {
-        TestCommonEncryptionRequirements(IsOlap, /* useSchemaSecrets */ false);
+    Y_UNIT_TEST(CommonEncryptionRequirements) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ false);
     }
 
-    Y_UNIT_TEST_TWIN(CommonEncryptionRequirementsWithSchemaSecrets, IsOlap) {
-        TestCommonEncryptionRequirements(IsOlap, /* useSchemaSecrets */ true);
+    Y_UNIT_TEST(CommonEncryptionRequirementsWithSchemaSecrets) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ true);
+    }
+
+    Y_UNIT_TEST(CommonEncryptionRequirementsFs) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ false, /* isFsBackup */ true);
+    }
+
+    Y_UNIT_TEST(CommonEncryptionRequirementsFsWithSchemaSecrets) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ true, /* isFsBackup */ true);
     }
 }

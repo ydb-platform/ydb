@@ -2,7 +2,7 @@
 
 #include <util/system/compiler.h>
 
-#include <stdlib.h>
+#include <cstdlib>
 
 namespace NKikimr {
 

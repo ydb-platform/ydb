@@ -601,10 +601,29 @@ namespace NKikimr {
                 const ui32 wholeKeep = IndexMerger.GetNumKeepFlags() - subsKeep; // they are counted too
                 const ui32 wholeDoNotKeep = IndexMerger.GetNumDoNotKeepFlags() - subsDoNotKeep; // so are they
 
-                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {subsKeep, subsDoNotKeep, wholeKeep,
-                    wholeDoNotKeep}, HullCtx->AllowKeepFlags, AllowGarbageCollection);
+                NGcOpt::TKeepFlagStat keepFlagStat;
+                if (IsFresh) {
+                    keepFlagStat.Needed = true;
+                } else {
+                    keepFlagStat = {subsKeep, subsDoNotKeep, wholeKeep, wholeDoNotKeep};
+                }
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), keepFlagStat, HullCtx->AllowKeepFlags,
+                    AllowGarbageCollection);
 
-                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, Key.LogoBlobID(), MinHugeBlobInBytes), keep.KeepData);
+                const TLogoBlobID& id = Key.LogoBlobID();
+                if (!TBlobStorageGroupType::IsCrcModeValid(id.CrcMode())) {
+                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_SKELETON, HullCtx->VCtx->VDiskLogPrefix
+                        << "invalid CrcMode in BlobId found during compaction"
+                        << " BlobId# " << id.ToString()
+                        << " KeepIndex# " << keep.KeepIndex
+                        << " KeepData# " << keep.KeepData
+                        << " SubsKeep# " << subsKeep
+                        << " SubsDoNotKeep# " << subsDoNotKeep
+                        << " WholeKeep# " << wholeKeep
+                        << " WholeDoNotKeep# " << wholeDoNotKeep);
+                }
+
+                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, id, MinHugeBlobInBytes), keep.KeepData);
             } else {
                 keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {}, HullCtx->AllowKeepFlags,
                     AllowGarbageCollection);
@@ -671,8 +690,9 @@ namespace NKikimr {
                     // ensure preallocated location has correct size
                     Y_DEBUG_ABORT_UNLESS(preallocatedLocation.ChunkIdx && preallocatedLocation.Size == MemRec->DataSize());
                     // producing inline blob with data here
-                    for (const auto& [location, partIdx] : collectTask.Reads) {
-                        ReadBatcher.AddReadItem(location, {NextDeferredItemId, partIdx, blobId, location});
+                    for (const auto& [location, partIdx, isHugeBlob] : collectTask.Reads) {
+                        ReadBatcher.AddReadItem(location, {NextDeferredItemId, partIdx, blobId, location},
+                            isHugeBlob ? TLogoBlobID(blobId, partIdx + 1) : TLogoBlobID());
                     }
                     if (!collectTask.Reads.empty() || WriterHasPendingOperations) { // defer this blob
                         DeferredItems.Put(NextDeferredItemId++, collectTask.Reads.size(), preallocatedLocation,
@@ -694,7 +714,8 @@ namespace NKikimr {
                 }
 
                 for (const auto& [partIdx, from, to] : dataMerger.GetHugeBlobMoves()) {
-                    ReadBatcher.AddReadItem(from, {NextDeferredItemId, partIdx, blobId, from});
+                    ReadBatcher.AddReadItem(from, {NextDeferredItemId, partIdx, blobId, from},
+                        TLogoBlobID(blobId, partIdx + 1));
                     DeferredItems.Put(NextDeferredItemId++, 1, to, TDiskBlobMerger(), blobId, false);
                 }
             }

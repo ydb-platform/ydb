@@ -427,9 +427,12 @@ private:
             }
         }
 
+        auto& headers = request->Headers;
         if (record.IsLowRequestPriority) {
-            auto& headers = request->Headers;
             headers["x-ya-priority"] = "low";
+        }
+        if (!record.PeerName.empty()) {
+            headers["x-user-ip"] = record.PeerName;
         }
 
         return request;
@@ -525,6 +528,9 @@ private:
     template <typename TTokenRecord>
     void NebiusAccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
         auto request = MakeHolder<TEvNebiusAccessServiceAuthorizeRequest>(key);
+        if (!record.PeerName.empty()) {
+            request->Headers["x-user-ip"] = record.PeerName;
+        }
         TStringBuilder requestForPermissions;
         i64 i = 0;
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
@@ -561,6 +567,9 @@ private:
     void NebiusAccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
         auto request = MakeHolder<TEvNebiusAccessServiceAuthenticateRequest>(key);
         request->Request.set_iam_token(record.Ticket);
+        if (!record.PeerName.empty()) {
+            request->Headers["x-user-ip"] = record.PeerName;
+        }
         Send(NebiusAccessServiceValidator, request.Release());
     }
 
@@ -1752,6 +1761,13 @@ protected:
         if (tokenType == "Certificate") {
             return TDerived::ETokenType::Certificate;
         }
+        if (tokenType == "Builtin") {
+            if (Config.GetUseBuiltinDomain()) {
+                return TDerived::ETokenType::Builtin;
+            } else {
+                return TDerived::ETokenType::Unsupported;
+            }
+        }
         return TDerived::ETokenType::Unknown;
     }
 
@@ -1837,7 +1853,7 @@ protected:
         TInstant now = TlsActivationContext->Now();
         record.InitTime = now;
         record.AccessTime = now;
-        record.ExpireTime = GetExpireTime(record, now);
+        record.ExpireTime = GetDerived()->GetExpireTime(record, now);
         record.RefreshTime = GetRefreshTime(now);
 
         if (record.Error) {
@@ -1863,7 +1879,7 @@ protected:
         if (!token->GetUserSID().empty()) {
             record.Subject = token->GetUserSID();
         }
-        record.ExpireTime = GetExpireTime(record, now);
+        record.ExpireTime = GetDerived()->GetExpireTime(record, now);
         if (record.NeedsRefresh()) {
             record.SetOkRefreshTime(this, now);
         } else {
@@ -1892,7 +1908,7 @@ protected:
             errorLogMessage << " (" << error.LogMessage << ")";
         }
         if (record.Error.Retryable) {
-            record.ExpireTime = GetExpireTime(record, now);
+            record.ExpireTime = GetDerived()->GetExpireTime(record, now);
             record.SetErrorRefreshTime(this, now);
             CounterTicketsErrorsRetryable->Inc();
             BLOG_D("Ticket " << record.GetMaskedTicket() << " ("

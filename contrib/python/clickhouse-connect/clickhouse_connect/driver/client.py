@@ -5,7 +5,7 @@ from datetime import tzinfo
 import pytz
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Optional, Any, Union, Sequence, Dict, Generator, BinaryIO
+from typing import Iterable, Literal, Optional, Any, Union, Sequence, Dict, Generator, BinaryIO, TYPE_CHECKING
 from pytz.exceptions import UnknownTimeZoneError
 
 from clickhouse_connect import common
@@ -25,9 +25,56 @@ from clickhouse_connect.driver.models import ColumnDef, SettingDef, SettingStatu
 from clickhouse_connect.driver.query import QueryResult, to_arrow, to_arrow_batches, QueryContext, arrow_buffer
 from clickhouse_connect.driver.binding import quote_identifier
 
+if TYPE_CHECKING:
+    import numpy
+    import pandas
+    import pyarrow
+
 io.DEFAULT_BUFFER_SIZE = 1024 * 256
 logger = logging.getLogger(__name__)
 arrow_str_setting = 'output_format_arrow_string_as_string'
+
+
+def _strip_utc_timezone_from_arrow(table: "arrow.Table") -> "arrow.Table":
+    """Strip UTC timezone from timestamp columns in Arrow table.
+
+    This ensures naive datetimes are returned when the server timezone is UTC
+    and utc_tz_aware is False (the default).
+
+    Only UTC-equivalent timezones (UTC, Etc/UTC, GMT, etc.) are stripped.
+    Non-UTC timezones carry important offset information and are always
+    preserved regardless of utc_tz_aware setting.
+    """
+    new_fields = []
+    needs_cast = False
+    for field in table.schema:
+        if arrow.types.is_timestamp(field.type) and tzutil.is_utc_timezone(field.type.tz):
+            new_fields.append(arrow.field(field.name, arrow.timestamp(field.type.unit)))
+            needs_cast = True
+        else:
+            new_fields.append(field)
+    if needs_cast:
+        return table.cast(arrow.schema(new_fields))
+    return table
+
+
+def _apply_arrow_tz_policy(table: "arrow.Table", utc_tz_aware: Union[bool, Literal["schema"]]) -> "arrow.Table":
+    """Apply the utc_tz_aware policy to an Arrow table before conversion.
+
+    Handles UTC stripping when utc_tz_aware is False and warns when
+    utc_tz_aware is "schema" since that mode is not yet implemented for
+    Arrow-based queries.
+    """
+    if utc_tz_aware == "schema":
+        logger.warning(
+            'utc_tz_aware="schema" is not yet supported for Arrow-based query methods. '
+            "It would require a separate schema lookup since ClickHouse attaches the server "
+            "timezone to all DateTime columns in Arrow format. Use query/query_df for "
+            "schema-matching behavior or open an issue if you need Arrow support."
+        )
+    if not utc_tz_aware:
+        table = _strip_utc_timezone_from_arrow(table)
+    return table
 
 
 # pylint: disable=too-many-lines
@@ -44,7 +91,7 @@ class Client(ABC):
     database = None
     max_error_message = 0
     apply_server_timezone = False
-    utc_tz_aware = False
+    utc_tz_aware: Union[bool, Literal["schema"]] = False
     show_clickhouse_errors = True
 
     def __init__(self,
@@ -54,15 +101,17 @@ class Client(ABC):
                  query_retries: int,
                  server_host_name: Optional[str],
                  apply_server_timezone: Optional[Union[str, bool]],
-                 utc_tz_aware: Optional[bool],
+                 utc_tz_aware: Optional[Union[bool, Literal["schema"]]],
                  show_clickhouse_errors: Optional[bool]):
         """
         Shared initialization of ClickHouse Connect client
         :param database: database name
         :param query_limit: default LIMIT for queries
         :param uri: uri for error messages
-        :param utc_tz_aware: Default timezone behavior when the active timezone resolves to UTC.  If True,
-          timezone-aware UTC datetimes are returned; otherwise legacy naive datetimes are used.
+        :param utc_tz_aware: Controls timezone-aware behavior for UTC DateTime columns.  False (default) returns
+          naive UTC timestamps.  True forces timezone-aware UTC datetimes.  "schema" returns datetimes that
+          match the server's column definition which means timezone-aware when the column defines a timezone and naive
+          for bare DateTime columns.
         """
         self.query_limit = coerce_int(query_limit)
         self.query_retries = coerce_int(query_retries)
@@ -72,7 +121,12 @@ class Client(ABC):
             self.show_clickhouse_errors = coerce_bool(show_clickhouse_errors)
         self.server_host_name = server_host_name
         self.uri = uri
-        self.utc_tz_aware = bool(utc_tz_aware)
+        if isinstance(utc_tz_aware, str):
+            if utc_tz_aware != "schema":
+                raise ProgrammingError(f'utc_tz_aware must be True, False, or "schema", got "{utc_tz_aware}"')
+            self.utc_tz_aware = utc_tz_aware
+        else:
+            self.utc_tz_aware = bool(utc_tz_aware)
         self._init_common_settings(apply_server_timezone)
 
     def _init_common_settings(self, apply_server_timezone: Optional[Union[str, bool]]):
@@ -176,11 +230,11 @@ class Client(ABC):
         return None
 
     @abstractmethod
-    def _query_with_context(self, context: QueryContext):
+    def _query_with_context(self, context: QueryContext) -> QueryResult:
         pass
 
     @abstractmethod
-    def set_client_setting(self, key, value):
+    def set_client_setting(self, key: str, value: Any) -> None:
         """
         Set a clickhouse setting for the client after initialization.  If a setting is not recognized by ClickHouse,
         or the setting is identified as "read_only", this call will either throw a Programming exception or attempt
@@ -190,14 +244,14 @@ class Client(ABC):
         """
 
     @abstractmethod
-    def get_client_setting(self, key) -> Optional[str]:
+    def get_client_setting(self, key: str) -> Optional[str]:
         """
         :param key: The setting key
         :return: The string value of the setting, if it exists, or None
         """
 
     @abstractmethod
-    def set_access_token(self, access_token: str):
+    def set_access_token(self, access_token: str) -> None:
         """
         Set the ClickHouse access token for the client
         :param access_token: Access token string
@@ -218,7 +272,7 @@ class Client(ABC):
               context: QueryContext = None,
               query_tz: Optional[Union[str, tzinfo]] = None,
               column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-              utc_tz_aware: Optional[bool] = None,
+              utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
               external_data: Optional[ExternalData] = None,
               transport_settings: Optional[Dict[str, str]] = None) -> QueryResult:
         """
@@ -254,7 +308,7 @@ class Client(ABC):
                                   context: QueryContext = None,
                                   query_tz: Optional[Union[str, tzinfo]] = None,
                                   column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                                  utc_tz_aware: Optional[bool] = None,
+                                  utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                                   external_data: Optional[ExternalData] = None,
                                   transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
@@ -275,7 +329,7 @@ class Client(ABC):
                                context: QueryContext = None,
                                query_tz: Optional[Union[str, tzinfo]] = None,
                                column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                               utc_tz_aware: Optional[bool] = None,
+                               utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                                external_data: Optional[ExternalData] = None,
                                transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
@@ -296,7 +350,7 @@ class Client(ABC):
                           context: QueryContext = None,
                           query_tz: Optional[Union[str, tzinfo]] = None,
                           column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                          utc_tz_aware: Optional[bool] = None,
+                          utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                           external_data: Optional[ExternalData] = None,
                           transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
@@ -360,7 +414,7 @@ class Client(ABC):
                  max_str_len: Optional[int] = None,
                  context: QueryContext = None,
                  external_data: Optional[ExternalData] = None,
-                 transport_settings: Optional[Dict[str, str]] = None):
+                 transport_settings: Optional[Dict[str, str]] = None) -> 'numpy.ndarray':
         """
         Query method that returns the results as a numpy array.  For parameter values, see the
         create_query_context method
@@ -405,11 +459,11 @@ class Client(ABC):
                  use_na_values: Optional[bool] = None,
                  query_tz: Optional[str] = None,
                  column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                 utc_tz_aware: Optional[bool] = None,
+                 utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                  context: QueryContext = None,
                  external_data: Optional[ExternalData] = None,
                  use_extended_dtypes: Optional[bool] = None,
-                 transport_settings: Optional[Dict[str, str]] = None):
+                 transport_settings: Optional[Dict[str, str]] = None) -> 'pandas.DataFrame':
         """
         Query method that results the results as a pandas dataframe.  For parameter values, see the
         create_query_context method
@@ -432,7 +486,7 @@ class Client(ABC):
                         use_na_values: Optional[bool] = None,
                         query_tz: Optional[str] = None,
                         column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                        utc_tz_aware: Optional[bool] = None,
+                        utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                         context: QueryContext = None,
                         external_data: Optional[ExternalData] = None,
                         use_extended_dtypes: Optional[bool] = None,
@@ -462,7 +516,7 @@ class Client(ABC):
                              context: Optional[QueryContext] = None,
                              query_tz: Optional[Union[str, tzinfo]] = None,
                              column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                             utc_tz_aware: Optional[bool] = None,
+                             utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                              use_na_values: Optional[bool] = None,
                              streaming: bool = False,
                              as_pandas: bool = False,
@@ -492,7 +546,8 @@ class Client(ABC):
         :param column_tzs: A dictionary of column names to tzinfo objects (or strings that will be converted to
           tzinfo objects).  The timezone will be applied to datetime objects returned in the query
         :param utc_tz_aware: Override the client default for handling UTC results.  True forces timezone-aware
-          UTC datetimes while False returns naive UTC datetimes.
+          UTC datetimes, False returns naive UTC datetimes, and "schema" returns datetimes matching the
+          server's column definition.
         :param use_na_values: Deprecated alias for use_advanced_dtypes
         :param as_pandas Return the result columns as pandas.Series objects
         :param streaming Marker used to correctly configure streaming queries
@@ -557,7 +612,7 @@ class Client(ABC):
                     settings: Optional[Dict[str, Any]] = None,
                     use_strings: Optional[bool] = None,
                     external_data: Optional[ExternalData] = None,
-                    transport_settings: Optional[Dict[str, str]] = None):
+                    transport_settings: Optional[Dict[str, str]] = None) -> 'pyarrow.Table':
         """
         Query method using the ClickHouse Arrow format to return a PyArrow table
         :param query: Query statement/format string
@@ -637,6 +692,7 @@ class Client(ABC):
                 raise ProgrammingError("PyArrow-backed dtypes are only supported when using pandas 2.x.")
 
             def converter(table: arrow.Table) -> pd.DataFrame:
+                table = _apply_arrow_tz_policy(table, self.utc_tz_aware)
                 return table.to_pandas(types_mapper=pd.ArrowDtype, safe=False)
 
         elif dataframe_library == "polars":
@@ -644,6 +700,7 @@ class Client(ABC):
             self._add_integration_tag("polars")
 
             def converter(table: arrow.Table) -> pl.DataFrame:
+                table = _apply_arrow_tz_policy(table, self.utc_tz_aware)
                 return pl.from_arrow(table)
 
         else:
@@ -689,12 +746,14 @@ class Client(ABC):
                 raise ProgrammingError("PyArrow-backed dtypes are only supported when using pandas 2.x.")
 
             def converter(table: "arrow.Table") -> "pd.DataFrame":
+                table = _apply_arrow_tz_policy(table, self.utc_tz_aware)
                 return table.to_pandas(types_mapper=pd.ArrowDtype, safe=False)
         elif dataframe_library == "polars":
             check_polars()
             self._add_integration_tag("polars")
 
             def converter(table: arrow.Table) -> pl.DataFrame:
+                table = _apply_arrow_tz_policy(table, self.utc_tz_aware)
                 return pl.from_arrow(table)
         else:
             raise ValueError(f"dataframe_library must be 'pandas' or 'polars', got '{dataframe_library}'")
@@ -1047,13 +1106,13 @@ class Client(ABC):
         """
 
     @abstractmethod
-    def close(self):
+    def close(self) -> None:
         """
         Subclass implementation to close the connection to the server/deallocate the client
         """
 
     @abstractmethod
-    def close_connections(self):
+    def close_connections(self) -> None:
         """
         Subclass implementation to disconnect all "re-used" client connections
         """
@@ -1064,8 +1123,8 @@ class Client(ABC):
         kwargs.update(overrides)
         return self._query_with_context((self.create_query_context(**kwargs)))
 
-    def __enter__(self):
+    def __enter__(self) -> 'Client':
         return self
 
-    def __exit__(self, exc_type, exc_value, exc_traceback):
+    def __exit__(self, exc_type, exc_value, exc_traceback) -> None:
         self.close()

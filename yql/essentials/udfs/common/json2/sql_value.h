@@ -244,52 +244,52 @@ TStringRef TSqlValue<InputType, TValueType, ForceConvert>::Name() {
 }
 
 template <>
-TStringRef TSqlValue<EDataSlot::Json, TUtf8, true>::Name() {
+inline TStringRef TSqlValue<EDataSlot::Json, TUtf8, true>::Name() {
     return TStringRef::Of("SqlValueConvertToUtf8");
 }
 
 template <>
-TStringRef TSqlValue<EDataSlot::Json, TUtf8>::Name() {
+inline TStringRef TSqlValue<EDataSlot::Json, TUtf8>::Name() {
     return TStringRef::Of("SqlValueUtf8");
 }
 
 template <>
-TStringRef TSqlValue<EDataSlot::Json, i64>::Name() {
+inline TStringRef TSqlValue<EDataSlot::Json, i64>::Name() {
     return TStringRef::Of("SqlValueInt64");
 }
 
 template <>
-TStringRef TSqlValue<EDataSlot::Json, double>::Name() {
+inline TStringRef TSqlValue<EDataSlot::Json, double>::Name() {
     return TStringRef::Of("SqlValueNumber");
 }
 
 template <>
-TStringRef TSqlValue<EDataSlot::Json, bool>::Name() {
+inline TStringRef TSqlValue<EDataSlot::Json, bool>::Name() {
     return TStringRef::Of("SqlValueBool");
 }
 
 template <>
-TStringRef TSqlValue<EDataSlot::JsonDocument, TUtf8, true>::Name() {
+inline TStringRef TSqlValue<EDataSlot::JsonDocument, TUtf8, true>::Name() {
     return TStringRef::Of("JsonDocumentSqlValueConvertToUtf8");
 }
 
 template <>
-TStringRef TSqlValue<EDataSlot::JsonDocument, TUtf8>::Name() {
+inline TStringRef TSqlValue<EDataSlot::JsonDocument, TUtf8>::Name() {
     return TStringRef::Of("JsonDocumentSqlValueUtf8");
 }
 
 template <>
-TStringRef TSqlValue<EDataSlot::JsonDocument, i64>::Name() {
+inline TStringRef TSqlValue<EDataSlot::JsonDocument, i64>::Name() {
     return TStringRef::Of("JsonDocumentSqlValueInt64");
 }
 
 template <>
-TStringRef TSqlValue<EDataSlot::JsonDocument, double>::Name() {
+inline TStringRef TSqlValue<EDataSlot::JsonDocument, double>::Name() {
     return TStringRef::Of("JsonDocumentSqlValueNumber");
 }
 
 template <>
-TStringRef TSqlValue<EDataSlot::JsonDocument, bool>::Name() {
+inline TStringRef TSqlValue<EDataSlot::JsonDocument, bool>::Name() {
     return TStringRef::Of("JsonDocumentSqlValueBool");
 }
 

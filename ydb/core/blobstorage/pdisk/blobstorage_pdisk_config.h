@@ -106,7 +106,11 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui64 StartOwnerRound = 1ull;  // set only by warden
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // set only by warden
-    bool EnableSectorEncryption = true;
+
+    // EnablePDiskDataEncryption feature flag is not the same as the DISABLE_PDISK_ENCRYPTION macro:
+    // unlike the macro, it does not disable metadata encryption.
+    // Tests need a runtime way to emulate DISABLE_PDISK_ENCRYPTION.
+    bool EnableFormatAndMetadataEncryption = true;
 
     ui32 ChunkSize = 128 << 20;
     ui32 SectorSize = 4 << 10;
@@ -135,6 +139,7 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 BufferPoolBufferSizeBytes;
     ui32 BufferPoolBufferCount;
     ui32 MaxQueuedCompletionActions;
+    ui32 IoPieceSizeBytes = 0;
     bool UseSpdkNvmeDriver;
 
     // Next 2 are either user-defined or inferred from drive size
@@ -170,6 +175,7 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui32 CompletionThreadsCount = 1;
     bool UseNoopScheduler = false;
+    bool UseBytesFlightControl = false;
 
     bool PlainDataChunks = false;
 
@@ -178,6 +184,9 @@ struct TPDiskConfig : public TThrRefBase {
     bool MetadataOnly = false;
 
     bool ReadOnly = false;
+
+    // used for tests only
+    std::optional<ui64> NonceRandNum;
 
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
@@ -235,6 +244,9 @@ struct TPDiskConfig : public TThrRefBase {
         BufferPoolBufferSizeBytes = choose(128 << 10, 256 << 10, 512 << 10);
         BufferPoolBufferCount = choose(1024, 512, 256);
         MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
+        IoPieceSizeBytes = choose(64 << 10, 64 << 10, 512 << 10);
+        // piece size should be ≤ buffer size
+        IoPieceSizeBytes = Min(IoPieceSizeBytes, BufferPoolBufferSizeBytes);
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
         Y_VERIFY_S(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
@@ -293,7 +305,7 @@ struct TPDiskConfig : public TThrRefBase {
         }
         str << " StartOwnerRound# " << StartOwnerRound << x;
         str << " SectorMap# " << (SectorMap ? "true" : "false") << x;
-        str << " EnableSectorEncryption # " << EnableSectorEncryption << x;
+        str << " EnableSectorEncryption # " << FeatureFlags.GetEnablePDiskDataEncryption() << x;
 
         str << " ChunkSize# " << ChunkSize << x;
         str << " SectorSize# " << SectorSize << x;
@@ -321,6 +333,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " BufferPoolBufferSizeBytes# " << BufferPoolBufferSizeBytes << x;
         str << " BufferPoolBufferCount# " << BufferPoolBufferCount << x;
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
+        str << " IoPieceSizeBytes# " << IoPieceSizeBytes << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
         str << " SlotSizeInUnits# " << SlotSizeInUnits << x;
 
@@ -334,6 +347,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " SpaceColorBorder# " << SpaceColorBorder << x;
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
+        str << " UseBytesFlightControl# " << (UseBytesFlightControl ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
         str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
         str << "}";
@@ -406,6 +420,9 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasMaxQueuedCompletionActions()) {
             MaxQueuedCompletionActions = cfg->GetMaxQueuedCompletionActions();
         }
+        if (cfg->HasIoPieceSizeBytes()) {
+            IoPieceSizeBytes = cfg->GetIoPieceSizeBytes();
+        }
         if (cfg->HasInsaneLogChunksMultiplier()) {
             InsaneLogChunksMultiplier = cfg->GetInsaneLogChunksMultiplier();
         }
@@ -427,6 +444,9 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasUseNoopScheduler()) {
             UseNoopScheduler = cfg->GetUseNoopScheduler();
+        }
+        if (cfg->HasUseBytesFlightControl()) {
+            UseBytesFlightControl = cfg->GetUseBytesFlightControl();
         }
         if (cfg->HasPlainDataChunks()) {
             PlainDataChunks = cfg->GetPlainDataChunks();

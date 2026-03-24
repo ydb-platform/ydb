@@ -35,6 +35,10 @@ def get_sql_flags():
     if yql_get_param('SQL_FLAGS'):
         flags = yql_get_param('SQL_FLAGS').split(',')
         gateway_config.SqlCore.TranslationFlags.extend(flags)
+
+    for flag in gateway_config.SqlCore.ExtendedTranslationFlags:
+        gateway_config.SqlCore.TranslationFlags.append(flag.Name)
+
     return gateway_config.SqlCore.TranslationFlags
 
 

@@ -1,5 +1,5 @@
---- a/Lib/sysconfig.py	(e47ebce7ac1bd4bee3e1de149401347ac4527193)
-+++ b/Lib/sysconfig.py	(index)
+--- a/Lib/sysconfig/__init__.py	(e47ebce7ac1bd4bee3e1de149401347ac4527193)
++++ b/Lib/sysconfig/__init__.py	(index)
 @@ -459,1 +459,1 @@ def _get_sysconfigdata_name():
 -        f'_sysconfigdata_{sys.abiflags}_{sys.platform}_{multiarch}',
 +        '_sysconfigdata_arcadia'  # f'_sysconfigdata_{sys.abiflags}_{sys.platform}_{multiarch}',

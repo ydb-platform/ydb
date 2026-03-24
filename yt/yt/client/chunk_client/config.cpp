@@ -502,6 +502,19 @@ void TChunkFragmentReaderConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("prefetch_whole_blocks", &TThis::PrefetchWholeBlocks)
         .Default(false);
+    registrar.Parameter("read_and_cache_whole_blocks", &TThis::ReadAndCacheWholeBlocks)
+        .Default(false)
+        .DontSerializeDefault();
+    registrar.Parameter("block_count_to_precache", &TThis::BlockCountToPrecache)
+        .Default(0)
+        .GreaterThanOrEqual(0)
+        .DontSerializeDefault();
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->BlockCountToPrecache > 0 && !config->ReadAndCacheWholeBlocks) {
+            THROW_ERROR_EXCEPTION("\"block_count_to_precache\" must be zero if \"read_and_cache_whole_blocks\" is disabled");
+        }
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

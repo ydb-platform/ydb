@@ -643,6 +643,7 @@ TMaybeNode<TDqStage> DqPushLambdasToStage(const TDqStage& stage, const std::map<
                 .Body(ctx.ReplaceNodes(newProgram->TailPtr(), inputArgReplaces))
             .Build()
             .Settings(TDqStageSettings().BuildNode(ctx, stage.Pos()))
+            .Outputs(stage.Outputs())
             .Done();
 
     optCtx.RemapNode(stage.Ref(), newStage.Ptr());
@@ -2971,7 +2972,8 @@ TExprBase DqBuildJoin(
     bool useBlockHashJoin,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
-    bool buildCollectStage
+    bool buildCollectStage,
+    bool blockHashJoinBuildSideLeft
 ) {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -3010,7 +3012,7 @@ TExprBase DqBuildJoin(
     }
 
     if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin);
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin, blockHashJoinBuildSideLeft);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {
@@ -3092,7 +3094,7 @@ TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizat
         return node;
     }
 
-    auto* typeAnn = precompute.Connection().Raw()->GetTypeAnn();
+    auto typeAnn = precompute.Connection().Raw()->GetTypeAnn();
 
     YQL_ENSURE(typeAnn);
     typeAnn = GetSeqItemType(typeAnn);

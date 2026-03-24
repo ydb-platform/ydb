@@ -1484,7 +1484,7 @@ private:
 
     TString ParseResponse() const
     {
-        auto rsp = ResponsePromise_.Get().ValueOrThrow();
+        auto rsp = ResponsePromise_.BlockingGet().ValueOrThrow();
         TNode writeResult;
         TNodeBuilder builder(&writeResult);
         NYTree::Serialize(rsp, &builder);

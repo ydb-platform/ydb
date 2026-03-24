@@ -1,5 +1,60 @@
 # Changelog
 
+## [14.13.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.12.1...v14.13.0) (2026-03-20)
+
+
+### Features
+
+* **Clusters:** show compute and storage nodes versions ([#3664](https://github.com/ydb-platform/ydb-embedded-ui/issues/3664)) ([f5dd98f](https://github.com/ydb-platform/ydb-embedded-ui/commit/f5dd98fb0df491d97543553c05e568f9f738c73d))
+* use settings for new db navigation ([#3642](https://github.com/ydb-platform/ydb-embedded-ui/issues/3642)) ([970c572](https://github.com/ydb-platform/ydb-embedded-ui/commit/970c5726af6b8fa8bad35574cfbf47e72e07dd27))
+
+
+### Bug Fixes
+
+* **Authentication:** do not pass database if empty string ([#3636](https://github.com/ydb-platform/ydb-embedded-ui/issues/3636)) ([4d40d7c](https://github.com/ydb-platform/ydb-embedded-ui/commit/4d40d7c76991308ed002c073912287b22179d727))
+* **PDiskSpaceDistribution:** use NumActiveSlots for empty slots ([#3645](https://github.com/ydb-platform/ydb-embedded-ui/issues/3645)) ([48158e3](https://github.com/ydb-platform/ydb-embedded-ui/commit/48158e356cb9b7107c594513dcdf3cf0a4a4ebed))
+* **Query:** fix height with new nav ([#3626](https://github.com/ydb-platform/ydb-embedded-ui/issues/3626)) ([fdc51e5](https://github.com/ydb-platform/ydb-embedded-ui/commit/fdc51e5c59c201a4daf67da0102361a9100065d3))
+* reload page on NEED_RESET ([#3614](https://github.com/ydb-platform/ydb-embedded-ui/issues/3614)) ([58cf2f9](https://github.com/ydb-platform/ydb-embedded-ui/commit/58cf2f9f3d9ad14c9c73f9d4ee350aa778cb8e2d))
+
+## [14.12.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.12.0...v14.12.1) (2026-03-18)
+
+
+### Bug Fixes
+
+* @gravity-ui/react-unipika -&gt; 0.5.2 ([#3634](https://github.com/ydb-platform/ydb-embedded-ui/issues/3634)) ([49209ec](https://github.com/ydb-platform/ydb-embedded-ui/commit/49209ec4cda45b36de9fe2fbcaf3f13124a3b189))
+* **ClusterInfo:** storage groups stats view ([#3623](https://github.com/ydb-platform/ydb-embedded-ui/issues/3623)) ([51b2d89](https://github.com/ydb-platform/ydb-embedded-ui/commit/51b2d893b657ac3ad22546676b1350fb142c15a4))
+* **FixedHeightQuery:** highlight only rendered lines, postpone highlight ([#3617](https://github.com/ydb-platform/ydb-embedded-ui/issues/3617)) ([0c487f5](https://github.com/ydb-platform/ydb-embedded-ui/commit/0c487f58e4a33e12baf94b937285eebad74a35fc))
+* **QueryEditor:** save statisticsMode ([#3635](https://github.com/ydb-platform/ydb-embedded-ui/issues/3635)) ([c904c9b](https://github.com/ydb-platform/ydb-embedded-ui/commit/c904c9b02db651325a95649f1dabe1552c566749))
+* return font color to entity-state-colors mixin ([#3628](https://github.com/ydb-platform/ydb-embedded-ui/issues/3628)) ([a0796cf](https://github.com/ydb-platform/ydb-embedded-ui/commit/a0796cf4aec955d49bc10f11c5cb96caebe1240b))
+* **TopicData:** scroll behaviour ([#3620](https://github.com/ydb-platform/ydb-embedded-ui/issues/3620)) ([718f309](https://github.com/ydb-platform/ydb-embedded-ui/commit/718f30989ea6b7f35c12a8fd261e425edc2edf39))
+* **TopicMessage:** decode base64 as utf-8 to fix non-ascii characters ([#3627](https://github.com/ydb-platform/ydb-embedded-ui/issues/3627)) ([b4beacd](https://github.com/ydb-platform/ydb-embedded-ui/commit/b4beacdd24e4ea9a281d36997af8ad8ac3e9d8af))
+
+## [14.12.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.11.0...v14.12.0) (2026-03-12)
+
+
+### Features
+
+* **TopicData:** add pagination ([#3584](https://github.com/ydb-platform/ydb-embedded-ui/issues/3584)) ([95b0ee8](https://github.com/ydb-platform/ydb-embedded-ui/commit/95b0ee8d8f3342d1ad7892f9032cba34bc6b7e93))
+
+
+### Bug Fixes
+
+* add error diagnostics case ([#3613](https://github.com/ydb-platform/ydb-embedded-ui/issues/3613)) ([012ef8b](https://github.com/ydb-platform/ydb-embedded-ui/commit/012ef8b4febcaa9f911c52bfc3fc26e2561ed574))
+* stop button doesnt appear if run query via hotkeys ([#3611](https://github.com/ydb-platform/ydb-embedded-ui/issues/3611)) ([6cc8bc4](https://github.com/ydb-platform/ydb-embedded-ui/commit/6cc8bc4d0f30027177d6b095c0b1271e5cc20aa9))
+
+## [14.11.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.10.0...v14.11.0) (2026-03-11)
+
+
+### Features
+
+* improve errors diagnostics ([#3537](https://github.com/ydb-platform/ydb-embedded-ui/issues/3537)) ([3ce7547](https://github.com/ydb-platform/ydb-embedded-ui/commit/3ce7547cffd406c11d22e4638567874ec128e683))
+* **Navigation:** add colors and animation to v2 navigation items ([#3588](https://github.com/ydb-platform/ydb-embedded-ui/issues/3588)) ([1f2a08c](https://github.com/ydb-platform/ydb-embedded-ui/commit/1f2a08c4bc1a8a9635499f1261147db77c75601a))
+
+
+### Bug Fixes
+
+* **GrantAccess:** fix api request payload ([#3608](https://github.com/ydb-platform/ydb-embedded-ui/issues/3608)) ([511ac1b](https://github.com/ydb-platform/ydb-embedded-ui/commit/511ac1b3d96d3e40346a66a326fabf3eea3a5d54))
+
 ## [14.10.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.9.2...v14.10.0) (2026-03-10)
 
 

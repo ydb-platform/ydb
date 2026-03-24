@@ -1842,7 +1842,7 @@ class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName = {})
+    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName)
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)

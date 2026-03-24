@@ -25,7 +25,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 
 from ydb import PrimitiveType, StatusCode
-import yatest.common.network
+import library.python.port_manager
 from moto.server import ThreadedMotoServer
 
 import boto3
@@ -55,7 +55,7 @@ class TestLoop:
 
 class S3:
     def __init__(self):
-        self.port_manager = yatest.common.network.PortManager()
+        self.port_manager = library.python.port_manager.PortManager()
         self._server = None
 
     def start_server(self) -> str:

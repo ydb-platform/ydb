@@ -138,12 +138,12 @@ TICStorageTransport::SyncWithPBuffer(
     NWilson::TSpan& span)
 {
     auto request = std::make_unique<TEvTransportPrivate::TEvSyncWithPBuffer>(
-        pbufferConnection.GetServiceId(),
-        pbufferConnection.Credentials,
+        ddiskConnection.GetServiceId(),
+        ddiskConnection.Credentials,
         std::move(selectors),
         std::move(lsns),
-        ddiskConnection.DDiskId,
-        *ddiskConnection.Credentials.DDiskInstanceGuid,
+        pbufferConnection.DDiskId,
+        pbufferConnection.Credentials,
         span.GetTraceId());
 
     auto future = request->Promise.GetFuture();

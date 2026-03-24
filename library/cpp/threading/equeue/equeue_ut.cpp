@@ -88,6 +88,25 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(0u, TEnv<T>::Queue->ObjectCount());
         UNIT_ASSERT_VALUES_EQUAL(0u, TEnv<T>::Queue->Size());
         UNIT_ASSERT_VALUES_EQUAL(Counters.Processed.load(), enqueued);
+
+        Counters.Reset();
+
+        enqueued = 0;
+        {
+            TLocalSetup setup;
+            TEnv<T>::Queue->SetCurrentMaxQueueSize(MaxQueueSize / 2);
+
+            while (TEnv<T>::Queue->Add(&job) && enqueued < MaxQueueSize + 100) {
+                ++enqueued;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(enqueued, MaxQueueSize / 2);
+            UNIT_ASSERT_VALUES_EQUAL(enqueued, TEnv<T>::Queue->ObjectCount());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(0u, TEnv<T>::Queue->ObjectCount());
+        UNIT_ASSERT_VALUES_EQUAL(0u, TEnv<T>::Queue->Size());
+        UNIT_ASSERT_VALUES_EQUAL(Counters.Processed.load(), enqueued);
     }
 
     Y_UNIT_TEST(FillTest) {

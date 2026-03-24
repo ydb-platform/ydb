@@ -81,7 +81,8 @@ public:
             1,
             "ddisk_pool");
         NDDisk::TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
-        const TActorId ddiskActor = Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbFormat), Counters),
+        const TActorId ddiskActor = Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
+            std::move(pbFormat), NDDisk::TDDiskConfig{}, Counters),
             NodeId);
         const TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, slotId);
         Runtime.RegisterService(ddiskServiceId, ddiskActor);

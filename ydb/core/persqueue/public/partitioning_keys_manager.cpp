@@ -28,11 +28,11 @@ TString TPartitioningKeysManager::GetMedianKey() {
 
     TVector<TString> medians;
     for (const auto& sketch : Sketches) {
-        TString m = sketch.Sketch.Median();
-        if (m == "") {
+        TString median = sketch.Sketch.Median();
+        if (median == "") {
             continue;
         }
-        medians.push_back(std::move(m));
+        medians.push_back(std::move(median));
     }
 
     if (medians.empty()) {

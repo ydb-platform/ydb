@@ -3,6 +3,8 @@
 
 #include <ydb/library/actors/core/actor.h>
 
+#include <ydb/library/actors/core/actor.h>
+
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/metrics/metric_sub_registry.h>
 
@@ -39,6 +41,10 @@ namespace {
             }
             TActivationContext::Send(new IEventHandle(common->MetricsAggregatorId, TActorId(),
                 new TEvent(std::forward<TArgs>(args)...)));
+        }
+
+        TStringBuf FormatSubscriberActivityName(ui32 activityIndex) {
+            return activityIndex == Max<ui32>() ? TStringBuf("manual") : GetActivityTypeName(activityIndex);
         }
 
         TStringBuf GetScopeClassPeerLabel(const TScopeId& localScopeId, const TScopeId& peerScopeId) {
@@ -243,6 +249,15 @@ namespace {
 
         void SubSubscribersCount(ui32 value) override {
             *SubscribersCount -= value;
+        }
+
+        void AddSubscribersByActivity(ui32 activityIndex, i64 value) override {
+            auto& counter = SubscribersByActivity[activityIndex];
+            if (!counter) {
+                counter = AdaptiveCounters->GetSubgroup("sensor", "InterconnectSessionSubscribersByActivity")
+                    ->GetNamedCounter("activity", TString(FormatSubscriberActivityName(activityIndex)), false);
+            }
+            *counter += value;
         }
 
         void SubOutputBuffersTotalSize(ui64 value) override {
@@ -522,6 +537,7 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr OutputBuffersTotalSize;
         NMonitoring::TDynamicCounters::TCounterPtr QueueUtilization;
         NMonitoring::TDynamicCounters::TCounterPtr SubscribersCount;
+        THashMap<ui32, NMonitoring::TDynamicCounters::TCounterPtr> SubscribersByActivity;
         NMonitoring::TDynamicCounters::TCounterPtr SendSyscalls;
         NMonitoring::TDynamicCounters::TCounterPtr SendSyscallsNs;
         NMonitoring::TDynamicCounters::TCounterPtr ClockSkewMicrosec;
@@ -716,6 +732,19 @@ namespace {
 
         void SubSubscribersCount(ui32 value) override {
             SubscribersCount_->Add(-value);
+        }
+
+        void AddSubscribersByActivity(ui32 activityIndex, i64 value) override {
+            auto& gauge = SubscribersByActivity_[activityIndex];
+            if (!gauge) {
+                gauge = AdaptiveMetrics_->IntGauge(
+                    NMonitoring::MakeLabels({
+                        {"sensor", "interconnect.session_subscribers_by_activity"},
+                        {"activity", TString(FormatSubscriberActivityName(activityIndex))},
+                    })
+                );
+            }
+            gauge->Add(value);
         }
 
         void SubOutputBuffersTotalSize(ui64 value) override {
@@ -1039,6 +1068,7 @@ namespace {
         NMonitoring::IRate* InflightRdmaDataAmount_;
         NMonitoring::IRate* OutputBuffersTotalSize_;
         NMonitoring::IIntGauge* SubscribersCount_;
+        THashMap<ui32, NMonitoring::IIntGauge*> SubscribersByActivity_;
         NMonitoring::IRate* SendSyscalls_;
         NMonitoring::IRate* RecvSyscalls_;
         NMonitoring::IRate* SpuriousWriteWakeups_;

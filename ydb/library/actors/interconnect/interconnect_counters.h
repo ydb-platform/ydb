@@ -27,6 +27,7 @@ public:
     virtual void SetRdmaRetryWatchdogPending(ui32 value) = 0;
     virtual void IncSubscribersCount() = 0;
     virtual void SubSubscribersCount(ui32 value) = 0;
+    virtual void AddSubscribersByActivity(ui32 activityIndex, i64 value) = 0;
     virtual void SubOutputBuffersTotalSize(ui64 value) = 0;
     virtual void AddOutputBuffersTotalSize(ui64 value) = 0;
     virtual ui64 GetOutputBuffersTotalSize() const = 0;

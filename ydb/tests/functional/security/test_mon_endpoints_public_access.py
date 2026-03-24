@@ -240,6 +240,7 @@ EXPECTED_RESULTS = {
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
+    # BUG healthcheck is under restrictions
     '/healthcheck?format=prometheus': {
         None: 200,
         'user@builtin': 200,

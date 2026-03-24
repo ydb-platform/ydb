@@ -375,6 +375,13 @@ public:
         StageData.reset();
     }
 
+    // Reset StageResult and the one-shot StageResultBuiltFlag so that
+    // BuildStageResult() can be called again for the next streaming page.
+    void ResetStageResultForNextPage() {
+        StageResult.reset();
+        AtomicSet(StageResultBuiltFlag, 0);
+    }
+
     const TFetchedData& GetStageData() const;
 
     bool HasStageData() const {

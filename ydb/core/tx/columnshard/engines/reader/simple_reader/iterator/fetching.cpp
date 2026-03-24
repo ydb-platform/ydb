@@ -304,10 +304,6 @@ TConclusion<bool> TDecideStreamingModeStep::DoExecuteInplace(
 
     const bool streamingMode = TStreamingConfigHelper::ShouldUseStreamingMode(source->GetRecordsCount());
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "decide_streaming_mode")(
-        "source_idx", source->GetSourceIdx())("records", source->GetRecordsCount())(
-        "pages", pages.size())("streaming", streamingMode);
-
     simpleSource->SetEarlyPages(std::move(pages), streamingMode);
 
     if (streamingMode) {
@@ -402,13 +398,21 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::
     auto context = source->GetContext();
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
     if (!source->IsSourceInMemory()) {
-        // In streaming mode with per-page assembly, the assembled batch for each page
-        // starts at row 0 (PrepareForAssemblePageImpl assembles only the page's rows).
-        // StartIndex holds the absolute page.GetIndexStart() within the portion (used
-        // for cursor tracking), but the batch slice must start at 0.
+        // Determine the correct start index for slicing the assembled batch:
+        //
+        // Old path (DoAssembleColumns with PrepareForAssemblePageImpl):
+        //   The assembled batch contains only the current page's rows, starting at row 0
+        //   (page-relative).  IsAssembledDataPageRelative() returns true.
+        //   → batchStartIndex = 0
+        //
+        // NSSA path (TProgramStep → DoStartFetchData → DoAssembleAccessor):
+        //   The assembled batch contains the entire portion's rows, starting at row 0
+        //   of the portion (portion-relative).  IsAssembledDataPageRelative() returns false.
+        //   → batchStartIndex = StartIndex (absolute page start within the portion)
         const auto* simpleSource = source->GetAs<IDataSource>();
         const bool isStreamingPerPage = simpleSource->IsStreamingMode() && simpleSource->HasEarlyPages();
-        const ui32 batchStartIndex = isStreamingPerPage ? 0 : StartIndex;
+        const bool pageRelative = isStreamingPerPage && simpleSource->IsAssembledDataPageRelative();
+        const ui32 batchStartIndex = pageRelative ? 0 : StartIndex;
         contextTableConstruct.SetStartIndex(batchStartIndex).SetRecordsCount(RecordsCount);
     } else {
         AFL_VERIFY(StartIndex == 0);
@@ -429,12 +433,8 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     auto resultBatch = BuildPageResultBatch(source);
     auto* sSource = source->MutableAs<IDataSource>();
     const ui32 recordsCount = resultBatch ? resultBatch->num_rows() : 0;
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TBuildResultStep")("source_idx", source->GetSourceIdx())("count", recordsCount);
     context->GetCommonContext()->GetCounters().OnSourceFinished(source->GetRecordsCount(), sSource->GetUsedRawBytes(), recordsCount);
     sSource->MutableResultRecordsCount() += recordsCount;
-    if (!resultBatch || !resultBatch->num_rows()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", sSource->DebugJson().GetStringRobust());
-    }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
     ReportTracing(source, step, TMonotonic::Now() - startExecution);
     const ui64 blobBytes = source->GetTotalBytesRead();
@@ -472,8 +472,6 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
                 "source_idx", source->GetSourceIdx());
             source->MutableStageResult().ExtractPageForResult();
             continue;
-        } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep")("source_idx", source->GetSourceIdx());
         }
         acc.AddStep(std::make_shared<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount()));
     }

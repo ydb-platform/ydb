@@ -93,19 +93,32 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "prefetch_next_page")
                         ("source_idx", source->GetSourceIdx())
                         ("pages_in_flight", Collection->GetPagesInFlightCount())
-                        ("max_pages", Collection->GetMaxPagesInFlight());
-                    source->MutableAs<IDataSource>()->ContinueCursor(source);
+                        ("max_pages", Collection->GetMaxPagesInFlight())
+                        ("page_index", source->GetAs<IDataSource>()->GetCurrentEarlyPageIndex())
+                        ("total_pages", source->GetAs<IDataSource>()->GetEarlyPages().size())
+                        ("reverse", source->GetAs<IDataSource>()->GetContext()->GetReadMetadata()->IsDescSorted());
+                    auto* simpleSource = source->MutableAs<IDataSource>();
+                    simpleSource->ContinueCursor(source);
+                    simpleSource->SetPrefetchTriggered(true);
                 } else {
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "backpressure_limit_reached")
                         ("source_idx", source->GetSourceIdx())
                         ("pages_in_flight", Collection->GetPagesInFlightCount())
-                        ("max_pages", Collection->GetMaxPagesInFlight());
+                        ("max_pages", Collection->GetMaxPagesInFlight())
+                        ("page_index", source->GetAs<IDataSource>()->GetCurrentEarlyPageIndex())
+                        ("total_pages", source->GetAs<IDataSource>()->GetEarlyPages().size())
+                        ("reverse", source->GetAs<IDataSource>()->GetContext()->GetReadMetadata()->IsDescSorted());
                     // Do not pre-fetch: Continue() will be called when a page is sent.
+                    source->MutableAs<IDataSource>()->SetPrefetchTriggered(false);
                 }
             } else if (!isFinished) {
                 // Non-streaming multi-page result (old path): continue within the
                 // existing StageResult pages.
                 source->MutableAs<IDataSource>()->ContinueCursor(source);
+                source->MutableAs<IDataSource>()->SetPrefetchTriggered(false);
+            } else {
+                // No more pages or finished - reset prefetch flag
+                source->MutableAs<IDataSource>()->SetPrefetchTriggered(false);
             }
             // In streaming mode with more pages, keep the source in the queue (Wait).
             // In streaming mode with no more pages, or non-streaming finished, fall through.

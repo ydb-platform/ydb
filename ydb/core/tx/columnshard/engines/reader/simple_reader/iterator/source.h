@@ -72,6 +72,14 @@ private:
     std::vector<TPortionDataAccessor::TReadPage> EarlyPages;
     // Index into EarlyPages pointing at the page currently being fetched/assembled.
     ui32 CurrentEarlyPageIndex = 0;
+    // Flag to track if pre-fetching has been triggered for the current page
+    bool PrefetchTriggered = false;
+    // True when DoAssembleColumns (old path) assembled only the current page's rows
+    // (page-relative batch starting at row 0).  False when the NSSA path
+    // (DoStartFetchData + DoAssembleAccessor) assembled the entire portion
+    // (portion-relative batch starting at row 0 of the portion).
+    // Used by TBuildResultStep to decide whether batchStartIndex should be 0 or StartIndex.
+    bool AssembledDataIsPageRelative = false;
 
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
@@ -230,8 +238,26 @@ public:
         if (!StreamingMode || EarlyPages.empty()) {
             return false;
         }
-        // There are more pages if the next page index is still within bounds.
-        return CurrentEarlyPageIndex + 1 < EarlyPages.size();
+        // In reverse scan mode, there are more pages if we haven't reached the first page (index 0).
+        // In forward scan mode, there are more pages if we haven't reached the last page.
+        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
+            // Reverse scan: more pages if current index > 0 (we still need to process pages before reaching index 0)
+            // When CurrentEarlyPageIndex == 0, we're at the first page and should stop after processing it
+            const bool result = CurrentEarlyPageIndex > 0;
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "HasMorePages_Reverse")
+                ("current_index", CurrentEarlyPageIndex)
+                ("total_pages", EarlyPages.size())
+                ("result", result);
+            return result;
+        } else {
+            // Forward scan: more pages if next index is still within bounds
+            const bool result = CurrentEarlyPageIndex + 1 < EarlyPages.size();
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "HasMorePages_Forward")
+                ("current_index", CurrentEarlyPageIndex)
+                ("total_pages", EarlyPages.size())
+                ("result", result);
+            return result;
+        }
     }
 
     // Called by TDecideStreamingModeStep before any fetch step.
@@ -241,7 +267,9 @@ public:
     void SetEarlyPages(std::vector<TPortionDataAccessor::TReadPage>&& pages, bool streamingMode) {
         AFL_VERIFY(EarlyPages.empty());
         EarlyPages = std::move(pages);
-        CurrentEarlyPageIndex = 0;
+        // In reverse scan mode, start from the last page and work backward
+        CurrentEarlyPageIndex = GetContext()->GetReadMetadata()->IsDescSorted() ?
+            (EarlyPages.empty() ? 0 : EarlyPages.size() - 1) : 0;
         StreamingMode = streamingMode;
     }
 
@@ -267,8 +295,29 @@ public:
     // Advance to the next early page (called after each page's blobs
     // have been fetched and assembled).
     void AdvanceEarlyPage() {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Start")
+            ("current_index_before", CurrentEarlyPageIndex)
+            ("total_pages", EarlyPages.size())
+            ("reverse", GetContext()->GetReadMetadata()->IsDescSorted());
         AFL_VERIFY(StreamingMode && CurrentEarlyPageIndex < EarlyPages.size());
-        ++CurrentEarlyPageIndex;
+        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
+            // In reverse scan mode, move to the previous page (decrement index)
+            // Allow CurrentEarlyPageIndex == 0 to be processed (the first page in reverse scan)
+            if (CurrentEarlyPageIndex > 0) {
+                --CurrentEarlyPageIndex;
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Reverse")
+                    ("current_index_after", CurrentEarlyPageIndex);
+            } else {
+                // We're at the first page (index 0), no more pages to advance to
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Reverse_AtFirstPage")
+                    ("current_index_after", CurrentEarlyPageIndex);
+            }
+        } else {
+            // In forward scan mode, move to the next page (increment index)
+            ++CurrentEarlyPageIndex;
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Forward")
+                ("current_index_after", CurrentEarlyPageIndex);
+        }
     }
 
     ui32 GetCurrentEarlyPageIndex() const {
@@ -277,6 +326,25 @@ public:
 
     const std::vector<TPortionDataAccessor::TReadPage>& GetEarlyPages() const {
         return EarlyPages;
+    }
+
+    // Methods to manage prefetch tracking
+    bool IsPrefetchTriggered() const {
+        return PrefetchTriggered;
+    }
+
+    void SetPrefetchTriggered(bool value) {
+        PrefetchTriggered = value;
+    }
+
+    // Methods to track whether the assembled data is page-relative (old DoAssembleColumns
+    // path) or portion-relative (NSSA DoStartFetchData/DoAssembleAccessor path).
+    bool IsAssembledDataPageRelative() const {
+        return AssembledDataIsPageRelative;
+    }
+
+    void SetAssembledDataPageRelative(bool value) {
+        AssembledDataIsPageRelative = value;
     }
 
     bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {

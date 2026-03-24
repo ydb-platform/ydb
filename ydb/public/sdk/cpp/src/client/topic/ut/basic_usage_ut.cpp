@@ -419,7 +419,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName(setup.GetConsumerName())
+            .ConsumerName(TEST_CONSUMER)
             .MaxMemoryUsageBytes(10_MB)
             .DecompressionExecutor(decompressor)
             .AppendTopics(setup.GetTopicPath())

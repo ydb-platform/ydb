@@ -261,6 +261,103 @@ Y_UNIT_TEST_SUITE(CalcProgressPercent) {
         UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 50.f, 1e-5f);
     }
 
+    // Fulltext relevance index: two shard-scan stages each covering 50%, with instant
+    // single-row uploads between them:
+    //   Stage 1 (None):                   shard scan -> posting table     [0%,  50%)
+    //   Stage 2 (FulltextIndexStats):      upload aggregate stats row      50%
+    //   Stage 3 (FulltextIndexDictionary): shard scan -> dictionary table  [50%, 100%)
+    //   Stage 4 (FulltextIndexBorders):    upload border rows              100%
+
+    Y_UNIT_TEST(FulltextRelevance_Stage1_NoShards) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        info.IndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        info.SubState = TIndexBuildInfo::ESubState::None;
+        // No shards yet -> 0%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 0.f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(FulltextRelevance_Stage1_HalfDone) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        info.IndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        info.SubState = TIndexBuildInfo::ESubState::None;
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        // shardProgress = 1/2 = 0.5 -> 50 * 0.5 = 25%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 25.f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(FulltextRelevance_Stage1_AllDone) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        info.IndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        info.SubState = TIndexBuildInfo::ESubState::None;
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        MarkDone(info, 1, 2);
+        // shardProgress = 1.0 -> 50 * 1.0 = 50%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 50.f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(FulltextRelevance_Stage2) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        info.IndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        info.SubState = TIndexBuildInfo::ESubState::FulltextIndexStats;
+        // Instant upload -> fixed 50%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 50.f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(FulltextRelevance_Stage3_HalfDone) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        info.IndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        info.SubState = TIndexBuildInfo::ESubState::FulltextIndexDictionary;
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        // shardProgress = 1/2 = 0.5 -> 50 + 50 * 0.5 = 75%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 75.f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(FulltextRelevance_Stage3_AllDone) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        info.IndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        info.SubState = TIndexBuildInfo::ESubState::FulltextIndexDictionary;
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        MarkDone(info, 1, 2);
+        // shardProgress = 1.0 -> 50 + 50 * 1.0 = 100%
+        // (stage 4 upload will immediately bring it to 100% too)
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 100.f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(FulltextRelevance_Stage4) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        info.IndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        info.SubState = TIndexBuildInfo::ESubState::FulltextIndexBorders;
+        // Instant upload -> fixed 100%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 100.f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(FulltextNonRelevance_UsesShardProgress) {
+        // Non-relevance fulltext index: only 1 stage, uses plain shard-based progress
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        info.IndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        // 100 * 1 / 2 = 50%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 50.f, 1e-5f);
+    }
+
     Y_UNIT_TEST(VectorIndex_Overlap_FilterBorders_CountsAsFilter) {
         TIndexBuildInfo info;
         info.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;

@@ -806,6 +806,21 @@ public:
             }
             return 100.f * (KMeans.Level - 1 + levelProgress) / static_cast<float>(KMeans.Levels);
         }
+        if (IsFlatRelevanceFulltext()) {
+            const float shardProgress = total > 0 ? static_cast<float>(done) / total : 0.f;
+            switch (SubState) {
+            case ESubState::None:
+                return 50.f * shardProgress;
+            case ESubState::FulltextIndexStats:
+                return 50.f;
+            case ESubState::FulltextIndexDictionary:
+                return 50.f + 50.f * shardProgress;
+            case ESubState::FulltextIndexBorders:
+                return 100.f;
+            default:
+                return 0.f;
+            }
+        }
         if (Shards) {
             return (100.f * done) / total;
         }

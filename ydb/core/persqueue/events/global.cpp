@@ -9,6 +9,3 @@ bool NKikimr::TEvPersQueue::TEvProposeTransaction::GetSkipSrcIdInfo() const
 
     return NPQ::AllExistingWritesSkipConflictCheck(Record.GetData().GetOperations());
 }
-
-template <>
-bool NKikimr::NPQ::AllExistingWritesSkipConflictCheck(const TVector<NKikimrPQ::TPartitionOperation>& ops);

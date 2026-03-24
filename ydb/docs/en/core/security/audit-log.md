@@ -323,14 +323,76 @@ audit_config:
     format: audit_log_format
 ```
 
-| Key | Description |
-| --- | --- |
-| `file_backend` | Write the audit log to a file at each cluster node.<br/>Optional. |
-| `format` | Audit log format. The default value is `JSON`.<br/>Acceptable values:<ul><li>`JSON`: Serialized [JSON](https://en.wikipedia.org/wiki/JSON).</li><li>`TXT`: Text format.</ul>Optional. |
-| `file_path` | Path to the file that the audit log will be streamed to. If the path and the file are missing, they will be created on each node at cluster startup. If the file exists, the data will be appended to it.<br/>This parameter is required if you use `file_backend`. |
-| `unified_agent_backend` | Stream the audit log to the Unified Agent. In addition, you need to define the `uaclient_config` section in the [cluster configuration](../reference/configuration/index.md).<br/>Optional. |
-| `log_name` | The session metadata delivered with the message. Using the metadata, you can redirect the log stream to one or more child channels based on the condition: `_log_name: "session_meta_log_name"`.<br/>Optional. |
-| `stderr_backend` | Forward the audit log to the standard error stream (`stderr`).<br/>Optional. |
+### Audit config parameters {#audit-config}
+
+All fields are optional.
+
+#|
+|| **Field**                | **Description** ||
+|| `stderr_backend`         | Forward the audit log to the standard error stream (`stderr`). See the [backend settings](#backend-settings) for details. ||
+|| `file_backend`           | Write the audit log to a file at each cluster node. See the [backend settings](#backend-settings) for details. ||
+|| `unified_agent_backend`  | Stream the audit log to the [Unified Agent](https://yandex.cloud/docs/monitoring/concepts/data-collection/unified-agent/). In addition, you need to define the `uaclient_config` section in the [cluster configuration](../reference/configuration/index.md). See the [backend settings](#backend-settings) for details. ||
+|| `log_class_config`       | An array of audit rules for different log classes. See the [log class configuration](#log-class-config). ||
+|| `heartbeat`              | Optional heartbeat configuration. See the [heartbeat settings](#heartbeat-settings). ||
+|#
+
+### Backend settings {#backend-settings}
+
+Each backend supports the following fields:
+
+#|
+|| **Field**            | **Description** ||
+|| `format`             | Audit log format. The default value is `JSON`. See [Log format](#log-format) for details.<br/>_Optional._ ||
+|| `file_path`          | Path to the file that the audit log will be streamed to. If the path and the file are missing, they will be created on each node at cluster startup. If the file exists, the data will be appended to it. Only for `file_backend`. <br/>_Required._ ||
+|| `log_name`           | The session metadata delivered with the message. Using the metadata, you can redirect the log stream to one or more child channels based on the condition: `_log_name: "session_meta_log_name"`. Only for `unified_agent_backend`. <br/>_Optional._ ||
+|| `log_json_envelope`  | JSON template that wraps each log record. The template must contain the `%message%` placeholder, which is replaced with the serialized audit record. See the [Envelope format](#envelope-format).</br>_Optional._ ||
+|#
+
+#### Log format {#log-format}
+
+The `format` field specifies the serialization format for audit events. The supported formats are:
+
+#|
+|| **Format**             | **Description** ||
+|| `JSON`                 | Each audit event is serialized as a single-line JSON object preceded by an ISO 8601 timestamp.</br>Example: `<time>: {"k1": "v1", "k2": "v2", ...}` </br>_`k1`, `k2`, …, `kn` represent audit log attributes; `v1`, `v2`, …, `vn` represent their values._ ||
+|| `TXT`                  | Each audit event is serialized as a single-line text string in the `key=value` format, preceded by an ISO 8601 timestamp.</br>Example: `<time>: k1=v1, k2=v2, ...` </br>_`k1`, `k2`, …, `kn` represent audit log attributes; `v1`, `v2`, …, `vn` represent their values._ ||
+|| `JSON_LOG_COMPATIBLE`  | Each audit event is serialized as a single-line JSON object suitable for output to destinations shared with debug logs. The object contains the `@timestamp` field with the ISO 8601 timestamp and the `@log_type` field set to `audit`.</br>Example: `{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}` </br>_`@timestamp` stores the ISO 8601 timestamp; `k1`, `k2`, …, `kn` represent audit log attributes; `v1`, `v2`, …, `vn` represent their values._ ||
+|#
+
+#### Envelope format {#envelope-format}
+
+Backends can wrap audit events into a custom envelope before delivering them to the backend by specifying the `log_json_envelope` field. The template must contain the `%message%` placeholder, which is replaced with the serialized audit record in the selected format.
+
+For example, the following configuration outputs audit events to `stderr` in JSON format, wrapped in a custom envelope:
+
+```yaml
+audit_config:
+  stderr_backend:
+    format: JSON
+    log_json_envelope: '{"audit": %message%, "source": "ydb-audit-log"}'
+```
+
+See the [Example with Envelope JSON](#examples) section for output details.
+
+### Log class configuration {#log-class-config}
+
+Each entry in `log_class_config` accepts the following fields:
+
+#|
+|| **Field**              | **Description** ||
+|| `log_class`            | Class name to configure. Uses values from the [log classes](#log-classes) list. The `log_class_config` list must not contain two classes with the same name.<br/>_Required._ ||
+|| `enable_logging`       | Enables audit event emission for the selected log class. Disabled by default.<br/>_Optional._ ||
+|| `exclude_account_type` | Array of account type (`Anonymous`, `User`, `Service`, `ServiceImpersonatedFromUser`) that should exclude events even if logging is enabled.<br/>_Optional._ ||
+|| `log_phase`            | Array of request processing phases to log. See the [Log phases](#log-phases).<br/>_Optional._ ||
+|#
+
+### Heartbeat settings {#heartbeat-settings}
+
+Heartbeat events help you monitor the health of the audit logging subsystem. They allow you to create alerts for missing audit events without false positives during periods of no activity.
+
+`heartbeat.interval_seconds` controls how often audit heartbeat events are written. A value of `0` disables heartbeat messages.
+
+### Config samples {#config-samples}
 
 **Simple configuration.** Below is a simple configuration that saves the audit log text to a file in `TXT` format.
 

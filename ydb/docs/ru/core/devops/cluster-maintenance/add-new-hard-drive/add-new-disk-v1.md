@@ -2,17 +2,19 @@
 
 Перед началом работы ознакомьтесь с документом [{#T}](disk-addition-preparation.md).
 
+Добавление дисков увеличивает ёмкость хранилища кластера и используется, когда текущих дисков недостаточно под данные или планируется рост нагрузки. Общие сценарии расширения кластера описаны в разделе [{#T}](../../configuration-management/configuration-v1/cluster-expansion.md).
+
 ## Порядок действий
 
 ### Обновите inventory/50-inventory.yaml
 
-Откройте `inventory/50-inventory.yaml` (ссылка) и добавьте новый диск в переменную `ydb_disks`, указав для него новый `label`.
+Откройте `inventory/50-inventory.yaml` (см. [создание инвентаря](../../deployment-options/ansible/initial-deployment.md#inventory-create)) и добавьте новый диск в переменную `ydb_disks`, указав для него новый `label`.
 
 Этот `label` потребуется для выполнения следующих шагов.
 
 ### Обновите files/config.yaml
 
-Откройте `files/config.yaml` (ссылка) и добавьте `label` нового диска в секцию `host_configs`.
+Откройте `files/config.yaml` (см. [подготовку конфигурации](../../deployment-options/ansible/initial-deployment.md#ydb-config-prepare)) и добавьте `label` нового диска в секцию `host_configs`.
 
 `Label` должен совпадать с тем, который вы указали в `inventory/50-inventory.yaml`.
 
@@ -25,7 +27,7 @@ ansible-playbook ydb_platform.ydb.prepare_drives \
   --extra-vars "ydb_disk_prepare=ydb_disk_4"
 ```  
 
-Значение `ydb_disk_prepare` должно содержать `label` нового диска.
+В примере вместо `ydb_disk_4` укажите `label` нового диска, заданный в инвентаре и в `files/config.yaml`.
 
 После выполнения команды вы должны увидеть новый `label` среди разделов дисков:
 
@@ -34,13 +36,17 @@ root@static-node-1:/opt/ydb# ls /dev/disk/by-partlabel/
 ydb_disk_1 ydb_disk_2 ydb_disk_3 ydb_disk_4
 ```
 
-### Обновите конфигурацию и перезапустите кластер
+### Обновите конфигурацию на узлах
 
-Примените изменения конфигурации на всех узлах и при необходимости перезапустите кластер:
+Плейбук [update_config](../../deployment-options/ansible/update-config.md) доставляет изменения на **все** узлы кластера из инвентаря. Поскольку список дисков в инвентаре и `host_configs` обычно одинаков для каждого узла хранения, после успешного выполнения новый диск должен быть подготовлен и учтён в конфигурации на **каждом** таком узле (node); при необходимости проверьте `ls /dev/disk/by-partlabel/` на серверах.
+
+Перезапуск процессов выполняется не всегда: плейбук сам запланирует перезапуск только если изменения этого требуют. При необходимости явного перезапуска используйте [{#T}](../../deployment-options/ansible/restart.md).
 
 ```bash
 ansible-playbook ydb_platform.ydb.update_config
 ```
+
+На скриншоте ниже — пример интерфейса мониторинга после применения конфигурации: убедитесь, что узлы и диски хранилища без критических ошибок (индикация соответствует штатной работе в вашей среде).
 
 ![_](_assets/step4-v2.png)
 
@@ -51,6 +57,8 @@ ansible-playbook ydb_platform.ydb.update_config
 ```bash
 ansible-playbook ydb_platform.ydb.healthcheck
 ```
+
+В конце вывода в блоке `PLAY RECAP` у всех хостов поля `failed` и `unreachable` должны быть равны `0`. На скриншоте — пример успешного прохождения проверки.
 
 ![_](_assets/step6-v2.png)
 
@@ -65,6 +73,8 @@ ansible-playbook ydb_platform.ydb.update_config \
   --skip-tags restart
 ```  
 
+На странице Configs Dispatcher убедитесь, что обновление конфигурации хранилища прошло без ошибок (нет отказов в статусе связанных компонентов).
+
 ![configs-dispatcher-page-v1](_assets/step6-v1.png)
 
 ### Добавьте дополнительные группы хранения
@@ -75,5 +85,7 @@ ansible-playbook ydb_platform.ydb.update_config \
 ansible-playbook ydb_platform.ydb.run_ydbd \
   --extra-vars 'cmd="admin database /Root/db pools add ssd:1"'
 ```  
+
+После добавления групп хранения проверьте в интерфейсе, что пулы и группы отображаются с ожидаемыми параметрами.
 
 ![configs-dispatcher-page-v1](_assets/step7-v1.png)

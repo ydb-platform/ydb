@@ -66,13 +66,48 @@ public:
 private:
     static constexpr size_t MAX_LEVELS = 30;
 
-    size_t FindSuitableLevel(ui64 w) const {
+    /**
+     * Levels have weights W_lo = w0*2^k and W_hi = w0*2^(k+1). When W_lo < w < W_hi,
+     * pick the lower or upper level with probabilities (W_hi-w)/(W_hi-W_lo) and (w-W_lo)/(W_hi-W_lo)
+     * so the expected represented mass matches w.
+     */
+    size_t FindSuitableLevel(ui64 w) {
+        const auto& levels = Sketch_.Levels_;
+        if (levels.empty()) {
+            return 0;
+        }
         auto lb = std::lower_bound(
-            Sketch_.Levels_.begin(),
-            Sketch_.Levels_.end(),
+            levels.begin(),
+            levels.end(),
             w,
             [](const auto& level, ui64 weight) { return level.Weight < weight; });
-        return static_cast<size_t>(std::distance(Sketch_.Levels_.begin(), lb));
+
+        if (lb == levels.end()) {
+            return levels.size();
+        }
+        if (lb->Weight == w) {
+            return static_cast<size_t>(std::distance(levels.begin(), lb));
+        }
+        if (lb == levels.begin()) {
+            return 0;
+        }
+
+        const ui64 wLo = (lb - 1)->Weight;
+        const ui64 wHi = lb->Weight;
+        Y_ASSERT(wLo < w && w < wHi);
+
+        const size_t iLo = static_cast<size_t>(std::distance(levels.begin(), lb - 1));
+        const size_t iHi = static_cast<size_t>(std::distance(levels.begin(), lb));
+        const ui64 d = wHi - wLo;
+        const ui64 gapAbove = wHi - w;
+
+        if ((d & (d - 1)) == 0) {
+            const ui64 u = static_cast<ui64>(Sketch_.Rng_()) & (d - 1);
+            return (u < gapAbove) ? iLo : iHi;
+        }
+        std::uniform_int_distribution<ui64> dist(0, d - 1);
+        const ui64 u = dist(Sketch_.Rng_);
+        return (u < gapAbove) ? iLo : iHi;
     }
 
     TKllSketch<T> Sketch_;

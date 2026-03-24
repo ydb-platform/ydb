@@ -210,4 +210,20 @@ Y_UNIT_TEST_SUITE(TDynamicKllSketchTest) {
         UNIT_ASSERT(m >= TString{"x0000000"} && m <= TString{"x0009999"});
     }
 
+    Y_UNIT_TEST(WeightBetweenLevelsDeterministicWithSeed) {
+        const ui64 seed = 3141592653ull;
+        TDynamicKllSketch<TString> d1(3, seed, 1);
+        TDynamicKllSketch<TString> d2(3, seed, 1);
+        for (int i = 0; i < 80; ++i) {
+            d1.Add(TStringBuilder() << "w" << i, 1);
+            d2.Add(TStringBuilder() << "w" << i, 1);
+        }
+        for (int i = 0; i < 120; ++i) {
+            TString key = TStringBuilder() << "z" << i;
+            d1.Add(key, 3);
+            d2.Add(key, 3);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(d1.Median(), d2.Median());
+    }
+
 } // Y_UNIT_TEST_SUITE(TDynamicKllSketchTest)

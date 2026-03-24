@@ -227,6 +227,7 @@ struct TEvPQ {
         EvMLPPurgeResponse,
         EvMLPConsumerStatus,
         EvUpdateReadMetrics,
+        EvMLPUpdateExternalLockedMessageGroupsId,
         EvEnd,
     };
 
@@ -1728,6 +1729,18 @@ struct TEvPQ {
             Record.SetPartitionId(partitionId);
             Record.SetMessages(messages);
             Record.SetUseForReading(useForReading);
+        }
+    };
+
+    struct TEvMLPUpdateExternalLockedMessageGroupsId : TEventPB<TEvMLPUpdateExternalLockedMessageGroupsId, NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId, EvMLPUpdateExternalLockedMessageGroupsId> {
+        TEvMLPUpdateExternalLockedMessageGroupsId() = default;
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
         }
     };
 };

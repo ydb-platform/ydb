@@ -11,6 +11,7 @@ SIZE(MEDIUM)
 
 SRCS(
     mlp_commit_ut.cpp
+    mlp_consumer_split_ut.cpp
     mlp_consumer_ut.cpp
     mlp_counters_ut.cpp
     mlp_dlq_mover_ut.cpp
@@ -20,6 +21,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/persqueue/public/mlp/ut/common
+    ydb/core/persqueue/ut/common
+    library/cpp/iterator
 )
 
 END()

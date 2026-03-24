@@ -195,12 +195,6 @@ private:
     }
 };
 
-TPath GetBuildPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo, const TString& tableName) {
-    return TPath::Init(buildInfo.TablePathId, ss)
-        .Dive(buildInfo.IndexName)
-        .Dive(tableName);
-}
-
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {

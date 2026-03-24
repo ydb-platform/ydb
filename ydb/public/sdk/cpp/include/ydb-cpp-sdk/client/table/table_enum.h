@@ -44,7 +44,7 @@ enum class EIndexType {
 
 enum class ECompactState {
     Unspecified = 0,
-    InProgess = 1,
+    InProgress = 1,
     Done = 2,
     Cancelled = 3,
 };

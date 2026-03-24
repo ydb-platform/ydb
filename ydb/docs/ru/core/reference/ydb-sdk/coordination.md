@@ -64,6 +64,15 @@
     ```
 
   {% endlist %}
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await client.createNode("/path/to/mynode", {});
+  ```
+
 
 {% endlist %}
 
@@ -133,7 +142,20 @@
 
   {% endlist %}
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await using session = await client.createSession("/path/to/mynode", {}, signal);
+  ```
+
 
 ### Контроль завершения сессии {#session-control}
 
@@ -152,6 +174,12 @@
 - Python
 
   В Python SDK сессия автоматически восстанавливает связь с кластером {{ ydb-short-name }} при сбоях. Рекомендуется использовать контекстный менеджер (`with` или `async with`) для гарантированного закрытия сессии при выходе из блока. При работе с семафорами через контекстный менеджер (`with session.semaphore(name)` или `async with session.semaphore(name)`) семафор автоматически освобождается при выходе из блока, а сессия — при закрытии контекста.
+- JavaScript
+
+  В JS SDK для отслеживания таких ситуаций используется сигнал `session.signal`, который абортится вместе с сессией. SDK самостоятельно обрабатывает ошибки транспортного уровня и восстанавливает соединение с сервисом, пытаясь восстановить сессию, если это возможно. Таким образом, клиенту достаточно следить за сигналом сессии, чтобы не совершать действий когда сессия была закрыта или просрочена.
+
+  Так же в JS SDK есть метод для получения новой сессии при утрате старой, и этот способ является рекомендованным для длительного использования `for await (session of client.openSession()) { session.signal }`.
+
 
 {% endlist %}
 
@@ -226,6 +254,16 @@
     ```
 
   {% endlist %}
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.create({
+    limit: 10,
+    data: new Uint8Array(),
+  });
+  ```
+
 
 {% endlist %}
 
@@ -317,6 +355,15 @@
     ```
 
   {% endlist %}
+- JavaScript
+
+  ```javascript
+  {
+    await using lease = await sem.acquire({ count: 1, data: new Uint8Array() });
+    await doWork(lease.signal);
+  } // lease.release() called automatically
+  ```
+
 
 {% endlist %}
 
@@ -376,6 +423,16 @@
     ```
 
   {% endlist %}
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.update({
+    limit: 5,
+    data: new Uint8Array(),
+  });
+  ```
+
 
 {% endlist %}
 
@@ -461,6 +518,16 @@
     ```
 
   {% endlist %}
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.describe({
+    owners: true,
+    waiters: true,
+  });
+  ```
+
 
 {% endlist %}
 
@@ -520,6 +587,14 @@
     ```
 
   {% endlist %}
+- JavaScript
+
+  Чтобы отпустить захваченный в сессии семафор, необходимо вызвать метод `Release` у объекта `Lease`. Если взятие семафора было с использованием конструкции using, то при выходе из скоупа, семафор будет освобожден автоматически.
+
+  ```javascript
+  await lease.release();
+  ```
+
 
 {% endlist %}
 

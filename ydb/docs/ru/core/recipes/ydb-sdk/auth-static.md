@@ -79,7 +79,7 @@
   }
   ```
 
-- Node.js
+- JavaScript
 
   {% include [auth-static](../../_includes/nodejs/auth-static.md) %}
 

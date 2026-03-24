@@ -60,7 +60,7 @@
 
 Инструменты для разработчиков приложений.
 
-  - [Обзор {{ydb-short-name}} SDK](../../reference/ydb-sdk/index.md): нативные SDK для Go, Python, Java, C++, Node.js.
+  - [Обзор {{ydb-short-name}} SDK](../../reference/ydb-sdk/index.md): нативные SDK для Go, Python, Java, C++, JavaScript.
   - [JDBC драйвер](../../reference/languages-and-apis/jdbc-driver/index.md): стандартный способ подключения из Java-экосистемы.
   - [{{ydb-short-name}} CLI](../../reference/ydb-cli/index.md): инструмент командной строки для администрирования и выполнения запросов.
 

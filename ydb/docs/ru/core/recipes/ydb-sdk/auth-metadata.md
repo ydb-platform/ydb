@@ -107,7 +107,7 @@
   }
   ```
 
-- Node.js
+- JavaScript
 
   {% include [auth-metadata](../../_includes/nodejs/auth-metadata.md) %}
 

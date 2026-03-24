@@ -22,7 +22,7 @@
 - [**Векторные индексы**](query_execution/vector_search.md) — поддержка хранения и поиска по векторным представлениям данных для задач семантического поиска, сходства и ML-сценариев.
 - [**Наблюдаемость**](../reference/observability/index.md) — встроенная поддержка метрик, логов и дашбордов.
 - **Безопасность и аудит** — шифрование данных (at-rest и in-transit), аудит операций, поддержка аутентификации и авторизации; подробнее — в разделе [Безопасность](../security/index.md).
-- **Инструменты взаимодействия и интеграции** — доступны [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) для администрирования и отладки, а также [SDK](../reference/ydb-sdk/index.md) для C++, C#, Go, Java, Node.js, PHP, Python и Rust; поддерживается интеграция с внешними системами; подробнее — в разделах [{#T}](../integrations/index.md) и [{#T}](../reference/languages-and-apis/index.md).
+- **Инструменты взаимодействия и интеграции** — доступны [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) для администрирования и отладки, а также [SDK](../reference/ydb-sdk/index.md) для C++, C#, Go, Java, JavaScript, PHP, Python и Rust; поддерживается интеграция с внешними системами; подробнее — в разделах [{#T}](../integrations/index.md) и [{#T}](../reference/languages-and-apis/index.md).
 - **Открытая архитектура**: [исходный код](https://github.com/ydb-platform/ydb) доступен под [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), взаимодействие с системой производится через открытый протокол [gRPC](https://grpc.io/), что позволяет реализовывать клиенты на любом языке программирования.
 
 ### Основные сценарии применения

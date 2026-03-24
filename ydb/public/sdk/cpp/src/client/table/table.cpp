@@ -191,6 +191,28 @@ const TBuildIndexOperation::TMetadata& TBuildIndexOperation::Metadata() const {
     return Metadata_;
 }
 
+TCompact::TCompact(bool cascade, uint32_t maxShardsInFlight)
+    : Cascade_(cascade)
+    , MaxShardsInFlight_(maxShardsInFlight)
+{}
+
+TCompact::TCompact()
+    : TCompact(false, 1)
+{}
+
+bool TCompact::GetCascade() const {
+    return Cascade_;
+}
+
+uint32_t TCompact::GetMaxShardsInFlight() const {
+    return MaxShardsInFlight_;
+}
+
+void TCompact::SerializeTo(Ydb::Table::CompactItem& proto) const {
+    proto.set_cascade(Cascade_);
+    proto.set_max_shards_in_flight(MaxShardsInFlight_);
+}
+
 TCompactionOperation::TCompactionOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
     : TOperation(std::move(status), std::move(operation))
 {
@@ -1877,6 +1899,10 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
             request.mutable_drop_metrics_settings();
             break;
         }
+    }
+
+    if (settings.Compact_) {
+        settings.Compact_->SerializeTo(*request.mutable_compact());
     }
 
     return request;

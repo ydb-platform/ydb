@@ -42,6 +42,7 @@ class TableIndex;
 class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
 class EvictionToExternalStorageSettings;
+class CompactItem;
 
 } // namespace Table
 } // namespace Ydb
@@ -546,6 +547,20 @@ public:
     const TMetadata& Metadata() const;
 private:
     TMetadata Metadata_;
+};
+
+class TCompact {
+public:
+    TCompact(bool cascade, uint32_t maxShardsInFlight);
+    TCompact();
+
+    bool GetCascade() const;
+    uint32_t GetMaxShardsInFlight() const;
+
+    void SerializeTo(Ydb::Table::CompactItem& proto) const;
+private:
+    bool Cascade_;
+    uint32_t MaxShardsInFlight_;
 };
 
 class TCompactionOperation : public TOperation {
@@ -2057,6 +2072,8 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
     FLUENT_SETTING_OPTIONAL(TPartitioningSettings, AlterPartitioningSettings);
 
     FLUENT_SETTING_OPTIONAL(bool, SetKeyBloomFilter);
+
+    FLUENT_SETTING_OPTIONAL(TCompact, Compact);
 
     FLUENT_SETTING_OPTIONAL(TReadReplicasSettings, SetReadReplicasSettings);
     TSelf& SetReadReplicasSettings(TReadReplicasSettings::EMode mode, uint64_t readReplicasCount) {

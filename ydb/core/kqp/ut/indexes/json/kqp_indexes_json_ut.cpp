@@ -177,6 +177,18 @@ void ValidatePredicate(TQueryClient& db, const std::string& table, const std::st
     CompareYson(FormatResultSetYson(mainResult.GetResultSet(0)), FormatResultSetYson(indexResult.GetResultSet(0)));
 }
 
+void ValidateError(TQueryClient& db, const std::string& table, const std::string& indexTable, const std::string& predicate, const std::string& errorMessage) {
+    auto query = [&](const std::string& table, const std::string& indexTable, const std::string& predicate) {
+        return std::format(R"(
+            SELECT * FROM {} {} WHERE {} ORDER BY k;
+        )", table, (indexTable.empty() ? "" : "VIEW  " + indexTable), predicate);
+    };
+
+    auto result = db.ExecuteQuery(query(table, indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), errorMessage);
+}
+
 }  // namespace
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
@@ -396,37 +408,39 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 R"(('1'))",
                 R"(('true'))",
                 R"(('false'))",
-                R"(('"string"'))",
+                R"(('"1"'))",
                 R"(('[]'))",
                 R"(('{}'))",
                 R"(('{"k1": null}'))",
                 R"(('{"k1": 1}'))",
                 R"(('{"k1": true}'))",
                 R"(('{"k1": false}'))",
-                R"(('{"k1": "string"}'))",
+                R"(('{"k1": "1"}'))",
                 R"(('{"k1": []}'))",
                 R"(('{"k1": {}}'))",
                 R"(('{"k1": [1, 2, 3]}'))",
-                R"(('{"k1": "string", "k2": "string2"}'))",
-                R"(('[{"k1": "string", "k2": "string2"}, {"k1": "string", "k2": "string2"}]'))",
-                R"(('{"k1": {"k2": {"k3": {"k4": "string"}}}}'))",
-                R"(('{"k1": 0, "k2": -1.5, "k3": "text", "k4": true, "k5": null, "k6": [1, "string", false], "k7": {"k1": "v"}}'))",
+                R"(('{"k1": "1", "k2": "22"}'))",
+                R"(('[{"k1": "1", "k2": "22"}, {"k1": "1", "k2": "22"}]'))",
+                R"(('{"k1": {"k2": {"k3": {"k4": "1"}}}}'))",
+                R"(('{"k1": 0, "k2": -1.5, "k3": "text", "k4": true, "k5": null, "k6": [1, "1", false], "k7": {"k1": "v"}}'))",
                 R"(('{"k1": [{"k1": 10}, {"k1": 20}], "k2": {"k1": 2, "k2": true}}'))",
                 R"(('{"": null}'))",
                 R"(('{"": 1}'))",
                 R"(('{"": true}'))",
                 R"(('{"": false}'))",
-                R"(('{"": "string"}'))",
+                R"(('{"": "1"}'))",
                 R"(('{"": []}'))",
                 R"(('{"": {}}'))",
                 R"(('{"": [1, 2, 3]}'))",
-                R"(('{"": {"": {"": {"": ["", "string", null, 1, {"": ""}]}}}}'))",
+                R"(('{"": {"": {"": {"": ["", "1", null, 1, {"": ""}]}}}}'))",
                 R"(('[{"": ""}, {"": ""}, {"": ""}, {"": ""}]'))",
                 R"(('{"k1": [[{"k2": 0}, {"k2": 1}], []]}'))",
                 R"(('[1, [2, [3, [4, []]]]]'))",
-                R"(('["string", {"k1": 1}, [2, 3], 4, null, false]'))",
+                R"(('["1", {"k1": 1}, [2, 3], 4, null, false]'))",
                 R"(('[[{"k1": 1}], [{"k2": [{"k3": 2}]}]]'))",
                 R"(('{"k1": {"k2": {"k3": [{"k1": "a"}, {"k2": "b"}], "k4": [0, 1.5, -2, null]}}}'))",
+                "NULL",
+                "NULL",
                 "NULL"
             };
 
@@ -522,6 +536,44 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*]"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*[0]"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*[*]"));
+        }
+
+        // Methods
+        {
+            auto validateMethod = [&](const std::string& method) {
+                Cerr << std::format("Validating method: {}", method) << Endl;
+                ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.{}", method)));
+                ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k1.{}", method)));
+                ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.*.{}", method)));
+                ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$[0].{}", method)));
+                ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$[*].{}", method)));
+            };
+
+            validateMethod("type()");
+            validateMethod("size()");
+            validateMethod("double()");
+            validateMethod("ceiling()");
+            validateMethod("floor()");
+            validateMethod("abs()");
+            validateMethod("keyvalue()");
+
+            validateMethod("keyvalue().size()");
+            validateMethod("keyvalue().name");
+            validateMethod("keyvalue().value");
+            validateMethod("keyvalue().value.size()");
+
+            validateMethod("size().double()");
+            validateMethod("abs().ceiling()");
+            validateMethod("abs().floor().type()");
+        }
+
+        // Without context object ($)
+        {
+            ValidateError(db, "TestTable", "json_idx", jsonExists("null"), "No search terms were extracted from the query");
+            ValidateError(db, "TestTable", "json_idx", jsonExists("1"), "No search terms were extracted from the query");
+            ValidateError(db, "TestTable", "json_idx", jsonExists("\"str\""), "No search terms were extracted from the query");
+            ValidateError(db, "TestTable", "json_idx", jsonExists("true"), "No search terms were extracted from the query");
+            ValidateError(db, "TestTable", "json_idx", jsonExists("false"), "No search terms were extracted from the query");
         }
     }
 }

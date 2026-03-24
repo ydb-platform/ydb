@@ -1,3 +1,5 @@
+import warnings
+
 from clickhouse_connect.driver.exceptions import NotSupportedError
 
 pd_time_test = None
@@ -15,6 +17,13 @@ try:
     PANDAS_VERSION = tuple(map(int, pd.__version__.split(".")[:2]))
     IS_PANDAS_2 = PANDAS_VERSION >= (2, 0)
     pd_extended_dtypes = not pd.__version__.startswith('0')
+    if not IS_PANDAS_2:
+        warnings.warn(
+            "clickhouse-connect support for pandas 1.x is deprecated and will be removed in v1.0.0. "
+            "Please upgrade to pandas 2.x or later.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     try:
         from pandas.core.dtypes.common import is_datetime64_dtype
         from pandas.core.dtypes.common import is_timedelta64_dtype

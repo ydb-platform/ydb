@@ -120,6 +120,7 @@ private:
         }
     }
 
+private:
     TKllSketch<T> Sketch_;
 };
 

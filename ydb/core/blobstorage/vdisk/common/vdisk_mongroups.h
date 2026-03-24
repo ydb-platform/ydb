@@ -940,6 +940,8 @@ public:                                                                         
                 COUNTER_INIT(BlobsPromoteSsts, true);
                 COUNTER_INIT(BlobsExplicit, true);
                 COUNTER_INIT(BlobsBalance, true);
+                COUNTER_INIT(BlobsBalanceLevel, true);
+                COUNTER_INIT(BlobsBalanceFull, true);
                 COUNTER_INIT(BlobsFreeSpace, true);
                 COUNTER_INIT(BlobsSqueeze, true);
 
@@ -956,6 +958,8 @@ public:                                                                         
             COUNTER_DEF(BlobsPromoteSsts);
             COUNTER_DEF(BlobsExplicit);
             COUNTER_DEF(BlobsBalance);
+            COUNTER_DEF(BlobsBalanceLevel);
+            COUNTER_DEF(BlobsBalanceFull);
             COUNTER_DEF(BlobsFreeSpace);
             COUNTER_DEF(BlobsSqueeze);
 

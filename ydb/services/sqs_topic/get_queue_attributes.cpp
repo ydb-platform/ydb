@@ -274,7 +274,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 AddAttribute(result, attrName, fifo);
             }
             if (const auto attrName = "ContentBasedDeduplication"sv; HasAttribute(attrName)) {
-                bool value = fifo && ConsumerConfig && ConsumerConfig->GetContentBasedDeduplication();
+                bool value = fifo && pqTabletConfig.GetContentBasedDeduplication();
                 AddAttribute(result, attrName, value);
             }
             if (const auto attrName = "RedrivePolicy"sv; HasAttribute(attrName)) {

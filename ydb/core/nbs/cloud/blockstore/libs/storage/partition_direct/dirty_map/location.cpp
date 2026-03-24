@@ -1,5 +1,6 @@
 #include "location.h"
 
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 
 #include <bitset>
@@ -166,8 +167,21 @@ bool TLocationMask::operator==(const TLocationMask& other) const
 
 TString TLocationMask::Print() const
 {
-    // ToDo
-    return ToString(Mask);
+    TStringBuilder result;
+    result << "[D";
+    result << (Get(ELocation::DDisk0) ? "+" : ".");
+    result << (Get(ELocation::DDisk1) ? "+" : ".");
+    result << (Get(ELocation::DDisk2) ? "+" : ".");
+    result << (Get(ELocation::HODDisk0) ? "*" : ".");
+    result << (Get(ELocation::HODDisk1) ? "*" : ".");
+    result << "P";
+    result << (Get(ELocation::PBuffer0) ? "+" : ".");
+    result << (Get(ELocation::PBuffer1) ? "+" : ".");
+    result << (Get(ELocation::PBuffer2) ? "+" : ".");
+    result << (Get(ELocation::HOPBuffer0) ? "*" : ".");
+    result << (Get(ELocation::HOPBuffer1) ? "*" : ".");
+    result << "]";
+    return result;
 }
 
 TLocationMask::TLocationMask(ui16 mask)

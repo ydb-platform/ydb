@@ -128,7 +128,7 @@ jobs:
                 echo "Processing pull request: $PULL_REQUEST_NUMBER"
                 
                 # Get PR data from GitHub API
-                PR_DATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: token $GITHUB_TOKEN" \
                   "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER")
                 MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
                 BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
@@ -173,7 +173,7 @@ jobs:
             echo "branch_name_map={}" >> $GITHUB_OUTPUT
             echo "pr_number_map={}" >> $GITHUB_OUTPUT
           elif [[ -n "$PULL_REQUEST_NUMBER" ]] && [[ $PULL_REQUEST_NUMBER =~ ^[0-9]+$ ]]; then
-            PR_DATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: token $GITHUB_TOKEN" \
                   "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER")
             MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
             BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')

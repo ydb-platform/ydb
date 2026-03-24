@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
 
     Y_UNIT_TEST(GetMedianKey_MultipleSketches) {
         constexpr size_t N = 100'000;
-        TPartitioningKeysManager m(1, SmallWindow());
+        TPartitioningKeysManager m(5, SmallWindow());
         std::deque<TString> keys;
 
         for (int i = 0; i < 10; ++i) {

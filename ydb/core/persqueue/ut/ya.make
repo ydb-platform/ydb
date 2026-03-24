@@ -22,6 +22,7 @@ PEERDIR(
     library/cpp/json
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/persqueue/public
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
@@ -39,6 +40,7 @@ SRCS(
     make_config.cpp
     metering_sink_ut.cpp
     partition_chooser_ut.cpp
+    partitioning_keys_manager_ut.cpp
     pq_ut.cpp
     partition_ut.cpp
     partitiongraph_ut.cpp

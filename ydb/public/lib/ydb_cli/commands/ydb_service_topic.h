@@ -116,7 +116,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui32> DlqMaxProcessingAttempts_;
         TMaybe<bool> DlqEnabled_;
         TMaybe<TString> DlqQueueName_;
-        TMaybe<bool> ContentBasedDeduplication_;
+        bool ContentBasedDeduplication_ = false;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };

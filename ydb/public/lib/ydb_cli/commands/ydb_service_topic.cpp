@@ -477,7 +477,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("content-based-deduplication", "Content based deduplication for topic")
             .Optional()
             .Hidden()
-            .StoreResult(&ContentBasedDeduplication_);
+            .StoreTrue(&ContentBasedDeduplication_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -542,8 +542,8 @@ namespace NYdb::NConsoleClient {
             settings.SetRetentionPeriod(*RetentionPeriod_);
         }
 
-        if (ContentBasedDeduplication_.Defined() && describeResult.GetTopicDescription().GetContentBasedDeduplication() != *ContentBasedDeduplication_) {
-            settings.SetContentBasedDeduplication(*ContentBasedDeduplication_);
+        if (ContentBasedDeduplication_ && describeResult.GetTopicDescription().GetContentBasedDeduplication() != ContentBasedDeduplication_) {
+            settings.SetContentBasedDeduplication(ContentBasedDeduplication_);
         }
 
         if (PartitionWriteSpeedKbps_.Defined() && describeResult.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond() / 1_KB != *PartitionWriteSpeedKbps_) {

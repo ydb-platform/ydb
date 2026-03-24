@@ -793,7 +793,18 @@ public:
                 return 100.f;
             }
             const float shardProgress = total > 0 ? static_cast<float>(done) / total : 0.f;
-            return 100.f * (KMeans.Level - 1 + shardProgress) / static_cast<float>(KMeans.Levels);
+            const bool hasFilterPass = KMeans.OverlapClusters > 1 && KMeans.Levels > 1;
+            float levelProgress;
+            if (hasFilterPass) {
+                if (KMeans.State == TKMeans::Filter || KMeans.State == TKMeans::FilterBorders) {
+                    levelProgress = 0.5f + 0.5f * shardProgress;
+                } else {
+                    levelProgress = 0.5f * shardProgress;
+                }
+            } else {
+                levelProgress = shardProgress;
+            }
+            return 100.f * (KMeans.Level - 1 + levelProgress) / static_cast<float>(KMeans.Levels);
         }
         if (Shards) {
             return (100.f * done) / total;

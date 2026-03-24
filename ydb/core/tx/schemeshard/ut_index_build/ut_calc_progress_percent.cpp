@@ -177,4 +177,104 @@ Y_UNIT_TEST_SUITE(CalcProgressPercent) {
         // 100 * (1 - 1 + 0.5) / 1 = 50%
         UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 50.f, 1e-5f);
     }
+
+    // OverlapClusters > 1 with Levels > 1: each level has a build half and a filter half.
+    // Within a level: build pass contributes [0, 0.5) and filter pass contributes [0.5, 1).
+
+    Y_UNIT_TEST(VectorIndex_Overlap_BuildHalf_FirstLevel) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
+        info.KMeans.Levels = 2;
+        info.KMeans.Level = 1;
+        info.KMeans.OverlapClusters = 2;
+        // State = Sample (default, not Filter/FilterBorders) -> build half
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        // shardProgress = 1/2 = 0.5, levelProgress = 0.5 * 0.5 = 0.25
+        // 100 * (1 - 1 + 0.25) / 2 = 12.5%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 12.5f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(VectorIndex_Overlap_FilterHalf_FirstLevel) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
+        info.KMeans.Levels = 2;
+        info.KMeans.Level = 1;
+        info.KMeans.OverlapClusters = 2;
+        info.KMeans.State = TIndexBuildInfo::TKMeans::Filter;
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        // shardProgress = 1/2 = 0.5, levelProgress = 0.5 + 0.5 * 0.5 = 0.75
+        // 100 * (1 - 1 + 0.75) / 2 = 37.5%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 37.5f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(VectorIndex_Overlap_BuildHalf_SecondLevel) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
+        info.KMeans.Levels = 2;
+        info.KMeans.Level = 2;
+        info.KMeans.OverlapClusters = 2;
+        // State = Sample (default, not Filter/FilterBorders) -> build half
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        // Keep shard 2 in ToUploadShards so the early-return is NOT taken
+        info.ToUploadShards.push_back(MakeShardIdx(1, 2));
+        // shardProgress = 1/2 = 0.5, levelProgress = 0.5 * 0.5 = 0.25
+        // 100 * (2 - 1 + 0.25) / 2 = 62.5%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 62.5f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(VectorIndex_Overlap_FilterHalf_SecondLevel) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
+        info.KMeans.Levels = 2;
+        info.KMeans.Level = 2;
+        info.KMeans.OverlapClusters = 2;
+        info.KMeans.State = TIndexBuildInfo::TKMeans::Filter;
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        // Keep shard 2 in ToUploadShards so the early-return is NOT taken
+        info.ToUploadShards.push_back(MakeShardIdx(1, 2));
+        // shardProgress = 1/2 = 0.5, levelProgress = 0.5 + 0.5 * 0.5 = 0.75
+        // 100 * (2 - 1 + 0.75) / 2 = 87.5%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 87.5f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(VectorIndex_Overlap_SingleLevel_NoFilterPass) {
+        // OverlapClusters > 1 but Levels == 1: no Filter pass, behaves like non-overlap.
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
+        info.KMeans.Levels = 1;
+        info.KMeans.Level = 1;
+        info.KMeans.OverlapClusters = 2;
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        info.ToUploadShards.push_back(MakeShardIdx(1, 2));
+        // hasFilterPass = false (Levels == 1), so levelProgress = shardProgress = 0.5
+        // 100 * (1 - 1 + 0.5) / 1 = 50%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 50.f, 1e-5f);
+    }
+
+    Y_UNIT_TEST(VectorIndex_Overlap_FilterBorders_CountsAsFilter) {
+        TIndexBuildInfo info;
+        info.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
+        info.KMeans.Levels = 2;
+        info.KMeans.Level = 1;
+        info.KMeans.OverlapClusters = 2;
+        info.KMeans.State = TIndexBuildInfo::TKMeans::FilterBorders;
+        AddShard(info, 1, 1);
+        AddShard(info, 1, 2);
+        MarkDone(info, 1, 1);
+        MarkDone(info, 1, 2);
+        // All shards done during FilterBorders -> shardProgress = 1.0
+        // levelProgress = 0.5 + 0.5 * 1.0 = 1.0
+        // 100 * (1 - 1 + 1.0) / 2 = 50%
+        UNIT_ASSERT_DOUBLES_EQUAL(info.CalcProgressPercent(), 50.f, 1e-5f);
+    }
 }

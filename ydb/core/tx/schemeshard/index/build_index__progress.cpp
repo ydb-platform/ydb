@@ -406,7 +406,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
         }
     };
 
-    return AlterMainTableProposeTemplate(ss, buildInfo, doFunc);
+    return AlterMainTableProposeTemplate(ss, buildInfo, buildInfo.AlterMainTableTxId, doFunc);
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareValidationPropose(

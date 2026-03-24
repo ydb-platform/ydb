@@ -999,7 +999,7 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
         }
 
         if (!remainingParentOps.empty()) {
-            auto phase7Uncommitted = ReadAndCommitFIFO(runtime, "/Root/topic1", "mlp-consumer", remainingParentOps, "phase 7");
+            auto phase7Uncommitted = ReadAndCommitFIFO(runtime, "/Root/topic1", "mlp-consumer", remainingParentOps, "phase 7", 3);
             UNIT_ASSERT_C(phase7Uncommitted.empty(),
                 "Phase 7: Expected all remaining parent messages to be committed, but "
                 << phase7Uncommitted.size() << " groups have uncommitted messages");
@@ -1020,7 +1020,7 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
         }
 
         if (!childOps.empty()) {
-            auto phase8Uncommitted = ReadAndCommitFIFO(runtime, "/Root/topic1", "mlp-consumer", childOps, "phase 8", 1);
+            auto phase8Uncommitted = ReadAndCommitFIFO(runtime, "/Root/topic1", "mlp-consumer", childOps, "phase 8", 3);
             UNIT_ASSERT_C(phase8Uncommitted.empty(),
                 "Phase 8: Expected all child messages to be committed, but "
                 << phase8Uncommitted.size() << " groups have uncommitted messages");

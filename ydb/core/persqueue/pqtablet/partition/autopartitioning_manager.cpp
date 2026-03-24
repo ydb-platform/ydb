@@ -167,7 +167,7 @@ public:
             return medianKey;
         }
 
-        return GetSplitBoundaryBasedOnSourceId();
+        return GetSplitBoundaryBasedOnSourceIds();
     }
 
     NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus /*currentState*/) override {
@@ -216,7 +216,7 @@ public:
     }
 
 private:
-    std::string GetSplitBoundaryBasedOnSourceId() {
+    std::string GetSplitBoundaryBasedOnSourceIds() {
         std::vector<std::pair<TString, ui64>> sorted;
         sorted.reserve(WrittenBytes.size());
         for (const auto& [sourceIdHash, counter] : WrittenBytes) {

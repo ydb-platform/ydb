@@ -3,8 +3,13 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#ifndef UNIT_ASSERT_TRUE
 #define UNIT_ASSERT_TRUE(e)  UNIT_ASSERT((e))
+#endif
+
+#ifndef UNIT_ASSERT_FALSE
 #define UNIT_ASSERT_FALSE(e) UNIT_ASSERT(!(e))
+#endif
 
 namespace NKikimr::NPQ {
 

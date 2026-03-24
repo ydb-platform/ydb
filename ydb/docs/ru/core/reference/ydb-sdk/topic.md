@@ -1027,15 +1027,15 @@
 
   Все сообщения записываются во внутренний буфер. Для отправки на сервер есть 3 механизма: два автоматических и один ручной. Ручной - это вызов метода `writer.flush` который возвращает последний seqno записанный на сервере. Автоматическая отправка происходит по условиям:
   - Превышение размера внутреннего буфера `maxBufferBytes` (значение по умолчанию = 256MiB).
-  - По тику интервала переодической отправки `flushIntervalMs` (значение по умолчанию = 10ms).
+  - По тику интервала периодической отправки `flushIntervalMs` (значение по умолчанию = 10ms).
 
   ```javascript
   await using writer = createTopicWriter(driver, {
   	topic: testTopicName,
   	producer: testProducerName,
     // Callback that is called when writer receives an acknowledgment for a message.
-    onAck: (seqNo: bigint, status?: 'skipped' | 'written' | 'writtenInTx') => {
-      console.log("ACK": seqNo, status)
+    onAck: (seqNo, status) => {
+      console.log("ACK", seqNo, status);
     },
   })
 
@@ -1123,7 +1123,7 @@
   });
 
   await using writer = t.createWriter({
-    codec: 10000 to 19999, // CUSTOM
+    codec: 10000, // CUSTOM (допустимый диапазон: 10000–19999)
   });
   ```
 
@@ -1770,7 +1770,7 @@
   await using reader = createTopicReader(driver, {
     topic: {
       path: topicPath,
-      readFrom: new Date(), // number, Date, protobuff Timestamp
+      readFrom: new Date(), // number, Date, protobuf Timestamp
     },
     consumer: consumerName,
   });

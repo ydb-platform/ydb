@@ -283,6 +283,35 @@ TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx,
         .Done();
 }
 
+TExprBase KqpBuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    Y_UNUSED(kqpCtx);
+
+    if (!node.Maybe<TKqlReadTableVectorIndex>()) {
+        return node;
+    }
+
+    const TKqlReadTableVectorIndex& read = node.Cast<TKqlReadTableVectorIndex>();
+
+    auto phyRead = ctx.RenameNode(*node.Raw(), TKqpReadTableVectorIndex::CallableName());
+
+    auto stage = Build<TDqStage>(ctx, read.Pos())
+        .Inputs()
+            .Build()
+        .Program()
+            .Args({})
+            .Body(phyRead)
+            .Build()
+        .Settings().Build()
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, read.Pos())
+        .Output()
+            .Stage(stage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
 TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const TParentsMap& parents)
 {

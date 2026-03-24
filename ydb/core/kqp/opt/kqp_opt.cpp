@@ -77,6 +77,10 @@ bool IsKqpPureInputs(const TExprList& inputs) {
                 return true;
             }
 
+            if (source.Cast().Settings().Maybe<TKqpReadTableVectorIndexSourceSettings>()) {
+                return true;
+            }
+
         }
 
         return false;

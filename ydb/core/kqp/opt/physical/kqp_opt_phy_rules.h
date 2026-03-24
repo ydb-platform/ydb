@@ -29,6 +29,12 @@ NYql::NNodes::TExprBase KqpBuildReadTableStage(NYql::NNodes::TExprBase node, NYq
 NYql::NNodes::TExprBase KqpBuildReadTableFullTextIndexStage(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
+NYql::NNodes::TExprBase KqpBuildReadTableVectorIndexStage(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
+NYql::NNodes::TExprBase KqpRewriteReadTableVectorIndex(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
 NYql::NNodes::TExprBase KqpBuildReadTableRangesStage(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parents);
 

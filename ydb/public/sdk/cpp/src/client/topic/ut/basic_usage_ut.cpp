@@ -23,7 +23,7 @@
 namespace NYdb::NTopic::NTests {
 
 void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message,
-    ui32 count, TTopicSdkTestSetup& setup, TIntrusivePtr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10)
+    ui32 count, TTopicSdkTestSetup& setup, TIntrusivePtr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10, ui64 shuffleRatio = 1, TDuration shuffleDelay = TDuration::MilliSeconds(10))
 {
     auto client = setup.MakeClient();
     auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
@@ -39,11 +39,23 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 
     TTopicClient topicClient = setup.MakeClient();
 
-    auto WaitTasks = [&, timeout = TInstant::Now() + TDuration::Seconds(60)](auto f, size_t c) {
-        while (f() < c) {
-            Sleep(TDuration::MilliSeconds(100));
-            UNIT_ASSERT(timeout > TInstant::Now());
+    auto WaitTasks = [&](auto f, size_t c) {
+        const auto hardTimeout = TInstant::Now() + TDuration::Seconds(60);
+        const auto shuffleTimeout = TInstant::Now() + shuffleDelay;
+        while (true) {
+            const auto fVal = f();
+            if (fVal >= c * shuffleRatio) {
+                return;
+            }
+
+            const auto now = TInstant::Now();
+            if (fVal >= c && now > shuffleTimeout) {
+                return;
+            }
+
+            UNIT_ASSERT_GE(hardTimeout, now);
             ReadSession->WaitEvent();
+            Sleep(TDuration::MilliSeconds(100));
         };
     };
     auto WaitPlannedTasks = [&](auto e, size_t count) {
@@ -53,28 +65,23 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
         WaitTasks([&]() { return e->GetExecutedCount(); }, count);
     };
 
-    auto RunTasks = [&](auto e, const std::vector<size_t>& tasks) {
-        size_t n = tasks.size();
-        WaitPlannedTasks(e, n);
+    auto RunTask = [&](auto e) {
+        WaitPlannedTasks(e, 1);
         size_t completed = e->GetExecutedCount();
-        e->StartFuncs(tasks);
-        WaitExecutedTasks(e, completed + n);
+        e->StartRandomFunc();
+        WaitExecutedTasks(e, completed + 1);
     };
-    Y_UNUSED(RunTasks);
 
-    auto PlanTasksAndRestart = [&](auto e, const std::vector<size_t>& tasks) {
-        size_t n = tasks.size();
-        WaitPlannedTasks(e, n);
+    auto PlanTaskAndRestart = [&](auto e) {
+        WaitPlannedTasks(e, 1);
         size_t completed = e->GetExecutedCount();
 
         setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
         Sleep(TDuration::MilliSeconds(100));
 
-        e->StartFuncs(tasks);
-        WaitExecutedTasks(e, completed + n);
+        e->StartRandomFunc();
+        WaitExecutedTasks(e, completed + 1);
     };
-    Y_UNUSED(PlanTasksAndRestart);
-
 
     NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
     TAtomic lastOffset = 0u;
@@ -95,11 +102,12 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
     ui32 restartCount = 0;
     while (AtomicGet(lastOffset) + 1 < count) {
         if (restartCount < maxRestartsCount && i % restartPeriod == 1) {
-            PlanTasksAndRestart(decompressor, {i++});
+            PlanTaskAndRestart(decompressor);
             restartCount++;
         } else {
-            RunTasks(decompressor, {i++});
+            RunTask(decompressor);
         }
+        i++;
     }
 
     ReadSession->Close(TDuration::MilliSeconds(10));
@@ -402,6 +410,32 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         std::string message(8'000, 'x');
 
         WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
+    }
+
+    Y_UNIT_TEST(ReadWithRestartsAndLargeDataAndShuffle) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto compressor = new TSyncExecutor();
+        auto decompressor = CreateThreadPoolManagedExecutor(1);
+
+        TReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName(TEST_CONSUMER)
+            .MaxMemoryUsageBytes(10_MB)
+            .DecompressionExecutor(decompressor)
+            .AppendTopics(TEST_TOPIC)
+            // .DirectRead(EnableDirectRead)
+            ;
+
+        TWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .Codec(ECodec::RAW)
+            .CompressionExecutor(compressor);
+
+            ui32 count = 3000;
+        std::string message(8'000, 'x');
+
+        WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor, 7, 10, 10);
     }
 
     Y_UNIT_TEST(SessionNotDestroyedWhileCompressionInFlight) {

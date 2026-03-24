@@ -18,6 +18,8 @@ public:
     bool IsAsync() const override;
     void Post(TFunction&& f) override;
 
+
+    void StartRandomFunc();
     void StartFuncs(const std::vector<size_t>& indicies);
 
     size_t GetFuncsCount() const;

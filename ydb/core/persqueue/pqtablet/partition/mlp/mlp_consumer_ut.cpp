@@ -1190,6 +1190,10 @@ static void WriteGroups(
     }
 }
 
+static size_t TotalExpectedMessages(const TMap<TString, size_t>& expectedCounts) {
+    return Accumulate(IterateValues(expectedCounts), size_t(0));
+}
+
 struct TCollectedMessage {
     TString GroupId;
     TMessageId MessageId;
@@ -1203,6 +1207,7 @@ static std::vector<TCollectedMessage> ReadAllAndCommit(
     NActors::TTestActorRuntime& runtime,
     const TString& topicName,
     const TString& consumer,
+    TMap<TString, size_t> remainingReads,
     TStringBuf phase,
     int retries = 100
 ) {
@@ -1210,17 +1215,18 @@ static std::vector<TCollectedMessage> ReadAllAndCommit(
     size_t batchIndex = 0;
 
     for (int readIteration = 1; ; ++readIteration) {
-          {
+        {
             TStringBuilder sb;
             sb << phase << " ReadAllAndCommit iteration=" << readIteration << ", retries left=" << retries << ":\n";
-            /*
             for (auto& [g, n] : remainingReads) {
-                sb << "  " << g << ": read=" << n << Endl;
+                sb << "  " << g << ": remaining=" << n << Endl;
             }
-            */
-            sb << "\n";
             Cerr << sb << Endl;
         }
+        if (TotalExpectedMessages(remainingReads) == 0) {
+            break;
+        }
+
         CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = topicName,
@@ -1238,7 +1244,7 @@ static std::vector<TCollectedMessage> ReadAllAndCommit(
             }
             continue;
         }
-        // Verify FIFO invariant: at most 1 message per group in a single read batch
+
         THashSet<TString> seenGroupsInBatch;
         std::vector<TMessageId> messagesToCommit;
         for (auto& msg : readResult->Messages) {
@@ -1259,9 +1265,12 @@ static std::vector<TCollectedMessage> ReadAllAndCommit(
                 .Data = msg.Data,
             });
             messagesToCommit.push_back(msg.MessageId);
+
+            if (remainingReads.contains(msg.MessageGroupId) && remainingReads[msg.MessageGroupId] > 0) {
+                remainingReads[msg.MessageGroupId]--;
+            }
         }
 
-        // Commit all messages in this batch
         auto commitResult = Commit(runtime, topicName, consumer, messagesToCommit);
         UNIT_ASSERT_VALUES_EQUAL_C(commitResult->Status, Ydb::StatusIds::SUCCESS, phase);
 
@@ -1351,10 +1360,6 @@ static void VerifyFIFOOrdering(
     }
 }
 
-static size_t TotalExpectedMessages(const TMap<TString, size_t>& expectedCounts) {
-    return Accumulate(IterateValues(expectedCounts), size_t(0));
-}
-
 // Test 1: All writes happen first, then read+commit at the end.
 // Verifies all messages are read with correct FIFO ordering across two levels of splits.
 Y_UNIT_TEST(DoubleSplit_ReadCommitAtEnd) {
@@ -1388,7 +1393,7 @@ Y_UNIT_TEST(DoubleSplit_ReadCommitAtEnd) {
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2, 3, 4, 5, 6});
 
     Cerr << ">>>>> DoubleSplit_ReadCommitAtEnd: Reading and committing all messages" << Endl;
-    auto allMessages = ReadAllAndCommit(runtime, "/Root/topic1", "mlp-consumer", "DoubleSplit_ReadCommitAtEnd");
+    auto allMessages = ReadAllAndCommit(runtime, "/Root/topic1", "mlp-consumer", expectedCounts, "DoubleSplit_ReadCommitAtEnd");
 
     Cerr << ">>>>> DoubleSplit_ReadCommitAtEnd: Verifying FIFO ordering" << Endl;
     size_t expectedTotal = TotalExpectedMessages(expectedCounts);
@@ -1437,8 +1442,12 @@ Y_UNIT_TEST(DoubleSplit_ReadAfterFirstWrite) {
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2, 3, 4, 5, 6});
 
     Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Reading and committing remaining messages" << Endl;
+    TMap<TString, size_t> remainingReads = expectedCounts;
+    for (const auto& msg : earlyMessages) {
+        remainingReads[msg.GroupId]--;
+    }
     auto remainingMessages = ReadAllAndCommit(runtime, "/Root/topic1", "mlp-consumer",
-        "DoubleSplit_ReadAfterFirstWrite_remaining");
+        remainingReads, "DoubleSplit_ReadAfterFirstWrite_remaining");
     std::vector<TCollectedMessage> allMessages;
     allMessages.insert(allMessages.end(), earlyMessages.begin(), earlyMessages.end());
     allMessages.insert(allMessages.end(), remainingMessages.begin(), remainingMessages.end());

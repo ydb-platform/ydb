@@ -109,7 +109,7 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
             } else if (TKqpExistsSublink::Match(sublink.Get())) {
                 entry = TSubplanEntry(subplan, {}, ESubplanType::EXISTS, sublinkVar);
             } else /* In sublink */ {
-                auto lambda = link->Child(TKqpInSublink::idx_InLambda);
+                auto lambda = sublink->Child(TKqpInSublink::idx_InLambda);
 
                 Y_ENSURE(lambda->IsLambda());
                 TVector<TInfoUnit> tuple;

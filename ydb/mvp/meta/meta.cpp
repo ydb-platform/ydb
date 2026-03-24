@@ -216,7 +216,7 @@ void TMVP::InitMeta() {
                      );
 
     ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
-                         "/meta/capabilities",
+                         "/capabilities",
                          ActorSystem.Register(new NMVP::THandlerActorMetaCapabilities())
                          )
                      );

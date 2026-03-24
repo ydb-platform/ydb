@@ -64,6 +64,10 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
             
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_idx", source->GetSourceIdx())
                 ("table", resultChunk->GetTable()->num_rows())("is_finished", isFinished)("streaming", isStreamingMode);
+            // resultChunk->GetStartIndex() is the absolute page.GetIndexStart() within
+            // the portion (set by TBuildResultStep from the page stored in StageResult).
+            // Adding GetRecordsCount() gives the absolute end position, which is what
+            // the scan cursor needs to track for resumed scans.
             auto cursor = Collection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount(),
                 Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
             reader.OnIntervalResult(
@@ -78,7 +82,13 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
             // will call ContinueCursor once a slot is freed by OnPageSent.
             // NOTE: both OnSourceReady and Continue run in the actor thread, so there
             // is no race condition between the pre-fetch and the Continue call.
-            if (!isFinished && isStreamingMode) {
+            //
+            // Use HasMorePages() rather than !isFinished: with per-page fetch each
+            // Finalize() creates a single-page StageResult, so isFinished is always
+            // true after TBuildResultStep pops the page.  HasMorePages() correctly
+            // checks whether there are more pages in EarlyPages to fetch.
+            const bool hasMorePages = source->GetAs<IDataSource>()->HasMorePages();
+            if (isStreamingMode && hasMorePages) {
                 if (Collection->GetPagesInFlightCount() < Collection->GetMaxPagesInFlight()) {
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "prefetch_next_page")
                         ("source_idx", source->GetSourceIdx())
@@ -92,13 +102,20 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                         ("max_pages", Collection->GetMaxPagesInFlight());
                     // Do not pre-fetch: Continue() will be called when a page is sent.
                 }
+            } else if (!isFinished) {
+                // Non-streaming multi-page result (old path): continue within the
+                // existing StageResult pages.
+                source->MutableAs<IDataSource>()->ContinueCursor(source);
+            }
+            // In streaming mode with more pages, keep the source in the queue (Wait).
+            // In streaming mode with no more pages, or non-streaming finished, fall through.
+            if (!isFinished || (isStreamingMode && hasMorePages)) {
+                return ESourceAction::Wait;
             }
         } else if (!isFinished) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_source")
                 ("source_idx", source->GetSourceIdx())("is_finished", isFinished);
             source->MutableAs<IDataSource>()->ContinueCursor(source);
-        }
-        if (!isFinished) {
             return ESourceAction::Wait;
         }
         source->MutableAs<IDataSource>()->ClearResult();

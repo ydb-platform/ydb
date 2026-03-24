@@ -104,21 +104,32 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssemblePageImpl(const TPorti
     const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TExternalBlobInfo>& blobsData,
     const TPortionDataAccessor::TPageRange& pageRange, const std::optional<TSnapshot>& defaultSnapshot, const bool restoreAbsent) {
 
-    // pageRange.End is a chunk boundary for at least one column (it comes from the union
-    // of per-column chunk-start positions in BuildReadPages), but may fall inside a chunk
-    // for other columns.  We include the straddling chunk in full and slice afterwards.
-    // batchRowsCount tracks the maximum assembled row count across all columns; it equals
-    // pageRange.End when every column aligns, or the end of the straddling chunk otherwise.
-    // The final TPreparedBatchData carries SliceRows=pageRange.End so that
-    // AssembleToGeneralContainer slices every column back to exactly pageRange.End rows.
+    // Assembles exactly the rows in [pageRange.Start, pageRange.End) from the portion.
+    //
+    // pageRange.End is an absolute row offset from the start of the portion.
+    // pageRange.Start is the first row of the page (also absolute).
+    //
+    // For each column we:
+    //   1. Skip chunks whose entire content falls before pageRange.Start.
+    //   2. Include chunks that intersect [pageRange.Start, pageRange.End).
+    //      A chunk that straddles pageRange.End is included in full; the assembled
+    //      column will have more rows than the page and will be sliced afterwards.
+    //   3. Require that blobsData contains an entry for every included chunk.
+    //
+    // The returned TPreparedBatchData carries SliceRows = pageRange.GetRecordsCount()
+    // so that AssembleToGeneralContainer slices every column back to exactly
+    // pageRange.GetRecordsCount() rows, starting from offset 0 of the assembled batch
+    // (which corresponds to pageRange.Start of the original portion).
+
+    const ui32 pageRecordsCount = pageRange.GetRecordsCount();
 
     std::vector<TPortionDataAccessor::TColumnAssemblingInfo> columns;
     columns.reserve(resultSchema.GetColumnIds().size());
     auto it = portionData.GetRecordsVerified().begin();
 
-    // Track the maximum row count actually assembled across all present columns.
-    // For absent columns we always use pageRange.End (default fill).
-    ui32 maxAssembledRows = pageRange.End;
+    // Track the maximum assembled row count across all present columns.
+    // For absent columns we always use pageRecordsCount (default fill).
+    ui32 maxAssembledRows = pageRecordsCount;
 
     for (auto&& i : resultSchema.GetColumnIds()) {
         while (it != portionData.GetRecordsVerified().end() && it->GetColumnId() < i) {
@@ -127,9 +138,9 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssemblePageImpl(const TPorti
         }
         if ((it == portionData.GetRecordsVerified().end() || i < it->GetColumnId())) {
             // Column is absent from the portion entirely — fill with defaults for
-            // pageRange.End rows.
+            // pageRecordsCount rows.
             if (restoreAbsent || IIndexInfo::IsSpecialColumn(i)) {
-                columns.emplace_back(pageRange.End, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
+                columns.emplace_back(pageRecordsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
                 portionInfo.FillDefaultColumn(columns.back(), defaultSnapshot);
             }
         }
@@ -140,27 +151,41 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssemblePageImpl(const TPorti
             continue;
         }
 
-        // Include all chunks whose start row is before pageRange.End.
-        // If a chunk straddles pageRange.End (chunkStart < pageRange.End but
-        // chunkEnd > pageRange.End) it is included in full; the assembled column
-        // will then have more rows than pageRange.End and will be sliced afterwards.
-        //
-        // First pass: scan to find the total row count of included chunks.
-        ui32 chunkRowOffset = 0;
+        // First pass: scan chunks to find those that intersect [pageRange.Start, pageRange.End).
+        // Skip chunks entirely before pageRange.Start; include chunks that start before
+        // pageRange.End (including any straddling chunk).
+        // chunkRowOffset accumulates the total rows of included chunks.
+        ui32 chunkRowOffset = 0;  // rows in included chunks (relative to pageRange.Start)
         {
             auto itCol = it;
+            ui32 absoluteRow = 0;  // absolute row offset from start of portion
             while (itCol != portionData.GetRecordsVerified().end() && itCol->GetColumnId() == i) {
-                if (chunkRowOffset >= pageRange.End) {
+                const ui32 chunkRows = itCol->GetMeta().GetRecordsCount();
+                const ui32 chunkStart = absoluteRow;
+                const ui32 chunkEnd = absoluteRow + chunkRows;
+
+                if (chunkEnd <= pageRange.Start) {
+                    // Chunk is entirely before the page — skip.
+                    absoluteRow = chunkEnd;
+                    ++itCol;
+                    continue;
+                }
+                if (chunkStart >= pageRange.End) {
+                    // Chunk is entirely after the page — stop.
                     break;
                 }
-                chunkRowOffset += itCol->GetMeta().GetRecordsCount();
+                // Chunk intersects [pageRange.Start, pageRange.End).
+                // Include it in full (straddling chunks are sliced afterwards).
+                chunkRowOffset += chunkRows;
+                absoluteRow = chunkEnd;
                 ++itCol;
             }
         }
         // chunkRowOffset is the total rows in included chunks for this column.
-        // It must be >= pageRange.End (we included at least enough to cover the page).
-        AFL_VERIFY(chunkRowOffset >= pageRange.End)
-            ("chunk_row_offset", chunkRowOffset)("page_end", pageRange.End)
+        // It must be >= pageRecordsCount (we included at least enough to cover the page).
+        AFL_VERIFY(chunkRowOffset >= pageRecordsCount)
+            ("chunk_row_offset", chunkRowOffset)("page_records", pageRecordsCount)
+            ("page_start", pageRange.Start)("page_end", pageRange.End)
             ("column_id", i);
         if (chunkRowOffset > maxAssembledRows) {
             maxAssembledRows = chunkRowOffset;
@@ -170,19 +195,32 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssemblePageImpl(const TPorti
         // add all included chunks to it.
         columns.emplace_back(chunkRowOffset, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
         ui32 chunkIdx = 0;
-        ui32 addedRows = 0;
+        ui32 absoluteRow = 0;
         auto itCol = it;
         while (itCol != portionData.GetRecordsVerified().end() && itCol->GetColumnId() == i) {
-            if (addedRows >= pageRange.End) {
+            const ui32 chunkRows = itCol->GetMeta().GetRecordsCount();
+            const ui32 chunkStart = absoluteRow;
+            const ui32 chunkEnd = absoluteRow + chunkRows;
+
+            if (chunkEnd <= pageRange.Start) {
+                // Chunk is entirely before the page — skip (no blob needed).
+                absoluteRow = chunkEnd;
+                ++itCol;
+                continue;
+            }
+            if (chunkStart >= pageRange.End) {
+                // Chunk is entirely after the page — stop.
                 break;
             }
-            const ui32 chunkRows = itCol->GetMeta().GetRecordsCount();
+            // Chunk intersects [pageRange.Start, pageRange.End) — blob required.
             auto itBlobs = blobsData.find(itCol->GetAddress());
-            AFL_VERIFY(itBlobs != blobsData.end())("size", blobsData.size())("address", itCol->GetAddress().DebugString());
+            AFL_VERIFY(itBlobs != blobsData.end())("size", blobsData.size())("address", itCol->GetAddress().DebugString())
+                ("chunk_start", chunkStart)("chunk_end", chunkEnd)
+                ("page_start", pageRange.Start)("page_end", pageRange.End);
             columns.back().AddBlobInfo(chunkIdx, chunkRows, std::move(itBlobs->second));
             blobsData.erase(itBlobs);
             ++chunkIdx;
-            addedRows += chunkRows;
+            absoluteRow = chunkEnd;
             ++itCol;
         }
 
@@ -199,9 +237,9 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssemblePageImpl(const TPorti
         preparedColumns.emplace_back(c.Compile());
     }
 
-    // Pass SliceRows=pageRange.End so AssembleToGeneralContainer slices every column
-    // back to exactly pageRange.End rows (handles the straddling-chunk case).
-    return TPortionDataAccessor::TPreparedBatchData(std::move(preparedColumns), maxAssembledRows, pageRange.End);
+    // Pass SliceRows=pageRecordsCount so AssembleToGeneralContainer slices every column
+    // back to exactly pageRecordsCount rows (handles the straddling-chunk case).
+    return TPortionDataAccessor::TPreparedBatchData(std::move(preparedColumns), maxAssembledRows, pageRecordsCount);
 }
 
 }   // namespace

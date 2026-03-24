@@ -274,6 +274,49 @@ void TPortionAccessorFetchedStep::ReportTracing(const std::shared_ptr<NCommon::I
     LWTRACK(PortionAccessorFetched, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
             step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+
+TConclusion<bool> TDecideStreamingModeStep::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    // Only applies to non-in-memory portion sources.
+    if (source->IsSourceInMemory()) {
+        return true;
+    }
+    if (!source->HasPortionAccessor()) {
+        // Accessor not yet available (should not happen in normal flow, but be safe).
+        return true;
+    }
+
+    auto* simpleSource = source->MutableAs<IDataSource>();
+    if (simpleSource->HasEarlyPages()) {
+        // Already decided (e.g. re-entry after ContinueCursor for next page).
+        // The page index was already advanced by ContinueCursor before restarting.
+        return true;
+    }
+
+    const ui64 memoryLimit = NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion();
+    if (memoryLimit == 0) {
+        // No memory limit configured — streaming mode is not applicable.
+        return true;
+    }
+
+    auto pages = source->GetPortionAccessor().BuildReadPages(
+        memoryLimit, source->GetContext()->GetProgramInputColumns()->GetColumnIds());
+
+    const bool streamingMode = TStreamingConfigHelper::ShouldUseStreamingMode(source->GetRecordsCount());
+
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "decide_streaming_mode")(
+        "source_idx", source->GetSourceIdx())("records", source->GetRecordsCount())(
+        "pages", pages.size())("streaming", streamingMode);
+
+    simpleSource->SetEarlyPages(std::move(pages), streamingMode);
+
+    if (streamingMode) {
+        // Store the fetch script so ContinueCursor can restart from the beginning
+        // for each subsequent page without re-running TDecideStreamingModeStep's
+        // expensive BuildReadPages call (HasEarlyPages() guards that).
+        simpleSource->SetStreamingFetchScript(step.GetScript());
+    }
+    return true;
 }
 
 TConclusion<bool> TPortionAccessorFetchedStep::DoExecuteInplace(
@@ -359,7 +402,14 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::
     auto context = source->GetContext();
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
     if (!source->IsSourceInMemory()) {
-        contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
+        // In streaming mode with per-page assembly, the assembled batch for each page
+        // starts at row 0 (PrepareForAssemblePageImpl assembles only the page's rows).
+        // StartIndex holds the absolute page.GetIndexStart() within the portion (used
+        // for cursor tracking), but the batch slice must start at 0.
+        const auto* simpleSource = source->GetAs<IDataSource>();
+        const bool isStreamingPerPage = simpleSource->IsStreamingMode() && simpleSource->HasEarlyPages();
+        const ui32 batchStartIndex = isStreamingPerPage ? 0 : StartIndex;
+        contextTableConstruct.SetStartIndex(batchStartIndex).SetRecordsCount(RecordsCount);
     } else {
         AFL_VERIFY(StartIndex == 0);
         AFL_VERIFY(RecordsCount == source->GetRecordsCount())("records_count", RecordsCount)("source", source->GetRecordsCount());

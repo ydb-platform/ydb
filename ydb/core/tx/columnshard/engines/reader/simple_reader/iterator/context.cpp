@@ -122,6 +122,11 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     NCommon::TFetchingScriptBuilder acc(*this);
     acc.AddStep(std::make_shared<TInitializeSourceStep>());
     acc.AddStep(std::make_shared<TDetectInMemFlag>(*GetFFColumns()));
+    // Decide streaming mode and compute page boundaries BEFORE any fetch step.
+    // This makes IsStreamingMode() and GetCurrentEarlyPageEndRow() return meaningful
+    // values inside NeedFetchColumns() and DoAssembleColumns(), so that only the
+    // chunks belonging to the current page are fetched and assembled.
+    acc.AddStep(std::make_shared<TDecideStreamingModeStep>());
     if (needFilterSharding && !GetShardingColumns()->IsEmpty()) {
         const TColumnsSetIds columnsFetch = *GetShardingColumns();
         acc.AddFetchingStep(columnsFetch, NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);

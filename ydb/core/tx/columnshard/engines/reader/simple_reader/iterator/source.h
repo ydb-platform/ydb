@@ -54,6 +54,9 @@ private:
     using TBase = NCommon::IDataSource;
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     std::shared_ptr<TFetchingScript> FetchingPlan;
+    // When streaming mode is active, this holds the original fetch script so that
+    // ContinueCursor can restart from the beginning for each subsequent page.
+    std::shared_ptr<TFetchingScript> StreamingFetchScript;
     YDB_ACCESSOR(ui32, ResultRecordsCount, 0);
     bool ProcessingStarted = false;
     bool IsStartedByCursor = false;
@@ -64,6 +67,11 @@ private:
 
     // Page-based streaming fields
     bool StreamingMode = false;
+    // Pages computed early (before fetching) so NeedFetchColumns/DoAssembleColumns can
+    // limit work to the current page.  Set by TDecideStreamingModeStep.
+    std::vector<TPortionDataAccessor::TReadPage> EarlyPages;
+    // Index into EarlyPages pointing at the page currently being fetched/assembled.
+    ui32 CurrentEarlyPageIndex = 0;
 
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
@@ -202,16 +210,73 @@ public:
     virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
 
+    // Saves the original fetch script so ContinueCursor can restart from the
+    // beginning for each subsequent page in streaming mode.
+    void SetStreamingFetchScript(const std::shared_ptr<TFetchingScript>& script) {
+        AFL_VERIFY(!StreamingFetchScript);
+        StreamingFetchScript = script;
+    }
+
+    const std::shared_ptr<TFetchingScript>& GetStreamingFetchScript() const {
+        return StreamingFetchScript;
+    }
+
     // Page-based streaming methods
     bool IsStreamingMode() const {
         return StreamingMode;
     }
 
     bool HasMorePages() const {
-        if (!StreamingMode || !StageResult) {
+        if (!StreamingMode || EarlyPages.empty()) {
             return false;
         }
-        return !StageResult->IsFinished();
+        // There are more pages if the next page index is still within bounds.
+        return CurrentEarlyPageIndex + 1 < EarlyPages.size();
+    }
+
+    // Called by TDecideStreamingModeStep before any fetch step.
+    // Stores the page list and activates streaming mode so that
+    // NeedFetchColumns / DoAssembleColumns can limit work to the
+    // current page.
+    void SetEarlyPages(std::vector<TPortionDataAccessor::TReadPage>&& pages, bool streamingMode) {
+        AFL_VERIFY(EarlyPages.empty());
+        EarlyPages = std::move(pages);
+        CurrentEarlyPageIndex = 0;
+        StreamingMode = streamingMode;
+    }
+
+    // Returns true when pages were computed early (before fetching).
+    bool HasEarlyPages() const {
+        return !EarlyPages.empty();
+    }
+
+    // Returns the end-row (exclusive) of the page currently being
+    // fetched/assembled, or std::nullopt when not in streaming mode or
+    // pages have not been computed yet.
+    std::optional<ui32> GetCurrentEarlyPageEndRow() const {
+        if (!StreamingMode || EarlyPages.empty()) {
+            return std::nullopt;
+        }
+        if (CurrentEarlyPageIndex >= EarlyPages.size()) {
+            return std::nullopt;
+        }
+        const auto& page = EarlyPages[CurrentEarlyPageIndex];
+        return page.GetIndexStart() + page.GetRecordsCount();
+    }
+
+    // Advance to the next early page (called after each page's blobs
+    // have been fetched and assembled).
+    void AdvanceEarlyPage() {
+        AFL_VERIFY(StreamingMode && CurrentEarlyPageIndex < EarlyPages.size());
+        ++CurrentEarlyPageIndex;
+    }
+
+    ui32 GetCurrentEarlyPageIndex() const {
+        return CurrentEarlyPageIndex;
+    }
+
+    const std::vector<TPortionDataAccessor::TReadPage>& GetEarlyPages() const {
+        return EarlyPages;
     }
 
     bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {

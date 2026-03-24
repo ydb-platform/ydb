@@ -260,6 +260,32 @@ public:
     }
 };
 
+// Runs immediately after TDetectInMemFlag. When a memory limit applies and the
+// source is NOT already in memory, this step calls BuildReadPages() to compute
+// the page list and stores it on the source together with the StreamingMode flag.
+// This makes the page boundaries available to NeedFetchColumns() and
+// DoAssembleColumns() so they can limit work to the current page, which is the
+// whole point of streaming mode.  Without this step those methods always see
+// StreamingMode==false / StageResult==nullptr and fall back to fetching the
+// entire portion at once.
+class TDecideStreamingModeStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(
+        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TString DoDebugString() const override {
+        return TStringBuilder();
+    }
+    virtual ui64 GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSource>& /*source*/) const override {
+        return 0;
+    }
+    TDecideStreamingModeStep()
+        : TBase("DECIDE_STREAMING_MODE") {
+    }
+};
+
 class TDeletionFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

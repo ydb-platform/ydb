@@ -368,18 +368,6 @@ audit_config:
     interval_seconds: 60
 ```
 
-### Log class configuration {#log-class-config}
-
-Use the `log_class_config` list under `audit_config` to tune logging per [log class](#log-classes), including [log phases](#log-phases) and filters such as `exclude_account_type`, as shown in the advanced configuration example above.
-
-### Heartbeat settings {#heartbeat-settings}
-
-Use `heartbeat.interval_seconds` under `audit_config` to control how often synthetic heartbeat records are written. Set the value to `0` to disable heartbeat events.
-
-### Backend and format settings {#backend-settings}
-
-Each audit stream destination (`file_backend`, `unified_agent_backend`, `stderr_backend`) accepts fields such as `format`, `file_path`, `log_name`, and optional `log_json_envelope`. Their meanings are described in the reference tables and YAML samples in this section.
-
 ## Examples {#examples}
 
 The following tabs show the same audit log event written using different [backend settings](#backend-settings).

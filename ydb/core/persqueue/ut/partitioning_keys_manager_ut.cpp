@@ -1,7 +1,12 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <algorithm>
 #include <cstdio>
+#include <random>
+#include <vector>
+
 #include <util/datetime/base.h>
+#include <util/generic/guid.h>
 #include <util/generic/string.h>
 #include <ydb/core/persqueue/public/partitioning_keys_manager.h>
 
@@ -59,6 +64,32 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
         TString med = m.GetMedianKey();
         UNIT_ASSERT(med.StartsWith("k"));
         UNIT_ASSERT(med >= TString{"k0000000"} && med <= TString{"k0002999"});
+    }
+
+    Y_UNIT_TEST(GetMedianKey_RandomKeys) {
+        constexpr size_t N = 1'000'000;
+        TPartitioningKeysManager m(1, HugeWindow());
+        std::vector<TString> keys;
+        keys.reserve(N);
+        for (size_t i = 0; i < N; ++i) {
+            keys.push_back(CreateGuidAsString());
+        }
+        std::mt19937 rng(20260324u);
+        std::shuffle(keys.begin(), keys.end(), rng);
+        for (const auto& key : keys) {
+            m.Add(key, kMsgSize);
+        }
+        TString med = m.GetMedianKey();
+        UNIT_ASSERT(!med.empty());
+
+        std::sort(keys.begin(), keys.end());
+        const size_t mid = N / 2;
+        // Allow ~10% rank slack around the empirical median (KLL is approximate).
+        const size_t tol = N / 10;
+        const size_t loIdx = mid > tol ? mid - tol : 0;
+        const size_t hiIdx = std::min(N - 1, mid + tol);
+        UNIT_ASSERT_C(keys[loIdx] <= med && med <= keys[hiIdx],
+            "median " << med << " outside [" << keys[loIdx] << ", " << keys[hiIdx] << "]");
     }
 
     Y_UNIT_TEST(AddZeroMsgSize_ThenGetMedianKeyThrows) {

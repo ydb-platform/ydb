@@ -3,6 +3,12 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+TPath GetBuildPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo, const TString& tableName) {
+    return TPath::Init(buildInfo.TablePathId, ss)
+        .Dive(buildInfo.IndexName)
+        .Dive(tableName);
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo, TTxId txId, const TPath& path)
 {
@@ -39,9 +45,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
 
     addUnlock(TPath::Init(buildInfo.TablePathId, ss));
 
-    for (auto& path : additionalPaths) {
-        if (path.IsResolved() && !path.IsDeleted() && path.IsLocked()) {
-            addUnlock(std::move(path));
+    if (buildInfo.IsValidatingUniqueIndex() || buildInfo.IsFlatRelevanceFulltext()) {
+        TPath indexImplTablePath = GetBuildPath(ss, buildInfo, NTableIndex::ImplTable);
+        if (indexImplTablePath.IsResolved() && indexImplTablePath.IsLocked()) {
+            addUnlock(std::move(indexImplTablePath));
         }
     }
 

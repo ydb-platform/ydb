@@ -100,9 +100,7 @@ ydb hard nofile 10000
 
   {% list tabs %}
 
-  <!-- markdownlint-disable MD046 -->
-  
-    - OSS
+      - OSS
 
       ```bash
       mkdir ydbd-stable-linux-amd64
@@ -115,8 +113,6 @@ ydb hard nofile 10000
       mkdir ydbd-stable-linux-amd64
       curl -L <binaries_url> | tar -xJ --strip-component=1 -C ydbd-stable-linux-amd64
       ```
-
-  <!-- markdownlint-enable MD046 -->
   
   {% endlist %}
 

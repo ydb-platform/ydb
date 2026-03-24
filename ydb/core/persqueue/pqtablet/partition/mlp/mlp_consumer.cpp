@@ -112,7 +112,6 @@ TString MaxWALKey(ui32 partitionId, const TString& consumerName) {
 static TStorage::TStorageSettings StorageSettingsFromConfig(const NKikimrPQ::TPQTabletConfig::TConsumer& config, const NKikimrPQ::TPQTabletConfig::TPartition& partitionConfig) {
     const bool keepMessageOrder = config.GetKeepMessageOrder();
     std::vector<ui32> parentPartitionId;
-    Y_ASSERT(partitionConfig.ParentPartitionIdsSize() <= 2);
     for (ui32 p : partitionConfig.GetParentPartitionIds()) {
         parentPartitionId.push_back(p);
     }

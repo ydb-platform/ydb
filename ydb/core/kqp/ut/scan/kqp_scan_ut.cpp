@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/base/hive.h>
-#include <ydb/core/base/tabletid.h>
+
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -1799,7 +1799,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         {
             auto sender = runtime->AllocateEdgeActor();
-            runtime->SendToPipe(MakeDefaultHiveID(), sender,
+            runtime->SendToPipe(runtime->GetAppData().DomainsInfo->GetHive(), sender,
                 new TEvHive::TEvDrainNode(firstNodeId), 0, GetPipeConfigWithRetries());
             TAutoPtr<IEventHandle> handle;
             runtime->GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));

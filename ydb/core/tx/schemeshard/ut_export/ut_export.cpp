@@ -3880,6 +3880,7 @@ WITH (
                 FederationAccount: "federation_account"
                 EnableCompactification: false
                 TimestampType: "LogAppendTime"
+                ContentBasedDeduplication: true
                 PartitionConfig {
                     LifetimeSeconds: 12
                     StorageLimitBytes: 104857600
@@ -3927,7 +3928,6 @@ WITH (
                     DefaultProcessingTimeoutSeconds: 30
                     DefaultDelayMessageTimeMs: 5000
                     DefaultReceiveMessageWaitTimeMs: 3000
-                    ContentBasedDeduplication: true
                     Codec {
                         Ids: 0
                         Ids: 1

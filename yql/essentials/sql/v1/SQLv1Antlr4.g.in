@@ -554,7 +554,7 @@ rollup_list: ROLLUP LPAREN ordinary_grouping_set_list RPAREN;
 cube_list: CUBE LPAREN ordinary_grouping_set_list RPAREN;
 
 /// SQL2003 grouping_set_list == grouping_element_list
-grouping_sets_specification: GROUPING SETS LPAREN grouping_element_list RPAREN;
+grouping_sets_specification: GROUPING SETS LPAREN grouping_element_list COMMA? RPAREN;
 
 hopping_window_specification: HOP LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN;
 

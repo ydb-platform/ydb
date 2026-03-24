@@ -29,7 +29,7 @@ class TDynamicKllSketch {
 public:
     explicit TDynamicKllSketch(size_t k, ui64 seed = std::random_device{}(), ui64 initialWeight = 1) : Sketch_(k, seed, initialWeight) {}
 
-    TString Median() const {
+    T Median() const {
         return Sketch_.Median();
     }
 

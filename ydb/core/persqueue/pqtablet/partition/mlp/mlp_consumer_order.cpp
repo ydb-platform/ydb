@@ -11,7 +11,14 @@
 namespace NKikimr::NPQ::NMLP {
 
     bool TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::NeedSendFullState() const {
+        if (LastSendFullStateReasons == ESendReasons::ParentDone && SendFullStateReasons == ESendReasons::ParentDone) {
+            return false;
+        }
         return SendFullStateReasons != ESendReasons::None;
+    }
+
+    void TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::MarkAsSent() {
+        LastSendFullStateReasons = std::exchange(SendFullStateReasons, ESendReasons::None);
     }
 
     bool TChildPartitionsOrderManager::Empty() const {

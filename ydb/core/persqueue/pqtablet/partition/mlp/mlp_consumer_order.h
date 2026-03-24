@@ -26,9 +26,11 @@ namespace NKikimr::NPQ::NMLP {
             ui64 TabletId = 0;
             ui32 Cookie = 0;
             ESendReasons SendFullStateReasons = ESendReasons::None;
+            ESendReasons LastSendFullStateReasons = ESendReasons::None;
 
             bool AddSendFullStateReason(ESendReasons reason);
             bool NeedSendFullState() const;
+            void MarkAsSent(); // stores last sent reasons and reset current ones
             TString SendFullStateReasonsAsString() const;
         };
 

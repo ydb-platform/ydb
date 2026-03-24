@@ -835,6 +835,70 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         UNIT_ASSERT_C(std::isnan(v5), v5);
     }
 
+    Y_UNIT_TEST(UuidParsing) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNonNullableColumn("Key", EPrimitiveType::Int32)
+                .AddNullableColumn("Value_Uuid", EPrimitiveType::Uuid);
+
+            tableBuilder.SetPrimaryKeyColumns({"Key"});
+            auto result = session.CreateTable("/Root/Uuid", tableBuilder.Build()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            TStringBuilder csv;
+            csv << "Key,Value_Uuid\n";
+            csv << "1,65df1ec1-a97d-47b2-ae56-3c023da6ee8c\n";
+            csv << "2,65df1ec1a97d47b2ae563c023da6ee8c\n";
+            csv << "3,\n";
+
+            auto upsert = client.BulkUpsert(
+                "/Root/Uuid",
+                EDataFormat::CSV,
+                csv,
+                {},
+                BulkUpsertSettings(CsvSettings()))
+                .GetValueSync();
+            UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+            NKqp::CompareYson(R"([
+                [[1];["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]];
+                [[2];["65df1ec1-a97d-47b2-ae56-3c023da6ee8c"]];
+                [[3];#]
+            ])", StreamQueryToYson(client, R"(
+                SELECT Key, CAST(Value_Uuid AS String)
+                FROM `/Root/Uuid`
+                ORDER BY Key;
+            )"));
+        }
+
+        {
+            TStringBuilder csv;
+            csv << "Key,Value_Uuid\n";
+            csv << "4,not-a-uuid\n";
+
+            auto upsert = client.BulkUpsert(
+                "/Root/Uuid",
+                EDataFormat::CSV,
+                csv,
+                {},
+                BulkUpsertSettings(CsvSettings()))
+                .GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(upsert.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "Failed to convert string 'not-a-uuid' to Uuid");
+        }
+    }
+
     Y_UNIT_TEST(Limits) {
         TKikimrWithGrpcAndRootSchema server;
         auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));

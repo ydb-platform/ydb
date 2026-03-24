@@ -315,9 +315,20 @@ message TEvCloseSessionRequest {
     optional string TraceId = 2;
 }
 
+message TSessionShutdownHint {
+}
+
+message TNodeShutdownHint {
+}
+
 message TCloseSessionResponse {
     optional bytes SessionId = 1;
     optional bool Closed = 2;
+
+    oneof StateHint {
+        TSessionShutdownHint SessionShutdown = 3;
+        TNodeShutdownHint NodeShutdown = 4;
+    }
 }
 
 message TEvCloseSessionResponse {

@@ -1,5 +1,6 @@
 #include "location.h"
 
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 
 #include <bitset>
@@ -23,6 +24,8 @@ bool IsDDisk(ELocation location)
         case ELocation::HODDisk0:
         case ELocation::HODDisk1:
             return true;
+        case ELocation::Unknown:
+            return false;
     }
 }
 
@@ -41,7 +44,17 @@ bool IsPBuffer(ELocation location)
         case ELocation::HODDisk0:
         case ELocation::HODDisk1:
             return false;
+        case ELocation::Unknown:
+            return false;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// static
+TLocationMask TLocationMask::MakeEmpty()
+{
+    return {};
 }
 
 // static
@@ -52,14 +65,12 @@ TLocationMask TLocationMask::MakePBuffer(
     bool handOff0,
     bool handOff1)
 {
-    return TLocationMask{
-        .Mask = static_cast<ui16>(
-            (pBuffer0 ? static_cast<ui16>(ELocation::PBuffer0) : 0) +
-            (pBuffer1 ? static_cast<ui16>(ELocation::PBuffer1) : 0) +
-            (pBuffer2 ? static_cast<ui16>(ELocation::PBuffer2) : 0) +
-            (handOff0 ? static_cast<ui16>(ELocation::HOPBuffer0) : 0) +
-            (handOff1 ? static_cast<ui16>(ELocation::HOPBuffer1) : 0)),
-    };
+    return TLocationMask(static_cast<ui16>(
+        (pBuffer0 ? static_cast<ui16>(ELocation::PBuffer0) : 0) +
+        (pBuffer1 ? static_cast<ui16>(ELocation::PBuffer1) : 0) +
+        (pBuffer2 ? static_cast<ui16>(ELocation::PBuffer2) : 0) +
+        (handOff0 ? static_cast<ui16>(ELocation::HOPBuffer0) : 0) +
+        (handOff1 ? static_cast<ui16>(ELocation::HOPBuffer1) : 0)));
 }
 
 // static
@@ -70,20 +81,24 @@ TLocationMask TLocationMask::MakeDDisk(
     bool handOff0,
     bool handOff1)
 {
-    return TLocationMask{
-        .Mask = static_cast<ui16>(
-            (dDisk0 ? static_cast<ui16>(ELocation::DDisk0) : 0) +
-            (dDisk1 ? static_cast<ui16>(ELocation::DDisk1) : 0) +
-            (dDisk2 ? static_cast<ui16>(ELocation::DDisk2) : 0) +
-            (handOff0 ? static_cast<ui16>(ELocation::HODDisk0) : 0) +
-            (handOff1 ? static_cast<ui16>(ELocation::HODDisk1) : 0)),
-    };
+    return TLocationMask(static_cast<ui16>(
+        (dDisk0 ? static_cast<ui16>(ELocation::DDisk0) : 0) +
+        (dDisk1 ? static_cast<ui16>(ELocation::DDisk1) : 0) +
+        (dDisk2 ? static_cast<ui16>(ELocation::DDisk2) : 0) +
+        (handOff0 ? static_cast<ui16>(ELocation::HODDisk0) : 0) +
+        (handOff1 ? static_cast<ui16>(ELocation::HODDisk1) : 0)));
+}
+
+// static
+TLocationMask TLocationMask::MakePrimaryDDisk()
+{
+    return TLocationMask(PrimaryDDisks);
 }
 
 // static
 TLocationMask TLocationMask::MakePrimaryPBuffers()
 {
-    return MakePBuffer(true, true, true, false, false);
+    return TLocationMask(PrimaryPBuffers);
 }
 
 bool TLocationMask::Get(ELocation location) const
@@ -116,9 +131,19 @@ bool TLocationMask::HasDDisk() const
     return (Mask & AllDDisks) != 0;
 }
 
+bool TLocationMask::OnlyDDisk() const
+{
+    return (Mask != 0) && ((Mask & AllDDisks) == Mask);
+}
+
 bool TLocationMask::HasPBuffer() const
 {
     return (Mask & AllPBuffers) != 0;
+}
+
+bool TLocationMask::OnlyPBuffer() const
+{
+    return (Mask != 0) && (Mask & AllPBuffers) == Mask;
 }
 
 std::optional<ELocation> TLocationMask::GetLocation(size_t tryNumber) const
@@ -142,9 +167,26 @@ bool TLocationMask::operator==(const TLocationMask& other) const
 
 TString TLocationMask::Print() const
 {
-    // ToDo
-    return ToString(Mask);
+    TStringBuilder result;
+    result << "[D";
+    result << (Get(ELocation::DDisk0) ? "+" : ".");
+    result << (Get(ELocation::DDisk1) ? "+" : ".");
+    result << (Get(ELocation::DDisk2) ? "+" : ".");
+    result << (Get(ELocation::HODDisk0) ? "*" : ".");
+    result << (Get(ELocation::HODDisk1) ? "*" : ".");
+    result << "P";
+    result << (Get(ELocation::PBuffer0) ? "+" : ".");
+    result << (Get(ELocation::PBuffer1) ? "+" : ".");
+    result << (Get(ELocation::PBuffer2) ? "+" : ".");
+    result << (Get(ELocation::HOPBuffer0) ? "*" : ".");
+    result << (Get(ELocation::HOPBuffer1) ? "*" : ".");
+    result << "]";
+    return result;
 }
+
+TLocationMask::TLocationMask(ui16 mask)
+    : Mask(mask)
+{}
 
 ////////////////////////////////////////////////////////////////////////////////
 

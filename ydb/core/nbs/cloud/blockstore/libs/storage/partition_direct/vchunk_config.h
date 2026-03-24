@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/location.h>
 
+#include <util/generic/hash.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -27,7 +28,11 @@ struct TVChunkConfig
 
     [[nodiscard]] bool IsValid() const;
 
+    // Translates location to host index.
     [[nodiscard]] ui8 GetHostIndex(ELocation location) const;
+
+    // Makes dictionary for translation host index to location.
+    [[nodiscard]] THashMap<ui8, ELocation> GetPBuffersMap() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

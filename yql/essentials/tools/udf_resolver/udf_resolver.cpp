@@ -332,7 +332,7 @@ int main(int argc, char** argv) {
         NYql::SendSignalOnParentThreadExit(SIGTERM);
 
 #ifdef _linux_
-        if (rlimit limit = {0, 0}; setrlimit(RLIMIT_CORE, &limit) != 0) {
+        if (rlimit limit = {.rlim_cur = 0, .rlim_max = 0}; setrlimit(RLIMIT_CORE, &limit) != 0) {
             ythrow TSystemError() << "Failed to set RLIMIT_CORE";
         }
 #endif

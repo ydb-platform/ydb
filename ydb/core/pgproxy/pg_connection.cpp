@@ -896,7 +896,7 @@ protected:
     }
 
     bool UpgradeToSecure() {
-        int res = Socket->TryUpgradeToSecure();
+        int res = Socket->TryUpgradeToSecure(NKikimrServices::PGYDB);
         if (res < 0) {
             BLOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
             PassAway();

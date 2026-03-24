@@ -1,5 +1,6 @@
 #include "managed_executor.h"
 
+#include <util/random/random.h>
 
 namespace NYdb::inline Dev::NTopic::NTests {
 
@@ -48,6 +49,26 @@ void TManagedExecutor::RunTask(TFunction&& func)
     Y_ABORT_UNLESS(Planned > 0);
     --Planned;
     Executor->Post(MakeTask(std::move(func)));
+}
+
+void TManagedExecutor::StartRandomFunc() {
+    std::lock_guard lock(Mutex);
+
+    Y_ABORT_UNLESS(Planned > 0);
+    size_t index = RandomNumber<size_t>(Planned);
+
+    for (size_t i = 0; i < Funcs.size(); ++i) {
+        if (Funcs[i] != nullptr) {
+            if (index == 0) {
+                RunTask(std::move(Funcs[i]));
+                Funcs[i] = nullptr;
+                return;
+            }
+            --index;
+        }
+    }
+
+    Y_ABORT("No functions to start");
 }
 
 void TManagedExecutor::StartFuncs(const std::vector<size_t>& indicies)

@@ -375,31 +375,40 @@ bool TColumnEngineForLogs::FinishLoading() {
     return true;
 }
 
-ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager,
-    const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept {
-    auto priority = GranulesStorage->GetCompactionPriority(dataLocksManager, pathIds, waitingPriority);
-    if (!priority) {
+ui64 TColumnEngineForLogs::GetCompactionPriority(
+    const std::set<TInternalPathId>& pathIds,
+    const std::optional<ui64> waitingPriority
+) const noexcept {
+    auto granules = GranulesStorage->GetGranulesForCompaction(pathIds, waitingPriority);
+    if (granules.empty()) {
         return 0;
     } else {
-        return priority->GetGeneralPriority();
+        return granules.front().GetPriority().GetGeneralPriority();
     }
 }
 
-std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCompaction(
-    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
+std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
-    auto granule = GranulesStorage->GetGranuleForCompaction(dataLocksManager);
-    if (!granule) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no granules for start compaction");
-        return {};
+    auto granulesSortedDesc = GranulesStorage->GetGranulesForCompaction();
+
+    std::shared_ptr<TGranuleMeta> granuleToCompact = nullptr;
+    std::vector<std::shared_ptr<TColumnEngineChanges>> changes;
+    for (auto& orderedG: granulesSortedDesc) {
+        auto granule = orderedG.GetGranule();
+        TMonotonic startTime = TMonotonic::Now();
+        changes = granule->GetOptimizationTasks(granule, dataLocksManager);
+        NChanges::TGeneralCompactionCounters::OnTasksGeneratred((TMonotonic::Now() - startTime).MicroSeconds(), changes.size());
+        if (changes.empty()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")("weight", orderedG.GetPriority().DebugString())("path_id", granule->GetPathId());
+        } else {
+            granuleToCompact = granule;
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "found granule for compaction")("weight", orderedG.GetPriority().DebugString())("path_id", granule->GetPathId());
+            break;
+        }
     }
-    granule->OnStartCompaction();
-    TMonotonic startTime = TMonotonic::Now();
-    auto changes = granule->GetOptimizationTasks(granule, dataLocksManager);
-    NChanges::TGeneralCompactionCounters::OnTasksGeneratred((TMonotonic::Now() - startTime).MicroSeconds(), changes.size());
-    if (changes.empty()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")(
-            "weight", granule->GetCompactionPriority().DebugString());
+    if (!granuleToCompact) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no granules to start compaction");
+        return {};
     }
     return changes;
 }

@@ -11,13 +11,15 @@ from ydb.tests.library.stability.utils.utils import unpack_resource
 
 
 class HealthCheckReporter():
-    def __init__(self, hosts: list[str]):
+    def __init__(self, hosts: list[str], store_results: bool = False):
         self.stop = False
         self.healthcheck_thread: threading.Thread = None
         self.ydb_path = os.path.join(os.getcwd(), 'ydb_cli_hc')
         self.hosts = hosts
         self.hc_request_timeout_seconds = 45
         self.hc_period_seconds = 15
+        self.store_results = store_results
+        self.last_results = {}
         unpack_resource('ydb_cli', self.ydb_path)
 
     def start_healthchecks(self):
@@ -34,7 +36,10 @@ class HealthCheckReporter():
     def __execute_healthcheck_thr(self):
         while self.stop is False:
             try:
-                self.__publish_healthcheck_results(self.__execute_healthcheck())
+                results = self.__execute_healthcheck()
+                if self.store_results:
+                    self.last_results = results
+                self.__publish_healthcheck_results(results)
             except Exception as e:
                 logging.error(f"Error in healthcheck thread: {e}")
             time.sleep(self.hc_period_seconds)

@@ -1,42 +1,102 @@
 #pragma once
 
 #include "location.h"
+#include "range_locker.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
 
+#include <library/cpp/threading/future/core/future.h>
+
 #include <util/datetime/base.h>
+#include <util/generic/hash_set.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TReadHint
+struct TReadRangeHint
 {
+    TReadRangeHint(
+        TLocationMask locationMask,
+        ui64 lsn,
+        TBlockRange64 requestRelativeRange,
+        TBlockRange64 vchunkRange,
+        TRangeLock&& lock);
+
+    TReadRangeHint(TReadRangeHint&& other) noexcept;
+    TReadRangeHint& operator=(TReadRangeHint&& other) noexcept;
+
     TLocationMask LocationMask;
     ui64 Lsn = 0;
-    TBlockRange64 Range;
+
+    // Range relative to the request.
+    TBlockRange64 RequestRelativeRange;
+
+    // Range relative to the VChunk.
+    TBlockRange64 VChunkRange;
+
+    // Should call Lock.Arm() before reading.
+    TRangeLock Lock;
+
+    [[nodiscard]] TString DebugPrint() const;
+};
+
+struct TReadHint
+{
+    // If the RangeHints is empty, then you need to wait for the WaitReady
+    // feature to be IsReady and repeat the request.
+    TVector<TReadRangeHint> RangeHints;
+    NThreading::TFuture<void> WaitReady;
+
+    [[nodiscard]] TString DebugPrint() const;
 };
 
 struct TPBufferSegment
 {
     ui64 Lsn = 0;
     TBlockRange64 Range;
+
+    [[nodiscard]] TString DebugPrint() const;
 };
 
 struct TFlushHint
 {
     TVector<TPBufferSegment> Segments;
+
+    [[nodiscard]] TString DebugPrint() const;
 };
 
 struct TEraseHint
 {
     TVector<TPBufferSegment> Segments;
+
+    [[nodiscard]] TString DebugPrint() const;
 };
 
-struct TInflightInfo
+struct IReadyQueue
 {
-    enum class EState
+    enum class EQueueType
     {
+        Clone,
+        Flush,
+        Erase,
+    };
+
+    virtual ~IReadyQueue() = default;
+    virtual void Register(ui64 lsn, EQueueType queueType) = 0;
+    virtual void UnRegister(ui64 lsn) = 0;
+};
+
+class TInflightInfo: public TDisableCopy
+{
+public:
+    enum class EStatus
+    {
+        // During the recovery, a item without quorum was detected. It must be
+        // copied to other PBuffers.
+        // Reading will be possible only after receiving a quorum.
+        PBufferIncompleteWrite,
+
         // Data written to PBuffers with quorum.
         // Read from any confirmed PBuffer.
         PBufferWritten,
@@ -44,6 +104,10 @@ struct TInflightInfo
         // Started flushing from PBuffers to DDisk.
         // Read from any confirmed PBuffer.
         PBufferFlushing,
+
+        // The data is now reading from PBuffers.
+        // Can't erase from PBuffers.
+        PBufferEraseLocked,
 
         // Data flushed to DDisk.
         // Read from DDisk.
@@ -58,7 +122,43 @@ struct TInflightInfo
         PBufferErased,
     };
 
-    TInflightInfo(TLocationMask writeRequested, TLocationMask writeConfirmed);
+    TInflightInfo(IReadyQueue* readyQueues, ui64 lsn, ELocation location);
+    TInflightInfo(
+        IReadyQueue* readyQueues,
+        ui64 lsn,
+        TLocationMask writeRequested,
+        TLocationMask writeConfirmed);
+
+    TInflightInfo(TInflightInfo&& other) noexcept;
+
+    ~TInflightInfo();
+
+    [[nodiscard]] NThreading::TFuture<void> GetReadyFuture();
+    [[nodiscard]] EStatus GetStatus() const;
+    [[nodiscard]] TLocationMask ReadMask() const;
+
+    [[nodiscard]] bool RequestFlush(ELocation location);
+    [[nodiscard]] bool RequestErase(ELocation location);
+
+    void ConfirmFlush(ELocation location);
+    void FlushFailed(ELocation location);
+
+    [[nodiscard]] bool ConfirmErase(ELocation location);
+    void EraseFailed(ELocation location);
+
+    void RestorePBuffer(ELocation location);
+
+    void LockPBuffer();
+    void UnlockPBuffer();
+
+private:
+    void UpdateReadyQueue();
+
+    IReadyQueue* ReadyQueue = nullptr;
+    ui64 Lsn = 0;
+    TInstant StartAt;
+    size_t PBuffersLockCount = 0;
+    NThreading::TPromise<void> ReadyPromise;
 
     TLocationMask WriteRequested;
     TLocationMask WriteConfirmed;
@@ -66,17 +166,15 @@ struct TInflightInfo
     TLocationMask FlushConfirmed;
     TLocationMask EraseRequested;
     TLocationMask EraseConfirmed;
-
-    TInstant StartAt;
-
-    [[nodiscard]] EState GetState() const;
-    [[nodiscard]] std::optional<TLocationMask> ReadMask() const;
 };
 
 class TBlocksDirtyMap
+    : public ILockableRanges
+    , public IReadyQueue
+    , public TDisableCopyMove
 {
 public:
-    [[nodiscard]] TVector<TReadHint> MakeReadHint(TBlockRange64 range);
+    [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
     [[nodiscard]] TMap<ELocation, TFlushHint> MakeFlushHint(size_t batchSize);
     [[nodiscard]] TMap<ELocation, TEraseHint> MakeEraseHint(size_t batchSize);
 
@@ -84,7 +182,7 @@ public:
         ui64 lsn,
         TBlockRange64 range,
         TLocationMask requested,
-        TLocationMask completed);
+        TLocationMask confirmed);
     void FlushFinished(
         ELocation location,
         const TVector<ui64>& flushOk,
@@ -94,12 +192,44 @@ public:
         const TVector<ui64>& eraseOk,
         const TVector<ui64>& eraseFailed);
 
+    void RestorePBuffer(ui64 lsn, TBlockRange64 range, ELocation location);
+
+    [[nodiscard]] size_t GetInflightCount() const;
+
+    // ILockableRanges implementation
+    void LockPBuffer(ui64 lsn) override;
+    void UnlockPBuffer(ui64 lsn) override;
+    TLockRangeHandle LockDDiskRange(TBlockRange64 range) override;
+    void UnLockDDiskRange(TLockRangeHandle handle) override;
+
+    // IReadyQueue implementation
+    void Register(ui64 lsn, EQueueType queueType) override;
+    void UnRegister(ui64 lsn) override;
+
 private:
+    struct TEmpty
+    {
+    };
+
     using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;
+    using TInflightDDiskReadsMap =
+        TBlockRangeMap<ILockableRanges::TLockRangeHandle, TEmpty>;
 
     TInflightMap Inflight;
-    TSet<ui64> ReadyToFlush;
-    TSet<ui64> ReadyToErase;
+
+    // Ranges that need to be copied to other PBuffers in order to reach a
+    // quorum.
+    THashSet<ui64> ReadyToClone;
+
+    // Ranges that are written PBuffers with quorum and ready to be flushed to
+    // DDisk.
+    THashSet<ui64> ReadyToFlush;
+
+    // Ranges that are fully transferred to DDisk and can be erased.
+    THashSet<ui64> ReadyToErase;
+
+    ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;
+    TInflightDDiskReadsMap InflightDDiskReads;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

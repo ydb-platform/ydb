@@ -12,6 +12,7 @@ SRCS(
     partition_direct.cpp
     read_request.cpp
     region.cpp
+    restore_request.cpp
     vchunk_config.cpp
     vchunk.cpp
     write_request.cpp
@@ -35,6 +36,10 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    dirty_map
+)
 
 RECURSE_FOR_TESTS(
     ut

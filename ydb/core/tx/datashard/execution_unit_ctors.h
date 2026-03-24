@@ -68,6 +68,7 @@ THolder<TExecutionUnit> CreateDropPersistentSnapshotUnit(TDataShard &dataShard, 
 THolder<TExecutionUnit> CreateCreateVolatileSnapshotUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateDropVolatileSnapshotUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateInitiateBuildIndexUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreatePrepareIndexValidationUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateFinalizeBuildIndexUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateDropIndexNoticeUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateMoveIndexUnit(TDataShard &dataShard, TPipeline &pipeline);

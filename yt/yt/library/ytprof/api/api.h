@@ -55,7 +55,7 @@ public:
     explicit TCpuProfilerTagGuard(TProfilerTagPtr tag);
     ~TCpuProfilerTagGuard();
 
-    TCpuProfilerTagGuard(TCpuProfilerTagGuard&& other);
+    TCpuProfilerTagGuard(TCpuProfilerTagGuard&& other) noexcept;
     TCpuProfilerTagGuard(const TCpuProfilerTagGuard& other) = delete;
 
     TCpuProfilerTagGuard& operator=(TCpuProfilerTagGuard&& other);

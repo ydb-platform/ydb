@@ -51,6 +51,7 @@ RECURSE(
     large
     lib
     load
+    minmax_index
     oom
     s3_import
     scenario

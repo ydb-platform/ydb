@@ -40,7 +40,7 @@ class ThreadPool : public Forkable {
   virtual void Run(y_absl::AnyInvocable<void()> callback) = 0;
   virtual void Run(EventEngine::Closure* closure) = 0;
 
-  static size_t SetThreadsLimit(size_t count);
+  static void SetThreadsLimit(size_t count);
   static size_t GetThreadsLimit();
 
  private:

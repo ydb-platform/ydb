@@ -5,6 +5,10 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
+namespace NLastGetoptPrivate {
+    TString& VersionString();
+}
+
 namespace NYdb::NConsoleClient {
 
 bool TClientCommand::TIME_REQUESTS = false; // measure time of requests
@@ -18,9 +22,10 @@ namespace {
         throw TNeedToExitWithCode(EXIT_SUCCESS);
     }
 
-    void PrintSvnVersionAndThrowHelpPrinted(const NLastGetopt::TOptsParser* parser) {
-        parser->PrintUsage();
-        throw TNeedToExitWithCode(EXIT_SUCCESS);
+    void PrintSvnVersionAndThrowHelpPrinted(const NLastGetopt::TOptsParser*) {
+        const auto& version = ::NLastGetoptPrivate::VersionString();
+        Cout << (version ? version : "program version: not linked with library/cpp/getopt") << Endl;
+        throw TNeedToExitWithCode(version.empty() ? EXIT_FAILURE : EXIT_SUCCESS);
     }
 }
 

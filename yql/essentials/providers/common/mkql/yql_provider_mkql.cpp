@@ -945,7 +945,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             defineVarNames,
             getDefines,
             streamingMode,
-            NYql::NMatchRecognize::TAfterMatchSkipTo{to, TString{var}},
+            NYql::NMatchRecognize::TAfterMatchSkipTo{.To = to, .Var = TString{var}},
             rowsPerMatch);
     });
 

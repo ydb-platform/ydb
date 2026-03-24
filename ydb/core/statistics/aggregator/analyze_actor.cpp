@@ -361,9 +361,9 @@ void TAnalyzeActor::DispatchSomeScanActors() {
     // and for nodes with the same number of in-flight scans, favoring nodes with the
     // longer tablet ids queue.
 
-    auto isSchedulable = [](const TNodeState& node) {
+    auto isSchedulable = [&](const TNodeState& node) {
         return !node.PendingTablets.empty()
-            && node.TabletsInFlight < MaxPerNodeScanActorsInFlight;
+            && node.TabletsInFlight < Config.MaxPerNodeScanActorsInFlight;
     };
 
     auto nodeCmp = [](TNodeState* left, TNodeState* right) {
@@ -379,7 +379,7 @@ void TAnalyzeActor::DispatchSomeScanActors() {
     }
 
     while (!schedulableQueue.empty()
-            && ScanActorsInFlight.size() < MaxTotalScanActorsInFlight) {
+            && ScanActorsInFlight.size() < Config.MaxTotalScanActorsInFlight) {
         auto* node = schedulableQueue.top();
         schedulableQueue.pop();
         Y_ENSURE(!node->PendingTablets.empty());

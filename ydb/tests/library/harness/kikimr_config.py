@@ -194,6 +194,7 @@ class KikimrConfigGenerator(object):
             cms_config=None,
             explicit_statestorage_config=None,
             system_tablets=None,
+            system_tablet_backup_config=None,
             protected_mode=False,  # Authentication
             enable_pool_encryption=False,
             tiny_mode=False,
@@ -611,6 +612,7 @@ class KikimrConfigGenerator(object):
                     "pipe_client_retry_count": 3,
                     "pipe_client_min_retry_time": 1,
                     "pipe_client_max_retry_time": 10,
+                    "sync_requests_batch_size": 3,
                 }
             }
 
@@ -662,6 +664,9 @@ class KikimrConfigGenerator(object):
 
         if self.system_tablets:
             self.yaml_config["system_tablets"] = self.system_tablets
+
+        if system_tablet_backup_config:
+            self.yaml_config["system_tablet_backup_config"] = system_tablet_backup_config
 
         if metadata_section:
             self.full_config["metadata"] = metadata_section

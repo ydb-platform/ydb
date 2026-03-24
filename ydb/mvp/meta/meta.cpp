@@ -5,6 +5,7 @@
 #include "meta_cp_databases.h"
 #include "meta_cp_databases_verbose.h"
 #include "meta_cloud.h"
+#include "meta_capabilities.h"
 #include "meta_support_links.h"
 #include "meta_cache.h"
 
@@ -211,6 +212,12 @@ void TMVP::InitMeta() {
     ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/meta/cloud",
                          ActorSystem.Register(new NMVP::THandlerActorMetaCloud(HttpProxyId, MetaLocation))
+                         )
+                     );
+
+    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/capabilities",
+                         ActorSystem.Register(new NMVP::THandlerActorMetaCapabilities())
                          )
                      );
 

@@ -5,7 +5,8 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-TString TPhysicalJoinBuilder::GetValidJoinKind(const TString& joinKind) {
+
+TString TPhysicalJoinBuilder::GetValidJoinKind(const TString& joinKind) const {
     const auto joinKindLowered = to_lower(joinKind);
     if (joinKindLowered == "left") {
         return "Left";
@@ -110,49 +111,232 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildCrossJoin(TExprNode::TPtr leftInput, 
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalJoinBuilder::BuildGraceJoinCore(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) {
-    TVector<TCoAtom> leftColumnIdxs;
-    TVector<TCoAtom> rightColumnIdxs;
-    TVector<TCoAtom> leftRenames, rightRenames;
-    TVector<TCoAtom> leftKeyColumnNames;
-    TVector<TCoAtom> rightKeyColumnNames;
+TExprNode::TPtr TPhysicalJoinBuilder::PrepareJoinSide(TExprNode::TPtr input, const TVector<TInfoUnit>& colNames, TVector<TString>& joinKeys,
+                                                     const TModifyKeysList& remap, const bool filterNulls) {
+    // clang-format off
+    auto castMap = Ctx.Builder(Pos)
+        .Callable("Map")
+            .Add(0, input)
+            .Lambda(1)
+                .Param("row")
+                .Callable("AsStruct")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        ui32 i = 0U;
+                        for (const auto& colName : colNames) {
+                            const auto colNameStr = colName.GetFullName();
+                            parent.List(i++)
+                                .Atom(0, colNameStr)
+                                .Callable(1, "Member")
+                                    .Arg(0, "row")
+                                    .Atom(1, colNameStr)
+                                .Seal()
+                            .Seal();
+                        }
+                        for (const auto& key : remap) {
+                            parent.List(i++)
+                                .Add(0, std::get<1>(key).Ptr())
+                                .Callable(1, "StrictCast")
+                                    .Callable(0, "Member")
+                                        .Arg(0, "row")
+                                        .Add(1, std::get<0>(key).Ptr())
+                                    .Seal()
+                                    .Add(1, ExpandType(Pos, *std::get<const TTypeAnnotationNode*>(key), Ctx))
+                                .Seal()
+                            .Seal();
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+        .Seal()
+    .Build();
+    // clang-format on
 
-    auto leftIUs = Join->GetLeftInput()->GetOutputIUs();
-    auto rightIUs = Join->GetRightInput()->GetOutputIUs();
-    const bool rightSideEmpty = (Join->JoinKind == "LeftSemi" || Join->JoinKind == "LeftOnly");
+    if (filterNulls) {
+        TExprNode::TListType skipNullMembers, filterNullMembers;
+        for (const auto& joinKey : joinKeys) {
+            skipNullMembers.emplace_back(Ctx.NewAtom(Pos, joinKey));
+        }
 
-    for (const auto& joinKey : Join->JoinKeys) {
-        const auto leftIdx = std::distance(leftIUs.begin(), std::find(leftIUs.begin(), leftIUs.end(), joinKey.first));
-        const auto rightIdx = std::distance(rightIUs.begin(), std::find(rightIUs.begin(), rightIUs.end(), joinKey.second));
+        for (const auto& remapTuple : remap) {
+            auto key = std::get<1>(remapTuple).Ptr();
+            if (std::get<const TTypeAnnotationNode*>(remapTuple)->IsOptionalOrNull()) {
+                skipNullMembers.emplace_back(key);
+            } else {
+                filterNullMembers.emplace_back(key);
+            }
+        }
 
-        leftColumnIdxs.push_back(Build<TCoAtom>(Ctx, Pos).Value(leftIdx).Done());
-        rightColumnIdxs.push_back(Build<TCoAtom>(Ctx, Pos).Value(rightIdx).Done());
+        // clang-format off
+        castMap = Build<TCoSkipNullMembers>(Ctx, Pos)
+            .Input(castMap)
+            .Members().Add(std::move(skipNullMembers)).Build()
+        .Done().Ptr();
+        // clang-format on
 
-        leftKeyColumnNames.push_back(Build<TCoAtom>(Ctx, Pos).Value(joinKey.first.GetFullName()).Done());
-        rightKeyColumnNames.push_back(Build<TCoAtom>(Ctx, Pos).Value(joinKey.second.GetFullName()).Done());
-    }
-
-    const auto leftTupleSize = leftIUs.size();
-    for (size_t i = 0; i < leftIUs.size(); i++) {
-        leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
-        leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
-    }
-
-    if (!rightSideEmpty) {
-        for (size_t i = 0; i < rightIUs.size(); i++) {
-            rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
-            rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i + leftTupleSize).Done());
+        if (!filterNullMembers.empty()) {
+            // clang-format off
+            castMap = Build<TCoFilterNullMembers>(Ctx, Pos)
+                .Input(castMap)
+                .Members().Add(std::move(filterNullMembers)).Build()
+            .Done().Ptr();
+            // clang-format on
         }
     }
 
-    // Convert to wide flow
+    // Update join keys.
+    THashMap<TString, ui32> joinKeysIndexMap;
+    for (ui32 i = 0; i < joinKeys.size(); ++i) {
+        joinKeysIndexMap[joinKeys[i]] = i;
+    }
+
+    for (const auto& remapTuple: remap) {
+        const auto& oldKey = std::get<0>(remapTuple);
+        const auto& newKey = std::get<1>(remapTuple);
+        joinKeys[joinKeysIndexMap[oldKey]] = newKey;
+    }
+
+    return castMap;
+}
+
+TExprNode::TPtr TPhysicalJoinBuilder::BuildGraceJoinCore(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) {
+    const auto leftIUs = Join->GetLeftInput()->GetOutputIUs();
+    const auto rightIUs = Join->GetRightInput()->GetOutputIUs();
+    const auto joinType = Join->JoinKind;
+    const bool rightSideEmpty = (joinType == "LeftSemi" || joinType == "LeftOnly");
+    const bool leftSideEmpty = (joinType == "RightSemi" || joinType == "RightOnly");
+
+    const bool outer = !(joinType == "Inner"sv || joinType.EndsWith("Semi"));
+    const bool leftKind = joinType.StartsWith("Left"sv);
+    const bool rightKind = joinType.StartsWith("Right"sv);
+
+    const auto leftInputType = Join->GetLeftInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto rightInputType = Join->GetRightInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TModifyKeysList remapLeft;
+    TModifyKeysList remapRight;
+    THashMap<TString, TString> leftColumnRemap;
+    THashMap<TString, TString> rightColumnRemap;
+    TVector<TString> leftJoinKeys;
+    TVector<TString> rightJoinKeys;
+    TVector<TString> leftJoinKeyRenames;
+    TVector<TString> rightJoinKeyRenames;
+    TVector<TCoAtom> leftKeyColumnNames;
+    TVector<TCoAtom> rightKeyColumnNames;
+
+    for (ui32 i = 0; i < Join->JoinKeys.size(); ++i) {
+        const auto joinKeyPair = Join->JoinKeys[i];
+        const auto leftKey = joinKeyPair.first.GetFullName();
+        leftJoinKeys.emplace_back(leftKey);
+        const auto rightKey = joinKeyPair.second.GetFullName();
+        rightJoinKeys.emplace_back(rightKey);
+
+        const auto leftKeyType = leftInputType->FindItemType(leftKey);
+        const auto rightKeyType = rightInputType->FindItemType(rightKey);
+        Y_ENSURE(leftKeyType && rightKeyType, "No types for join keys");
+
+        const TTypeAnnotationNode* commonType = nullptr;
+        if (leftKind) {
+            commonType = JoinDryKeyType(outer, leftKeyType, rightKeyType, Ctx);
+        } else if (rightKind) {
+            commonType = JoinDryKeyType(outer, rightKeyType, leftKeyType, Ctx);
+        } else {
+            commonType = JoinCommonDryKeyType(Pos, outer, leftKeyType, rightKeyType, Ctx);
+        }
+
+        if (commonType) {
+            if (!IsSameAnnotation(*leftKeyType, *commonType)) {
+                const TString rename = TString("_rbo_join_key_left_") + ToString(i);
+                leftColumnRemap[leftKey] = rename;
+                const auto joinKey = Ctx.NewAtom(Pos, leftKey);
+                const auto renameKey = Ctx.NewAtom(Pos, rename);
+                remapLeft.emplace_back(joinKey, renameKey, i, commonType);
+                leftJoinKeyRenames.emplace_back(rename);
+            }
+            if (!IsSameAnnotation(*rightKeyType, *commonType)) {
+                const TString rename = TString("_rbo_join_key_right_") + ToString(i);
+                rightColumnRemap[rightKey] = rename;
+                const auto joinKey = Ctx.NewAtom(Pos, rightKey);
+                const auto renameKey = Ctx.NewAtom(Pos, rename);
+                remapRight.emplace_back(joinKey, renameKey, i, commonType);
+                rightJoinKeyRenames.emplace_back(rename);
+            }
+        } else {
+            // FIXME: Add support for keys with diff types.
+            Y_ENSURE(false, "No common types for join keys.");
+        }
+    }
+
+    if (!remapLeft.empty()) {
+        leftInput = PrepareJoinSide(leftInput, leftIUs, leftJoinKeys, remapLeft, !outer || rightKind);
+    }
+
+    if (!remapRight.empty()) {
+        rightInput = PrepareJoinSide(rightInput, rightIUs, rightJoinKeys, remapRight, !outer || leftKind);
+    }
+
+    // Prepare inputs.
+    TVector<TString> leftInputColumns;
+    THashSet<TString> leftOutputColumns;
+    for (const auto& leftCol : leftIUs) {
+        const auto column = leftCol.GetFullName();
+        leftInputColumns.push_back(column);
+        leftOutputColumns.insert(column);
+    }
+    leftInputColumns.insert(leftInputColumns.end(), leftJoinKeyRenames.begin(), leftJoinKeyRenames.end());
+
+    TVector<TString> rightInputColumns;
+    THashSet<TString> rightOutputColumns;
+    for (const auto& rightCol : rightIUs) {
+        const auto column = rightCol.GetFullName();
+        rightInputColumns.push_back(column);
+        rightOutputColumns.insert(column);
+    }
+    rightInputColumns.insert(rightInputColumns.end(), rightJoinKeyRenames.begin(), rightJoinKeyRenames.end());
+
+    // Prepare join keys.
+    TVector<TCoAtom> leftColumnIdxs;
+    for (const auto& leftKey : leftJoinKeys) {
+        const auto leftIdx = std::distance(leftInputColumns.begin(), std::find(leftInputColumns.begin(), leftInputColumns.end(), leftKey));
+        leftColumnIdxs.push_back(Build<TCoAtom>(Ctx, Pos).Value(leftIdx).Done());
+        leftKeyColumnNames.push_back(Build<TCoAtom>(Ctx, Pos).Value(leftKey).Done());
+    }
+
+    TVector<TCoAtom> rightColumnIdxs;
+    for (const auto& rightKey : rightJoinKeys) {
+        const auto rightIdx = std::distance(rightInputColumns.begin(), std::find(rightInputColumns.begin(), rightInputColumns.end(), rightKey));
+        rightColumnIdxs.push_back(Build<TCoAtom>(Ctx, Pos).Value(rightIdx).Done());
+        rightKeyColumnNames.push_back(Build<TCoAtom>(Ctx, Pos).Value(rightKey).Done());
+    }
+
+    // Prepare renames.
+    ui32 outputIdx = 0;
+    TVector<TCoAtom> leftRenames;
+    if (!leftSideEmpty) {
+        for (ui32 i = 0; i < leftInputColumns.size(); ++i) {
+            if (leftOutputColumns.contains(leftInputColumns[i])) {
+                leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
+                leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(outputIdx++).Done());
+            }
+        }
+    }
+
+    TVector<TCoAtom> rightRenames;
+    if (!rightSideEmpty) {
+        for (ui32 i = 0; i < rightInputColumns.size(); ++i) {
+            if (rightOutputColumns.contains(rightInputColumns[i])) {
+                rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
+                rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(outputIdx++).Done());
+            }
+        }
+    }
+
     // clang-format off
     leftInput = Build<TCoToFlow>(Ctx, Pos)
         .Input(leftInput)
     .Done().Ptr();
     // clang-forat on
 
-    leftInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(leftInput, leftIUs, Ctx);
+    leftInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(leftInput, leftInputColumns, Ctx);
 
     // clang-format off
     rightInput = Build<TCoToFlow>(Ctx, Pos)
@@ -160,14 +344,14 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildGraceJoinCore(TExprNode::TPtr leftInp
     .Done().Ptr();
     // clang-format on
 
-    rightInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(rightInput, rightIUs, Ctx);
+    rightInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(rightInput, rightInputColumns, Ctx);
 
     // clang-format off
     auto graceJoin = Build<TCoGraceJoinCore>(Ctx, Pos)
         .LeftInput(leftInput)
         .RightInput(rightInput)
         .JoinKind<TCoAtom>()
-            .Value(GetValidJoinKind(Join->JoinKind))
+            .Value(GetValidJoinKind(joinType))
         .Build()
         .LeftKeysColumns<TCoAtomList>()
             .Add(leftColumnIdxs)

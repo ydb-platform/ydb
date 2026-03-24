@@ -217,6 +217,7 @@ SRCS(
     schemeshard__operation_move_tables.cpp
     schemeshard__operation_part.cpp
     schemeshard__operation_part.h
+    schemeshard__operation_prepare_index_validation.cpp
     schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_rmdir.cpp
     schemeshard__operation_rotate_cdc_stream.cpp
@@ -331,10 +332,6 @@ SRCS(
     schemeshard_validate_ttl.cpp
     schemeshard_xxport__helpers.cpp
     user_attributes.cpp
-    schemeshard__operation_create_set_constraint.cpp
-    schemeshard__operation_create_set_constraint_check.cpp
-    schemeshard__operation_create_set_constraint_finalize.cpp
-    schemeshard__operation_create_set_constraint_lock.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)
@@ -377,6 +374,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/resource_pools
     ydb/core/scheme
+    ydb/core/split
     ydb/core/statistics
     ydb/core/sys_view/common
     ydb/core/sys_view/partition_stats

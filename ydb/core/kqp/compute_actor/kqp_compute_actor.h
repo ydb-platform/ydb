@@ -19,33 +19,40 @@ namespace NMiniKQL {
 namespace NKqp {
 
 class TShardsScanningPolicy {
-private:
-    const NKikimrConfig::TTableServiceConfig::TShardsScanningPolicy ProtoConfig;
 public:
-    TShardsScanningPolicy(const NKikimrConfig::TTableServiceConfig::TShardsScanningPolicy& pbConfig)
-        : ProtoConfig(pbConfig)
+    TShardsScanningPolicy(ui32 aggregationGroupByLimit, ui32 aggregationNoGroupLimit, ui32 scanLimit,
+      bool isParallelScanningAvailable, ui32 shardSplitFactor, ui32 criticalTotalRetriesCount, ui32 reaskShardRetriesCount)
+        : AggregationGroupByLimit(aggregationGroupByLimit)
+        , AggregationNoGroupLimit(aggregationNoGroupLimit)
+        , ScanLimit(scanLimit)
+        , IsParallelScanningAvailable(isParallelScanningAvailable)
+        , ShardSplitFactor(shardSplitFactor)
+        , CriticalTotalRetriesCount(criticalTotalRetriesCount)
+        , ReaskShardRetriesCount(reaskShardRetriesCount)
     {
     }
 
-    ui32 GetCriticalTotalRetriesCount() const {
-        return ProtoConfig.GetCriticalTotalRetriesCount();
-    }
-
-    ui32 GetReaskShardRetriesCount() const {
-        return ProtoConfig.GetReaskShardRetriesCount();
-    }
-
-    bool IsParallelScanningAvailable() const {
-        return ProtoConfig.GetParallelScanningAvailable();
-    }
-
-    bool GetShardSplitFactor() const {
-        return ProtoConfig.GetShardSplitFactor();
+    TShardsScanningPolicy()
+        : AggregationGroupByLimit(256)
+        , AggregationNoGroupLimit(1024)
+        , ScanLimit(3)
+        , IsParallelScanningAvailable(false)
+        , ShardSplitFactor(5)
+        , CriticalTotalRetriesCount(20)
+        , ReaskShardRetriesCount(5)
+    {
     }
 
     void FillRequestScanFeatures(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta,
         ui32& maxInFlight, bool& isAggregationRequest) const;
 
+    const ui32 AggregationGroupByLimit;
+    const ui32 AggregationNoGroupLimit;
+    const ui32 ScanLimit;
+    const bool IsParallelScanningAvailable;
+    const ui32 ShardSplitFactor;
+    const ui32 CriticalTotalRetriesCount;
+    const ui32 ReaskShardRetriesCount;
 };
 
 class TCPULimits {

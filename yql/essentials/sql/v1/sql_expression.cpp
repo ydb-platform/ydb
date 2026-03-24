@@ -1750,7 +1750,7 @@ bool TSqlExpression::SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWi
             Ctx_.Error(argPtr->GetPos()) << "Duplicate lambda argument parametr: '" << *contentPtr << "'.";
             return false;
         }
-        args.push_back(TSymbolNameWithPos{*contentPtr, argPtr->GetPos()});
+        args.push_back(TSymbolNameWithPos{.Name = *contentPtr, .Pos = argPtr->GetPos()});
     }
     return true;
 }

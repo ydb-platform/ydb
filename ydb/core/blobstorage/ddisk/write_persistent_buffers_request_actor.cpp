@@ -42,7 +42,9 @@ namespace NKikimr::NDDisk {
     void TWritePersistentBuffersRequestActor::Timeout(TEvents::TEvWakeup::TPtr &ev) {
         ui64 cookie = ev->Get()->Tag;
         auto itInflight = Inflights.find(cookie);
-        Y_ABORT_UNLESS(itInflight != Inflights.end());
+        if (itInflight == Inflights.end()) {
+            return;
+        }
         auto& inflight = itInflight->second;
 
         if (inflight.Received == inflight.Inflights.size()) {
@@ -103,7 +105,6 @@ namespace NKikimr::NDDisk {
     }
 
     void TWritePersistentBuffersRequestActor::Handle(TEvReadPersistentBufferResult::TPtr ev) {
-
         auto cookie = ev->Cookie;
         auto it = ReadInflights.find(cookie);
         Y_ABORT_UNLESS(it != ReadInflights.end());

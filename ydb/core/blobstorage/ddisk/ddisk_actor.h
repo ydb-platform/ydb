@@ -426,9 +426,6 @@ namespace NKikimr::NDDisk {
             using TRecord = std::decay_t<decltype(record)>;
 
             if constexpr (NPrivate::THasSelectorField<TRecord>::value) {
-                if (!record.HasSelector()) {
-                    return true;
-                }
                 const TBlockSelector selector(record.GetSelector());
                 if (selector.OffsetInBytes % BlockSize || selector.Size % BlockSize || !selector.Size) {
                     SendReply(ev, std::make_unique<typename TEvent::TResult>(

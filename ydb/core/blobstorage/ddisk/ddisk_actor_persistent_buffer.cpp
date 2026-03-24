@@ -442,7 +442,10 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvReadPersistentBuffer::TPtr ev) {
-        if (!CheckQuery(*ev, &Counters.Interface.ReadPersistentBuffer)) {
+        const auto& record = ev->Get()->Record;
+        const TQueryCredentials creds(record.GetCredentials());
+        if ((!creds.FromPersistentBuffer || record.HasSelector()) &&
+            !CheckQuery(*ev, &Counters.Interface.ReadPersistentBuffer)) {
             return;
         }
 
@@ -451,9 +454,6 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        const auto& record = ev->Get()->Record;
-        const TQueryCredentials creds(record.GetCredentials());
-        TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
         const ui32 generation = record.GetGeneration();
 
@@ -554,7 +554,7 @@ namespace NKikimr::NDDisk {
         auto& inflight = inflightIt->second;
 
         auto replyEv = std::make_unique<TEvReadPersistentBufferResult>(inflight.Status, inflight.ErrorMessage,
-            vChunkIndex, offsetInBytes, size, data);
+            vChunkIndex, offsetInBytes, size, std::move(data));
         auto h = std::make_unique<IEventHandle>(inflight.Sender, SelfId(), replyEv.release(), 0, inflight.Cookie);
         if (inflight.Session) {
             h->Rewrite(TEvInterconnect::EvForward, inflight.Session);

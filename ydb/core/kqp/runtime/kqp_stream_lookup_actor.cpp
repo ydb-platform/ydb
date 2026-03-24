@@ -314,6 +314,7 @@ private:
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
 
+        ResultNotificationSent = false;
         if (ResolveShardsInProgress) {
             finished = false;
             return 0;
@@ -344,7 +345,10 @@ private:
 
         if (hasPendingResults || (allReadsFinished && !allRowsProcessed)) {
             // has more results
-            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+            if (!ResultNotificationSent) {
+                ResultNotificationSent = true;
+                Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+            }
         }
 
         finished = inputRowsFinished && allReadsFinished && allRowsProcessed;
@@ -426,7 +430,10 @@ private:
 
         ProcessInputRows();
 
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        if (!ResultNotificationSent) {
+            ResultNotificationSent = true;
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        }
     }
 
     void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
@@ -590,7 +597,10 @@ private:
         StreamLookupWorker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
             shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
         });
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        if (!ResultNotificationSent) {
+            ResultNotificationSent = true;
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        }
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -900,6 +910,7 @@ private:
     NKqpProto::EIsolationLevel IsolationLevel;
     const TString Database;
 
+    bool ResultNotificationSent = false;
     // stats
     ui64 ReadRowsCount = 0;
     ui64 ReadBytesCount = 0;

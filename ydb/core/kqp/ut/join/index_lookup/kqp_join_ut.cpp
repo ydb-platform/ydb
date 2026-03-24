@@ -2072,6 +2072,13 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         auto client = kikimr.GetTableClient();
         auto db = kikimr.GetQueryClient();
 
+        auto savedReadSettings = NKqp::GetDefaultReadSettings();
+        auto savedReadAckSettings = NKqp::GetDefaultReadAckSettings();
+        Y_DEFER {
+            NKqp::SetDefaultReadSettings(savedReadSettings->Record);
+            NKqp::SetDefaultReadAckSettings(savedReadAckSettings->Record);
+        };
+
         // Limit rows per read response to force incremental result production.
         {
             NKikimrTxDataShard::TEvRead evread;

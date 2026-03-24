@@ -24,6 +24,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
@@ -769,7 +770,7 @@ public:
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
         }
 
-        if (!TryFillPoolInfoFromCache(ev, requestId)) {
+        if (!TryFillPoolInfoFromCache(ev, sessionInfo, requestId)) {
             return;
         }
 
@@ -1581,49 +1582,98 @@ private:
         }
     }
 
-    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
-        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
-
+    ///
+    /// Note: This implementation follows the legacy classification logic:
+    /// 1. Find the first matching classifier based on the highest priority (Rank).
+    /// 2. Once a candidate is found, perform a final check for user permissions
+    ///    and resource pool availability.
+    ///
+    /// If the user lacks access to the first matched pool, the request is rejected
+    /// immediately (fail-fast) rather than falling back to the next available rank.
+    ///
+    void Classify(const TEvKqp::TEvQueryRequest::TPtr& ev, TWmQueryClassifier& cl) {
         const auto& databaseId = ev->Get()->GetDatabaseId();
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || ev->Get()->IsInternalCall() || ev->Get()->GetIsWarmupCompilation()) {
-            ev->Get()->SetPoolId("");
-            return true;
+
+        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)
+            || ev->Get()->IsInternalCall()
+            || ev->Get()->GetIsWarmupCompilation()) {
+            cl.Bypass();
+            return;
         }
 
-        const auto& userToken = ev->Get()->GetUserToken();
-        if (!ev->Get()->GetPoolId()) {
-            ev->Get()->SetPoolId(ResourcePoolsCache.GetPoolId(databaseId, userToken, ActorContext()));
+        cl.PreCompileClassify();
+        auto status = cl.GetPreClassifyResult();
+        const auto* resolved = std::get_if<IWmQueryClassifier::TResolvedPoolId>(&status);
+
+        if (!resolved) {
+            return;
         }
 
-        const auto& poolId = ev->Get()->GetPoolId();
+        // If pool config exists in a cache, check user's access permissions.
+        // Fail-fast optimization if the user lacks required rights.
+        auto poolId = resolved->PoolId;
         const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(databaseId, poolId, ActorContext());
 
         if (!poolInfo) {
-            Y_ASSERT(!poolId.empty());
-            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
-            return true;
+            return;
         }
 
         const auto& securityObject = poolInfo->SecurityObject;
+        const auto& userToken = ev->Get()->GetUserToken();
+
         if (securityObject && userToken && !userToken->GetSerializedToken().empty()) {
             if (!securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *userToken)) {
-                ReplyProcessError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions", requestId);
-                return false;
+                cl.Reject(
+                    Ydb::StatusIds::NOT_FOUND,
+                    TStringBuilder() << "Resource pool " << poolId << " not found or access denied"
+                );
+                return;
             }
             if (!securityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
-                ReplyProcessError(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for resource pool " << poolId, requestId);
-                return false;
+                cl.Reject(
+                    Ydb::StatusIds::UNAUTHORIZED,
+                    TStringBuilder() << "No access permissions for resource pool " << poolId
+                );
+                return;
             }
         }
 
+        // If the pool has no limits, bypass the workload manager logic.
         const auto& poolConfig = poolInfo->Config;
+
         if (!NWorkload::IsWorkloadServiceRequired(poolConfig)) {
-            ev->Get()->SetPoolConfig(poolConfig);
+            cl.Bypass();
+        }
+    }
+
+    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 requestId) {
+        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
+
+        auto context = TClassifyContext{
+            // This parameter is set when user creates a request with an explicit PoolId
+            .PoolId = ev->Get()->GetPoolId(),
+            .DatabaseId = ev->Get()->GetDatabaseId(),
+            .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
+            .UserToken = ev->Get()->GetUserToken()
+        };
+
+        auto classifier = std::make_shared<TWmQueryClassifier>(ResourcePoolsCache.LastSnapshot, context);
+
+        Classify(ev, *classifier);
+        const auto status = classifier->GetPreClassifyResult();
+
+        if (const auto* reject = std::get_if<IWmQueryClassifier::TReject>(&status)) {
+            ReplyProcessError(reject->Code, reject->Message, requestId);
+            return false;
         }
 
-        Y_ASSERT(!poolId.empty());
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId, poolConfig));
+        if (const auto* resolved = std::get_if<IWmQueryClassifier::TResolvedPoolId>(&status)) {
+            ev->Get()->SetPoolId(resolved->PoolId);
+        } else {
+            ev->Get()->SetPoolId("");
+        }
 
+        ev->Get()->SetWmQueryClassifier(classifier);
         return true;
     }
 
@@ -1900,7 +1950,7 @@ private:
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>(), ActorContext());
+        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetValidatedSnapshotAs<TResourcePoolClassifierSnapshot>(), ActorContext());
     }
 
     void InitSharedReading() {

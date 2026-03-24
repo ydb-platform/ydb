@@ -9,9 +9,11 @@ namespace NKikimr::NKqp {
 
 class TResourcePoolClassifierSnapshot : public NMetadata::NFetcher::ISnapshot {
     using TBase = NMetadata::NFetcher::ISnapshot;
-    using TConfigsMap = std::unordered_map<TString, std::unordered_map<TString, TResourcePoolClassifierConfig>>;
+    using TConfigsMapByRank = std::unordered_map<TString, std::map<i64, TResourcePoolClassifierConfig>>;
+    using TConfigsMapByName = std::unordered_map<TString, std::unordered_map<TString, TResourcePoolClassifierConfig>>;
 
-    YDB_ACCESSOR_DEF(TConfigsMap, ResourcePoolClassifierConfigs);
+    YDB_ACCESSOR_DEF(TConfigsMapByRank, ResourcePoolClassifierConfigsByRank);
+    YDB_ACCESSOR_DEF(TConfigsMapByName, ResourcePoolClassifierConfigs);
 
 protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) override;

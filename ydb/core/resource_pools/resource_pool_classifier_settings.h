@@ -34,6 +34,8 @@ struct TClassifierSettings : public TSettingsBase {
     i64 Rank = -1;  // -1 = max rank + CLASSIFIER_RANK_OFFSET
     TString ResourcePool = DEFAULT_POOL_ID;
     std::optional<TString> MemberName;
+    std::optional<TString> AppName;
+    std::optional<bool> FullScan;
 };
 
 }  // namespace NKikimr::NResourcePool

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/overloaded.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -9,6 +10,7 @@
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/workload_service/kqp_workload_service.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
@@ -528,7 +530,7 @@ public:
         return !databaseInfo || !databaseInfo->Serverless;
     }
 
-    TString GetPoolId(const TString& databaseId, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
+   TString GetPoolId(const TString& databaseId, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
         TString resultPoolId;
         i64 resultRank = std::numeric_limits<i64>::max();
 
@@ -611,8 +613,11 @@ public:
         }
     }
 
-    void UpdateResourcePoolClassifiersInfo(const TResourcePoolClassifierSnapshot* snapsot, TActorContext actorContext) {
-        auto resourcePoolClassifierConfigs = snapsot->GetResourcePoolClassifierConfigs();
+    void UpdateResourcePoolClassifiersInfo(std::shared_ptr<TResourcePoolClassifierSnapshot> snapshot, TActorContext actorContext) {
+        LastSnapshot = snapshot;
+
+        auto resourcePoolClassifierConfigs = snapshot->GetResourcePoolClassifierConfigs();
+
         for (auto& [databaseId, databaseInfo] : DatabasesCache) {
             auto it = resourcePoolClassifierConfigs.find(databaseId);
             if (it != resourcePoolClassifierConfigs.end()) {
@@ -710,6 +715,9 @@ private:
     static TString GetPoolKey(const TString& databaseId, const TString& poolId) {
         return TStringBuilder() << databaseId << "/" << poolId;
     }
+
+public:
+    std::shared_ptr<const TResourcePoolClassifierSnapshot> LastSnapshot;
 
 private:
     std::unordered_map<TString, TPoolInfo> PoolsCache;

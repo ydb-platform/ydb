@@ -2,8 +2,12 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
+#include <ydb/library/aclib/aclib.h>
 
 namespace NKikimr::NKqp {
+
+class TPreparedQueryHolder;
 
 ///
 /// Interface for updating the execution state of a KQP session within the Workload Manager (WM).
@@ -23,4 +27,4 @@ struct IWmSessionUpdater {
     virtual void SetPoolId(TString poolId) = 0;
 };
 
-}
+} // NKikimr::NKqp

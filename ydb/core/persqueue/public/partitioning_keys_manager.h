@@ -9,14 +9,13 @@ struct TPartitioningKeysManager {
     TPartitioningKeysManager(size_t numSketches, TDuration windowSize)
         : NumSketches(numSketches)
         , WindowSize(windowSize) {
-        
     }
 
     void Add(const TString& /*key*/, ui64 /*msgSize*/) {
         
     }
     
-    TString GetQuantile(long double /*phi*/) const {
+    TString GetMedian() const {
         return {};
     }
 
@@ -27,7 +26,7 @@ private:
     };
 
     std::deque<KllSketchWrapper> Sketches;
-    [[maybe_unused]] const ui64 NumSketches;
+    [[maybe_unused]] const ui64 NumSketches; // Num sketches in window
     const TDuration WindowSize;
 };
 

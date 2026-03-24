@@ -5,5 +5,6 @@
 Основные материалы:
 
 - [{#T}](deployment-preparation.md)
+- [{#T}](../initial-deployment.md)
 - [{#T}](deployment-configuration-v1.md)
 - [{#T}](deployment-configuration-v2.md)

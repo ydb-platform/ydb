@@ -17,6 +17,8 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
+    ydb/core/sys_view/common
+    ydb/core/testlib
     ydb/library/testlib/common
     ydb/library/testlib/pq_helpers
     ydb/library/testlib/s3_recipe_helper

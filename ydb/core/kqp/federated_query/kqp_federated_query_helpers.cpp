@@ -16,7 +16,7 @@
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -199,10 +199,10 @@ namespace {
         return settings;
     }
 
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver) {
+    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver) {
         auto settings = MakeCommonTopicClientSettings(1, 2);
 
-        return CreatePqNativeGateway(NYql::TPqGatewayServices(
+        return CreatePqNativeGatewayFactory(NYql::TPqGatewayServices(
             *driver,
             nullptr,
             nullptr,
@@ -256,7 +256,6 @@ namespace {
         S3GatewayConfig = queryServiceConfig.GetS3();
 
         SolomonGatewayConfig = queryServiceConfig.GetSolomon();
-        SolomonGateway = NYql::CreateSolomonGateway(SolomonGatewayConfig);
 
         S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
 
@@ -266,7 +265,6 @@ namespace {
 
         ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
         Driver = MakeYdbDriver(ActorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-        PqGateway = MakePqGateway(Driver);
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
@@ -326,12 +324,11 @@ namespace {
             YtGatewayConfig,
             YtGateway,
             SolomonGatewayConfig,
-            SolomonGateway,
             nullptr,
             S3ReadActorFactoryConfig,
             DqTaskTransformFactory,
             PqGatewayConfig,
-            PqGateway,
+            MakePqGatewayFactory(Driver),
             ActorSystemPtr,
         };
 
@@ -351,7 +348,6 @@ namespace {
 
     void TKqpFederatedQuerySetupFactoryDefault::Cleanup() {
         HttpGateway.reset();
-        PqGateway.Reset();
     }
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

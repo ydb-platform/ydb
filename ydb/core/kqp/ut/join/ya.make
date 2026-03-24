@@ -1,13 +1,16 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-FORK_TEST_FILES()
-SPLIT_FACTOR(250)
+SPLIT_FACTOR(200)
 
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(cpu:4)
+ELSEIF(SANITIZER_TYPE == "memory")
+    SIZE(MEDIUM)
+    # Keep explicit MSan memory headroom from YQL-19940.
+    REQUIREMENTS(ram:16 cpu:4)
 ELSEIF(SANITIZER_TYPE)
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:4)

@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(12)
 
 SRCS(
     huge.cpp

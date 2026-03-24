@@ -5,6 +5,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
+#include <ydb/core/grpc_services/rpc_request_base.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -36,21 +37,39 @@ using TEvListLocalPartitionsKeyValueRequest =
 using TEvAcquireLockKeyValueRequest =
     TGrpcRequestOperationCall<Ydb::KeyValue::AcquireLockRequest,
         Ydb::KeyValue::AcquireLockResponse>;
+using TEvAcquireLockKeyValueV2Request =
+    TGrpcRequestNoOperationCall<Ydb::KeyValue::AcquireLockRequest,
+        Ydb::KeyValue::AcquireLockResult>;
 using TEvExecuteTransactionKeyValueRequest =
     TGrpcRequestOperationCall<Ydb::KeyValue::ExecuteTransactionRequest,
         Ydb::KeyValue::ExecuteTransactionResponse>;
+using TEvExecuteTransactionKeyValueV2Request =
+    TGrpcRequestNoOperationCall<Ydb::KeyValue::ExecuteTransactionRequest,
+        Ydb::KeyValue::ExecuteTransactionResult>;
 using TEvReadKeyValueRequest =
     TGrpcRequestOperationCall<Ydb::KeyValue::ReadRequest,
         Ydb::KeyValue::ReadResponse>;
+using TEvReadKeyValueV2Request =
+    TGrpcRequestNoOperationCall<Ydb::KeyValue::ReadRequest,
+        Ydb::KeyValue::ReadResult>;
 using TEvReadRangeKeyValueRequest =
     TGrpcRequestOperationCall<Ydb::KeyValue::ReadRangeRequest,
         Ydb::KeyValue::ReadRangeResponse>;
+using TEvReadRangeKeyValueV2Request =
+    TGrpcRequestNoOperationCall<Ydb::KeyValue::ReadRangeRequest,
+        Ydb::KeyValue::ReadRangeResult>;
 using TEvListRangeKeyValueRequest =
     TGrpcRequestOperationCall<Ydb::KeyValue::ListRangeRequest,
         Ydb::KeyValue::ListRangeResponse>;
+using TEvListRangeKeyValueV2Request =
+    TGrpcRequestNoOperationCall<Ydb::KeyValue::ListRangeRequest,
+        Ydb::KeyValue::ListRangeResult>;
 using TEvGetStorageChannelStatusKeyValueRequest =
     TGrpcRequestOperationCall<Ydb::KeyValue::GetStorageChannelStatusRequest,
         Ydb::KeyValue::GetStorageChannelStatusResponse>;
+using TEvGetStorageChannelStatusKeyValueV2Request =
+    TGrpcRequestNoOperationCall<Ydb::KeyValue::GetStorageChannelStatusRequest,
+        Ydb::KeyValue::GetStorageChannelStatusResult>;
 
 } // namespace NKikimr::NGRpcService
 
@@ -441,14 +460,11 @@ protected:
     void OnBootstrap() {
         auto self = static_cast<TDerived*>(this);
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-        NYql::TIssues issues;
-        if (!self->ValidateRequest(status, issues)) {
-            self->Reply(status, issues, self->ActorContext());
+        if (!self->ValidateRequest(status)) {
+            self->Reply(status);
             return;
         }
-        if (const auto& userToken = self->Request_->GetSerializedToken()) {
-            UserToken = new NACLib::TUserToken(userToken);
-        }
+        UserToken = self->GetToken();
         SendNavigateRequest();
     }
 
@@ -462,9 +478,9 @@ protected:
         entry.ShowPrivatePath = true;
         entry.SyncVersion = false;
         req->UserToken = UserToken;
-        req->DatabaseName = self->Request_->GetDatabaseName().GetOrElse("");
+        req->DatabaseName = self->GetDatabaseName();
         auto ev = new TEvTxProxySchemeCache::TEvNavigateKeySet(req.Release());
-        self->Send(MakeSchemeCacheID(), ev, 0, 0, self->Span_.GetTraceId());
+        self->Send(MakeSchemeCacheID(), ev, 0, 0, self->GetTraceId());
     }
 
     bool OnNavigateKeySetResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, ui32 access) {
@@ -472,10 +488,8 @@ protected:
         TEvTxProxySchemeCache::TEvNavigateKeySetResult* res = ev->Get();
         NSchemeCache::TSchemeCacheNavigate *request = res->Request.Get();
 
-        auto ctx = self->ActorContext();
-
         if (res->Request->ResultSet.size() != 1) {
-            self->Reply(StatusIds::INTERNAL_ERROR, "Received an incorrect answer from SchemeCache.", NKikimrIssues::TIssuesIds::UNEXPECTED, ctx);
+            self->Reply(StatusIds::INTERNAL_ERROR, "Received an incorrect answer from SchemeCache.", NKikimrIssues::TIssuesIds::UNEXPECTED);
             return false;
         }
 
@@ -483,33 +497,33 @@ protected:
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
-            self->Reply(StatusIds::UNAUTHORIZED, "Access denied.", NKikimrIssues::TIssuesIds::ACCESS_DENIED, ctx);
+            self->Reply(StatusIds::UNAUTHORIZED, "Access denied.", NKikimrIssues::TIssuesIds::ACCESS_DENIED);
             return false;
         case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
         case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-            self->Reply(StatusIds::SCHEME_ERROR, "Path isn't exist.", NKikimrIssues::TIssuesIds::PATH_NOT_EXIST, ctx);
+            self->Reply(StatusIds::SCHEME_ERROR, "Path isn't exist.", NKikimrIssues::TIssuesIds::PATH_NOT_EXIST);
             return false;
         case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
         case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
-            self->Reply(StatusIds::UNAVAILABLE, "Database resolve failed with no certain result.", NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, ctx);
+            self->Reply(StatusIds::UNAVAILABLE, "Database resolve failed with no certain result.", NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR);
             return false;
         default:
-            self->Reply(StatusIds::UNAVAILABLE, "Resolve error", NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, ctx);
+            self->Reply(StatusIds::UNAVAILABLE, "Resolve error", NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR);
             return false;
         }
 
-        if (!self->CheckAccess(CanonizePath(res->Request->ResultSet[0].Path), res->Request->ResultSet[0].SecurityObject, access)) {
+        if (!self->InternalCheckAccess(CanonizePath(res->Request->ResultSet[0].Path), res->Request->ResultSet[0].SecurityObject, access)) {
             return false;
         }
         if (!request->ResultSet[0].SolomonVolumeInfo) {
-            self->Reply(StatusIds::SCHEME_ERROR, "Table isn't keyvalue.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+            self->Reply(StatusIds::SCHEME_ERROR, "Table isn't keyvalue.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
             return false;
         }
 
         return true;
     }
 
-    bool CheckAccess(const TString& path, TIntrusivePtr<TSecurityObject> securityObject, ui32 access) {
+    bool InternalCheckAccess(const TString& path, TIntrusivePtr<TSecurityObject> securityObject, ui32 access) {
         auto self = static_cast<TDerived*>(this);
         if (!UserToken || !securityObject) {
             return true;
@@ -524,8 +538,7 @@ protected:
                 << ": for# " << UserToken->GetUserSID()
                 << ", path# " << path
                 << ", access# " << NACLib::AccessRightsToString(access),
-            NKikimrIssues::TIssuesIds::ACCESS_DENIED,
-            self->ActorContext());
+            NKikimrIssues::TIssuesIds::ACCESS_DENIED);
         return false;
     }
 
@@ -579,12 +592,24 @@ protected:
         this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, TActivationContext::AsActorContext());
     }
 
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) {
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/) {
         return true;
     }
 
-private:
-    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> GetToken() {
+        if (const auto& userToken = this->Request_->GetSerializedToken()) {
+            return new NACLib::TUserToken(userToken);
+        }
+        return nullptr;
+    }
+
+    TString GetDatabaseName() {
+        return this->Request_->GetDatabaseName().GetOrElse("");
+    }
+
+    NWilson::TTraceId GetTraceId() {
+        return this->Span_.GetTraceId();
+    }
 };
 
 
@@ -609,7 +634,7 @@ public:
         }
     }
 
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) {
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/) {
         return true;
     } 
 
@@ -672,8 +697,22 @@ public:
         SendProposeRequest(TActivationContext::AsActorContext());
     }
 
+    TIntrusiveConstPtr<NACLib::TUserToken> GetToken() {
+        if (const auto& userToken = this->Request_->GetSerializedToken()) {
+            return new NACLib::TUserToken(userToken);
+        }
+        return nullptr;
+    }
+
+    TString GetDatabaseName() {
+        return this->Request_->GetDatabaseName().GetOrElse("");
+    }
+
+    NWilson::TTraceId GetTraceId() {
+        return this->Span_.GetTraceId();
+    }
+
 private:
-    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     Ydb::KeyValue::StorageConfig StorageConfig;
 };
 
@@ -770,8 +809,23 @@ protected:
         this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, TActivationContext::AsActorContext());
     }
 
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) {
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/) {
         return true;
+    }
+
+    TIntrusiveConstPtr<NACLib::TUserToken> GetToken() {
+        if (const auto& userToken = this->Request_->GetSerializedToken()) {
+            return new NACLib::TUserToken(userToken);
+        }
+        return nullptr;
+    }
+
+    TString GetDatabaseName() {
+        return this->Request_->GetDatabaseName().GetOrElse("");
+    }
+
+    NWilson::TTraceId GetTraceId() {
+        return this->Span_.GetTraceId();
     }
 
 private:
@@ -779,14 +833,21 @@ private:
 };
 
 
-template <typename TDerived, typename TRequest, typename TResultRecord, typename TKVRequest>
+template <typename TDerived, typename TRequest, typename TResultRecord, typename TKVRequest, bool IsOperational>
 class TKeyValueRequestGrpc
-    : public TRpcOperationRequestActor<TDerived, TRequest>
-    , public TBaseKeyValueRequest<TKeyValueRequestGrpc<TDerived, TRequest, TResultRecord, TKVRequest>>
+    : public std::conditional_t<IsOperational,
+        TRpcOperationRequestActor<TDerived, TRequest>,
+        TRpcRequestActor<TDerived, TRequest>
+    >
+    , public TBaseKeyValueRequest<TDerived>
 {
 public:
-    using TBase = TRpcOperationRequestActor<TDerived, TRequest>;
+    using TBase = std::conditional_t<IsOperational,
+        TRpcOperationRequestActor<TDerived, TRequest>,
+        TRpcRequestActor<TDerived, TRequest>
+    >;
     using TBase::TBase;
+    using TBase::Reply;
 
     template<typename T, typename = void>
     struct THasMsg: std::false_type
@@ -797,10 +858,12 @@ public:
     template<typename T>
     static constexpr bool HasMsgV = THasMsg<T>::value;
 
-    friend class TBaseKeyValueRequest<TKeyValueRequestGrpc<TDerived, TRequest, TResultRecord, TKVRequest>>;
+    friend class TBaseKeyValueRequest<TDerived>;
 
     void Bootstrap(const TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
+        if constexpr (IsOperational) {
+            TBase::Bootstrap(ctx);
+        }
         this->OnBootstrap();
         this->Become(&TKeyValueRequestGrpc::StateFunc);
     }
@@ -814,7 +877,11 @@ protected:
             hFunc(TKVRequest::TResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:
-            return TBase::StateFuncBase(ev);
+            if constexpr (IsOperational) {
+                return TBase::StateFuncBase(ev);
+            } else {
+                this->Reply(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected event received in TKeyValueRequestGrpc::StateWork: " << ev->GetTypeRewrite());
+            }
         }
     }
 
@@ -830,7 +897,7 @@ protected:
         const NKikimrSchemeOp::TSolomonVolumeDescription &desc = request->ResultSet[0].SolomonVolumeInfo->Description;
 
         if (rec.partition_id() >= desc.PartitionsSize()) {
-            this->Reply(StatusIds::SCHEME_ERROR, "The partition wasn't found. Partition ID was larger or equal partition count.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, this->ActorContext());
+            this->Reply(StatusIds::SCHEME_ERROR, "The partition wasn't found. Partition ID was larger or equal partition count.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
             return;
         }
 
@@ -848,7 +915,7 @@ protected:
         }
 
         if (!KVTabletId) {
-            this->Reply(StatusIds::INTERNAL_ERROR, "Partition wasn't found.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, this->ActorContext());
+            this->Reply(StatusIds::INTERNAL_ERROR, "Partition wasn't found.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
             return;
         }
 
@@ -861,19 +928,27 @@ protected:
         auto &rec = *this->GetProtoRequest();
         CopyProtobuf(rec, &req->Record);
         req->Record.set_tablet_id(KVTabletId);
-        NTabletPipe::SendData(this->SelfId(), KVPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
+        NTabletPipe::SendData(this->SelfId(), KVPipeClient, req.release(), 0, GetTraceId());
     }
 
     void Handle(typename TKVRequest::TResponse::TPtr &ev) {
         auto status = PullStatus(ev->Get()->Record);
         if constexpr (HasMsgV<decltype(ev->Get()->Record)>) {
             if (status != Ydb::StatusIds::SUCCESS) {
-                this->Reply(status, ev->Get()->Record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, this->ActorContext());
+                this->Reply(status, ev->Get()->Record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
             }
         }
-        TResultRecord result;
-        CopyProtobuf(ev->Get()->Record, &result);
-        this->ReplyWithResult(status, result, TActivationContext::AsActorContext());
+        if constexpr (IsOperational) {
+            TResultRecord result;
+            CopyProtobuf(ev->Get()->Record, &result);
+            this->ReplyWithResult(status, result, TActivationContext::AsActorContext());
+        } else {      
+            TResultRecord result;//google::protobuf::Arena::CreateMessage<TResultRecord>(this->Request->GetArena());
+            CopyProtobuf(ev->Get()->Record, &result);
+            result.set_status(status);
+            this->Request->Reply(&result, status);
+            PassAway();
+        }
     }
 
     NTabletPipe::TClientConfig GetPipeConfig() {
@@ -890,15 +965,13 @@ protected:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            this->Reply(StatusIds::UNAVAILABLE, "Failed to connect to coordination node.", NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, this->ActorContext());
+            this->Reply(StatusIds::UNAVAILABLE, "Failed to connect to partition.", NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE);
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        this->Reply(StatusIds::UNAVAILABLE, "Connection to coordination node was lost.", NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, this->ActorContext());
+        this->Reply(StatusIds::UNAVAILABLE, "Connection to partition was lost.", NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE);
     }
-
-    virtual bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) = 0;
 
     void PassAway() override {
         if (KVPipeClient) {
@@ -908,21 +981,53 @@ protected:
         TBase::PassAway();
     }
 
+    TIntrusiveConstPtr<NACLib::TUserToken> GetToken() {
+        if constexpr (IsOperational) {
+            if (const auto& userToken = this->Request_->GetSerializedToken()) {
+                return new NACLib::TUserToken(userToken);
+            }
+        } else {
+            if (this->TBase::UserToken) {
+                return new NACLib::TUserToken(*this->TBase::UserToken);
+            }
+        }
+        return nullptr;
+    }
+
+    TString GetDatabaseName() {
+        if constexpr (IsOperational) {
+            return this->Request_->GetDatabaseName().GetOrElse("");
+        } else {
+            return this->TBase::GetDatabaseName();
+        }
+    }
+
+    NWilson::TTraceId GetTraceId() {
+        if constexpr (IsOperational) {
+            return this->Span_.GetTraceId();
+        } else {
+            return NWilson::TTraceId();
+        }
+    }
+
 protected:
     ui64 KVTabletId = 0;
     TActorId KVPipeClient;
 };
 
+template <bool IsOperational>
 class TAcquireLockRequest
-    : public TKeyValueRequestGrpc<TAcquireLockRequest, TEvAcquireLockKeyValueRequest,
-            Ydb::KeyValue::AcquireLockResult, TEvKeyValue::TEvAcquireLock>
+    : public TKeyValueRequestGrpc<TAcquireLockRequest<IsOperational>,
+            std::conditional_t<IsOperational, TEvAcquireLockKeyValueRequest, TEvAcquireLockKeyValueV2Request>,
+            Ydb::KeyValue::AcquireLockResult, TEvKeyValue::TEvAcquireLock, IsOperational>
 {
 public:
-    using TBase = TKeyValueRequestGrpc<TAcquireLockRequest, TEvAcquireLockKeyValueRequest,
-            Ydb::KeyValue::AcquireLockResult, TEvKeyValue::TEvAcquireLock>;
+    using TBase = TKeyValueRequestGrpc<TAcquireLockRequest,
+            std::conditional_t<IsOperational, TEvAcquireLockKeyValueRequest, TEvAcquireLockKeyValueV2Request>,
+            Ydb::KeyValue::AcquireLockResult, TEvKeyValue::TEvAcquireLock, IsOperational>;
     using TBase::TBase;
 
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) override {
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/) {
         return true;
     }
     NACLib::EAccessRights GetRequiredAccessRights() const {
@@ -930,16 +1035,18 @@ public:
     }
 };
 
-
+template <bool IsOperational>
 class TExecuteTransactionRequest
-    : public TKeyValueRequestGrpc<TExecuteTransactionRequest, TEvExecuteTransactionKeyValueRequest,
-            Ydb::KeyValue::ExecuteTransactionResult, TEvKeyValue::TEvExecuteTransaction> {
+    : public TKeyValueRequestGrpc<TExecuteTransactionRequest<IsOperational>,
+            std::conditional_t<IsOperational, TEvExecuteTransactionKeyValueRequest, TEvExecuteTransactionKeyValueV2Request>,
+            Ydb::KeyValue::ExecuteTransactionResult, TEvKeyValue::TEvExecuteTransaction, IsOperational> {
 public:
-    using TBase = TKeyValueRequestGrpc<TExecuteTransactionRequest, TEvExecuteTransactionKeyValueRequest,
-            Ydb::KeyValue::ExecuteTransactionResult, TEvKeyValue::TEvExecuteTransaction>;
+    using TBase = TKeyValueRequestGrpc<TExecuteTransactionRequest,
+            std::conditional_t<IsOperational, TEvExecuteTransactionKeyValueRequest, TEvExecuteTransactionKeyValueV2Request>,
+            Ydb::KeyValue::ExecuteTransactionResult, TEvKeyValue::TEvExecuteTransaction, IsOperational>;
     using TBase::TBase;
 
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) override {
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/) {
         return true;
     }
 
@@ -970,12 +1077,15 @@ public:
     }
 };
 
+template <bool IsOperational>
 class TReadRequest
-    : public TKeyValueRequestGrpc<TReadRequest, TEvReadKeyValueRequest,
-            Ydb::KeyValue::ReadResult, TEvKeyValue::TEvRead> {
+    : public TKeyValueRequestGrpc<TReadRequest<IsOperational>, 
+            std::conditional_t<IsOperational, TEvReadKeyValueRequest, TEvReadKeyValueV2Request>,
+            Ydb::KeyValue::ReadResult, TEvKeyValue::TEvRead, IsOperational> {
 public:
-    using TBase = TKeyValueRequestGrpc<TReadRequest, TEvReadKeyValueRequest,
-            Ydb::KeyValue::ReadResult, TEvKeyValue::TEvRead>;
+    using TBase = TKeyValueRequestGrpc<TReadRequest,
+            std::conditional_t<IsOperational, TEvReadKeyValueRequest, TEvReadKeyValueV2Request>,
+            Ydb::KeyValue::ReadResult, TEvKeyValue::TEvRead, IsOperational>;
     using TBase::TBase;
     using TBase::Handle;
     STFUNC(StateFunc) {
@@ -984,7 +1094,7 @@ public:
             return TBase::StateFunc(ev);
         }
     }
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) override {
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/) {
         return true;
     }
     NACLib::EAccessRights GetRequiredAccessRights() const {
@@ -992,12 +1102,15 @@ public:
     }
 };
 
+template <bool IsOperational>
 class TReadRangeRequest
-    : public TKeyValueRequestGrpc<TReadRangeRequest, TEvReadRangeKeyValueRequest,
-            Ydb::KeyValue::ReadRangeResult, TEvKeyValue::TEvReadRange> {
+    : public TKeyValueRequestGrpc<TReadRangeRequest<IsOperational>,
+            std::conditional_t<IsOperational, TEvReadRangeKeyValueRequest, TEvReadRangeKeyValueV2Request>,
+            Ydb::KeyValue::ReadRangeResult, TEvKeyValue::TEvReadRange, IsOperational> {
 public:
-    using TBase = TKeyValueRequestGrpc<TReadRangeRequest, TEvReadRangeKeyValueRequest,
-            Ydb::KeyValue::ReadRangeResult, TEvKeyValue::TEvReadRange>;
+    using TBase = TKeyValueRequestGrpc<TReadRangeRequest,
+            std::conditional_t<IsOperational, TEvReadRangeKeyValueRequest, TEvReadRangeKeyValueV2Request>,
+            Ydb::KeyValue::ReadRangeResult, TEvKeyValue::TEvReadRange, IsOperational>;
     using TBase::TBase;
     using TBase::Handle;
     STFUNC(StateFunc) {
@@ -1006,7 +1119,7 @@ public:
             return TBase::StateFunc(ev);
         }
     }
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) override {
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/) {
         return true;
     }
     NACLib::EAccessRights GetRequiredAccessRights() const {
@@ -1014,12 +1127,15 @@ public:
     }
 };
 
+template <bool IsOperational>
 class TListRangeRequest
-    : public TKeyValueRequestGrpc<TListRangeRequest, TEvListRangeKeyValueRequest,
-            Ydb::KeyValue::ListRangeResult, TEvKeyValue::TEvReadRange> {
+    : public TKeyValueRequestGrpc<TListRangeRequest<IsOperational>,
+            std::conditional_t<IsOperational, TEvListRangeKeyValueRequest, TEvListRangeKeyValueV2Request>,
+            Ydb::KeyValue::ListRangeResult, TEvKeyValue::TEvReadRange, IsOperational> {
 public:
-    using TBase = TKeyValueRequestGrpc<TListRangeRequest, TEvListRangeKeyValueRequest,
-            Ydb::KeyValue::ListRangeResult, TEvKeyValue::TEvReadRange>;
+    using TBase = TKeyValueRequestGrpc<TListRangeRequest,
+            std::conditional_t<IsOperational, TEvListRangeKeyValueRequest, TEvListRangeKeyValueV2Request>,
+            Ydb::KeyValue::ListRangeResult, TEvKeyValue::TEvReadRange, IsOperational>;
     using TBase::TBase;
     using TBase::Handle;
     STFUNC(StateFunc) {
@@ -1028,7 +1144,7 @@ public:
             return TBase::StateFunc(ev);
         }
     }
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) override {
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/) {
         return true;
     }
     NACLib::EAccessRights GetRequiredAccessRights() const {
@@ -1036,12 +1152,15 @@ public:
     }
 };
 
+template <bool IsOperational>
 class TGetStorageChannelStatusRequest
-    : public TKeyValueRequestGrpc<TGetStorageChannelStatusRequest, TEvGetStorageChannelStatusKeyValueRequest,
-            Ydb::KeyValue::GetStorageChannelStatusResult, TEvKeyValue::TEvGetStorageChannelStatus> {
+    : public TKeyValueRequestGrpc<TGetStorageChannelStatusRequest<IsOperational>,
+            std::conditional_t<IsOperational, TEvGetStorageChannelStatusKeyValueRequest, TEvGetStorageChannelStatusKeyValueV2Request>,
+            Ydb::KeyValue::GetStorageChannelStatusResult, TEvKeyValue::TEvGetStorageChannelStatus, IsOperational> {
 public:
-    using TBase = TKeyValueRequestGrpc<TGetStorageChannelStatusRequest, TEvGetStorageChannelStatusKeyValueRequest,
-            Ydb::KeyValue::GetStorageChannelStatusResult, TEvKeyValue::TEvGetStorageChannelStatus>;
+    using TBase = TKeyValueRequestGrpc<TGetStorageChannelStatusRequest,
+            std::conditional_t<IsOperational, TEvGetStorageChannelStatusKeyValueRequest, TEvGetStorageChannelStatusKeyValueV2Request>,
+            Ydb::KeyValue::GetStorageChannelStatusResult, TEvKeyValue::TEvGetStorageChannelStatus, IsOperational>;
     using TBase::TBase;
     using TBase::Handle;
     STFUNC(StateFunc) {
@@ -1050,7 +1169,7 @@ public:
             return TBase::StateFunc(ev);
         }
     }
-    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) override {
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/) {
         return true;
     }
     NACLib::EAccessRights GetRequiredAccessRights() const {
@@ -1081,28 +1200,53 @@ void DoListLocalPartitionsKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFaci
     TActivationContext::AsActorContext().Register(new TListLocalPartitionsRequest(p.release()));
 }
 
+
 void DoAcquireLockKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TAcquireLockRequest(p.release()));
+    TActivationContext::AsActorContext().Register(new TAcquireLockRequest<true>(p.release()));
+}
+
+void DoAcquireLockKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TAcquireLockRequest<false>(p.release()));
 }
 
 void DoExecuteTransactionKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TExecuteTransactionRequest(p.release()));
+    TActivationContext::AsActorContext().Register(new TExecuteTransactionRequest<true>(p.release()));
+}
+
+void DoExecuteTransactionKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TExecuteTransactionRequest<false>(p.release()));
 }
 
 void DoReadKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TReadRequest(p.release()));
+    TActivationContext::AsActorContext().Register(new TReadRequest<true>(p.release()));
+}
+
+void DoReadKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TReadRequest<false>(p.release()));
 }
 
 void DoReadRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TReadRangeRequest(p.release()));
+    TActivationContext::AsActorContext().Register(new TReadRangeRequest<true>(p.release()));
+}
+
+void DoReadRangeKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TReadRangeRequest<false>(p.release()));
 }
 
 void DoListRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TListRangeRequest(p.release()));
+    TActivationContext::AsActorContext().Register(new TListRangeRequest<true>(p.release()));
+}
+
+void DoListRangeKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TListRangeRequest<false>(p.release()));
 }
 
 void DoGetStorageChannelStatusKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
-    TActivationContext::AsActorContext().Register(new TGetStorageChannelStatusRequest(p.release()));
+    TActivationContext::AsActorContext().Register(new TGetStorageChannelStatusRequest<true>(p.release()));
+}
+
+void DoGetStorageChannelStatusKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TGetStorageChannelStatusRequest<false>(p.release()));
 }
 
 } // namespace NKikimr::NGRpcService

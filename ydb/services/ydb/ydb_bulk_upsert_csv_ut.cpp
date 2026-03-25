@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -571,6 +572,72 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             UNIT_ASSERT_C(!upsert.IsSuccess(), upsert.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "Received NULL value for not null column: Key");
         }
+    }
+
+    Y_UNIT_TEST(ValidateExplicitDefaultValueColumns) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        {
+            NQuery::TQueryClient client(connection);
+
+            auto result = client.ExecuteQuery(R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64 NOT NULL,
+                    Value_Default Uint64 DEFAULT 42,
+                    PRIMARY KEY (Key)
+                );
+            )sql", NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        NYdb::NTable::TTableClient client(connection);
+
+        {
+            // We must specify columns explicitly, regardless of whether they have default values
+            TStringBuilder csv;
+            csv << "Key\n";
+            csv << "0\n";
+            csv << "1\n";
+
+            auto upsert = client.BulkUpsert(
+                "/Root/TestTable",
+                EDataFormat::CSV,
+                csv,
+                {},
+                BulkUpsertSettings(CsvSettings()))
+                .GetValueSync();
+            UNIT_ASSERT_C(!upsert.IsSuccess(), upsert.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(upsert.GetIssues().ToString(), "Error: Bulk upsert to table '/Root/TestTable' No column 'Value_Default'");
+        }
+
+        {
+            TStringBuilder csv;
+            csv << "Key,Value_Default\n";
+            csv << "0,\n";
+            csv << "1,15\n";
+
+            auto upsert = client.BulkUpsert(
+                "/Root/TestTable",
+                EDataFormat::CSV,
+                csv,
+                {},
+                BulkUpsertSettings(CsvSettings()))
+                .GetValueSync();
+            UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        }
+
+        // No default values were applied
+        NKqp::CompareYson(R"([
+            [0u;#];
+            [1u;[15u]]
+        ])", StreamQueryToYson(client, R"(
+            SELECT Key, Value_Default
+            FROM `/Root/TestTable`
+            ORDER BY Key;
+        )"));
     }
 
     Y_UNIT_TEST(Errors) {

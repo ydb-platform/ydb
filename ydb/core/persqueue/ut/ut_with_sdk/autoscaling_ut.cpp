@@ -898,8 +898,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad) {
-        TTopicSdkTestSetup setup = CreateSetup();
+    namespace {
+
+    void PartitionSplit_AutosplitByLoad_Run(TTopicSdkTestSetup& setup) {
         TTopicClient client = setup.MakeClient();
 
         TCreateTopicSettings createSettings;
@@ -953,8 +954,19 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
     }
 
-    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_AfterAlter) {
+    } // namespace
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad) {
         TTopicSdkTestSetup setup = CreateSetup();
+        PartitionSplit_AutosplitByLoad_Run(setup);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_KllSketchBasedSplit) {
+        TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, true);
+        PartitionSplit_AutosplitByLoad_Run(setup);
+    }
+
+    void PartitionSplit_AutosplitByLoad_AfterAlter_Run(TTopicSdkTestSetup& setup) {
         TTopicClient client = setup.MakeClient();
 
         TCreateTopicSettings createSettings;
@@ -1013,6 +1025,16 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
         }
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_AfterAlter) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PartitionSplit_AutosplitByLoad_AfterAlter_Run(setup);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_AfterAlter_KllSketchBasedSplit) {
+        TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, true);
+        PartitionSplit_AutosplitByLoad_AfterAlter_Run(setup);
     }
 
     void ExecuteQuery(NYdb::NTable::TSession& session, const TString& query ) {

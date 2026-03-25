@@ -67,11 +67,15 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .UncompressMessages = true
         });
 
+        auto now = TInstant::Now();
+
         auto response = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
+        UNIT_ASSERT_GE(response->Messages[0].ApproximateFirstReceiveTimestamp, now);
     }
 
     Y_UNIT_TEST(TopicWithManyIterationsData) {
@@ -100,7 +104,9 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].Data, "msg-2");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].ApproximateReceiveCount, 1);
         }
 
         {
@@ -117,6 +123,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-3");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
         }
 
         {
@@ -150,9 +157,10 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 2);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].Data, "msg-2");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].ApproximateReceiveCount, 2);
         }
-
     }
 
     Y_UNIT_TEST(TopicWithBigMessage) {

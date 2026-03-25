@@ -56,6 +56,8 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
         THashMap<TString, TString> MessageMetaAttributes;
         TInstant SentTimestamp;
         TString MessageGroupId;
+        ui32 ApproximateReceiveCount;
+        TInstant ApproximateFirstReceiveTimestamp;
     };
     std::vector<TMessage> Messages;
 };

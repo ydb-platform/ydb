@@ -256,8 +256,8 @@ private:
 
             for (auto& message : messages) {
                 auto* item = Response_.MutableReceiveMessage()->AddMessages();
-                //item->SetApproximateFirstReceiveTimestamp(message.FirstReceiveTimestamp.MilliSeconds());
-                //item->SetApproximateReceiveCount(message.ReceiveCount);
+                item->SetApproximateFirstReceiveTimestamp(message.ApproximateFirstReceiveTimestamp.MilliSeconds());
+                item->SetApproximateReceiveCount(message.ApproximateReceiveCount);
                 item->SetMessageId(ToMessageId(message.MessageId));
                 item->SetMD5OfMessageBody(MD5::Calc(message.Data));
                 item->SetData(std::move(message.Data));

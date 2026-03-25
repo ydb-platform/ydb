@@ -151,6 +151,8 @@ namespace NKikimr::NSqsTopic::V1 {
             AFL_ENSURE(message.Codec == Ydb::Topic::Codec::CODEC_RAW)("codec", Ydb::Topic::Codec_Name(message.Codec));
             result.set_m_d_5_of_body(MD5::Calc(result.body()));
 
+            result.mutable_attributes()->emplace("ApproximateFirstReceiveTimestamp", ToString(message.ApproximateFirstReceiveTimestamp.MilliSeconds()));
+            result.mutable_attributes()->emplace("ApproximateReceiveCount", ToString(message.ApproximateReceiveCount));
 
             if (!message.MessageGroupId.empty()) {
                 if (TString v = NPQ::NSourceIdEncoding::Decode(message.MessageGroupId); !v.empty()) {

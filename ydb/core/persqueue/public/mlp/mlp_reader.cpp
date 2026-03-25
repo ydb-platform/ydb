@@ -143,8 +143,8 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             codec = Ydb::Topic::CODEC_RAW;
         }
 
-        THashMap<TString, TString> messageMetaAttr(proto.messagemeta_size());
-        for (const auto& meta : proto.messagemeta()) {
+        THashMap<TString, TString> messageMetaAttr(proto.GetMessageMeta().size());
+        for (const auto& meta : proto.GetMessageMeta()) {
             messageMetaAttr.try_emplace(meta.key(), meta.value());
         }
 
@@ -158,8 +158,10 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             .Codec = codec,
             .Data = std::move(data),
             .MessageMetaAttributes = std::move(messageMetaAttr),
-            .SentTimestamp = TInstant::MilliSeconds(message.messagemeta().senttimestampmilliseconds()),
+            .SentTimestamp = TInstant::MilliSeconds(message.GetMessageMeta().GetSentTimestampMilliseconds()),
             .MessageGroupId = messageGroupId,
+            .ApproximateReceiveCount = message.GetMessageMeta().GetApproximateReceiveCount(),
+            .ApproximateFirstReceiveTimestamp = TInstant::MilliSeconds(message.GetMessageMeta().GetApproximateFirstReceiveTimestampMilliseconds()),
         });
     }
 

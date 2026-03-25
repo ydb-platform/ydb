@@ -632,14 +632,14 @@ void TConsumerActor::ProcessEventQueue() {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
         auto visibilityDeadline = ev->Get()->GetProcessingTimeout().ToDeadLine();
 
-        std::deque<ui64> messages;
+        std::deque<TReadMessage> messages;
         for (; count; --count) {
             auto result = Storage->Next(visibilityDeadline, position);
             if (!result) {
                 break;
             }
 
-            messages.push_back(result.value());
+            messages.push_back(std::move(result.value()));
         }
 
         if (messages.empty() && ev->Get()->GetWaitDeadline() <= now) {

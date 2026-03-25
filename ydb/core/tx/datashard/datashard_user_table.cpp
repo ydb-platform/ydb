@@ -1,6 +1,8 @@
 #include "datashard_user_table.h"
 
 #include <ydb/core/base/path.h>
+
+#include <util/generic/algorithm.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -480,8 +482,21 @@ void TUserTable::DoApplyCreate(
         alter.SetCompactionPolicy(tid, *NLocalDb::CreateDefaultUserTablePolicy());
     }
 
-    if (partConfig.HasEnableFilterByKey()) {
-        alter.SetByKeyFilter(tid, partConfig.GetEnableFilterByKey());
+    {
+        // Unify EnableFilterByKey and ByKeyFilterPrefixes into a single prefix list
+        TVector<ui32> prefixes;
+        for (auto p : partConfig.GetByKeyFilterPrefixes()) {
+            if (p > 0) {
+                prefixes.push_back(p);
+            }
+        }
+        if (partConfig.HasEnableFilterByKey() && partConfig.GetEnableFilterByKey()) {
+            prefixes.push_back(KeyColumnIds.size());
+        }
+        SortUnique(prefixes);
+        if (!prefixes.empty()) {
+            alter.SetByKeyFilterPrefixes(tid, prefixes);
+        }
     }
 
     // N.B. some settings only apply to the main table
@@ -613,10 +628,49 @@ void TUserTable::ApplyAlter(
         }
     }
 
-    if (configDelta.HasEnableFilterByKey()) {
-        config.SetEnableFilterByKey(configDelta.GetEnableFilterByKey());
+    if (configDelta.HasEnableFilterByKey() || configDelta.ByKeyFilterPrefixesSize() > 0) {
+        // Rebuild unified prefix list from current config + delta
+        TVector<ui32> prefixes;
+        // Start with existing prefixes from current config
+        for (auto p : config.GetByKeyFilterPrefixes()) {
+            if (p > 0) {
+                prefixes.push_back(p);
+            }
+        }
+        ui32 keyCount = KeyColumnIds.size();
+
+        if (configDelta.HasEnableFilterByKey()) {
+            config.SetEnableFilterByKey(configDelta.GetEnableFilterByKey());
+            if (configDelta.GetEnableFilterByKey()) {
+                prefixes.push_back(keyCount);
+            } else {
+                // Remove full-key entry
+                prefixes.erase(std::remove(prefixes.begin(), prefixes.end(), keyCount), prefixes.end());
+            }
+        }
+
+        if (configDelta.ByKeyFilterPrefixesSize() > 0) {
+            // Delta replaces the explicit prefix list
+            prefixes.clear();
+            for (auto p : configDelta.GetByKeyFilterPrefixes()) {
+                if (p > 0) {
+                    prefixes.push_back(p);
+                }
+            }
+            // Re-add full-key entry if EnableFilterByKey is enabled
+            if (config.GetEnableFilterByKey()) {
+                prefixes.push_back(keyCount);
+            }
+        }
+
+        SortUnique(prefixes);
+
+        config.ClearByKeyFilterPrefixes();
+        for (auto p : prefixes) {
+            config.AddByKeyFilterPrefixes(p);
+        }
         for (ui32 tid : tids) {
-            alter.SetByKeyFilter(tid, configDelta.GetEnableFilterByKey());
+            alter.SetByKeyFilterPrefixes(tid, prefixes);
         }
     }
 

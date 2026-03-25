@@ -1066,6 +1066,20 @@ bool TPartitionConfigMerger::ApplyChanges(
         result.SetEnableFilterByKey(changes.GetEnableFilterByKey());
     }
 
+    if (changes.ByKeyFilterPrefixesSize() > 0) {
+        TVector<ui32> prefixes;
+        for (auto p : changes.GetByKeyFilterPrefixes()) {
+            if (p > 0) {
+                prefixes.push_back(p);
+            }
+        }
+        SortUnique(prefixes);
+        result.ClearByKeyFilterPrefixes();
+        for (auto p : prefixes) {
+            result.AddByKeyFilterPrefixes(p);
+        }
+    }
+
     if (changes.HasExecutorFastLogPolicy()) {
         result.SetExecutorFastLogPolicy(changes.GetExecutorFastLogPolicy());
     }

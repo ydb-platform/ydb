@@ -83,7 +83,7 @@ public:
 
         TIntrusiveConstPtr<TCompactionPolicy> CompactionPolicy;
         bool ColdBorrow = false;
-        bool ByKeyFilter = false;
+        TVector<ui32> ByKeyFilterPrefixes; // Prefix column counts for bloom filters (full-key = keyColumnCount entry)
         bool EraseCacheEnabled = false;
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
@@ -249,6 +249,7 @@ public:
     TAlter& SetExecutorResourceProfile(const TString &name);
     TAlter& SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPolicy);
     TAlter& SetByKeyFilter(ui32 tableId, bool enabled);
+    TAlter& SetByKeyFilterPrefixes(ui32 tableId, const TVector<ui32>& prefixes);
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
     TAlter& SetRewrite();

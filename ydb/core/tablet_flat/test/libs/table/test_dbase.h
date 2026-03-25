@@ -295,7 +295,7 @@ namespace NTest {
 
             NPage::TConf conf{ last, 8291, family->Large };
 
-            conf.ByKeyFilter = Base->GetScheme().GetTableInfo(table)->ByKeyFilter;
+            conf.ByKeyFilterPrefixes = Base->GetScheme().GetTableInfo(table)->ByKeyFilterPrefixes;
             conf.MaxRows = subset->MaxRows();
             conf.MinRowVersion = subset->MinRowVersion();
             conf.SmallEdge = family->Small;

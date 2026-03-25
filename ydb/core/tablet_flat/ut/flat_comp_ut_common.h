@@ -148,7 +148,7 @@ public:
         conf.SmallEdge = family->Small;
         conf.LargeEdge = family->Large;
         conf.MaxRows = subset->MaxRows();
-        conf.ByKeyFilter = scheme.GetTableInfo(params->Table)->ByKeyFilter;
+        conf.ByKeyFilterPrefixes = scheme.GetTableInfo(params->Table)->ByKeyFilterPrefixes;
 
         // Don't care about moving blobs by reference
         TAutoPtr<IPages> env = new TTestEnv;

@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr {
 namespace NPQ {

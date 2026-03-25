@@ -252,7 +252,7 @@ private:
         if (status != Ydb::StatusIds::SUCCESS) {
             MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
         } else {
-            auto messages = ev->Get()->Messages;
+            auto& messages = ev->Get()->Messages;
 
             for (auto& message : messages) {
                 auto* item = Response_.MutableReceiveMessage()->AddMessages();
@@ -275,8 +275,6 @@ private:
                 if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_ATTRIBUTES)) {
                     NKikimr::NSQS::TMessageAttributes messageAttributes;
                     if (messageAttributes.ParseFromString(*value)) {
-                        //result.set_m_d_5_of_message_attributes(NSQS::CalcMD5OfMessageAttributes(messageAttributes.attributes()));
-                        //auto* mma = result.mutable_message_attributes();
                         for (const auto& attribute : messageAttributes.attributes()) {
                             auto* value = item->AddMessageAttributes();
                             value->SetName(attribute.name());

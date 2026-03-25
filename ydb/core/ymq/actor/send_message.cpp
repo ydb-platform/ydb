@@ -221,10 +221,10 @@ private:
                     auto* dstAttribute = messageAttributes.add_attributes();
                     dstAttribute->SetName(attr.GetName());
                     dstAttribute->SetDataType(attr.GetDataType());
-                    if (const auto& value = attr.GetStringValue()) {
-                        dstAttribute->SetStringValue(value);
-                    } else if (const auto& value = attr.GetBinaryValue()) {
-                        dstAttribute->SetBinaryValue(value);
+                    if (attr.HasStringValue()) {
+                        dstAttribute->SetStringValue(attr.GetStringValue());
+                    } else if (attr.HasBinaryValue()) {
+                        dstAttribute->SetBinaryValue(attr.GetBinaryValue());
                     }
                 }
                 TString serialized;

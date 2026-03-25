@@ -506,8 +506,17 @@ int TJobPreparer::GetFileCacheReplicationFactor() const
     if (IsLocalMode()) {
         return 1;
     } else {
-        return OperationPreparer_.GetContext().Config->FileCacheReplicationFactor;
+        return OperationPreparer_.GetContext().Config->FileCacheReplicationFactor.Get(OperationPreparer_.GetClient());
     }
+}
+
+TFileWriterOptions TJobPreparer::GetFileCacheWriterOptions() const
+{
+    auto replicationFactor = GetFileCacheReplicationFactor();
+    return TFileWriterOptions()
+        .ComputeMD5(true)
+        .WriterOptions(TWriterOptions()
+            .UploadReplicationFactor(replicationFactor));
 }
 
 void TJobPreparer::CreateFileInCypress(const TString& path) const
@@ -612,7 +621,7 @@ TString TJobPreparer::UploadToRandomPath(const IItemToUpload& itemToUpload) cons
             OperationPreparer_.GetClient()->GetTransactionPinger(),
             OperationPreparer_.GetContext(),
             Options_.FileStorageTransactionId_,
-            TFileWriterOptions().ComputeMD5(true));
+            GetFileCacheWriterOptions());
         itemToUpload.CreateInputStream()->ReadAll(writer);
         writer.Finish();
     }
@@ -678,7 +687,7 @@ TMaybe<TString> TJobPreparer::TryUploadWithDeduplication(const IItemToUpload& it
         OperationPreparer_.GetPreparationId());
 
     {
-        auto writer = uploadTx->CreateFileWriter(cypressPath, TFileWriterOptions().ComputeMD5(true));
+        auto writer = uploadTx->CreateFileWriter(cypressPath, GetFileCacheWriterOptions());
         YT_VERIFY(writer);
         itemToUpload.CreateInputStream()->ReadAll(*writer);
         writer->Finish();

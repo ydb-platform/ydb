@@ -79,7 +79,7 @@ public:
     void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ignoreFullThreadQuota = false) override;
     void Enable(bool enable) override;
     TPoolHarmonizerStats GetPoolStats(i16 poolId) const override;
-    THarmonizerStats GetStats() const override;
+    void GetStats(THarmonizerStats &stats) const override;
     void SetSharedPool(ISharedPool* pool) override;
 };
 
@@ -529,8 +529,8 @@ TPoolHarmonizerStats THarmonizer::GetPoolStats(i16 poolId) const {
     };
 }
 
-THarmonizerStats THarmonizer::GetStats() const {
-    return THarmonizerStats{
+void THarmonizer::GetStats(THarmonizerStats &stats) const {
+    stats = THarmonizerStats{
         .MaxUsedCpu = MaxUsedCpu.load(std::memory_order_relaxed),
         .MinUsedCpu = MinUsedCpu.load(std::memory_order_relaxed),
         .MaxElapsedCpu = MaxElapsedCpu.load(std::memory_order_relaxed),

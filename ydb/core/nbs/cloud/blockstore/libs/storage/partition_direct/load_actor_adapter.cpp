@@ -1,5 +1,6 @@
 #include "load_actor_adapter.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/public/api/protos/io.pb.h>
 
@@ -11,14 +12,6 @@
 using namespace NThreading;
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-constexpr size_t BlockSize = 4096;
-
-}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -47,14 +40,12 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
     const ui64 startIndex = msg->Record.GetStartIndex();
     const auto& blocks = msg->Record.GetBlocks();
 
-    size_t totalSize = 0;
+    ui32 totalSize = 0;
     for (const auto& buffer: blocks.GetBuffers()) {
         totalSize += buffer.size();
     }
 
-    // Round up
-    // Move to separate function
-    totalSize = (totalSize + BlockSize - 1) / BlockSize * BlockSize;
+    totalSize = AlignUp(totalSize, DefaultBlockSize);
 
     Y_ABORT_UNLESS(totalSize == 4096);
 
@@ -70,7 +61,7 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
 
     auto request = std::make_shared<TWriteBlocksLocalRequest>(
         TRequestHeaders{},
-        TBlockRange64::WithLength(startIndex, totalSize / BlockSize));
+        TBlockRange64::WithLength(startIndex, totalSize / DefaultBlockSize));
     request->Sglist = TGuardedSgList(std::move(sglist));
 
     auto future = FastPathService->WriteBlocksLocal(

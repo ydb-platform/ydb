@@ -449,7 +449,6 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("node_reader_format").Value(::ToString(config.NodeReaderFormat))
         .Item("protobuf_format_with_descriptors").Value(config.ProtobufFormatWithDescriptors)
         .Item("connection_pool_size").Value(config.ConnectionPoolSize)
-        .Item("file_cache_replication_factor").Value(config.FileCacheReplicationFactor)
         .Item("cache_lock_timeout_per_gb").Value(config.CacheLockTimeoutPerGb.ToString())
         .Item("cache_upload_deduplication_mode")
             .Value(TEnumTraits<EUploadDeduplicationMode>::ToString(config.CacheUploadDeduplicationMode))
@@ -527,7 +526,6 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("node_reader_format", config.NodeReaderFormat);
     DESERIALIZE_ITEM("protobuf_format_with_descriptors", config.ProtobufFormatWithDescriptors);
     DESERIALIZE_ITEM("connection_pool_size", config.ConnectionPoolSize);
-    DESERIALIZE_ITEM("file_cache_replication_factor", config.FileCacheReplicationFactor);
     DESERIALIZE_ITEM("cache_lock_timeout_per_gb", config.CacheLockTimeoutPerGb);
     DESERIALIZE_ITEM("cache_upload_deduplication_mode", config.CacheUploadDeduplicationMode);
     DESERIALIZE_ITEM("cache_upload_deduplication_threshold", config.CacheUploadDeduplicationThreshold);

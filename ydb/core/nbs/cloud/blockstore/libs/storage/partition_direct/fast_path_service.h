@@ -17,7 +17,7 @@ class TFastPathService
 {
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
-    const std::shared_ptr<TRegion> Region;   // 4 GiB
+    const TVector<std::shared_ptr<TRegion>> Regions;   // 4 GiB each
 
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
@@ -30,7 +30,9 @@ public:
         NActors::TActorSystem* actorSystem,
         ui64 tabletId,
         ui32 generation,
-        std::shared_ptr<TRegion> region,
+        ui64 blockCount,
+        ui64 blockSize,
+        TVector<IDirectBlockGroupPtr> directBlockGroups,
         const NProto::TStorageServiceConfig& storageConfig,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
 
@@ -52,6 +54,9 @@ public:
 
 private:
     NWilson::TTraceId SpanTrace();
+
+    static size_t GetRegionIndex(ui64 blockIndex);
+    static size_t GetRegionOffset(ui64 blockIndex);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

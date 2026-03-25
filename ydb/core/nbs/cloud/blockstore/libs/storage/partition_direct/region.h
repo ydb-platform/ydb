@@ -15,6 +15,7 @@ class TRegion
 public:
     TRegion(
         NActors::TActorSystem* actorSystem,
+        ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
         TDuration traceSamplePeriod);
@@ -34,8 +35,8 @@ private:
     TVector<std::shared_ptr<TVChunk>> VChunks;
 
     // Striping
-    size_t GetVChunkIndex(ui64 blockIndex) const;
-    size_t GetVChunkOffset(ui64 blockIndex) const;
+    [[nodiscard]] size_t GetVChunkIndex(ui64 blockIndex) const;
+    [[nodiscard]] size_t GetVChunkOffset(ui64 blockIndex) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

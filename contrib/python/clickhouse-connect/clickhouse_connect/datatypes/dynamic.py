@@ -383,22 +383,3 @@ class JSON(ClickHouseType):
         if self.read_format(ctx) == 'string':
             return [any_to_json(v) for v in col]
         return col
-
-
-# Note that this type is deprecated and should not be used, it included for temporary backward compatibility only
-class Object(ClickHouseType):
-    python_type = dict
-    # Native is a Python type (primitive, dict, array), string is an actual JSON string
-    valid_formats = 'string', 'native'
-    _data_size = json_sample_size
-    write_column_data = write_json
-
-    def __init__(self, type_def):
-        data_type = type_def.values[0].lower().replace(' ', '')
-        if data_type not in ("'json'", "nullable('json')"):
-            raise NotImplementedError('Only json or Nullable(json) Object type is currently supported')
-        super().__init__(type_def)
-        self._name_suffix = type_def.arg_str
-
-    def write_column_prefix(self, dest: bytearray):
-        dest.append(0x01)

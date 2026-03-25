@@ -83,7 +83,7 @@ public:
 
     virtual ui64 GenerateLsn() = 0;
 
-    virtual NThreading::TFuture<void> EstablishConnections() = 0;
+    virtual void EstablishConnections() = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -161,7 +161,7 @@ public:
 
     ui64 GenerateLsn() override;
 
-    NThreading::TFuture<void> EstablishConnections() override;
+    void EstablishConnections() override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -206,11 +206,7 @@ public:
         ui8 hostIndex) override;
 
 private:
-    enum class EConnectionType
-    {
-        DDisk,
-        PBuffer,
-    };
+    using EConnectionType = NTransport::THostConnection::EConnectionType;
 
     struct TDDiskConnection
     {
@@ -226,7 +222,6 @@ private:
 
     void DoEstablishConnections();
     void DoEstablishConnection(
-        EConnectionType connectionType,
         size_t index,
         const TDDiskConnection& connection);
     void OnConnectionEstablished(

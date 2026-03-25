@@ -19,6 +19,5 @@
   "engineering": "area/engineering",
   "postgres-compatibility": "area/pg",
   "security": "area/security",
-  "changelog-reviewers": "area/changelog",
-  "nbs": "area/nbs"
+  "changelog-reviewers": "area/changelog"
 }

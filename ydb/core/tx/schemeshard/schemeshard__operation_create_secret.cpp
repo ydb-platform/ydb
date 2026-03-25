@@ -257,6 +257,9 @@ public:
             }
         }
 
+        Y_ENSURE(!createSecretProto.HasValueParamName(),
+            "ValueParamName must be resolved by scheme executer before reaching schemeshard");
+
         NKikimrSchemeOp::TSecretDescription secretDescription;
         secretDescription.SetName(createSecretProto.GetName());
         secretDescription.SetValue(createSecretProto.GetValue());

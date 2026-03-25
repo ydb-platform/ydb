@@ -277,17 +277,20 @@ struct TWriteSecretSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Value;
     NNodes::TMaybeNode<NNodes::TCoAtom> ValueParamName;
     NNodes::TMaybeNode<NNodes::TCoAtom> InheritPermissions;
+    bool HasError = false;
 
     TWriteSecretSettings(
         NNodes::TMaybeNode<NNodes::TCoAtom>&& mode,
         NNodes::TMaybeNode<NNodes::TCoAtom>&& value,
         NNodes::TMaybeNode<NNodes::TCoAtom>&& valueParamName,
-        NNodes::TMaybeNode<NNodes::TCoAtom>&& inheritPermissions
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& inheritPermissions,
+        bool hasError = false
     )
         : Mode(std::move(mode))
         , Value(std::move(value))
         , ValueParamName(std::move(valueParamName))
         , InheritPermissions(std::move(inheritPermissions))
+        , HasError(hasError)
     {
     }
 };

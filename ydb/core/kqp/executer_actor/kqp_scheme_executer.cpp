@@ -670,6 +670,8 @@ public:
                         return;
                     }
                     modifyScheme.MutableCreateSecret()->SetValue(*paramValue);
+                    // Need to clear ValueParamName so schemeshard will see only the value itself
+                    modifyScheme.MutableCreateSecret()->ClearValueParamName();
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
@@ -685,6 +687,8 @@ public:
                         return;
                     }
                     modifyScheme.MutableAlterSecret()->SetValue(*paramValue);
+                    // Need to clear ValueParamName so schemeshard will see only the value itself
+                    modifyScheme.MutableAlterSecret()->ClearValueParamName();
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;

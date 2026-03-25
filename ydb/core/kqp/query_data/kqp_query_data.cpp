@@ -354,8 +354,14 @@ bool TQueryData::TryGetParameterAsString(const TString& name, TString& outValue,
     }
     TType* type = it->second.first;
     // remove all optionals
+    NUdf::TUnboxedValue unboxedValue = it->second.second;
     while (type->IsOptional()) {
         type = static_cast<const TOptionalType*>(type)->GetItemType();
+        if (!unboxedValue.HasValue()) {
+            outError = TStringBuilder() << "Parameter " << name << " must not be NULL";
+            return false;
+        }
+        unboxedValue = unboxedValue.GetOptionalValue();
     }
 
     if (!type->IsData()) {
@@ -367,7 +373,7 @@ bool TQueryData::TryGetParameterAsString(const TString& name, TString& outValue,
         outError = TStringBuilder() << "Parameter " << name << " must be String or Utf8";
         return false;
     }
-    outValue = TString(it->second.second.AsStringRef());
+    outValue = TString(unboxedValue.AsStringRef());
     return true;
 }
 

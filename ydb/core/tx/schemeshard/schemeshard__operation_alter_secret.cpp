@@ -172,6 +172,9 @@ public:
         context.DbChanges.PersistAlterSecret(secretPath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
+        Y_ENSURE(!alterSecretProto.HasValueParamName(),
+            "ValueParamName must be resolved by scheme executer before reaching schemeshard");
+
         auto alterData = secretInfo->CreateNextVersion();
         alterData->Description.SetValue(alterSecretProto.GetValue());
         alterData->Description.SetVersion(secretInfo->AlterVersion);

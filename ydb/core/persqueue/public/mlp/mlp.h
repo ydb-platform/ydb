@@ -55,6 +55,7 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
         TString Data;
         TInstant SentTimestamp;
         TString MessageGroupId;
+        TString MessageDeduplicationId;
         std::optional<ui32> ApproximateReceiveCount;
         std::optional<TInstant> ApproximateFirstReceiveTimestamp;
         std::unordered_multimap<TString, TString> Attributes;

@@ -167,8 +167,8 @@ namespace NKikimr::NSqsTopic::V1 {
             if (message.SentTimestamp) {
                 result.mutable_attributes()->emplace("SentTimestamp", ToString(message.SentTimestamp.MilliSeconds()));
             }
-            if (auto it = message.Attributes.find(TString{NPQ::MESSAGE_ATTRIBUTE_DEDUPLICATION_ID}); it != message.Attributes.end()) {
-                result.mutable_attributes()->emplace("MessageDeduplicationId", std::move(it->second));
+            if (!message.MessageDeduplicationId.empty()) {
+                result.mutable_attributes()->emplace("MessageDeduplicationId", message.MessageDeduplicationId);
             }
 
             result.set_message_id(GenerateMessageId(message.MessageId));

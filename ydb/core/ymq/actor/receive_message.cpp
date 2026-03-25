@@ -303,8 +303,8 @@ private:
                 }
 
                 if (IsFifoQueue()) {
-                    if (auto it = message.Attributes.find(TString{NPQ::MESSAGE_ATTRIBUTE_DEDUPLICATION_ID}); it != message.Attributes.end()) {
-                        item->SetMessageDeduplicationId(std::move(it->second));
+                    if (!message.MessageDeduplicationId.empty()) {
+                        item->SetMessageDeduplicationId(message.MessageDeduplicationId);
                     }
                     item->SetSequenceNumber(message.MessageId.Offset);
                 }

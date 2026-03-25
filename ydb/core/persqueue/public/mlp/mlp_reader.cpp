@@ -143,22 +143,27 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             codec = Ydb::Topic::CODEC_RAW;
         }
 
+        TString messageGroupId;
+        TString messageDeduplicationId;
+
         std::unordered_multimap<TString, TString> attributes(proto.GetMessageMeta().size());
         for (const auto& meta : proto.GetMessageMeta()) {
+            if (meta.key() == MESSAGE_ATTRIBUTE_KEY) {
+                messageGroupId = std::move(meta.value());
+            } else if (meta.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
+                messageDeduplicationId = std::move(meta.value());
+            } else {
             attributes.emplace(meta.key(), meta.value());
+            }
         }
 
-        TString messageGroupId;
-        auto it = attributes.find(TString{MESSAGE_ATTRIBUTE_KEY});
-        if (it != attributes.end()) {
-            messageGroupId = std::move(it->second);
-        }
         response->Messages.push_back(TEvReadResponse::TMessage{
             .MessageId = {PartitionId, message.GetId().GetOffset()},
             .Codec = codec,
             .Data = std::move(data),
             .SentTimestamp = TInstant::MilliSeconds(message.GetMessageMeta().GetSentTimestampMilliseconds()),
             .MessageGroupId = messageGroupId,
+            .MessageDeduplicationId = messageDeduplicationId,
             .ApproximateReceiveCount = message.GetMessageMeta().HasApproximateReceiveCount() ? std::make_optional(message.GetMessageMeta().GetApproximateReceiveCount()) : std::nullopt,
             .ApproximateFirstReceiveTimestamp = message.GetMessageMeta().HasApproximateFirstReceiveTimestampMilliseconds() ? std::make_optional(TInstant::MilliSeconds(message.GetMessageMeta().GetApproximateFirstReceiveTimestampMilliseconds())) : std::nullopt,
             .Attributes = std::move(attributes),

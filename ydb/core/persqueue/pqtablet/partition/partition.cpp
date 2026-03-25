@@ -257,25 +257,13 @@ ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp
 }
 
 TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp) {
-    TStringStream ss;
-    Y_DEFER {
-        Cerr << ss.Str() << Endl;
-    };
-    ss << "GetOffsetEstimate: container.size()=" << container.size() << " timestamp_ms=" << timestamp.MilliSeconds() << "\n";
-    for(const auto& item : container) {
-        const auto& key = item.Key;
-        ss << "  GetOffsetEstimate: item.Timestamp=" << item.Timestamp.MilliSeconds() << " diff_ms=" << ((i64)item.Timestamp.MilliSeconds() - (i64)timestamp.MilliSeconds()) << " " << LabeledOutput(key.GetOffset(), key.GetPartNo(), key.IsHead(), key.IsFastWrite()) << '\n';
-    }
     if (container.empty()) {
         return Nothing();
     }
     auto it = std::ranges::lower_bound(container, timestamp, {}, &TDataKey::Timestamp);
-    ss << "  GetOffsetEstimate: dist_it=" << it - container.begin()<< '\n';
     if (it == container.end()) {
-        ss << "  GetOffsetEstimate: ret=" << "(nothing)" << '\n';
         return Nothing();
     } else {
-        ss << "  GetOffsetEstimate: ret=" <<  it->Key.GetOffset() << '\n';
         return it->Key.GetOffset();
     }
 }

@@ -41,73 +41,27 @@ TMaybe<TInstant> GetReadFrom(ui32 maxTimeLagMs, ui64 readTimestampMs, TInstant c
     return timestamp;
 }
 
-static TString CheckOrder(const std::deque<TDataKey>& c, const std::deque<TDataKey>& h, const std::deque<TDataKey>& fw) {
-    TMaybe<TInstant> pts;
-    TStringBuf pZoneName = "null";
-    TStringBuilder sb;
-
-    ui32 unCnt = 0;
-    ui32 ttlCnt = 0;
-    for (const auto* zone : {&c, &h, &fw}) {
-        TStringBuf zoneName = "error";
-        if (zone == &c) {
-            zoneName = "compact_body";
-        } else if (zone == &h) {
-            zoneName = "compact_head";
-        } else if (zone = &fw) {
-            zoneName = "fast_write";
-        } else {
-            Y_DEBUG_ABORT("unknown zone");
-        }
-
-        for (const auto& key : *zone) {
-            size_t i = 0;
-            if (pts && key.Timestamp < pts) {
-                sb << "Unordered " << pZoneName << "->" << zoneName << " " << i << ": " << pts->MilliSeconds() << " > " << key.Timestamp.MilliSeconds() << "\n";
-                ++unCnt;
-            }
-            pts = key.Timestamp;
-            pZoneName = zoneName;
-            ++i;
-            ++ttlCnt;
-        }
-    }
-    if (unCnt > 0) {
-        sb << "Total unordered: " << unCnt << "/" << ttlCnt << "\n";
-    }
-    return sb;
-}
-
-
 ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const {
     if (!readTimestamp) {
         return offset;
     }
-    TStringStream ss;
-    Y_DEFER {
-        Cerr << ss.Str() << Endl;
-    };
-    ss << "GetReadOffset: offset=" << offset << ", readTimestamp=" << readTimestamp.GetOrElse(TInstant::Max()).MilliSeconds() << "\n";
-
     if (AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
         // round timestamp down, because timestamps are stored with second precision in the kv-tablet
         readTimestamp = TInstant::Seconds(readTimestamp->Seconds());
-        ss << "round readTimestamp=" << readTimestamp.GetOrElse(TInstant::Max()).MilliSeconds() << "\n";
     }
-    TMaybe<ui64> estimatedOffset1 = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, *readTimestamp);
-    TMaybe<ui64> estimatedOffset2 = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp);
-    TMaybe<ui64> estimatedOffset3 = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp);
-    TMaybe<ui64> estimatedOffset4 = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);
-    ss << "found stage1=" << estimatedOffset1 << ", stage2=" << estimatedOffset2 << ", stage3=" << estimatedOffset3 << ", stage4=" << estimatedOffset4 << "\n";
-    TMaybe<ui64> estimatedOffset = estimatedOffset1.OrElse(estimatedOffset2).OrElse(estimatedOffset3).OrElse(estimatedOffset4);
+    TMaybe<ui64> estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, *readTimestamp);
 
-    if (TString coLog = CheckOrder(CompactionBlobEncoder.DataKeysBody, CompactionBlobEncoder.HeadKeys, BlobEncoder.DataKeysBody); !coLog.empty()) {
-        ss << coLog;
+    if (!estimatedOffset.Defined()) {
+        estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp);
+    }
+    if (!estimatedOffset.Defined()) {
+        estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp);
     }
 
-    ui64 result  = Max(*estimatedOffset, offset);
-    ss << "result_offset=" << result << "\n";
-    return result;
+    if (!estimatedOffset.Defined()) {
+        estimatedOffset = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);
+    }
+    return Max(*estimatedOffset, offset);
 }
 
 void TPartition::SendReadingFinished(const TString& consumer) {

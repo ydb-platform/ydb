@@ -923,6 +923,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["ApproximateReceiveCount"].GetString().empty());
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["ApproximateFirstReceiveTimestamp"].GetString().empty());
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SenderId"].GetString().empty());
         }
 
         {

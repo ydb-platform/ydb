@@ -272,9 +272,10 @@ private:
                 item->SetReceiptHandle(EncodeReceiptHandle(receipt));
 
                 item->SetSentTimestamp(message.SentTimestamp.MilliSeconds());
-                // if (message.SenderId) {
-                //     item->SetSenderId(message.SenderId);
-                // }
+
+                if (auto it = message.Attributes.find("sender_id"); it != message.Attributes.end()) {
+                    item->SetSenderId(std::move(it->second));
+                }
 
                 Ydb::Ymq::V1::Message ymqMessage;
                 if (NSQS::DeserializeUserAttributes(ymqMessage, message.Attributes)) {

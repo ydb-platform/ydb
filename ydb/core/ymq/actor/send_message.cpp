@@ -216,7 +216,6 @@ private:
             }
             message.MessageGroupId = std::move(currentRequest->GetMessageGroupId());
 
-
            {
                 Ydb::Ymq::V1::SendMessageBatchRequestEntry entry;
                 for (const auto& attr : currentRequest->GetMessageAttributes()) {
@@ -234,6 +233,7 @@ private:
                 message.Attributes = std::move(attributes);
             }
 
+            message.Attributes.emplace("sender_id", UserSID_);
         }
 
         if (writerSettings.Messages.size() > 0) {

@@ -917,7 +917,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
             // Request message system attributes using AttributeNames field.
             json = receiveMessage({{"AttributeNames", NJson::TJsonArray{
-                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber"
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
                 "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
             }}});
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
@@ -939,7 +939,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
             // Request message system attributes.
             json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{
-                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber"
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
                 "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
             }}});
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
@@ -1014,7 +1014,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
             // Request message system attributes using AttributeNames field.
             json = receiveMessage({{"AttributeNames", NJson::TJsonArray{
-                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber"
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
                 "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
             }}});
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
@@ -1033,7 +1033,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
             // Request message system attributes.
             json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{
-                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber"
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
                 "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
             }}});
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());

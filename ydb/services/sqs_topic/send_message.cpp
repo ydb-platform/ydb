@@ -230,7 +230,11 @@ namespace NKikimr::NSqsTopic::V1 {
 
             THashSet<TString> batchIds;
             for (auto& item : Items) {
-                const size_t msgSize = item.MessageBody.size() /* TODO + (item.SerializedMessageAttributes ? item.SerializedMessageAttributes->size() : 0) */;
+                size_t msgSize = item.MessageBody.size();
+                for (const auto& [key, value] : item.Attributes) {
+                    msgSize += key.size() + value.size();
+                }
+
                 if (msgSize > NSQS::TLimits::MaxMessageSize) {
                     item.ValidationError = MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "The length the message is more than the limit.");
                 }
@@ -326,8 +330,10 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         auto [attributes, md5] = NSQS::SerializeUserAttributes(request);
-        item.Attributes = std::move(attributes);
-        item.MD5OfMessageAttributes = std::move(md5);
+        if (!attributes.empty()) {
+            item.Attributes = std::move(attributes);
+            item.MD5OfMessageAttributes = std::move(md5);
+        }
         item.DelaySeconds = request.delay_seconds();
         item.BatchIndex = 0;
         item.BatchId = GetBatchId(request);

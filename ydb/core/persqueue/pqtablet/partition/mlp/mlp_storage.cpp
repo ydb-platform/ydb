@@ -139,7 +139,7 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
         return TReadMessage{
             .Offset = offset,
             .ApproximateReceiveCount = message.ProcessingCount,
-            .ApproximateFirstReceiveTimestamp = TimeProvider->Now(), // TODO implement
+            .ApproximateFirstReceiveTimestamp = TimeProvider->Now(), // TODO: replace with persisted first-receive timestamp
         };
     };
 

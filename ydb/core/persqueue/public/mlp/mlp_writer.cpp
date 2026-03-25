@@ -96,11 +96,11 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
         m->set_value(ToString(item.Delay.Seconds()));
     }
     for (auto&& [key, value] : item.Attributes) {
+        totalSize += key.size() + value.size();
+
         auto* m = proto.AddMessageMeta();
         m->set_key(std::move(key));
         m->set_value(std::move(value));
-
-        totalSize += key.size() + value.size();
     }
 
     TString dataStr;

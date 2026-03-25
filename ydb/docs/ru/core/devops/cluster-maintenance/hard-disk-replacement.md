@@ -1,6 +1,6 @@
 # Замена диска в кластере {{ ydb-short-name }}
 
-В этом руководстве описан процесс замены диска в кластере {{ ydb-short-name }}, который развернут в соответствии с топологией `3-nodes-mirror-3-dc`, с помощью [Ansible](../deployment-options/ansible/index.md).
+В этом руководстве описан процесс замены диска в кластере {{ ydb-short-name }}, который развернут в соответствии с топологией `3-nodes-mirror-3-dc`, с помощью [Ansible](../../devops/deployment-options/ansible/index.md).
 
 ## Подготовка к замене диска
 
@@ -55,7 +55,7 @@
 
 ### Подготовьте диск к использованию
 
-Перейдите на управляющий узел (node) — ту машину и рабочую директорию Ansible, с которых выполнялась установка и развёртывание(ссылка) кластера {{ ydb-short-name }}. Выполните команду:
+Перейдите на управляющий узел (node) — ту машину и рабочую директорию Ansible, с которых выполнялась [установка и развёртывание](../../devops/deployment-options/ansible/initial-deployment/index.md) кластера {{ ydb-short-name }}. Выполните команду:
 
 ```bash
 ansible-playbook ydb_platform.ydb.prepare_drives -l static-node.ydb-cluster.com 

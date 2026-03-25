@@ -2,19 +2,19 @@
 
 Перед началом работы ознакомьтесь с документом [{#T}](disk-addition-preparation.md).
 
-Добавление дисков увеличивает ёмкость хранилища кластера. Сценарии расширения для конфигурации V2 описаны в разделе [{#T}](../../configuration-management/configuration-v2/cluster-expansion.md).
+Добавление дисков увеличивает ёмкость хранилища кластера. Сценарии расширения для конфигурации V2 описаны в разделе [{#T}](../../../devops/configuration-management/configuration-v2/cluster-expansion.md).
 
 ## Порядок действий
 
 ### Обновите inventory/group_vars/ydb/all.yaml
 
-Откройте файл `inventory/group_vars/ydb/all.yaml` в каталоге проекта Ansible и добавьте новый диск в переменную `ydb_disks` с новым `label`. Структуру репозитория и расположение файлов см. в руководстве по развёртыванию(ссылка) и [обзоре конфигурации V2](../../configuration-management/configuration-v2/config-overview.md).
+Откройте файл `inventory/group_vars/ydb/all.yaml` в каталоге проекта Ansible и добавьте новый диск в переменную `ydb_disks` с новым `label`. Структуру репозитория и расположение файлов см. в [руководстве по развёртыванию](../../../devops/deployment-options/ansible/initial-deployment/index.md) и [обзоре конфигурации V2](../../../devops/configuration-management/configuration-v2/config-overview.md).
 
 Этот `label` потребуется для выполнения следующих шагов.
 
 ### Обновите files/config.yaml
 
-Откройте `files/config.yaml` (см. подготовку конфигурации(ссылка)) и добавьте `label` нового диска в секцию `config.host_configs`.
+Откройте `files/config.yaml` (см. [подготовку конфигурации](../../../devops/deployment-options/ansible/initial-deployment/deployment-configuration-v2.md#ydb-config-prepare)) и добавьте `label` нового диска в секцию `config.host_configs`.
 
 Убедитесь, что `label` совпадает со значением, указанным в `ydb_disks` в `inventory/group_vars/ydb/all.yaml`.
 
@@ -38,9 +38,9 @@ ydb_disk_1 ydb_disk_2 ydb_disk_3 ydb_disk_4
 
 ### Обновите конфигурацию на узлах
 
-Плейбук [update_config](../../deployment-options/ansible/update-config.md) применяет изменения на **всех** узлах из инвентаря. Новый диск должен быть подготовлен и отражён в конфигурации на **каждом** узле хранения с тем же набором дисков; проверьте при необходимости `ls /dev/disk/by-partlabel/` на серверах.
+Плейбук [update_config](../../../devops/deployment-options/ansible/update-config.md) применяет изменения на **всех** узлах из инвентаря. Новый диск должен быть подготовлен и отражён в конфигурации на **каждом** узле хранения с тем же набором дисков; проверьте при необходимости `ls /dev/disk/by-partlabel/` на серверах.
 
-Перезапуск выполняется только если изменения этого требуют; при необходимости явного перезапуска см. [{#T}](../../deployment-options/ansible/restart.md).
+Перезапуск выполняется только если изменения этого требуют; при необходимости явного перезапуска см. [{#T}](../../../devops/deployment-options/ansible/restart.md).
 
 ```bash
 ansible-playbook ydb_platform.ydb.update_config

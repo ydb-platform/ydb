@@ -1,6 +1,6 @@
 * Added support for METRICS_LEVEL for the CreateTable/AlterTable requests.
 
-* Added support for the new alter compact operation in TableClient and OperationClient
+* Added support for the new alter table compact action in TableClient and compaction operation in OperationClient in SDK
 
 ## v3.16.0
 

@@ -143,25 +143,25 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             codec = Ydb::Topic::CODEC_RAW;
         }
 
-        THashMap<TString, TString> messageMetaAttr(proto.GetMessageMeta().size());
+        std::unordered_multimap<TString, TString> attributes(proto.GetMessageMeta().size());
         for (const auto& meta : proto.GetMessageMeta()) {
-            messageMetaAttr.try_emplace(meta.key(), meta.value());
+            attributes.emplace(meta.key(), meta.value());
         }
 
         TString messageGroupId;
-        auto it = messageMetaAttr.find(MESSAGE_ATTRIBUTE_KEY);
-        if (it != messageMetaAttr.end()) {
+        auto it = attributes.find(TString{MESSAGE_ATTRIBUTE_KEY});
+        if (it != attributes.end()) {
             messageGroupId = std::move(it->second);
         }
         response->Messages.push_back(TEvReadResponse::TMessage{
             .MessageId = {PartitionId, message.GetId().GetOffset()},
             .Codec = codec,
             .Data = std::move(data),
-            .MessageMetaAttributes = std::move(messageMetaAttr),
             .SentTimestamp = TInstant::MilliSeconds(message.GetMessageMeta().GetSentTimestampMilliseconds()),
             .MessageGroupId = messageGroupId,
             .ApproximateReceiveCount = message.GetMessageMeta().HasApproximateReceiveCount() ? std::make_optional(message.GetMessageMeta().GetApproximateReceiveCount()) : std::nullopt,
             .ApproximateFirstReceiveTimestamp = message.GetMessageMeta().HasApproximateFirstReceiveTimestampMilliseconds() ? std::make_optional(TInstant::MilliSeconds(message.GetMessageMeta().GetApproximateFirstReceiveTimestampMilliseconds())) : std::nullopt,
+            .Attributes = std::move(attributes),
         });
     }
 

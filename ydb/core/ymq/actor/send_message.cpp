@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
+#include <ydb/core/ymq/attributes/attributes.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -215,23 +216,24 @@ private:
             }
             message.MessageGroupId = std::move(currentRequest->GetMessageGroupId());
 
-            {
-                NKikimr::NSQS::TMessageAttributes messageAttributes;
+
+           {
+                Ydb::Ymq::V1::SendMessageBatchRequestEntry entry;
                 for (const auto& attr : currentRequest->GetMessageAttributes()) {
-                    auto* dstAttribute = messageAttributes.add_attributes();
-                    dstAttribute->SetName(attr.GetName());
-                    dstAttribute->SetDataType(attr.GetDataType());
+                    Ydb::Ymq::V1::MessageAttribute dstAttribute;
+                    dstAttribute.set_data_type(std::move(attr.GetDataType()));
                     if (const auto& value = attr.GetStringValue()) {
-                        dstAttribute->SetStringValue(value);
+                        dstAttribute.set_string_value(std::move(value));
                     } else if (const auto& value = attr.GetBinaryValue()) {
-                        dstAttribute->SetBinaryValue(value);
+                        dstAttribute.set_binary_value(std::move(value));
                     }
+                    entry.mutable_message_attributes()->emplace(std::move(attr.GetName()), dstAttribute);
                 }
-                TString serialized;
-                bool res = messageAttributes.SerializeToString(&serialized);
-                Y_ABORT_UNLESS(res);
-                message.SerializedMessageAttributes = std::move(serialized);
+
+                auto [attributes, md5] = NSQS::SerializeUserAttributes(entry);
+                message.Attributes = std::move(attributes);
             }
+
         }
 
         if (writerSettings.Messages.size() > 0) {

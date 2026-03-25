@@ -53,11 +53,11 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
         TMessageId MessageId;
         Ydb::Topic::Codec Codec;
         TString Data;
-        THashMap<TString, TString> MessageMetaAttributes;
         TInstant SentTimestamp;
         TString MessageGroupId;
         std::optional<ui32> ApproximateReceiveCount;
         std::optional<TInstant> ApproximateFirstReceiveTimestamp;
+        std::unordered_multimap<TString, TString> Attributes;
     };
     std::vector<TMessage> Messages;
 };
@@ -103,7 +103,7 @@ struct TWriterSettings {
         TString MessageBody;
         std::optional<TString> MessageGroupId;
         std::optional<TString> MessageDeduplicationId;
-        std::optional<TString> SerializedMessageAttributes;
+        std::unordered_multimap<TString, TString> Attributes;
         TDuration Delay;
     };
     std::vector<TMessage> Messages;

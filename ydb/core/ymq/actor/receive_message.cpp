@@ -7,6 +7,7 @@
 #include "params.h"
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
+#include <ydb/core/ymq/attributes/attributes.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/helpers.h>
@@ -252,9 +253,8 @@ private:
         if (status != Ydb::StatusIds::SUCCESS) {
             MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
         } else {
-            auto& messages = ev->Get()->Messages;
-
-            for (auto& message : messages) {
+            auto&& messages = ev->Get()->Messages;
+            for (auto&& message : messages) {
                 auto* item = Response_.MutableReceiveMessage()->AddMessages();
                 if (message.ApproximateFirstReceiveTimestamp) {
                     item->SetApproximateFirstReceiveTimestamp(message.ApproximateFirstReceiveTimestamp->MilliSeconds());
@@ -276,29 +276,25 @@ private:
                 //     item->SetSenderId(message.SenderId);
                 // }
 
-                if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_ATTRIBUTES)) {
-                    NKikimr::NSQS::TMessageAttributes messageAttributes;
-                    if (messageAttributes.ParseFromString(*value)) {
-                        for (auto& attribute : *messageAttributes.mutable_attributes()) {
+                Ydb::Ymq::V1::Message ymqMessage;
+                if (NSQS::DeserializeUserAttributes(ymqMessage, message.Attributes)) {
+                    if (ymqMessage.message_attributes_size() > 0) {
+                        item->SetMD5OfMessageAttributes(ymqMessage.m_d_5_of_message_attributes());
+                        for (auto&& [name, v] : ymqMessage.message_attributes()) {
                             auto* value = item->AddMessageAttributes();
-                            value->SetName(std::move(attribute.name()));
-                            value->SetDataType(std::move(attribute.datatype()));
-                            if (attribute.has_binaryvalue()) {
-                                value->SetBinaryValue(std::move(attribute.binaryvalue()));
-                            } else if (attribute.has_stringvalue()) {
-                                value->SetStringValue(std::move(attribute.stringvalue()));
+                            value->SetName(std::move(name));
+                            if (auto&& d = v.string_value()) {
+                                value->SetStringValue(std::move(d));
+                            } else if (auto&& d = v.binary_value()) {
+                                value->SetBinaryValue(std::move(d));
                             } else {
                                 continue;
                             }
+                            value->SetDataType(std::move(v.data_type()));
                         }
-                    } else {
-                        RLOG_SQS_WARN("Unable to deserialize message attributes");
                     }
-
-                    if (item->MessageAttributesSize() > 0) {
-                        const TString md5 = CalcMD5OfMessageAttributes(item->GetMessageAttributes());
-                        item->SetMD5OfMessageAttributes(md5);
-                    }
+                } else {
+                    RLOG_SQS_WARN("Unable to deserialize message attributes");
                 }
 
                 if (!message.MessageGroupId.empty()) {
@@ -306,8 +302,8 @@ private:
                 }
 
                 if (IsFifoQueue()) {
-                    if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_DEDUPLICATION_ID)) {
-                        item->SetMessageDeduplicationId(*value);
+                    if (auto it = message.Attributes.find(TString{NPQ::MESSAGE_ATTRIBUTE_DEDUPLICATION_ID}); it != message.Attributes.end()) {
+                        item->SetMessageDeduplicationId(std::move(it->second));
                     }
                     item->SetSequenceNumber(message.MessageId.Offset);
                 }

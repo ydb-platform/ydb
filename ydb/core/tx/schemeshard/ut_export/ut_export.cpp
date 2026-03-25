@@ -3928,6 +3928,10 @@ WITH (
                     DefaultProcessingTimeoutSeconds: 30
                     DefaultDelayMessageTimeMs: 5000
                     DefaultReceiveMessageWaitTimeMs: 3000
+                    DeadLetterPolicyEnabled: true
+                    DeadLetterPolicy: DEAD_LETTER_POLICY_MOVE
+                    MaxProcessingAttempts: 42
+                    DeadLetterQueue: "/MyRoot/dlq_for_topic_full_test"
                     Codec {
                         Ids: 0
                         Ids: 1
@@ -4021,6 +4025,12 @@ WITH (
         UNIT_ASSERT_VALUES_EQUAL(sharedType.receive_message_delay().seconds(), 5);
         UNIT_ASSERT_VALUES_EQUAL(sharedType.receive_message_wait_time().seconds(), 3);
         UNIT_ASSERT_VALUES_EQUAL(sharedType.default_processing_timeout().seconds(), 30);
+        UNIT_ASSERT(sharedType.has_dead_letter_policy());
+        const auto& deadLetterPolicy = sharedType.dead_letter_policy();
+        UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.enabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.condition().max_processing_attempts(), 42u);
+        UNIT_ASSERT(deadLetterPolicy.has_move_action());
+        UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.move_action().dead_letter_queue(), "/MyRoot/dlq_for_topic_full_test");
         UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs_size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs(0), 1);
         UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs(1), 2);

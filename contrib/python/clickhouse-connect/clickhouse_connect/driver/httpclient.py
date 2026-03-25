@@ -26,7 +26,7 @@ from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.httputil import ResponseSource, get_pool_manager, get_response_data, \
     default_pool_manager, get_proxy_manager, all_managers, check_env_proxy, check_conn_expiration
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.query import QueryResult, QueryContext
+from clickhouse_connect.driver.query import QueryResult, QueryContext, TzSource
 from clickhouse_connect.driver.binding import quote_identifier, bind_query
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.transform import NativeTransform
@@ -76,8 +76,10 @@ class HttpClient(Client):
                  http_proxy: Optional[str] = None,
                  https_proxy: Optional[str] = None,
                  server_host_name: Optional[str] = None,
-                 apply_server_timezone: Optional[Union[str, bool]] = None,
+                 tz_source: Optional[TzSource] = None,
+                 tz_mode: Optional[str] = None,
                  utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
+                 apply_server_timezone: Optional[Union[str, bool]] = None,
                  show_clickhouse_errors: Optional[bool] = None,
                  autogenerate_session_id: Optional[bool] = None,
                  autogenerate_query_id: Optional[bool] = None,
@@ -184,8 +186,10 @@ class HttpClient(Client):
                          query_limit=query_limit,
                          query_retries=query_retries,
                          server_host_name=server_host_name,
-                         apply_server_timezone=apply_server_timezone,
+                         tz_source=tz_source,
+                         tz_mode=tz_mode,
                          utc_tz_aware=utc_tz_aware,
+                         apply_server_timezone=apply_server_timezone,
                          show_clickhouse_errors=show_clickhouse_errors)
         self.params = dict_copy(self.params, self._validate_settings(ch_settings))
         cancel_setting = self._setting_status("cancel_http_readonly_queries_on_client_close")

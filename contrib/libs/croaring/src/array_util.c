@@ -382,9 +382,8 @@ static const uint8_t shuffle_mask16[] = {
  * Optimized by D. Lemire on May 3rd 2013
  */
 CROARING_TARGET_AVX2
-int32_t intersect_vector16(const uint16_t *__restrict__ A, size_t s_a,
-                           const uint16_t *__restrict__ B, size_t s_b,
-                           uint16_t *C) {
+int32_t intersect_vector16(const uint16_t *A, size_t s_a, const uint16_t *B,
+                           size_t s_b, uint16_t *C) {
     size_t count = 0;
     size_t i_a = 0, i_b = 0;
     const int vectorlength = sizeof(__m128i) / sizeof(uint16_t);
@@ -483,8 +482,8 @@ int array_container_to_uint32_array_vector16(void *vout, const uint16_t *array,
     return outpos;
 }
 
-int32_t intersect_vector16_inplace(uint16_t *__restrict__ A, size_t s_a,
-                                   const uint16_t *__restrict__ B, size_t s_b) {
+int32_t intersect_vector16_inplace(uint16_t *A, size_t s_a, const uint16_t *B,
+                                   size_t s_b) {
     size_t count = 0;
     size_t i_a = 0, i_b = 0;
     const int vectorlength = sizeof(__m128i) / sizeof(uint16_t);
@@ -578,10 +577,8 @@ int32_t intersect_vector16_inplace(uint16_t *__restrict__ A, size_t s_a,
 CROARING_UNTARGET_AVX2
 
 CROARING_TARGET_AVX2
-int32_t intersect_vector16_cardinality(const uint16_t *__restrict__ A,
-                                       size_t s_a,
-                                       const uint16_t *__restrict__ B,
-                                       size_t s_b) {
+int32_t intersect_vector16_cardinality(const uint16_t *A, size_t s_a,
+                                       const uint16_t *B, size_t s_b) {
     size_t count = 0;
     size_t i_a = 0, i_b = 0;
     const int vectorlength = sizeof(__m128i) / sizeof(uint16_t);
@@ -654,9 +651,8 @@ CROARING_TARGET_AVX2
 // Warning:
 // This function may not be safe if A == C or B == C.
 /////////
-int32_t difference_vector16(const uint16_t *__restrict__ A, size_t s_a,
-                            const uint16_t *__restrict__ B, size_t s_b,
-                            uint16_t *C) {
+int32_t difference_vector16(const uint16_t *A, size_t s_a, const uint16_t *B,
+                            size_t s_b, uint16_t *C) {
     // we handle the degenerate case
     if (s_a == 0) return 0;
     if (s_b == 0) {
@@ -1653,8 +1649,8 @@ static int uint16_compare(const void *a, const void *b) {
 CROARING_TARGET_AVX2
 // a one-pass SSE union algorithm
 // This function may not be safe if array1 == output or array2 == output.
-uint32_t union_vector16(const uint16_t *__restrict__ array1, uint32_t length1,
-                        const uint16_t *__restrict__ array2, uint32_t length2,
+uint32_t union_vector16(const uint16_t *array1, uint32_t length1,
+                        const uint16_t *array2, uint32_t length2,
                         uint16_t *output) {
     if ((length1 < 8) || (length2 < 8)) {
         return (uint32_t)union_uint16(array1, length1, array2, length2, output);
@@ -1777,8 +1773,8 @@ static inline uint32_t unique_xor(uint16_t *out, uint32_t len) {
 }
 CROARING_TARGET_AVX2
 // a one-pass SSE xor algorithm
-uint32_t xor_vector16(const uint16_t *__restrict__ array1, uint32_t length1,
-                      const uint16_t *__restrict__ array2, uint32_t length2,
+uint32_t xor_vector16(const uint16_t *array1, uint32_t length1,
+                      const uint16_t *array2, uint32_t length2,
                       uint16_t *output) {
     if ((length1 < 8) || (length2 < 8)) {
         return xor_uint16(array1, length1, array2, length2, output);

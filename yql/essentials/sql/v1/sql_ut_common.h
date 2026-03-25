@@ -5090,39 +5090,47 @@ Y_UNIT_TEST(BetweenSymmetric) {
 
 Y_UNIT_TEST(CreateSecret) {
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE plato; CREATE SECRET `secret-name` WITH (value = "secret-value");
+            USE plato;
+            CREATE SECRET `secret-name` WITH (VALUE = "secret-value");
         )sql")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE plato; CREATE SECRET `secret-name` WITH (value = "");
+            USE plato;
+            CREATE SECRET `secret-name` WITH (VALUE = "");
         )sql")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE plato; PRAGMA TablePathPrefix = "/PathPrefix"; CREATE SECRET `secret-name` WITH (value = "secret-value");
+            USE plato;
+            PRAGMA TablePathPrefix = "/PathPrefix";
+            CREATE SECRET `secret-name` WITH (VALUE = "secret-value");
         )sql")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE plato; CREATE SECRET `secret-name` WITH (value = "secret-value", inherit_permissions = FALSE);
+            USE plato;
+            CREATE SECRET `secret-name` WITH (VALUE = "secret-value", INHERIT_PERMISSIONS = FALSE);
         )sql")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE plato; CREATE SECRET `secret-name` WITH (inherit_permissions = true, value = "secret-value");
+            USE plato;
+            CREATE SECRET `secret-name` WITH (INHERIT_PERMISSIONS = TRUE, VALUE = "secret-value");
         )sql")
                     .IsOk());
 }
 
-Y_UNIT_TEST(CreateSecretWithDeclare) {
+Y_UNIT_TEST(CreateSecretWithExpressionCorrect) {
     const auto res = SqlToYql(R"sql(
-            USE plato; declare $foo as String; CREATE SECRET `secret-name` WITH (value = $foo);
+            USE plato;
+            DECLARE $foo AS String;
+            CREATE SECRET `secret-name` WITH (VALUE = $foo);
         )sql");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'create"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"("value" (EvaluateAtom "$foo"))"));
+            UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create");
+            UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('"value_expr" (EvaluateExpr "$foo"))");
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
         }
     };
@@ -5136,16 +5144,18 @@ Y_UNIT_TEST(CreateSecretWithDeclare) {
 Y_UNIT_TEST(CreateSecretCorrect) {
     { // basic case: some value, no other params are set
         auto res = SqlToYql(R"sql(
-                USE plato; CREATE SECRET `secret-name` WITH (value = "secret-value");
-            )sql");
+            USE plato;
+            CREATE SECRET `secret-name` WITH (VALUE = "secret-value");
+        )sql");
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'create"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-value"));
+                UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
+                UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create");
+                UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"("value" '"secret-value")");
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value_expr")"));
                 UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
             }
         };
@@ -5157,16 +5167,17 @@ Y_UNIT_TEST(CreateSecretCorrect) {
     }
     { // empty value; inherit_permissions is set to True
         auto res = SqlToYql(R"sql(
-                USE plato; CREATE SECRET `secret-name` WITH (value = "", inherit_permissions = TRUE);
-            )sql");
+            USE plato;
+            CREATE SECRET `secret-name` WITH (VALUE = "", INHERIT_PERMISSIONS = TRUE);
+        )sql");
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'create"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"("inherit_permissions" '"1")"));
+                UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
+                UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create");
+                UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"("inherit_permissions" '"1")");
             }
         };
 
@@ -5177,17 +5188,20 @@ Y_UNIT_TEST(CreateSecretCorrect) {
     }
     { // inherit_permissions is set explicitly to its default value
         auto res = SqlToYql(R"sql(
-                USE plato; PRAGMA TablePathPrefix = "/PathPrefix"; CREATE SECRET `secret-name` WITH (value = "secret-value", inherit_permissions = FALSE);
-            )sql");
+            USE plato;
+            PRAGMA TablePathPrefix = "/PathPrefix";
+            CREATE SECRET `secret-name` WITH (VALUE = "secret-value", INHERIT_PERMISSIONS = FALSE);
+        )sql");
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'create"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/PathPrefix/secret-name"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-value"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"("inherit_permissions" '"0")"));
+                UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
+                UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create");
+                UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/secret-name");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"("value" '"secret-value")");
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value_expr")"));
+                UNIT_ASSERT_STRING_CONTAINS(line, R"("inherit_permissions" '"0")");
             }
         };
 
@@ -5198,92 +5212,185 @@ Y_UNIT_TEST(CreateSecretCorrect) {
     }
 }
 
+Y_UNIT_TEST(CreateSecretWithExpression) {
+    { // Named node on other named nodes
+        const auto res = SqlToYql(R"sql(
+            USE plato;
+            DECLARE $sec1 AS String;
+            DECLARE $sec2 AS String;
+            CREATE SECRET `secret-name` WITH (VALUE = $sec1 || $sec2);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+
+    { // Named node on literal: $x = 1; value = $x
+        auto res = SqlToYql(R"sql(
+            USE plato;
+            $x = 1;
+            CREATE SECRET `x` WITH (VALUE = $x);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+
+    { // Named node on pure inline subquery: $x = (SELECT 1); value = $x
+        auto res = SqlToYql(R"sql(
+            USE plato;
+            $x = (SELECT 1);
+            CREATE SECRET `x` WITH (VALUE = $x);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+
+    { // Named node on effectful inline subquery: $x = (SELECT Max(value) FROM secrets); value = $x
+        auto res = SqlToYql(R"sql(
+            USE plato;
+            $x = (SELECT Max(value) FROM secrets);
+            CREATE SECRET `x` WITH (VALUE = $x);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+
+    { // Named node on named node: $y = 1; $x = $y; value = $x
+        auto res = SqlToYql(R"sql(
+            USE plato;
+            $y = 1;
+            $x = $y;
+            CREATE SECRET `x` WITH (VALUE = $x);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+
+    { // Pure inline subquery: value = (SELECT 1)
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 4);
+        auto res = SqlToYqlWithSettings(R"sql(
+            USE plato;
+            CREATE SECRET `x` WITH (VALUE = (SELECT 1));
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+
+    { // Effectful inline subquery: value = (SELECT Max(value) FROM secrets)
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 4);
+        auto res = SqlToYqlWithSettings(R"sql(
+            USE plato;
+            CREATE SECRET `x` WITH (VALUE = (SELECT Max(value) FROM secrets));
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+}
+
 Y_UNIT_TEST(CreateSecretIncorrect) {
     { // no value
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; CREATE SECRET `secret-name` WITH (inherit_permissions = FALSE);
-            )sql");
+            USE plato;
+            CREATE SECRET `secret-name` WITH (INHERIT_PERMISSIONS = FALSE);
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:28: Error: parameter VALUE must be set\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:13: Error: Parameter VALUE must be set\n");
     }
     { // value is not a string
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; CREATE SECRET `secret-name` WITH (value = true);
-            )sql");
+            USE plato;
+            CREATE SECRET `secret-name` WITH (VALUE = true);
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:70: Error: Unsupported type for parameter: VALUE. String (or named expression with type String) was expected\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:55: Error: Unsupported type for parameter: VALUE. String was expected\n");
     }
     { // value is set twice
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; CREATE SECRET `secret-name` WITH (value = "value1", value = "value2");
-            )sql");
+            USE plato;
+            CREATE SECRET `secret-name` WITH (VALUE = "value1", VALUE = "value2");
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:80: Error: Duplicate parameter: VALUE\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:65: Error: Duplicate parameter: VALUE\n");
+    }
+    { // value is set twice, once via expression
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            DECLARE $foo AS String;
+            CREATE SECRET `secret-name` WITH (VALUE = "value1", VALUE = $foo);
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:65: Error: Duplicate parameter: VALUE\n");
     }
     { // inherit_permissions is set twice
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; CREATE SECRET `secret-name` WITH (inherit_permissions = FALSE, inherit_permissions = TRUE);
-            )sql");
+            USE plato;
+            CREATE SECRET `secret-name` WITH (INHERIT_PERMISSIONS = FALSE, INHERIT_PERMISSIONS = TRUE);
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:91: Error: Duplicate parameter: INHERIT_PERMISSIONS\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:76: Error: Duplicate parameter: INHERIT_PERMISSIONS\n");
     }
     { // inherit_permissions is not bool
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; CREATE SECRET `secret-name` WITH (inherit_permissions = "TRUE");
-            )sql");
+            USE plato;
+            CREATE SECRET `secret-name` WITH (INHERIT_PERMISSIONS = "TRUE");
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:84: Error: Unsupported type for parameter: INHERIT_PERMISSIONS. Bool was expected\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:69: Error: Unsupported value for parameter: INHERIT_PERMISSIONS. Bool was expected\n");
     }
     { // unknown parameter
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; CREATE SECRET `secret-name` WITH (value = "secret-value", abc = "abc");
-            )sql");
+            USE plato;
+            CREATE SECRET `secret-name` WITH (VALUE = "secret-value", ABC = "abc");
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:86: Error: Unknown parameter: ABC\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:71: Error: Unknown parameter: ABC\n");
     }
     { // temporal object in secret name
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; CREATE SECRET @tmp WITH (value = "abc");
-            )sql");
+            USE plato;
+            CREATE SECRET @tmp WITH (VALUE = "abc");
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:43: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:28: Error: '@' is not allowed prefix for secret name\n");
     }
     { // empty secret name
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; CREATE SECRET `` WITH (inherit_permissions = FALSE);
-            )sql");
+            USE plato;
+            CREATE SECRET `` WITH (INHERIT_PERMISSIONS = FALSE);
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:42: Error: Empty secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:27: Error: Empty secret name\n");
     }
 }
 
 Y_UNIT_TEST(AlterSecret) {
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE ydb;   ALTER SECRET `secret-name` WITH (value = "secret-value");
+            USE ydb;
+            ALTER SECRET `secret-name` WITH (VALUE = "secret-value");
         )sql")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE ydb;   ALTER SECRET `secret-name` WITH (value = "");
+            USE ydb;
+            ALTER SECRET `secret-name` WITH (VALUE = "");
         )sql")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE plato; PRAGMA TablePathPrefix = "/PathPrefix"; ALTER SECRET `secret-name` WITH (value = "secret-value");
+            USE plato;
+            PRAGMA TablePathPrefix = "/PathPrefix";
+            ALTER SECRET `secret-name` WITH (VALUE = "secret-value");
         )sql")
                     .IsOk());
 }
 
-Y_UNIT_TEST(AlterSecretWithDeclare) {
+Y_UNIT_TEST(AlterSecretWithExpressionCorrect) {
     const auto res = SqlToYql(R"sql(
-            USE plato; declare $foo as String; ALTER SECRET `secret-name` WITH (value = $foo);
+            USE plato;
+            DECLARE $foo AS String;
+            ALTER SECRET `secret-name` WITH (VALUE = $foo);
         )sql");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'alter"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"("value" (EvaluateAtom "$foo"))"));
+            UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'alter");
+            UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('"value_expr" (EvaluateExpr "$foo"))");
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value")"));
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
         }
     };
@@ -5296,92 +5403,114 @@ Y_UNIT_TEST(AlterSecretWithDeclare) {
 
 Y_UNIT_TEST(AlterSecretCorrect) {
     auto res = SqlToYql(R"sql(
-            USE ydb;   ALTER SECRET `secret-name` WITH (value = "secret-value");
+            USE ydb;
+            ALTER SECRET `secret-name` WITH (VALUE = "secret-value");
         )sql");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'alter"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-value"));
+            UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'alter");
+            UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"("value" '"secret-value")");
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value_expr")"));
             UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
         }
     };
 }
 
+Y_UNIT_TEST(AlterSecretWithExpression) {
+    const auto res = SqlToYql(R"sql(
+            USE plato;
+            DECLARE $sec1 AS String;
+            DECLARE $sec2 AS String;
+            ALTER SECRET `secret-name` WITH (VALUE = $sec1 || $sec2);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(AlterSecretIncorrect) {
     { // no value
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE ydb;   ALTER SECRET `secret-name`;
-            )sql");
+            USE ydb;
+            ALTER SECRET `secret-name`;
+        )sql");
         UNIT_ASSERT(!res.IsOk());
 #if ANTLR_VER == 3
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:53: Error: Unexpected token ';' : syntax error...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:38: Error: Unexpected token ';' : syntax error...\n\n");
 #else
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:53: Error: mismatched input ';' expecting WITH\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:38: Error: mismatched input ';' expecting WITH\n");
 #endif
     }
     { // value is not a string
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE ydb;   ALTER SECRET `secret-name` WITH (value = true);
-            )sql");
+            USE ydb;
+            ALTER SECRET `secret-name` WITH (VALUE = true);
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:69: Error: Unsupported type for parameter: VALUE. String (or named expression with type String) was expected\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:54: Error: Unsupported type for parameter: VALUE. String was expected\n");
     }
     { // value is set twice
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE ydb;   ALTER SECRET `secret-name` WITH (value = "value1", value = "value2");
-            )sql");
+            USE ydb;
+            ALTER SECRET `secret-name` WITH (VALUE = "value1", VALUE = "value2");
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:79: Error: Duplicate parameter: VALUE\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:64: Error: Duplicate parameter: VALUE\n");
     }
     { // inherit_permissions is set
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE ydb;   ALTER SECRET `secret-name` WITH (value = "value", inherit_permissions = FALSE);
-            )sql");
+            USE ydb;
+            ALTER SECRET `secret-name` WITH (VALUE = "value", INHERIT_PERMISSIONS = FALSE);
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:28: Error: parameter INHERIT_PERMISSIONS is not supported for alter operation\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:13: Error: parameter INHERIT_PERMISSIONS is not supported for alter operation\n");
     }
     { // unknown parameter
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE ydb;   ALTER SECRET `secret-name` WITH (value = "secret-value", abc = "abc");
-            )sql");
+            USE ydb;
+            ALTER SECRET `secret-name` WITH (VALUE = "secret-value", abc = "abc");
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:85: Error: Unknown parameter: ABC\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:70: Error: Unknown parameter: ABC\n");
     }
     { // temporal object in secret name
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE ydb;   ALTER SECRET @tmp WITH (value = "abc");
-            )sql");
+            USE ydb;
+            ALTER SECRET @tmp WITH (VALUE = "abc");
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:42: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:27: Error: '@' is not allowed prefix for secret name\n");
     }
 }
 
 Y_UNIT_TEST(DropSecret) {
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE plato; DROP SECRET `secret-name`;
+            USE plato;
+            DROP SECRET `secret-name`;
         )sql")
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"sql(
-            USE plato; PRAGMA TablePathPrefix = "/PathPrefix"; DROP SECRET `secret-name`;
+            USE plato;
+            PRAGMA TablePathPrefix = "/PathPrefix";
+            DROP SECRET `secret-name`;
         )sql")
                     .IsOk());
 }
 
 Y_UNIT_TEST(DropSecretCorrect) {
     auto res = SqlToYql(R"sql(
-            USE plato; DROP SECRET `secret-name`;
+            USE plato;
+            DROP SECRET `secret-name`;
         )sql");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'drop"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
+            UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'drop");
+            UNIT_ASSERT_STRING_CONTAINS(line, "secret-name");
         }
     };
 
@@ -5394,33 +5523,35 @@ Y_UNIT_TEST(DropSecretCorrect) {
 Y_UNIT_TEST(DropSecretIncorrect) {
     {
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; DROP SECRET `secret-name` WITH (value = "abc");
-            )sql");
+            USE plato;
+            DROP SECRET `secret-name` WITH (VALUE = "abc");
+        )sql");
         UNIT_ASSERT(!res.IsOk());
 #if ANTLR_VER == 3
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:53: Error: Unexpected token 'WITH' : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:38: Error: Unexpected token 'WITH' : cannot match to any predicted input...\n\n");
 #else
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:53: Error: extraneous input 'WITH' expecting {<EOF>, ';'}\n");
-
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:38: Error: extraneous input 'WITH' expecting {<EOF>, ';'}\n");
 #endif
     }
     {
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; DROP SECRET SECRET `secret-name`;
-            )sql");
+            USE plato;
+            DROP SECRET SECRET `secret-name`;
+        )sql");
         UNIT_ASSERT(!res.IsOk());
 #if ANTLR_VER == 3
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:46: Error: Unexpected token '`secret-name`' : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:31: Error: Unexpected token '`secret-name`' : cannot match to any predicted input...\n\n");
 #else
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:46: Error: extraneous input '`secret-name`' expecting {<EOF>, ';'}\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:31: Error: extraneous input '`secret-name`' expecting {<EOF>, ';'}\n");
 #endif
     }
     { // temporal object in secret name
         NYql::TAstParseResult res = SqlToYql(R"sql(
-                USE plato; DROP SECRET @tmp;
-            )sql");
+            USE plato;
+            DROP SECRET @tmp;
+        )sql");
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:41: Error: '@' is not allowed prefix for secret name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:26: Error: '@' is not allowed prefix for secret name\n");
     }
 }
 } // Y_UNIT_TEST_SUITE(SqlParsingOnly)

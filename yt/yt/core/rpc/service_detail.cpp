@@ -2011,10 +2011,17 @@ TRequestQueue* TServiceBase::GetRequestQueue(
         auto profiler = runtimeInfo->Profiler.WithSparse();
         if (runtimeInfo->Descriptor.RequestQueueProvider) {
             profiler = profiler.WithTag("queue", requestQueue->GetName());
+
+            // If there is no request queue provider, then total metrics reported
+            // by method profilers are enough.
+            profiler.AddFuncGauge("/request_queue_size", MakeStrong(this), [=] {
+                return requestQueue->GetQueueSize();
+            });
+            profiler.AddFuncGauge("/request_queue_size_limit", MakeStrong(this), [=] {
+                // Reporting 0 for a sparse metric effectively hides it.
+                return requestQueue->GetQueueSizeLimit().value_or(0);
+            });
         }
-        profiler.AddFuncGauge("/request_queue_size", MakeStrong(this), [=] {
-            return requestQueue->GetQueueSize();
-        });
         profiler.AddFuncGauge("/request_queue_byte_size", MakeStrong(this), [=] {
             return requestQueue->GetQueueByteSize();
         });
@@ -2673,7 +2680,12 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
     // Failure here means that such method is already registered.
     YT_VERIFY(MethodMap_.emplace(descriptor.Method, runtimeInfo).second);
 
-    auto& profiler = runtimeInfo->Profiler;
+    auto profiler = runtimeInfo->Profiler
+        .WithSparse()
+        .WithTag("queue", "Aggr");
+    profiler.AddFuncGauge("/request_queue_size", MakeStrong(this), [=] {
+        return runtimeInfo->QueueSize.load(std::memory_order::relaxed);
+    });
     profiler.AddFuncGauge("/request_queue_size_limit", MakeStrong(this), [=] {
         return runtimeInfo->QueueSizeLimit.load(std::memory_order::relaxed);
     });

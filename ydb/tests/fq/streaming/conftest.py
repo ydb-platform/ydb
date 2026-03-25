@@ -15,7 +15,7 @@ def kikimr(request):
     enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
 
     def get_ydb_config():
-        extra_feature_flags={
+        extra_feature_flags = {
             "enable_external_data_sources",
             "enable_streaming_queries",
             "enable_streaming_queries_counters",

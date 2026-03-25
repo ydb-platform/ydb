@@ -1,5 +1,4 @@
 import logging
-import os
 import pytest
 import random
 import string
@@ -598,4 +597,3 @@ class TestStreamingInYdb(StreamingTestBase):
                 match=r"SHARED_READING in External data source is not supported",
             ):
                 self.create_source(kikimr, source_name, shared=True)
-

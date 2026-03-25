@@ -485,6 +485,9 @@ message TDqMemoryHistoryItem {
     uint64 MemArrowDefault  = 5;
     uint64 MemMkqlAllocated = 6;
     uint64 MemMkqlFreeList  = 7;
+    uint64 InputInflightBytes  = 8;
+    uint64 OutputInflightBytes = 9;
+    uint64 LocalInflightBytes  = 10;
 }
 
 message TDqNodeStats {

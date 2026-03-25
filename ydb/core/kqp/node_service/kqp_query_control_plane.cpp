@@ -269,6 +269,13 @@ public:
             StatsMode = runtimeSettings.GetStatsMode();
             if (StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
                 StatsReportPeriod = reportStatsSettings.MinInterval;
+
+                auto channelCounters = Counters_->GetChannelCounters();
+                InputBufferInflightBytes = channelCounters->GetCounter("InputBuffer/InflightBytes", false);
+                OutputBufferInflightBytes = channelCounters->GetCounter("OutputBuffer/InflightBytes", false);
+                OutputBufferWaiterBytes = channelCounters->GetCounter("OutputBuffer/WaiterBytes", false);
+                LocalBufferInflightBytes = channelCounters->GetCounter("LocalBuffer/InflightBytes", false);
+
                 SendProfileStats();
                 Schedule(StatsReportPeriod, new TEvents::TEvWakeup());
             }
@@ -278,35 +285,34 @@ public:
     }
 
     void SendProfileStats() {
+        auto ev = MakeHolder<NYql::NDq::TEvDqCompute::TEvNodeState>();
 
-        ui64 memPhysicalUsage = 0;
-        ui64 memSysAllocated = 0;
-        ui64 memSysFragmented = 0;
-        ui64 memArrowDefault = 0;
-        ui64 memMkqlAllocated = 0;
-        ui64 memMkqlFreeList = 0;
+        ev->Record.SetNodeId(SelfId().NodeId());
 
         if (auto p = tcmalloc::MallocExtension::GetNumericProperty("generic.physical_memory_used"); p) {
-            memPhysicalUsage = *p;
+            ev->Record.SetMemPhysicalUsage(*p);
         }
         if (auto p = tcmalloc::MallocExtension::GetNumericProperty("generic.current_allocated_bytes"); p) {
-            memSysAllocated = *p;
+            ev->Record.SetMemSysAllocated(*p);
         }
         if (auto p = tcmalloc::MallocExtension::GetNumericProperty("generic.realized_fragmentation"); p) {
-            memSysFragmented = *p;
+            ev->Record.SetMemSysFragmented(*p);
         }
-        memArrowDefault = arrow::default_memory_pool()->bytes_allocated();
-        memMkqlAllocated = GetTotalMmapedBytes<>();
-        memMkqlFreeList = GetTotalFreeListBytes<>();
 
-        auto ev = MakeHolder<NYql::NDq::TEvDqCompute::TEvNodeState>();
-        ev->Record.SetNodeId(SelfId().NodeId());
-        ev->Record.SetMemPhysicalUsage(memPhysicalUsage);
-        ev->Record.SetMemSysAllocated(memSysAllocated);
-        ev->Record.SetMemSysFragmented(memSysFragmented);
-        ev->Record.SetMemArrowDefault(memArrowDefault);
-        ev->Record.SetMemMkqlAllocated(memMkqlAllocated);
-        ev->Record.SetMemMkqlFreeList(memMkqlFreeList);
+        ev->Record.SetMemArrowDefault(arrow::default_memory_pool()->bytes_allocated());
+        ev->Record.SetMemMkqlAllocated(GetTotalMmapedBytes<>());
+        ev->Record.SetMemMkqlFreeList(GetTotalFreeListBytes<>());
+
+        if (InputBufferInflightBytes) {
+            ev->Record.SetInputInflightBytes(InputBufferInflightBytes->Val());
+        }
+        if (OutputBufferInflightBytes && OutputBufferWaiterBytes) {
+            ev->Record.SetOutputInflightBytes(OutputBufferInflightBytes->Val() + OutputBufferWaiterBytes->Val());
+        }
+        if (LocalBufferInflightBytes) {
+            ev->Record.SetLocalInflightBytes(LocalBufferInflightBytes->Val());
+        }
+
         Send(ExecuterId, ev.Release());
     }
 
@@ -332,6 +338,10 @@ private:
     TActorId ExecuterId;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
     TDuration StatsReportPeriod;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferInflightBytes;
 };
 
 NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,

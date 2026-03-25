@@ -834,7 +834,10 @@ void TNodeExecutionStats::UpdateStats(const NYql::NDqProto::TEvNodeState& state)
         .MemSysFragmented = state.GetMemSysFragmented(),
         .MemArrowDefault = state.GetMemArrowDefault(),
         .MemMkqlAllocated = state.GetMemMkqlAllocated(),
-        .MemMkqlFreeList = state.GetMemMkqlFreeList()
+        .MemMkqlFreeList = state.GetMemMkqlFreeList(),
+        .InputInflightBytes = state.GetInputInflightBytes(),
+        .OutputInflightBytes = state.GetOutputInflightBytes(),
+        .LocalInflightBytes = state.GetLocalInflightBytes(),
     });
 }
 
@@ -1648,6 +1651,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                         stats.SetMemArrowDefault((usage.MemArrowDefault + 512_KB) / 1_MB);
                         stats.SetMemMkqlAllocated((usage.MemMkqlAllocated + 512_KB) / 1_MB);
                         stats.SetMemMkqlFreeList((usage.MemMkqlFreeList + 512_KB) / 1_MB);
+                        stats.SetInputInflightBytes((usage.InputInflightBytes + 512_KB) / 1_MB);
+                        stats.SetOutputInflightBytes((usage.OutputInflightBytes + 512_KB) / 1_MB);
+                        stats.SetLocalInflightBytes((usage.LocalInflightBytes + 512_KB) / 1_MB);
                     }
                 }
             }

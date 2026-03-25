@@ -299,6 +299,9 @@ struct TGlobalMemoryUsage {
     ui64 MemArrowDefault = 0;
     ui64 MemMkqlAllocated = 0;
     ui64 MemMkqlFreeList = 0;
+    ui64 InputInflightBytes = 0;
+    ui64 OutputInflightBytes = 0;
+    ui64 LocalInflightBytes = 0;
 };
 
 struct TNodeExecutionStats {

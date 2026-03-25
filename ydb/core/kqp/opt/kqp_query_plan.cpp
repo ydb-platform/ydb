@@ -3543,6 +3543,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                             value.AppendValue(u.GetMemArrowDefault());
                             value.AppendValue(u.GetMemMkqlAllocated());
                             value.AppendValue(u.GetMemMkqlFreeList());
+                            value.AppendValue(u.GetInputInflightBytes());
+                            value.AppendValue(u.GetOutputInflightBytes());
+                            value.AppendValue(u.GetLocalInflightBytes());
                             history.AppendValue(std::move(value));
                         }
                     }

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from helpers import check_endpoints
+from helpers import check_endpoints, check_expected_results
 
 
 PUBLIC_STATUSES = {
@@ -13,15 +13,6 @@ PUBLIC_STATUSES = {
 
 ENFORCE_MONITORING_STATUSES = {
     None: 401,
-    'user@builtin': 403,
-    'database@builtin': 403,
-    'viewer@builtin': 403,
-    'monitoring@builtin': 200,
-    'root@builtin': 200,
-}
-
-ENFORCE_SPECIAL_HEALTHCHECK_STATUSES = {
-    None: 200,
     'user@builtin': 403,
     'database@builtin': 403,
     'viewer@builtin': 403,
@@ -91,9 +82,16 @@ ENFORCE_MONITORING_ENDPOINTS = [
     '/actors/',
 ]
 
-ENFORCE_SPECIAL_HEALTHCHECK_ENDPOINTS = [
-    '/healthcheck?database=%2FRoot',
-]
+ADDITIONAL_ACCESS_CASES = {
+    '/healthcheck?database=%2FRoot': {
+        None: 200,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+}
 
 WITHOUT_ENFORCE_ENDPOINTS = [
     '/actors/tablet_counters_aggregator',
@@ -150,11 +148,10 @@ def test_monitoring_access_with_enforce_user_token(ydb_cluster_with_enforce_user
     )
 
 
-def test_special_healthcheck_access_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
-    check_endpoints(
+def test_additional_access_cases_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    check_expected_results(
         ydb_cluster_with_enforce_user_token,
-        ENFORCE_SPECIAL_HEALTHCHECK_ENDPOINTS,
-        ENFORCE_SPECIAL_HEALTHCHECK_STATUSES,
+        ADDITIONAL_ACCESS_CASES,
     )
 
 

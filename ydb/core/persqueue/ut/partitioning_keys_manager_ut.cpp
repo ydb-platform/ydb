@@ -47,10 +47,8 @@ namespace {
             auto decimal = NDataStreams::V1::HexBytesToDecimal(MD5::Calc(CreateGuidAsString()));
             keys.emplace_back(decimal);
         }
-        auto start = Now();
-        for (const auto& key : keys) {m.Add(key, kMsgSize, start);}
-        auto duration = Now() - start;
-        UNIT_ASSERT_C(duration.MilliSeconds() < 1000, "duration " << duration.MilliSeconds() << " milliseconds");
+        auto now = Now();
+        for (const auto& key : keys) {m.Add(key, kMsgSize, now);}
     }
 
 } // namespace

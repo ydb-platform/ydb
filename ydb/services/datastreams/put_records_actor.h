@@ -450,7 +450,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         TString hashKey = NPQ::AsKeyBound(GetHashKey(record));
         auto* partition = chooser->GetPartition(hashKey);
-        items[partition->PartitionId].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip});
+        items[partition->PartitionId].push_back(TPutRecordsItem{record.data(), record.partition_key(), hashKey, Ip});
         PartitionToActor[partition->PartitionId].RecordIndexes.push_back(index);
     }
 

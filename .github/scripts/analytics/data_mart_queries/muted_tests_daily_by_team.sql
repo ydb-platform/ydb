@@ -6,11 +6,10 @@ $window_days = 365;
 $muted_sla_days = 30;
 
 $normalize = ($raw_area) -> {
-    RETURN Cast(CASE
-        WHEN ListLength(String::SplitToList(Cast($raw_area AS String), '/')) >= 2
-        THEN String::SplitToList(Cast($raw_area AS String), '/')[0] || '/' || String::SplitToList(Cast($raw_area AS String), '/')[1]
-        ELSE Cast($raw_area AS String)
-    END AS Utf8);
+    $parts = String::SplitToList(Cast($raw_area AS String), '/');
+    RETURN Cast(
+        IF(ListLength($parts) >= 2, $parts[0] || '/' || $parts[1], Cast($raw_area AS String))
+    AS Utf8);
 };
 
 -- Single read of mapping table, reused everywhere

@@ -89,8 +89,6 @@ namespace NSchemeShard {
 extern const ui64 NEW_TABLE_ALTER_VERSION;
 extern ui64 gVectorIndexSeed; // for tests only
 
-class TShredManager;
-
 // Forward declaration for incremental restore context
 struct TIncrementalRestoreState;
 

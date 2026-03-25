@@ -60,8 +60,26 @@ void TSchemeShard::PersistSetColumnConstraintUnlockTxDone([[maybe_unused]] NIceD
     // todo
 }
 
+void TSchemeShard::PersistSetColumnConstraintValidationSnapshot([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
+    // todo
+}
+
+void TSchemeShard::PersistSetColumnConstraintValidationShardStatus([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] TShardIdx shardIdx, [[maybe_unused]] const TIndexBuildShardStatus& status) {
+    // todo
+}
+
+void TSchemeShard::PersistSetColumnConstraintValidationIssue([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TString& issue) {
+    // todo
+}
+
 void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxCreateSetColumnConstraint(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    TIndexBuildId operationId = TIndexBuildId(record.GetId());
+    Execute(CreateTxReplyValidateRowCondition(operationId, ev), ctx);
 }
 
 } // NSchemeShard

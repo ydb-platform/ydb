@@ -37,6 +37,7 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         ui64 txId = 100;
 
+        // Create table with nullable column "value"
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
               Name: "Table"
               Columns { Name: "key"   Type: "Uint32" }
@@ -45,8 +46,10 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        // Set NOT NULL constraint on "value" column
+        ui64 setConstraintTxId = ++txId;
         auto response = TestSetColumnConstraint(
-            runtime, ++txId,
+            runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
             "/MyRoot",
             "/MyRoot/Table",
@@ -54,11 +57,39 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
 
-        // Progress stub replies UNSUPPORTED until the operation is fully implemented
+        // Should get SUCCESS response (operation accepted)
         UNIT_ASSERT_VALUES_EQUAL_C(
             response.GetStatus(),
-            Ydb::StatusIds::UNSUPPORTED,
+            Ydb::StatusIds::SUCCESS,
             response.ShortDebugString());
+
+        // Wait for the operation to complete
+        env.TestWaitNotification(runtime, setConstraintTxId);
+
+        // Test 1: Insert row with non-NULL value - should succeed
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        bool success = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, R"(
+            (
+                (let key '( '('key (Uint32 '1) ) ) )
+                (let row '( '('value (Utf8 '"test_value") ) ) )
+                (return (AsList (UpdateRow '__user__Table key row) ))
+            )
+        )", result, error);
+
+        UNIT_ASSERT_C(success, "Insert with non-NULL value should succeed: " << error);
+
+        // Test 2: Insert row with NULL value - should fail
+        success = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, R"(
+            (
+                (let key '( '('key (Uint32 '2) ) ) )
+                (let row '( '('value (Nothing (OptionalType (DataType 'Utf8)))) ) )
+                (return (AsList (UpdateRow '__user__Table key row) ))
+            )
+        )", result, error);
+
+        UNIT_ASSERT_C(!success, "Insert with NULL value should fail but succeeded");
+        UNIT_ASSERT_STRING_CONTAINS(error, "NOT NULL");
     }
 
     Y_UNIT_TEST(InvalidTable) {

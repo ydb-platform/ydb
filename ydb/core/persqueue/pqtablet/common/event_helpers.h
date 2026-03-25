@@ -25,6 +25,13 @@ void ReplyPersQueueError(
     bool isInternal = false
 );
 
+inline
+bool IsWriteTxOperation(const NKikimrPQ::TPartitionOperation& operation)
+{
+    bool isRead = operation.HasCommitOffsetsBegin() || (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd());
+    return !isRead;
+}
+
 template <class C>
 bool AllExistingWritesSkipConflictCheck(const C& ops)
 {
@@ -32,8 +39,7 @@ bool AllExistingWritesSkipConflictCheck(const C& ops)
     size_t flagsCount = 0;
 
     for (const auto& op : ops) {
-        if (!op.HasSkipConflictCheck()) {
-            // SkipConflictCheck is not set for read operations
+        if (!IsWriteTxOperation(op)) {
             continue;
         }
 

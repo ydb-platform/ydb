@@ -351,7 +351,9 @@ void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ct
 }
 
 void TKafkaSaslAuthActor::SendMtlsAuthRequest(const NActors::TActorContext&) {
-    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(ClientCert));
+    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = ClientCert,
+                                                                                                     .Database = DatabasePath,
+                                                                                                     .PeerName = TStringBuilder() << Address}));
     Become(&TKafkaSaslAuthActor::StateTicketResolve);
 }
 

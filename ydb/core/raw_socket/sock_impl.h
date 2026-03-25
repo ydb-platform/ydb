@@ -92,16 +92,19 @@ public:
 
     TSslHelpers::TSslHolder<X509> GetSslClientCert() {
         auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
+        Y_VERIFY(socket);
         return socket->GetSslClientCert();
     }
 
     int GetSslHandshakeResult() {
         auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
+        Y_VERIFY(socket);
         return socket->GetSslHandshakeResult();
     }
 
     TString GetStringClientCert(X509* cert) {
         auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
+        Y_VERIFY(socket);
         return socket->ConvertX509ToPEMString(cert);
     }
 

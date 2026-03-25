@@ -1,7 +1,10 @@
 #pragma once
+
+#include <util/generic/hash.h>
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/core/protos/long_tx_service.pb.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr {
 namespace NLongTxService {
@@ -67,5 +70,33 @@ namespace NLongTxService {
         {}
     };
 
+    struct TWaitEdgeId {
+        NActors::TActorId OwnerId;
+        ui64 RequestId;
+
+        TWaitEdgeId(const NActors::TActorId& ownerId, ui64 requestId)
+            : OwnerId(ownerId), RequestId(requestId)
+        {}
+
+        bool operator==(const TWaitEdgeId& other) const noexcept {
+            return OwnerId == other.OwnerId && RequestId == other.RequestId;
+        }
+
+        bool operator!=(const TWaitEdgeId& other) const noexcept {
+            return !(*this == other);
+        }
+    };
+
 } // namespace NLongTxService
 } // namespace NKikimr
+
+template <>
+struct THash<NKikimr::NLongTxService::TWaitEdgeId> {
+    inline ui64 operator()(const NKikimr::NLongTxService::TWaitEdgeId& x) const {
+        return CombineHashes(x.OwnerId.Hash(), std::hash<ui64>{}(x.RequestId));
+    }
+};
+
+template<> struct std::hash<NKikimr::NLongTxService::TWaitEdgeId>
+    : THash<NKikimr::NLongTxService::TWaitEdgeId>
+{};

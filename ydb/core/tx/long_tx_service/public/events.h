@@ -36,6 +36,7 @@ namespace NLongTxService {
             EvWaitingLockAdd,
             EvWaitingLockRemove,
             EvWaitingLockDeadlock,
+            EvUpdateLockWaitEdges,
             EvEnd,
         };
 
@@ -242,6 +243,15 @@ namespace NLongTxService {
                 Record.SetLockId(lockId);
                 Record.SetLockNode(lockNode);
             }
+
+            void AddLocalWaitEdge(const TWaitEdgeId& id, const TLockInfo& blocker) {
+                auto* edge = Record.AddLocalWaitEdges();
+                ActorIdToProto(id.OwnerId, edge->MutableId()->MutableOwner());
+                edge->MutableId()->SetRequestId(id.RequestId);
+
+                edge->SetBlockerLockId(blocker.LockId);
+                edge->SetBlockerLockNode(blocker.LockNodeId);
+            }
         };
 
         struct TEvLockStatus
@@ -258,6 +268,15 @@ namespace NLongTxService {
                 if (lockTimestamp) {
                     Record.SetLockTimestampUs(lockTimestamp.MicroSeconds());
                 }
+            }
+
+            void AddWaitEdge(const TWaitEdgeId& id, const TLockInfo& blocker) {
+                auto* edge = Record.AddWaitEdges();
+                ActorIdToProto(id.OwnerId, edge->MutableId()->MutableOwner());
+                edge->MutableId()->SetRequestId(id.RequestId);
+
+                edge->SetBlockerLockId(blocker.LockId);
+                edge->SetBlockerLockNode(blocker.LockNodeId);
             }
 
             TInstant GetLockTimestamp() const {
@@ -308,6 +327,37 @@ namespace NLongTxService {
             {}
 
             ui64 RequestId;
+        };
+
+        struct TEvUpdateLockWaitEdges
+            : TEventPB<TEvUpdateLockWaitEdges,
+                NKikimrLongTxService::TEvUpdateLockWaitEdges, EvUpdateLockWaitEdges>
+        {
+            TEvUpdateLockWaitEdges() = default;
+
+            TEvUpdateLockWaitEdges(ui64 lockId, ui32 lockNodeId) {
+                Record.SetLockId(lockId);
+                Record.SetLockNode(lockNodeId);
+            }
+
+            TEvUpdateLockWaitEdges(const TLockInfo& lockInfo)
+                : TEvUpdateLockWaitEdges(lockInfo.LockId, lockInfo.LockNodeId)
+            {}
+
+            void AddAddedEdge(const TWaitEdgeId& id, const TLockInfo& blocker) {
+                auto* edge = Record.AddAdded();
+                ActorIdToProto(id.OwnerId, edge->MutableId()->MutableOwner());
+                edge->MutableId()->SetRequestId(id.RequestId);
+
+                edge->SetBlockerLockId(blocker.LockId);
+                edge->SetBlockerLockNode(blocker.LockNodeId);
+            }
+
+            void AddRemovedEdge(const TWaitEdgeId& id) {
+                auto* edgeId = Record.AddRemoved();
+                ActorIdToProto(id.OwnerId, edgeId->MutableOwner());
+                edgeId->SetRequestId(id.RequestId);
+            }
         };
     };
 

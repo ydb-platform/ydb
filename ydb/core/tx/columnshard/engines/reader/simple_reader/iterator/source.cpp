@@ -193,7 +193,7 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     } else if (memoryLimit && !IsSourceInMemory()) {
         const auto accessor = ExtractPortionAccessor();
         StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
-        StreamingMode = TStreamingConfigHelper::ShouldUseStreamingMode(GetRecordsCount());
+        StreamingMode = TStreamingConfigHelper::ShouldUseStreamingMode();
     } else {
         // No memory limit or source already in memory: single page covering the whole portion
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });

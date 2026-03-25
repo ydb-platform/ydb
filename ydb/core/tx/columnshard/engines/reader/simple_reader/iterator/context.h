@@ -24,21 +24,12 @@ using TFetchingScript = NCommon::TFetchingScript;
 // Helper class to work with streaming configuration from AppData
 class TStreamingConfigHelper {
 public:
-    enum class EStrategy {
-        Always,      // Always use page-based streaming
-        Never,       // Never use streaming (read entire portion)
-        Auto         // Automatically decide based on portion size
-    };
-
-    static bool ShouldUseStreamingMode(ui32 recordsCount);
+    static bool ShouldUseStreamingMode();
     static ui32 GetMaxPagesInFlight();
-    
-    // Validates the streaming configuration. Returns an error if the config is
-    // invalid and streaming could be activated (i.e. strategy != Never).
-    static TConclusionStatus Validate();
 
-private:
-    static EStrategy GetStrategy();
+    // Validates the streaming configuration. Returns an error if the config is
+    // invalid and streaming is explicitly enabled.
+    static TConclusionStatus Validate();
 };
 
 class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {

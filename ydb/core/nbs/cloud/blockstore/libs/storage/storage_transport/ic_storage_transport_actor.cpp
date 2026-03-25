@@ -134,8 +134,6 @@ void TICStorageTransportActor::HandleWritePersistentBufferResult(
     }
 }
 
-//-------- begin
-
 void TICStorageTransportActor::HandleWritePersistentBuffers(
     const TEvTransportPrivate::TEvWriteToPBuffers::TPtr& ev,
     const TActorContext& ctx)
@@ -153,17 +151,14 @@ void TICStorageTransportActor::HandleWritePersistentBuffers(
         "Sent TEvWriteToPBuffers with requestId# %lu",
         requestId);
 
-    // TODO maks сделать передачу параметра
-    // NodeId, PDiskId, DDiskSlotId
-    constexpr ui32 tiomeoutMicroseconds = 420;
     const std::vector<std::tuple<ui32, ui32, ui32>> persistentBufferIds;
     auto request = std::make_unique<NDDisk::TEvWritePersistentBuffers>(
         msg->Credentials,
         msg->Selector,
         msg->Lsn,
         msg->Instruction,
-        persistentBufferIds,
-        tiomeoutMicroseconds);
+        msg->PersistentBufferIds,
+        msg->ReplyTimeoutMicroseconds);
 
     if (auto guard = msg->Data.Acquire()) {
         const auto& sglist = guard.Get();
@@ -200,6 +195,8 @@ void TICStorageTransportActor::HandleWritePersistentBuffersResult(
         WriteToPBuffersRequests.erase(requestId);
     } else {
         // That means that request is already completed
+        // TODO надо ли обрабатывать такой ответ?
+        // он может прийти повторно, например, после таймаута на 1 PB
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
@@ -207,8 +204,6 @@ void TICStorageTransportActor::HandleWritePersistentBuffersResult(
             requestId);
     }
 }
-
-//-------- end
 
 void TICStorageTransportActor::HandleErasePersistentBuffer(
     const TEvTransportPrivate::TEvEraseFromPBuffer::TPtr& ev,
@@ -536,6 +531,13 @@ STFUNC(TICStorageTransportActor::StateWork)
         HFunc(
             NDDisk::TEvWritePersistentBufferResult,
             HandleWritePersistentBufferResult);
+
+        HFunc(
+            TEvTransportPrivate::TEvWriteToPBuffers,
+            HandleWritePersistentBuffers);
+        HFunc(
+            NDDisk::TEvWritePersistentBuffersResult,
+            HandleWritePersistentBuffersResult);
 
         HFunc(
             TEvTransportPrivate::TEvEraseFromPBuffer,

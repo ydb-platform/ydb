@@ -62,7 +62,7 @@ TICStorageTransport::WriteToPBuffers(
     const NDDisk::TBlockSelector& selector,
     const ui64 lsn,
     const NDDisk::TWriteInstruction instruction,
-    const std::vector<NKikimrBlobStorage::NDDisk::TDDiskId>& persistentBufferIds,
+    const std::vector<std::tuple<ui32, ui32, ui32>>& persistentBufferIds,
     const ui32 replyTimeoutMicroseconds,
     const TGuardedSgList& data,
     NWilson::TSpan& span)

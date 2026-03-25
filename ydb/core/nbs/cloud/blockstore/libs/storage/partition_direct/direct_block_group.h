@@ -29,19 +29,21 @@ struct TDBGWriteBlocksResponse
 
 struct TDBGWriteBlocksToManyPBuffersResponse
 {
-    struct TSinglePersistentBufferResult {
-        TSinglePersistentBufferResult(NKikimrBlobStorage::NDDisk::TDDiskId persistentBufferId, NProto::TError error):
-            PersistentBufferId(std::move(persistentBufferId)),
-            Error(std::move(error))
+    struct TSinglePersistentBufferResult
+    {
+        TSinglePersistentBufferResult(
+            std::tuple<ui32, ui32, ui32> persistentBufferId,
+            NProto::TError error)
+            : PersistentBufferId(std::move(persistentBufferId))
+            , Error(std::move(error))
         {}
 
-        NKikimrBlobStorage::NDDisk::TDDiskId PersistentBufferId;
+        std::tuple<ui32, ui32, ui32> PersistentBufferId;
         NProto::TError Error;
     };
 
     TDBGWriteBlocksToManyPBuffersResponse() = default;
-    TDBGWriteBlocksToManyPBuffersResponse();
-    TVector<TSinglePersistentBufferResult> Errors;
+    TVector<TSinglePersistentBufferResult> Responses;
 };
 
 struct TDBGFlushResponse
@@ -88,6 +90,9 @@ struct TAggregatedListPBufferResponse
     TMap<ui8, TListPBufferMetaVector> Meta;
 };
 
+// TODO переименовать
+using DDiskIdToHostIndex = THashMap<std::tuple<ui32, ui32, ui32>, ui8>;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Abstract base interface for DirectBlockGroup implementations
@@ -131,8 +136,9 @@ public:
         std::vector<ui8> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
-        const TGuardedSgList &guardedSglist,
-        NWilson::TTraceId traceId) = 0;
+        const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId,
+        DDiskIdToHostIndex& dDiskIdToHostIndex) = 0;
 
     // Batch operation to flush a list of PBuffer entries. It can be executed in
     // two modes - when the source and destination are the same host, and when
@@ -218,8 +224,9 @@ public:
         std::vector<ui8> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
-        const TGuardedSgList &guardedSglist,
-        NWilson::TTraceId traceId) override;
+        const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId,
+        DDiskIdToHostIndex& dDiskIdToHostIndex) override;
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,

@@ -41,15 +41,98 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
 
 void TWriteRequestExecutor::Run()
 {
-    SendWriteRequest(ELocation::PBuffer0);
-    SendWriteRequest(ELocation::PBuffer1);
-    SendWriteRequest(ELocation::PBuffer2);
+    // SendWriteRequest(ELocation::PBuffer0);
+    // SendWriteRequest(ELocation::PBuffer1);
+    // SendWriteRequest(ELocation::PBuffer2);
+    SendWriteRequestToManyPBuffers();
 }
 
 NThreading::TFuture<TWriteRequestExecutor::TResponse>
 TWriteRequestExecutor::GetFuture() const
 {
     return Promise.GetFuture();
+}
+
+void TWriteRequestExecutor::SendWriteRequestToManyPBuffers()
+{
+    std::vector<ELocation> locations = {
+        ELocation::PBuffer0,
+        ELocation::PBuffer1,
+        ELocation::PBuffer2};
+    // std::vector<ui8> hostsIndexes(
+    //     {VChunkConfig.GetHostIndex(ELocation::PBuffer0),
+    //      VChunkConfig.GetHostIndex(ELocation::PBuffer1),
+    //      VChunkConfig.GetHostIndex(ELocation::PBuffer2)});
+    std::vector<ui8> hostsIndexes;
+    hostsIndexes.reserve(3);
+    for (auto location: locations) {
+        hostsIndexes.push_back(VChunkConfig.GetHostIndex(location));
+        RequestedWrites.Set(location);
+    }
+
+    auto future = DirectBlockGroup->WriteBlocksToPBuffers(
+        VChunkConfig.VChunkIndex,
+        std::move(hostsIndexes),
+        Lsn,
+        Request->Range,
+        Request->Sglist,
+        NWilson::TTraceId(TraceId),
+        dDiskIdToHostIndex);
+
+    future.Subscribe(
+        [self = shared_from_this()](
+            const NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>& f)
+        { self->OnWriteToManyPBuffersResponse(f.GetValue()); });
+}
+
+void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
+    const TDBGWriteBlocksToManyPBuffersResponse& response)
+{
+    for (const auto& pbufferResponse: response.Responses) {
+        const auto& pbufferDiskId = pbufferResponse.PersistentBufferId;
+        auto hostId = dDiskIdToHostIndex.find(pbufferDiskId);
+        if (hostId == dDiskIdToHostIndex.end()) {
+            LOG_ERROR(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "TWriteRequestExecutor. Unexpected pbufferDiskId.");
+
+            continue;
+        }
+        auto location = VChunkConfig.GetPBufferLocation(hostId->second);
+        if (!HasError(pbufferResponse.Error)) {
+            CompletedWrites.Set(location);
+        }
+    }
+
+    if (CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount) {
+        Reply(MakeError(S_OK));
+        return;
+    }
+
+    std::vector<ELocation> handoffLocations(
+        {ELocation::HOPBuffer0, ELocation::HOPBuffer1});
+    if (CompletedWrites.Count() + handoffLocations.size() <
+        QuorumDirectBlockGroupHostCount)
+    {
+        auto resultError = MakeError(E_FAIL, "ololo");   // TODO
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TWriteRequestExecutor. All hand-offs attempts are over. %s",
+            FormatError(resultError).c_str());
+
+        Reply(resultError);
+        return;
+    }
+
+    // при 1-2 ошибках отправляем единичные запросы в HO
+    for (size_t i = 0;
+         i < QuorumDirectBlockGroupHostCount - CompletedWrites.Count();
+         ++i)
+    {
+        SendWriteRequest(handoffLocations[i]);
+    }
 }
 
 void TWriteRequestExecutor::SendWriteRequest(ELocation location)

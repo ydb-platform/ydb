@@ -55,6 +55,31 @@ ui8 TVChunkConfig::GetHostIndex(ELocation location) const
     }
 }
 
+ELocation TVChunkConfig::GetPBufferLocation(ui8 hostIndex) const
+{
+    if (hostIndex == PrimaryHost0) {
+        return ELocation::PBuffer0;
+    }
+
+    if (hostIndex == PrimaryHost1) {
+        return ELocation::PBuffer1;
+    }
+
+    if (hostIndex == PrimaryHost2) {
+        return ELocation::PBuffer2;
+    }
+
+    if (hostIndex == HandOffHost0) {
+        return ELocation::HOPBuffer0;
+    }
+
+    if (hostIndex == HandOffHost1) {
+        return ELocation::HOPBuffer1;
+    }
+
+    return ELocation::Unknown;
+}
+
 THashMap<ui8, ELocation> TVChunkConfig::GetPBuffersMap() const
 {
     THashMap<ui8, ELocation> result;

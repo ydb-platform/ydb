@@ -42,9 +42,12 @@ public:
 
 private:
     void SendWriteRequest(ELocation location);
+    void SendWriteRequestToManyPBuffers();
     void OnWriteResponse(
         ELocation location,
         const TDBGWriteBlocksResponse& response);
+    void OnWriteToManyPBuffersResponse(
+        const TDBGWriteBlocksToManyPBuffersResponse& response);
     void Reply(NProto::TError error);
 
     NActors::TActorSystem const* ActorSystem;
@@ -59,6 +62,7 @@ private:
         NThreading::NewPromise<TResponse>();
     TLocationMask RequestedWrites;
     TLocationMask CompletedWrites;
+    DDiskIdToHostIndex dDiskIdToHostIndex;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

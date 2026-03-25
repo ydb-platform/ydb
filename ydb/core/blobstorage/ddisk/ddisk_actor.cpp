@@ -148,8 +148,9 @@ namespace {
     }
 
     void TDDiskActor::Bootstrap() {
-        WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
-
+        if (IsPersistentBufferActor()) {
+            WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
+        }
         FillPool(DdiskIoOpPool);
         FillPool(PersistentBufferPartIoOpPool);
         FillPool(InternalSyncWriteOpPool);
@@ -240,6 +241,7 @@ namespace {
 
             case TEvReadThenWritePersistentBuffers::EventType:
             case TEvWritePersistentBuffers::EventType: {
+                Y_ABORT_UNLESS(WritePersistentBuffersActor);
                 TActivationContext::Forward(ev, WritePersistentBuffersActor);
                 break;
             }

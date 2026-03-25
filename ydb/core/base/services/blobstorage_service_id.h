@@ -69,9 +69,22 @@ inline TActorId MakeBlobStorageDDiskId(ui32 node, ui32 pdiskId, ui32 ddiskSlotId
     x[6] = pdiskId >> 16;
     x[7] = pdiskId >> 24;
     x[8] = ddiskSlotId;
-    x[8] = ddiskSlotId >> 8;
-    x[8] = ddiskSlotId >> 16;
-    x[8] = ddiskSlotId >> 24;
+    x[9] = ddiskSlotId >> 8;
+    x[10] = ddiskSlotId >> 16;
+    x[11] = ddiskSlotId >> 24;
+    return TActorId(node, TStringBuf(x, 12));
+}
+
+inline TActorId MakeBlobStoragePersistentBufferId(ui32 node, ui32 pdiskId, ui32 ddiskSlotId) {
+    char x[12] = {'N', 'P', 'B', '_'};
+    x[4] = pdiskId;
+    x[5] = pdiskId >> 8;
+    x[6] = pdiskId >> 16;
+    x[7] = pdiskId >> 24;
+    x[8] = ddiskSlotId;
+    x[9] = ddiskSlotId >> 8;
+    x[10] = ddiskSlotId >> 16;
+    x[11] = ddiskSlotId >> 24;
     return TActorId(node, TStringBuf(x, 12));
 }
 

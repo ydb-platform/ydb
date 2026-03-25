@@ -9,6 +9,11 @@
 namespace NKikimr::NDDisk {
 
     class TPersistentBufferActor : public TDDiskActor {
+    protected:
+        bool IsPersistentBufferActor() override {
+            return true;
+        }
+
     public:
         TPersistentBufferActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,

@@ -30,7 +30,7 @@ namespace NKikimr::NDDisk {
 
         InitPersistentBuffer();
 
-        if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
+        if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); !IsPersistentBufferActor() && it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;
             ChunkMapSnapshotLsn = record.Lsn;
             NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord chunkMap;
@@ -46,7 +46,7 @@ namespace NKikimr::NDDisk {
                 }
             }
         }
-        if (const auto it = msg.StartingPoints.find(TLogSignature::SignaturePersistentBufferChunkMap); it != msg.StartingPoints.end()) {
+        if (const auto it = msg.StartingPoints.find(TLogSignature::SignaturePersistentBufferChunkMap); IsPersistentBufferActor() && it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;
             PersistentBufferChunkMapSnapshotLsn = record.Lsn;
             NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord chunkMap;

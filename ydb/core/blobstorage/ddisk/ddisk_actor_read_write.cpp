@@ -47,6 +47,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvWrite::TPtr ev) {
+        Y_ABORT_UNLESS(!IsPersistentBufferActor());
         if (!CheckQuery(*ev, &Counters.Interface.Write)) {
             return;
         }
@@ -117,6 +118,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvRead::TPtr ev) {
+        Y_ABORT_UNLESS(!IsPersistentBufferActor());
         if (!CheckQuery(*ev, &Counters.Interface.Read)) {
             return;
         }

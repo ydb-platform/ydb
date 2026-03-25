@@ -299,6 +299,11 @@ namespace NKikimr::NDDisk {
             WakeupUpdateFreeSpaceInfo = 2,
         };
 
+    protected:
+        virtual bool IsPersistentBufferActor() {
+            return false;
+        }
+
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,

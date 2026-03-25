@@ -187,10 +187,16 @@ namespace NKikimr::NStorage {
             donorDiskIds, scrubCookie, whiteboardInstanceGuid, readOnly);
 
         std::unique_ptr<IActor> actor;
+        auto *as = TActivationContext::ActorSystem();
 
         if (ddisk) {
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {},
                 NDDisk::TDDiskConfig{}, AppData()->Counters));
+
+            auto pbServiceId = MakeBlobStoragePersistentBufferId(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId);
+            const TActorId pbActorId = as->Register(NDDisk::CreatePersistentBufferActor(std::move(baseInfo), groupInfo, {},
+                NDDisk::TDDiskConfig{}, AppData()->Counters), TMailboxType::Revolving, AppData()->SystemPoolId);
+            as->RegisterLocalService(pbServiceId, pbActorId);
         } else {
             baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
             baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;
@@ -295,7 +301,6 @@ namespace NKikimr::NStorage {
             actor.reset(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters));
         }
 
-        auto *as = TActivationContext::ActorSystem();
         const TActorId actorId = as->Register(actor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);

@@ -191,7 +191,10 @@ Y_UNIT_TEST_SUITE(TDynamicKllSketchTest) {
         const ui64 seed = 97531u;
         TDynamicKllSketch<TString> d1(45, seed, 4096);
         TDynamicKllSketch<TString> d2(45, seed, 4096);
-        for (int i = 0; i < 600; ++i) {
+        // With weight 1 and w0=4096 each Add is accepted with prob 1/4096; need enough trials so
+        // both sketches (same seed) almost surely get the same non-empty sample set.
+        constexpr int iterations = 100'000;
+        for (int i = 0; i < iterations; ++i) {
             TString key = TStringBuilder() << "p" << i;
             d1.Add(key, 1);
             d2.Add(key, 1);

@@ -498,7 +498,7 @@ selector_config:
 - **`selector_config`** с условием `dynamic: true` — фрагмент применяется к [динамическим узлам](../../../../concepts/glossary.md#dynamic), на которых выполняются запросы.
 - **`actor_system_config`** — выделение CPU под вычислительный пул актёров на узле (в примере `cpu_count: 16`).
 - **`memory_controller_config`** — ограничения по RAM: доли на кэш, выполнение запросов и жёсткий потолок (`hard_limit_bytes`), чтобы аналитические запросы не вытесняли всю память узла.
-- **`table_service_config`** — `enable_olap_sink`, `enable_spilling_nodes`, `enable_query_service_spilling` включают колоночную выгрузку и [спиллинг](../../../../concepts/spilling.md) для тяжёлых запросов.
+- **`table_service_config`** — `enable_olap_sink`, `enable_spilling_nodes`, `enable_query_service_spilling` включают колоночную выгрузку и [спиллинг](../../../../concepts/query_execution/spilling.md) для тяжёлых запросов.
 - **`spilling_service_config.local_file_config`** — каталог и лимиты размера временных файлов на диске спиллинга.
 
 Замените следующие значения на актуальные в разделе `selector_config.config.table_service_config.spilling_service_config.local_file_config`:
@@ -515,7 +515,7 @@ selector_config:
 ansible-playbook ydb_platform.ydb.initial_setup
 ```
 
-Вскоре после начала будет необходимо подтвердить полную очистку настроенных дисков. Затем завершение развёртывания может занять десятки минут в зависимости от окружения и настроек. Этот плейбук выполняет примерно те же шаги, которые описаны в инструкциях для [ручного развёртывания кластера {{ ydb-short-name }}](../../manual/initial-deployment.md).
+Вскоре после начала будет необходимо подтвердить полную очистку настроенных дисков. Затем завершение развёртывания может занять десятки минут в зависимости от окружения и настроек. Этот плейбук выполняет примерно те же шаги, которые описаны в инструкциях для [ручного развёртывания кластера {{ ydb-short-name }}](../../manual/initial-deployment/index.md).
 
 ### Проверьте состояние кластера {#cluster-state}
 

@@ -47,7 +47,8 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
 
     totalSize = AlignUp(totalSize, DefaultBlockSize);
 
-    Y_ABORT_UNLESS(totalSize == 4096);
+    Y_ABORT_UNLESS(totalSize > 0);
+    Y_ABORT_UNLESS(totalSize % DefaultBlockSize == 0);
 
     auto data = std::make_shared<TString>(TString::Uninitialized(totalSize));
     char* ptr = data->Detach();
@@ -94,16 +95,16 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
 {
     const auto* msg = ev->Get();
 
-    Y_ABORT_UNLESS(msg->Record.GetBlocksCount() == 1);
+    const ui32 blocksCount = msg->Record.GetBlocksCount();
+    Y_ABORT_UNLESS(blocksCount > 0);
 
-    auto data = std::make_shared<TString>(TString::Uninitialized(4096));
-    TSgList sglist = {TBlockDataRef(data->data(), data->size())};
+    auto buffer = std::make_shared<TString>(
+        TString::Uninitialized(blocksCount * DefaultBlockSize));
+    TSgList sglist = {TBlockDataRef(buffer->data(), buffer->size())};
 
     auto request = std::make_shared<TReadBlocksLocalRequest>(
         TRequestHeaders{},
-        TBlockRange64::WithLength(
-            msg->Record.GetStartIndex(),
-            msg->Record.GetBlocksCount()));
+        TBlockRange64::WithLength(msg->Record.GetStartIndex(), blocksCount));
     request->Sglist = TGuardedSgList(std::move(sglist));
 
     auto future = FastPathService->ReadBlocksLocal(
@@ -116,17 +117,17 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
          selfId = ctx.SelfID,
          cookie = ev->Cookie,
          request,
-         data](const NThreading::TFuture<TReadBlocksLocalResponse>& f)
+         buffer](const NThreading::TFuture<TReadBlocksLocalResponse>& f)
         {
             auto response = std::make_unique<TEvService::TEvReadBlocksResponse>(
                 f.GetValue().Error);
 
             if (auto guard = request->Sglist.Acquire()) {
                 const auto& sglist = guard.Get();
-                for (const auto& block: sglist) {
+                for (const auto& data: sglist) {
                     response->Record.MutableBlocks()->AddBuffers(
-                        block.Data(),
-                        block.Size());
+                        data.Data(),
+                        data.Size());
                 }
             } else {
                 Y_ABORT_UNLESS(false);

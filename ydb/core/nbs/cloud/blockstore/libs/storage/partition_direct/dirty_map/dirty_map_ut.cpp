@@ -269,6 +269,47 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "123[10..19];",
             flushHint[ELocation::PBuffer2].DebugPrint());
     }
+
+    Y_UNIT_TEST(ShouldReadFromDDiskIfRangeIsNotCoveredByInflightRange)
+    {
+        TBlocksDirtyMap dirtyMap;
+
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(0, 100),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_EQUAL(false, flushHint.empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "123[0..99];",
+            flushHint[ELocation::PBuffer0].DebugPrint());
+
+        dirtyMap.FlushFinished(ELocation::PBuffer0, {123}, {});
+        dirtyMap.FlushFinished(ELocation::PBuffer1, {123}, {});
+        dirtyMap.FlushFinished(ELocation::PBuffer2, {123}, {});
+
+        auto eraseHint = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT_EQUAL(false, eraseHint.empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "123[0..99];",
+            eraseHint[ELocation::PBuffer0].DebugPrint());
+
+        dirtyMap.EraseFinished(ELocation::PBuffer0, {123}, {});
+
+        dirtyMap.WriteFinished(
+            124,
+            TBlockRange64::WithLength(10, 10),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, 100));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D+++..P.....][0..99][0..99]};",
+            readHint.DebugPrint());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

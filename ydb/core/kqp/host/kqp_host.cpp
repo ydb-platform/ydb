@@ -691,6 +691,113 @@ const TTypedUnboxedValue* ValidateParameter(const TString& name, const TTypeAnno
     return parameter;
 }
 
+// EvaluateExpr nodes containing Parameter references cannot be evaluated at compile time
+// because parameter values are not available in the evaluation context for DDL queries.
+// This transformer unwraps such nodes before expression evaluation so the existing
+// parameter-at-execution-time flow handles them. Pure expressions (no parameters) keep
+// their EvaluateExpr wrapper and are evaluated normally.
+class TUnwrapEvaluateExprForParametersTransformer {
+public:
+    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        TOptimizeExprSettings optSettings(nullptr);
+        optSettings.VisitChanges = true;
+
+        return OptimizeExpr(input, output,
+            [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+                if (node->IsCallable("EvaluateExpr") && node->ChildrenSize() == 1 &&
+                    ContainsParameter(node->Head())
+                ) {
+                    return node->HeadPtr();
+                }
+                return node;
+            }, ctx, optSettings);
+    }
+
+    static TAutoPtr<IGraphTransformer> Sync() {
+        return CreateFunctorTransformer(TUnwrapEvaluateExprForParametersTransformer());
+    }
+
+private:
+    static bool ContainsParameter(const TExprNode& node) {
+        if (node.IsCallable("Parameter")) {
+            return true;
+        }
+        for (ui32 i = 0; i < node.ChildrenSize(); ++i) {
+            if (ContainsParameter(*node.Child(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
+// Collects parameters from CREATE/ALTER SECRET. We need this because parameters are not supported in DDL operations.
+// Secrets are the only schema objects that support parameters.
+class TCollectParametersForSecretsTransformer {
+public:
+    TCollectParametersForSecretsTransformer(TIntrusivePtr<TKikimrQueryContext> queryCtx)
+        : QueryCtx(queryCtx) {}
+
+    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (!QueryCtx->PrepareOnly || !QueryCtx->PreparingQuery) {
+            output = input;
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        TOptimizeExprSettings optSettings(nullptr);
+        optSettings.VisitChanges = false;
+
+        auto& queryCtx = QueryCtx;
+        auto status = OptimizeExpr(input, output,
+            [&queryCtx](const TExprNode::TPtr& input, TExprContext&) -> TExprNode::TPtr {
+                auto ret = input;
+                TExprBase node(input);
+
+                auto addSecretValueParam = [&](auto secretNode) {
+                    if (secretNode.ValueFromParam().Value() != "1") {
+                        return;
+                    }
+                    if (!secretNode.Value().template Maybe<TCoAtom>()) {
+                        return;
+                    }
+                    TString paramName(secretNode.Value().template Cast<TCoAtom>().Value());
+                    if (!paramName.StartsWith("$")) {
+                        paramName = "$" + paramName;
+                    }
+                    for (const auto& param : queryCtx->PreparingQuery->GetParameters()) {
+                        if (param.GetName() == paramName) {
+                            return;
+                        }
+                    }
+                    auto& paramDesc = *queryCtx->PreparingQuery->AddParameters();
+                    paramDesc.SetName(paramName);
+                    auto guard = queryCtx->QueryData->TypeEnv().BindAllocator();
+                    auto* utf8Type = NKikimr::NMiniKQL::TDataType::Create(
+                        NYql::NUdf::TDataType<NYql::NUdf::TUtf8>::Id,
+                        queryCtx->QueryData->TypeEnv());
+                    NKikimr::NMiniKQL::ExportTypeToProto(utf8Type, *paramDesc.MutableType());
+                };
+
+                if (auto createSecret = node.Maybe<TKiCreateSecret>()) {
+                    addSecretValueParam(createSecret.Cast());
+                } else if (auto alterSecret = node.Maybe<TKiAlterSecret>()) {
+                    addSecretValueParam(alterSecret.Cast());
+                }
+
+                return ret;
+            }, ctx, optSettings);
+
+        return status;
+    }
+
+    static TAutoPtr<IGraphTransformer> Sync(TIntrusivePtr<TKikimrQueryContext> queryCtx) {
+        return CreateFunctorTransformer(TCollectParametersForSecretsTransformer(queryCtx));
+    }
+
+private:
+    TIntrusivePtr<TKikimrQueryContext> QueryCtx;
+};
+
 class TCollectParametersTransformer {
 public:
     TCollectParametersTransformer(TIntrusivePtr<TKikimrQueryContext> queryCtx)
@@ -1765,9 +1872,11 @@ private:
         auto transformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
             .AddPreTypeAnnotation()
+            .Add(TUnwrapEvaluateExprForParametersTransformer::Sync(), "UnwrapEvaluateExprForParameters")
             .AddIOAnnotation()
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
+            .Add(TCollectParametersForSecretsTransformer::Sync(SessionCtx->QueryPtr()), "CollectParametersForSecrets")
             .Build(false);
 
         return MakeIntrusive<TAsyncValidateYqlResult>(compileResult.QueryExpr.Get(), SessionCtx, ctx, transformer, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
@@ -2058,11 +2167,13 @@ private:
             .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
             .AddPreTypeAnnotation()
+            .Add(TUnwrapEvaluateExprForParametersTransformer::Sync(), "UnwrapEvaluateExprForParameters")
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
+            .Add(TCollectParametersForSecretsTransformer::Sync(SessionCtx->QueryPtr()), "CollectParametersForSecrets")
             .AddPostTypeAnnotation()
             .AddOptimization(true, false)
             .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
@@ -2119,11 +2230,13 @@ private:
             .Add(TLogExprTransformer::Sync("YqlTransformerNewRBO", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransformNewRBO")
             .AddPreTypeAnnotation()
+            .Add(TUnwrapEvaluateExprForParametersTransformer::Sync(), "UnwrapEvaluateExprForParameters")
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
+            .Add(TCollectParametersForSecretsTransformer::Sync(SessionCtx->QueryPtr()), "CollectParametersForSecrets")
             .AddPostTypeAnnotation()
             //.AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION)
             .Add(RBOOptimizationTransformer.Release(), "RBOOptimizationTransformer")

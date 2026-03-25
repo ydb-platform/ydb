@@ -74,7 +74,7 @@ private:
         }
     }
 
-    virtual void ProceedAuthentication(const TActorContext &ctx,
+    virtual void ProceedWithAuthentication(const TActorContext &ctx,
         TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) override final
     {
         const auto itUser = domainInfo->Users.find(AuthcId);

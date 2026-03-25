@@ -44,7 +44,7 @@ protected:
     void ResolveSchemeShard(const TActorContext &ctx);
     virtual NKikimrScheme::TEvLogin CreateLoginRequest() const = 0;
     void SendLoginRequest();
-    virtual void ProceedAuthentication(const TActorContext &ctx,
+    virtual void ProceedWithAuthentication(const TActorContext &ctx,
         TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) = 0;
     virtual void SendIssuedToken(const NKikimrScheme::TEvLoginResult& loginResult) const = 0;
     virtual void SendError(NKikimrIssues::TIssuesIds::EIssueCode issueCode, const std::string& message,

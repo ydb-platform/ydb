@@ -63,7 +63,7 @@ private:
         return CreatePlainLdapLoginRequest(TString(AuthcId), TString(PeerName), AppData()->AuthConfig);
     }
 
-    virtual void ProceedAuthentication([[maybe_unused]] const TActorContext &ctx,
+    virtual void ProceedWithAuthentication([[maybe_unused]] const TActorContext &ctx,
         [[maybe_unused]] TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) override final
     {
         SendLoginRequest();

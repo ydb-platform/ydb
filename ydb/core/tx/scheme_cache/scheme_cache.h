@@ -50,12 +50,6 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     using TPtr = TIntrusivePtr<TDomainInfo>;
     using THashInitParams = std::unordered_map<NLoginProto::EHashType::HashType, std::string>;
 
-    struct TUser {
-        TString Sid;
-
-        TString ToString() const;
-    };
-
     struct TGroup {
         TString Sid;
         TVector<TString> Members;

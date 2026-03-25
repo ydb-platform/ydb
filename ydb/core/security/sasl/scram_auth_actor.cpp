@@ -210,7 +210,7 @@ public:
     }
 
 private:
-    virtual void ProceedAuthentication(const TActorContext &ctx,
+    virtual void ProceedWithAuthentication(const TActorContext &ctx,
         TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) override final
     {
         const auto itUser = domainInfo->Users.find(AuthcId);
@@ -230,7 +230,7 @@ private:
         // it can happen if SchemeShard works on a old version and doesn't pass hashes params
         // in this case we didn't have any user hashes in scram format
         if (userHashInitParams.empty()) {
-            std::string error = "SchemeShard works on old version ans doesn't support SASL SCRAM";
+            std::string error = "SchemeShard works on old version and doesn't support SASL SCRAM";
             LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
                 ActorName << "# " << ctx.SelfID.ToString() <<
                 ", " << error

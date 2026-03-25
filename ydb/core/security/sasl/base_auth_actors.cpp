@@ -30,7 +30,7 @@ void TAuthActorBase::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResu
             IActor* pipe = NTabletPipe::CreateClient(SelfId(), domainInfo->ExtractSchemeShard(), GetPipeClientConfig());
             PipeClient = RegisterWithSameMailbox(pipe);
 
-            return ProceedAuthentication(ctx, domainInfo);
+            return ProceedWithAuthentication(ctx, domainInfo);
         }
     }
 

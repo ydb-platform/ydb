@@ -30,10 +30,10 @@ TString TDomainInfo::ToString() const {
     const auto usersView = std::views::keys(Users);
     for (auto it = usersView.begin(); it != usersView.end(); ++it) {
         if (it != usersView.begin()) {
-            result << ",";
+            result << ", ";
         }
 
-        result << *it;
+        result << "{ Sid: " << *it << " }";
     }
     result << "]";
 
@@ -49,12 +49,6 @@ TString TDomainInfo::ToString() const {
 
     result << " }";
     return result;
-}
-
-TString TDomainInfo::TUser::ToString() const {
-    return TStringBuilder() << "{"
-        << " Sid: " << Sid
-    << " }";
 }
 
 TString TDomainInfo::TGroup::ToString() const {

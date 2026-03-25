@@ -85,7 +85,10 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataMixedFlags)
 
 void AddReadOperation(TVector<NKikimrPQ::TPartitionOperation>& ops)
 {
-    ops.push_back({});
+    NKikimrPQ::TPartitionOperation op;
+    op.SetCommitOffsetsBegin(0);
+    op.SetCommitOffsetsEnd(0);
+    ops.push_back(std::move(op));
 }
 
 void AddWriteOperation(TVector<NKikimrPQ::TPartitionOperation>& ops, bool skipConflictCheck)

@@ -1,6 +1,8 @@
 #include "autopartitioning_manager.h"
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/common/partition_id.h>
+#include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/partitioning_keys_manager.h>
 #include <ydb/core/persqueue/public/utils.h>
@@ -148,6 +150,8 @@ public:
 
         if (key) {
             KeysManager.Add(key, size);
+        } else {
+            KeysManager.Add(sourceIdHash, size);
         }
     }
 
@@ -162,9 +166,19 @@ public:
             return std::nullopt;
         }
 
-        auto medianKey = KeysManager.GetMedianKey();
-        if (medianKey) {
-            return medianKey;
+        if (AppData()->FeatureFlags.GetEnableTopicPartitionSplitBasedOnKllSketch()) {
+            auto medianKey = KeysManager.GetMedianKey();
+            if (medianKey) {
+                return medianKey;
+            }
+
+            auto* partition = GetPartition();
+            const auto& keyRange = partition->GetKeyRange();
+
+            PQ_LOG_NOTICE(
+                TStringBuilder()
+                << "TAutopartitioningManager::SplitBoundary KLL sketch enabled, no median key found, will split by middle of key range");
+            return MiddleOf(keyRange.GetFromBound(), keyRange.GetToBound());
         }
 
         return GetSplitBoundaryBasedOnSourceIds();
@@ -227,12 +241,7 @@ private:
             return lhs < rhs;
         });
 
-        auto* partition = FindIfPtr(Config.GetPartitions(), [&](const auto& v) {
-            return v.GetPartitionId() == PartitionId;
-        });
-
-        AFL_ENSURE(partition)("p", PartitionId);
-
+        auto* partition = GetPartition();
         const auto& keyRange = partition->GetKeyRange();
 
         auto inRange = [&](const TString& sourceIdHash) {
@@ -279,6 +288,14 @@ private:
         }
 
         return MiddleOf(*lastLeft, *lastRight);
+    }
+
+    const NKikimrPQ::TPQTabletConfig_TPartition *GetPartition() const {
+        auto* partition = FindIfPtr(Config.GetPartitions(), [&](const auto& v) {
+            return v.GetPartitionId() == PartitionId;
+        });
+        AFL_ENSURE(partition)("p", PartitionId);
+        return partition;
     }
 
     static constexpr auto DEFAULT_NUM_SKETCHES = 100;

@@ -13,8 +13,6 @@ ENDIF()
 
 SIZE(LARGE)
 
-TAG(ya:fat)
-
 REQUIREMENTS(ram:16 cpu:2)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

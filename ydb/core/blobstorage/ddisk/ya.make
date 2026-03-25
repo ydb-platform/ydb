@@ -12,6 +12,7 @@ LIBRARY()
         ddisk_actor_read_write.cpp
         ddisk_actor_sync.cpp
         direct_io_op.cpp
+        persistent_buffer_actor.cpp
         persistent_buffer_space_allocator.cpp
         segment_manager.cpp
         write_persistent_buffers_request_actor.cpp

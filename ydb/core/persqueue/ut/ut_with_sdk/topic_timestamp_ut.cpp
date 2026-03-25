@@ -29,6 +29,34 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         Middle,
     };
 
+    static TString FormatMilliSeconds(const auto ts) {
+        ui64 v = ts.MicroSeconds();
+        TStringBuilder sb;
+        sb << v / 1000;
+        if (auto r = v % 1000) {
+            sb << "." << LeftPad(r, 3, '0');
+        }
+        return sb;
+    }
+
+    static double DiffTimestampMs(const TInstant a, const TInstant b) {
+        if (a >= b) {
+            return (a - b).MicroSeconds() / 1000.0;
+        } else {
+            return (b - a).MicroSeconds() / -1000.0;
+        }
+    }
+
+
+    static TInstant RoundDownToMilliSeconds(const TInstant ts) {
+        return TInstant::MilliSeconds(ts.MilliSeconds());
+    }
+
+    // The best available positioning precision that the test checks
+    static TInstant RoundPositionTimestamp(const TInstant ts) {
+        return RoundDownToMilliSeconds(ts);
+    }
+
     void TimestampReadImpl(const bool topicsAreFirstClassCitizen, const bool enableSkipMessagesWithObsoleteTimestamp, const TTimestampReadOptions options, const std::span<const ETimestampFnKind> timestampKinds, const bool checkEarly, const ui32 maxHeadSkip, const bool withRestart) {
         auto createSetup = [=]() {
             NKikimrConfig::TFeatureFlags ff;
@@ -127,7 +155,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             TStringStream ssLog;
             ssLog << "SESSION " << sessionId;
             if (startTimestamp.has_value()) {
-                ssLog << " " << startTimestamp->MilliSeconds() << " ms (" << *startTimestamp << ")";
+                ssLog << " " << FormatMilliSeconds(*startTimestamp) << " ms (" << *startTimestamp << ")";
             }
 
             size_t early = 0;
@@ -149,17 +177,17 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             ssLog << ": [\n";
             for (size_t i = 0; i < messages.size(); ++i) {
                 const auto& m = messages[i];
-                TMaybe<i64> writeDiff;
+                TMaybe<double> writeDiff;
                 if (startTimestamp.has_value()) {
-                    writeDiff = (i64)m.GetWriteTime().MilliSeconds() - (i64)startTimestamp->MilliSeconds();
+                    writeDiff = DiffTimestampMs(m.GetWriteTime(), *startTimestamp);
                 }
-                ssLog << "    " << i << ":{create_ms:" << m.GetCreateTime().MilliSeconds() << ", write_ms:" << m.GetWriteTime().MilliSeconds() << "";
+                ssLog << "    " << i << ":{create_ms:" << FormatMilliSeconds(m.GetCreateTime()) << ", write_ms:" << FormatMilliSeconds(m.GetWriteTime()) << "";
                 if (writeDiff) {
                     ssLog << ", write_ms-start_ms:" << *writeDiff;
                 }
                 if (i > 0) {
                     const auto& prevM = messages[i - 1];
-                    i64 diff = (i64)m.GetWriteTime().MilliSeconds() - (i64)prevM.GetWriteTime().MilliSeconds();
+                    auto diff = DiffTimestampMs(m.GetWriteTime(), prevM.GetWriteTime());
                     ssLog << ", write_ms-prev_write_ms:" << diff;
                 }
                 ssLog << "},\n";
@@ -185,6 +213,9 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             TInstant mid = writeTimestamp - (writeTimestamp - createTimestamp) / 2;
             return Max(mid, threshold);
         };
+        auto countExpectedMessages = [&](const TInstant startTimestamp) -> size_t {
+            return CountIf(messages, [=](const auto& m) { return startTimestamp <= m.GetWriteTime(); });
+        };
         struct TTimestampFn {
             std::function<TInstant(size_t)> Fn;
             TString Name;
@@ -205,26 +236,42 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         struct TCase {
             TString TimestampFn;
             size_t SessionId;
+
             auto operator<=>(const TCase& v) const {
                 const TCase& u = *this;
                 return std::tie(u.TimestampFn, u.SessionId) <=> std::tie(v.TimestampFn, v.SessionId);
             }
+            // non key parameters
+            TInstant StartTimestamp;
+            size_t ExpectedMessagesCount;
         };
+
         TMap<TCase, TStatistics> result;
         for (const auto& [tsFn, tsName, tsKind] : timestampCases) {
             if (!FindPtr(timestampKinds, tsKind)) {
                 continue;
             }
             for (size_t sessionId = 0; sessionId < messages.size(); ++sessionId) {
-                TInstant startTimestamp = tsFn(sessionId);
+                TInstant startTimestamp = RoundPositionTimestamp(tsFn(sessionId));
                 TInstant messageWriteTimestamp = messages.at(sessionId).GetWriteTime();
                 if (startTimestamp > messageWriteTimestamp) {
                     Cerr << (TStringBuilder()
-                    << "Skip SESSION " << sessionId << ": messages have same timestamp; " << LabeledOutput(messageWriteTimestamp, startTimestamp) << "\n") << Flush;
+                    << "Skip SESSION " << sessionId << ": start timestamp is later than message write timestamp; " << LabeledOutput(messageWriteTimestamp, startTimestamp) << "\n") << Flush;
                     continue;
                 }
+                if (sessionId > 0) {
+                    TInstant previousStartTimestamp = RoundPositionTimestamp(tsFn(sessionId - 1));
+                    if (previousStartTimestamp == startTimestamp) {
+                        Cerr << (TStringBuilder()
+                        << "Skip SESSION " << sessionId << ": start timestamp is same as the previous one; " << LabeledOutput(previousStartTimestamp, startTimestamp) << "\n") << Flush;
+                        continue;
+                    }
+                }
+
                 const auto [tail, early, outOfOrder] = readFromTimestamp(startTimestamp, TStringBuilder() << LabeledOutput(tsName, sessionId));
-                result[TCase{.TimestampFn = tsName, .SessionId = sessionId,}] = TStatistics{.Size = tail.size(), .Early = early, .OutOfOrder = outOfOrder};
+                TCase c{.TimestampFn = tsName, .SessionId = sessionId, .StartTimestamp = startTimestamp, .ExpectedMessagesCount = countExpectedMessages(startTimestamp)};
+                TStatistics s{.Size = tail.size(), .Early = early, .OutOfOrder = outOfOrder};
+                result[c] = s;
             }
         }
         for (const auto& [testCase, stats] : result) {
@@ -233,20 +280,16 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         }
 
         for (const auto& [testCase, stats] : result) {
-            const auto [timestampFn, sessionId] = testCase;
-            const size_t expected = messages.size() - sessionId;
-            UNIT_ASSERT_GE_C(stats.Size + maxHeadSkip, expected, LabeledOutput(timestampFn, sessionId, stats.Size, expected, maxHeadSkip));
+            UNIT_ASSERT_GE_C(stats.Size + maxHeadSkip, testCase.ExpectedMessagesCount, LabeledOutput(testCase.TimestampFn, testCase.SessionId, stats.Size, testCase.ExpectedMessagesCount, maxHeadSkip));
         }
         if (!checkEarly) {
             Cerr << "Test case skipped\n";
             return;
         }
         for (const auto& [testCase, stats] : result) {
-            const auto [timestampFn, sessionId] = testCase;
-            const size_t expected = messages.size() - sessionId;
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.Early, 0, LabeledOutput(timestampFn, sessionId, stats.Size, expected));
-            UNIT_ASSERT_LE_C(stats.Size, expected, LabeledOutput(timestampFn, sessionId, stats.Size, expected));
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.OutOfOrder, 0, LabeledOutput(timestampFn, sessionId, stats.Size, expected));
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.Early, 0, LabeledOutput(testCase.TimestampFn, testCase.SessionId, stats.Size, testCase.ExpectedMessagesCount));
+            UNIT_ASSERT_LE_C(stats.Size, testCase.ExpectedMessagesCount, LabeledOutput(testCase.TimestampFn, testCase.SessionId, stats.Size, testCase.ExpectedMessagesCount));
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.OutOfOrder, 0, LabeledOutput(testCase.TimestampFn, testCase.SessionId, stats.Size, testCase.ExpectedMessagesCount));
         }
     }
 

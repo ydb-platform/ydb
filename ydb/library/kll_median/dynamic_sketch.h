@@ -41,23 +41,23 @@ public:
         }
 
         ui64 placementWeight = weight;
+        ui64 minWeight = Sketch_.CurrentWeight_;
         if (!Sketch_.Levels_.empty()) {
-            const ui64 w0 = Sketch_.Levels_[0].Weight;
-            if (w0 > weight) {
-                if (!TryAcceptSmallWeight(weight, w0, Sketch_.Rng_)) {
-                    return;
-                }
-                placementWeight = w0;
+            minWeight = Sketch_.Levels_[0].Weight;
+        }
+        
+        if (minWeight > weight) {
+            if (!TryAcceptSmallWeight(weight, minWeight, Sketch_.Rng_)) {
+                return;
             }
+            placementWeight = minWeight;
         }
 
         if ((weight & (weight - 1)) != 0) { // weight is not a power of two
-            size_t power = 0;
-            while ((1ULL << power) <= weight) {
+            for (ui32 power = 0; (1ULL << power) <= weight; ++power) {
                 if ((weight & (1ULL << power)) != 0) {
                     Add(x, 1ULL << power);
                 }
-                ++power;
             }
             return;
         }

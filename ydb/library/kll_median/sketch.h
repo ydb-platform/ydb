@@ -60,6 +60,7 @@ public:
         , Bit_(0, 1)
     {
         Y_ENSURE(k >= 2, "k must be >= 2");
+        Y_ENSURE(initialWeight > 0 && (initialWeight & (initialWeight - 1)) == 0, "initialWeight must be a power of two");
     }
 
     void Add(const T& x) {

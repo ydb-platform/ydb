@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         return RoundDownToMilliSeconds(ts);
     }
 
-    void TimestampReadImpl(const bool topicsAreFirstClassCitizen, const bool enableSkipMessagesWithObsoleteTimestamp, const TTimestampReadOptions options, const std::span<const ETimestampFnKind> timestampKinds, const TExplicitType<bool> checkEarly, const TExplicitType<ui32> maxHeadSkip, const TExplicitType<bool> withRestart) {
+    void TimestampReadImpl(const bool topicsAreFirstClassCitizen, const bool enableSkipMessagesWithObsoleteTimestamp, const TTimestampReadOptions options, const std::span<const ETimestampFnKind> timestampKinds, const TExplicitType<bool> checkEarly, const ui32 maxHeadSkip, const TExplicitType<bool> withRestart) {
         auto createSetup = [=]() {
             NKikimrConfig::TFeatureFlags ff;
             ff.SetEnableTopicAutopartitioningForReplication(true);

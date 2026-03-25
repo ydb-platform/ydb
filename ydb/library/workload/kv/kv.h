@@ -57,7 +57,16 @@ public:
     std::string TableName = "kv_test";
 
     bool StaleRO = KvWorkloadConstants::STALE_RO;
+    /// For `bulk_upsert` run: target logical MiB/s (approximate). ydb_cli maps this to `--rate`.
+    /// Mutually exclusive with explicitly passing `--rate` on the CLI.
+    ui64 LoadMbPerSec = 0;
+
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
+
+public:
+    void SetStoreType(EStoreType st) noexcept {
+        StoreType = st;
+    }
 };
 
 class TKvWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TKvWorkloadParams> {
@@ -100,11 +109,13 @@ public:
         InsertRandom,
         SelectRandom,
         ReadRowsRandom,
-        Mixed
+        Mixed,
+        BulkUpsertRandom,
     };
 
 private:
     TQueryInfoList Upsert(TVector<TRow>&& rows);
+    TQueryInfoList BulkUpsert(TVector<TRow>&& rows);
     TQueryInfoList Insert(TVector<TRow>&& rows);
     TQueryInfoList WriteRows(TString operation, TVector<TRow>&& rows);
     TQueryInfoList Select(TVector<TRow>&& rows);
@@ -113,6 +124,7 @@ private:
 
     TQueryInfo FillKvData() const;
     TVector<TRow> GenerateRandomRows(bool randomValues = false);
+    TVector<TRow> GenerateBulkUpsertRows();
 
     TString BigString;
 

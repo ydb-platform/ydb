@@ -41,16 +41,16 @@ Ydb::Formats::CsvSettings CsvSettings(
     return csvSettings;
 }
 
-void CreateStringTestTable(NYdb::NTable::TTableClient& client) {
+void CreateKeyValueTestTable(NYdb::NTable::TTableClient& client, EPrimitiveType keyType = EPrimitiveType::Uint32, EPrimitiveType valueType = EPrimitiveType::Int32) {
     auto session = client.GetSession().ExtractValueSync().GetSession();
 
     auto tableBuilder = client.GetTableBuilder();
     tableBuilder
-        .AddNullableColumn("Key", EPrimitiveType::Uint32)
-        .AddNullableColumn("Value", EPrimitiveType::Utf8);
+        .AddNullableColumn("Key", keyType)
+        .AddNullableColumn("Value", valueType);
 
     tableBuilder.SetPrimaryKeyColumns({"Key"});
-    auto result = session.CreateTable("/Root/StringTest", tableBuilder.Build()).ExtractValueSync();
+    auto result = session.CreateTable("/Root/Test", tableBuilder.Build()).ExtractValueSync();
 
     UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -60,160 +60,6 @@ TString StreamQueryToYson(NYdb::NTable::TTableClient& client, const TString& que
     auto it = client.StreamExecuteScanQuery(query).GetValueSync();
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
     return NKqp::StreamResultToYson(it);
-}
-
-struct TLimitCsvRow {
-    TString Key1;
-    TString Key2;
-    TString Key3;
-    TString Value1;
-    TString Value2;
-    TString Value3;
-};
-
-NYdb::NTable::TBulkUpsertResult BulkUpsertCsvLimitRow(NYdb::NTable::TTableClient& client, const TLimitCsvRow& row) {
-    TStringBuilder csv;
-    csv << "Key1,Key2,Key3,Value1,Value2,Value3\n";
-    csv << row.Key1 << "," << row.Key2 << "," << row.Key3 << "," << row.Value1 << "," << row.Value2 << "," << row.Value3 << "\n";
-
-    auto upsert = client.BulkUpsert(
-        "/Root/Limits",
-        EDataFormat::CSV,
-        csv,
-        {},
-        BulkUpsertSettings(CsvSettings()))
-        .GetValueSync();
-    return upsert;
-}
-
-TString MakeInvalidDataCsv(
-    const TString& valueDecimal = "0",
-    const TString& valueDecimal35 = "0",
-    const TString& valueDate = "1970-01-01",
-    const TString& valueDateTime = "1970-01-01T00:00:00Z",
-    const TString& valueTimestamp = "1970-01-01T00:00:00Z",
-    const TString& valueUtf8 = "",
-    const TString& valueYson = "{}",
-    const TString& valueJson = "{}",
-    const TString& valueJsonDocument = "{}",
-    const TString& valueDyNumber = "0")
-{
-    TStringBuilder csv;
-    csv << "Key,Value_Decimal,Value_Decimal35,Value_Date,Value_DateTime,Value_Timestamp,Value_Utf8,Value_Yson,Value_Json,Value_JsonDocument,Value_DyNumber\n";
-    csv << "1," << valueDecimal
-        << "," << valueDecimal35
-        << "," << valueDate
-        << "," << valueDateTime
-        << "," << valueTimestamp
-        << ",\"" << valueUtf8 << "\""
-        << ",\"" << valueYson << "\""
-        << ",\"" << valueJson << "\""
-        << ",\"" << valueJsonDocument << "\""
-        << "," << valueDyNumber
-        << "\n";
-    return csv;
-}
-
-NYdb::NTable::TBulkUpsertResult BulkUpsertCsvUint8Row(NYdb::NTable::TTableClient& client, const TString& path, ui32 key, ui32 value) {
-    TStringBuilder csv;
-    csv << "Key,Value\n";
-    csv << key << "," << value << "\n";
-
-    auto upsert = client.BulkUpsert(
-        path,
-        EDataFormat::CSV,
-        csv,
-        {},
-        BulkUpsertSettings(CsvSettings()))
-        .GetValueSync();
-    return upsert;
-}
-
-void WaitAndCompareQueryYson(NYdb::NTable::TTableClient& client, const TString& query, const TString& expectedYson) {
-    TString actualYson;
-    for (ui32 attempt = 0; attempt != 30; ++attempt) {
-        actualYson = StreamQueryToYson(client, query);
-        if (actualYson == expectedYson) {
-            break;
-        }
-        Sleep(TDuration::Seconds(1));
-    }
-
-    NKqp::CompareYson(expectedYson, actualYson);
-}
-
-void CreateTestTable(NYdb::NTable::TTableClient& client) {
-    auto session = client.GetSession().ExtractValueSync().GetSession();
-
-    auto tableBuilder = client.GetTableBuilder();
-    tableBuilder
-        .AddNullableColumn("Key", EPrimitiveType::Uint32)
-        .AddNullableColumn("Value", EPrimitiveType::Int32);
-
-    tableBuilder.SetPrimaryKeyColumns({"Key"});
-    auto result = session.CreateTable("/Root/Test", tableBuilder.Build()).ExtractValueSync();
-
-    UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-}
-
-void Index(NYdb::NTable::EIndexType indexType, bool enableBulkUpsertToAsyncIndexedTables = false) {
-    auto server = TKikimrWithGrpcAndRootSchema({}, {}, {}, false, nullptr, [=](auto& settings) {
-        settings.SetEnableBulkUpsertToAsyncIndexedTables(enableBulkUpsertToAsyncIndexedTables);
-    });
-    auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-
-    NYdb::NTable::TTableClient client(connection);
-    auto session = client.GetSession().ExtractValueSync().GetSession();
-
-    {
-        auto tableBuilder = client.GetTableBuilder();
-        tableBuilder
-            .AddNullableColumn("Key", EPrimitiveType::Uint8)
-            .AddNullableColumn("Value", EPrimitiveType::Uint8)
-            .AddSecondaryIndex("Value_index", indexType, "Value");
-
-        tableBuilder.SetPrimaryKeyColumns({"Key"});
-        auto result = session.CreateTable("/Root/ui8", tableBuilder.Build()).ExtractValueSync();
-
-        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-    }
-
-    {
-        auto res = BulkUpsertCsvUint8Row(client, "/Root/ui8", 1, 2);
-
-        if (indexType == NYdb::NTable::EIndexType::GlobalAsync) {
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), enableBulkUpsertToAsyncIndexedTables
-                ? EStatus::SUCCESS : EStatus::SCHEME_ERROR, res.GetIssues().ToString());
-
-            if (enableBulkUpsertToAsyncIndexedTables) {
-                WaitAndCompareQueryYson(client, R"(
-                    SELECT Key, Value
-                    FROM `/Root/ui8`
-                    ORDER BY Key;
-                )", R"([
-                    [[1u];[2u]]
-                ])");
-
-                WaitAndCompareQueryYson(client, R"(
-                    SELECT Value, Key
-                    FROM `/Root/ui8` VIEW Value_index
-                    ORDER BY Value, Key;
-                )", R"([
-                    [[2u];[1u]]
-                ])");
-            }
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
-        }
-    }
-
-    {
-        auto res = BulkUpsertCsvUint8Row(client, "/Root/ui8/Value_index/indexImplTable", 1, 2);
-        UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, res.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(res.GetIssues().ToString(), "Writing to index implementation tables is not allowed", res.GetIssues().ToString());
-    }
 }
 
 } // namespace
@@ -278,7 +124,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
         NYdb::NTable::TTableClient client(connection);
 
-        CreateTestTable(client);
+        CreateKeyValueTestTable(client);
 
         TStringBuilder csv;
         csv << "ignore,ignore\n";
@@ -312,7 +158,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
         NYdb::NTable::TTableClient client(connection);
 
-        CreateTestTable(client);
+        CreateKeyValueTestTable(client);
 
         TStringBuilder csv;
         csv << "Key@Value\n";
@@ -344,7 +190,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
         NYdb::NTable::TTableClient client(connection);
 
-        CreateTestTable(client);
+        CreateKeyValueTestTable(client);
 
         TStringBuilder csv;
         csv << "1,10\n";
@@ -375,7 +221,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
         NYdb::NTable::TTableClient client(connection);
 
-        CreateStringTestTable(client);
+        CreateKeyValueTestTable(client, EPrimitiveType::Uint32, EPrimitiveType::Utf8);
 
         TStringBuilder csv;
         csv << "Key,Value\n";
@@ -386,7 +232,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         settings.mutable_quoting()->set_disabled(true);
 
         auto upsert = client.BulkUpsert(
-            "/Root/StringTest",
+            "/Root/Test",
             EDataFormat::CSV,
             csv,
             {},
@@ -399,7 +245,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             [[2u];["'text'"]]
         ])", StreamQueryToYson(client, R"(
             SELECT Key, Value
-            FROM `/Root/StringTest`
+            FROM `/Root/Test`
             ORDER BY Key;
         )"));
     }
@@ -410,7 +256,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
         NYdb::NTable::TTableClient client(connection);
 
-        CreateStringTestTable(client);
+        CreateKeyValueTestTable(client, EPrimitiveType::Uint32, EPrimitiveType::Utf8);
 
         TStringBuilder csv;
         csv << "Key,Value\n";
@@ -420,7 +266,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         settings.mutable_quoting()->set_quote_char("*");
 
         auto upsert = client.BulkUpsert(
-            "/Root/StringTest",
+            "/Root/Test",
             EDataFormat::CSV,
             csv,
             {},
@@ -432,7 +278,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             [[1u];["hello,world"]]
         ])", StreamQueryToYson(client, R"(
             SELECT Key, Value
-            FROM `/Root/StringTest`
+            FROM `/Root/Test`
             ORDER BY Key;
         )"));
     }
@@ -443,7 +289,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
         NYdb::NTable::TTableClient client(connection);
 
-        CreateStringTestTable(client);
+        CreateKeyValueTestTable(client, EPrimitiveType::Uint32, EPrimitiveType::Utf8);
 
         TStringBuilder csv;
         csv << "Key,Value\n";
@@ -455,7 +301,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         settings.mutable_quoting()->set_double_quote_disabled(true);
 
         auto upsert = client.BulkUpsert(
-            "/Root/StringTest",
+            "/Root/Test",
             EDataFormat::CSV,
             csv,
             {},
@@ -468,7 +314,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
             [[2u];["\"abcd\""]]
         ])", StreamQueryToYson(client, R"(
             SELECT Key, Value
-            FROM `/Root/StringTest`
+            FROM `/Root/Test`
             ORDER BY Key;
         )"));
     }
@@ -967,6 +813,30 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         }
     }
 
+    struct TLimitCsvRow {
+        TString Key1;
+        TString Key2;
+        TString Key3;
+        TString Value1;
+        TString Value2;
+        TString Value3;
+    };
+
+    NYdb::NTable::TBulkUpsertResult BulkUpsertCsvLimitRow(NYdb::NTable::TTableClient& client, const TLimitCsvRow& row) {
+        TStringBuilder csv;
+        csv << "Key1,Key2,Key3,Value1,Value2,Value3\n";
+        csv << row.Key1 << "," << row.Key2 << "," << row.Key3 << "," << row.Value1 << "," << row.Value2 << "," << row.Value3 << "\n";
+
+        auto upsert = client.BulkUpsert(
+            "/Root/Limits",
+            EDataFormat::CSV,
+            csv,
+            {},
+            BulkUpsertSettings(CsvSettings()))
+            .GetValueSync();
+        return upsert;
+    }
+
     Y_UNIT_TEST(Limits) {
         TKikimrWithGrpcAndRootSchema server;
         auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
@@ -1025,6 +895,34 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
                                                       TString(16 * 1000000, '1'), TString(16 * 1000000, '2'), TString(16 * 1000000, '3')});
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
         }
+    }
+
+    TString MakeInvalidDataCsv(
+        const TString& valueDecimal = "0",
+        const TString& valueDecimal35 = "0",
+        const TString& valueDate = "1970-01-01",
+        const TString& valueDateTime = "1970-01-01T00:00:00Z",
+        const TString& valueTimestamp = "1970-01-01T00:00:00Z",
+        const TString& valueUtf8 = "",
+        const TString& valueYson = "{}",
+        const TString& valueJson = "{}",
+        const TString& valueJsonDocument = "{}",
+        const TString& valueDyNumber = "0")
+    {
+        TStringBuilder csv;
+        csv << "Key,Value_Decimal,Value_Decimal35,Value_Date,Value_DateTime,Value_Timestamp,Value_Utf8,Value_Yson,Value_Json,Value_JsonDocument,Value_DyNumber\n";
+        csv << "1," << valueDecimal
+            << "," << valueDecimal35
+            << "," << valueDate
+            << "," << valueDateTime
+            << "," << valueTimestamp
+            << ",\"" << valueUtf8 << "\""
+            << ",\"" << valueYson << "\""
+            << ",\"" << valueJson << "\""
+            << ",\"" << valueJsonDocument << "\""
+            << "," << valueDyNumber
+            << "\n";
+        return csv;
     }
 
     Y_UNIT_TEST(DataValidation) {
@@ -1165,16 +1063,103 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
         }
     }
 
+    void WaitAndCompareQueryYson(NYdb::NTable::TTableClient& client, const TString& query, const TString& expectedYson) {
+        TString actualYson;
+        for (ui32 attempt = 0; attempt != 30; ++attempt) {
+            actualYson = StreamQueryToYson(client, query);
+            if (actualYson == expectedYson) {
+                break;
+            }
+            Sleep(TDuration::Seconds(1));
+        }
+
+        NKqp::CompareYson(expectedYson, actualYson);
+    }
+
+    NYdb::NTable::TBulkUpsertResult BulkUpsertCsvUint8Row(NYdb::NTable::TTableClient& client, const TString& path, ui32 key, ui32 value) {
+        TStringBuilder csv;
+        csv << "Key,Value\n";
+        csv << key << "," << value << "\n";
+
+        auto upsert = client.BulkUpsert(
+            path,
+            EDataFormat::CSV,
+            csv,
+            {},
+            BulkUpsertSettings(CsvSettings()))
+            .GetValueSync();
+        return upsert;
+    }
+
+    void IndexTestImpl(NYdb::NTable::EIndexType indexType, bool enableBulkUpsertToAsyncIndexedTables = false) {
+        auto server = TKikimrWithGrpcAndRootSchema({}, {}, {}, false, nullptr, [=](auto& settings) {
+            settings.SetEnableBulkUpsertToAsyncIndexedTables(enableBulkUpsertToAsyncIndexedTables);
+        });
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint8)
+                .AddNullableColumn("Value", EPrimitiveType::Uint8)
+                .AddSecondaryIndex("Value_index", indexType, "Value");
+
+            tableBuilder.SetPrimaryKeyColumns({"Key"});
+            auto result = session.CreateTable("/Root/ui8", tableBuilder.Build()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto res = BulkUpsertCsvUint8Row(client, "/Root/ui8", 1, 2);
+
+            if (indexType == NYdb::NTable::EIndexType::GlobalAsync) {
+                UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), enableBulkUpsertToAsyncIndexedTables
+                    ? EStatus::SUCCESS : EStatus::SCHEME_ERROR, res.GetIssues().ToString());
+
+                if (enableBulkUpsertToAsyncIndexedTables) {
+                    WaitAndCompareQueryYson(client, R"(
+                        SELECT Key, Value
+                        FROM `/Root/ui8`
+                        ORDER BY Key;
+                    )", R"([
+                        [[1u];[2u]]
+                    ])");
+
+                    WaitAndCompareQueryYson(client, R"(
+                        SELECT Value, Key
+                        FROM `/Root/ui8` VIEW Value_index
+                        ORDER BY Value, Key;
+                    )", R"([
+                        [[2u];[1u]]
+                    ])");
+                }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
+            }
+        }
+
+        {
+            auto res = BulkUpsertCsvUint8Row(client, "/Root/ui8/Value_index/indexImplTable", 1, 2);
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, res.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(res.GetIssues().ToString(), "Writing to index implementation tables is not allowed", res.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(SyncIndexShouldSucceed) {
-        Index(NYdb::NTable::EIndexType::GlobalSync);
+        IndexTestImpl(NYdb::NTable::EIndexType::GlobalSync);
     }
 
     Y_UNIT_TEST(AsyncIndexShouldFail) {
-        Index(NYdb::NTable::EIndexType::GlobalAsync, false);
+        IndexTestImpl(NYdb::NTable::EIndexType::GlobalAsync, false);
     }
 
     Y_UNIT_TEST(AsyncIndexShouldSucceed) {
-        Index(NYdb::NTable::EIndexType::GlobalAsync, true);
+        IndexTestImpl(NYdb::NTable::EIndexType::GlobalAsync, true);
     }
 
     Y_UNIT_TEST(ZeroRows) {
@@ -1183,7 +1168,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertCsv) {
 
         NYdb::NTable::TTableClient client(connection);
 
-        CreateTestTable(client);
+        CreateKeyValueTestTable(client);
 
         auto status = client.BulkUpsert(
             "/Root/Test",

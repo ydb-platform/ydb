@@ -35,7 +35,7 @@ public:
         Y_UNUSED(config);
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, TUint128 key = 0) override {
+    void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override {
         Y_UNUSED(sourceId);
         Y_UNUSED(size);
         Y_UNUSED(key);
@@ -67,7 +67,7 @@ public:
         Y_UNUSED(config);
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] TUint128 key = 0) override {
+    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] const TString& key = "") override {
         auto now = TInstant::Now();
 
         auto it = WrittenBytes.find(sourceId);
@@ -128,7 +128,8 @@ public:
         RecreateSumWrittenBytes();
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] TUint128 key = 0) override  {
+    void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override  {
+        auto key128 = NKikimr::NPQ::AsInt<TUint128>(key);
         auto now = TInstant::Now();
 
         SumWrittenBytes->Update(size, now);
@@ -149,9 +150,12 @@ public:
 
         SourceIdCounter.Use(sourceIdHashStr, now);
 
-        if (key) {
-            KeysManager.Add(key, size);
-        } else {
+        auto* partition = GetPartition();
+        const auto& keyRange = partition->GetKeyRange();
+
+        if (key && IsInKeyRange(key, keyRange)) {
+            KeysManager.Add(key128, size);
+        } else if (sourceId) {
             KeysManager.Add(sourceIdHash, size);
         }
     }
@@ -235,6 +239,20 @@ public:
     }
 
 private:
+    bool IsInKeyRange(const TString& key, const auto& keyRange) {
+        if (key.empty()) {
+            return false;
+        }
+        if (keyRange.HasFromBound() && key < keyRange.GetFromBound()) {
+            return false;
+        }
+        if (keyRange.HasToBound() && key >= keyRange.GetToBound()) {
+            return false;
+        }
+        return true;
+    }
+    
+    
     std::string GetSplitBoundaryBasedOnSourceIds() {
         std::vector<std::pair<TString, ui64>> sorted;
         sorted.reserve(WrittenBytes.size());
@@ -249,19 +267,6 @@ private:
         auto* partition = GetPartition();
         const auto& keyRange = partition->GetKeyRange();
 
-        auto inRange = [&](const TString& sourceIdHash) {
-            if (sourceIdHash.empty()) {
-                return false;
-            }
-            if (keyRange.HasFromBound() && sourceIdHash < keyRange.GetFromBound()) {
-                return false;
-            }
-            if (keyRange.HasToBound() && sourceIdHash >= keyRange.GetToBound()) {
-                return false;
-            }
-            return true;
-        };
-
         ui64 lWrittenBytes = 0, rWrittenBytes = 0, oWrittenBytes = 0;
         ssize_t i = 0, j = sorted.size() - 1;
         TString* lastLeft = nullptr, *lastRight = nullptr;
@@ -269,10 +274,10 @@ private:
             auto& lhs = sorted[i];
             auto& rhs = sorted[j];
 
-            if (!inRange(lhs.first)) {
+            if (!IsInKeyRange(lhs.first, keyRange)) {
                 oWrittenBytes += lhs.second;
                 ++i;
-            } else if (!inRange(rhs.first)) {
+            } else if (!IsInKeyRange(rhs.first, keyRange)) {
                 oWrittenBytes += rhs.second;
                 --j;
             } else if (lWrittenBytes < rWrittenBytes) {
@@ -295,18 +300,23 @@ private:
         return MiddleOf(*lastLeft, *lastRight);
     }
 
-    const NKikimrPQ::TPQTabletConfig_TPartition *GetPartition() const {
-        auto* partition = FindIfPtr(Config.GetPartitions(), [&](const auto& v) {
+    const NKikimrPQ::TPQTabletConfig_TPartition* GetPartition() {
+        if (Partition) {
+            return Partition;
+        }
+
+        Partition = FindIfPtr(Config.GetPartitions(), [&](const auto& v) {
             return v.GetPartitionId() == PartitionId;
         });
-        AFL_ENSURE(partition)("p", PartitionId);
-        return partition;
+        AFL_ENSURE(Partition)("p", PartitionId);
+        return Partition;
     }
 
     static constexpr auto DEFAULT_NUM_SKETCHES = 100;
 
     const NKikimrPQ::TPQTabletConfig& Config;
     const ui32 PartitionId;
+    const NKikimrPQ::TPQTabletConfig_TPartition* Partition = nullptr;
 
     TMaybe<TSlidingWindow> SumWrittenBytes;
     // SourceIdHash -> SlidingWindow

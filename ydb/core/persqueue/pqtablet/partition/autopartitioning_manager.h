@@ -20,7 +20,7 @@ class IAutopartitioningManager {
 public:
     virtual ~IAutopartitioningManager() = default;
 
-    virtual void OnWrite(const TString& sourceId, ui64 size, TUint128 key = 0) = 0;
+    virtual void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") = 0;
     virtual void CleanUp() = 0;
 
     virtual NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus currentState) = 0;

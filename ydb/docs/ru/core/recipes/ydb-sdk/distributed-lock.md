@@ -77,30 +77,20 @@
 
 - Java
 
-  {% list tabs %}
+  ```java
+  CoordinationClient client = CoordinationClient.newClient(transport);
+  client.createNode(nodePath).join().expectSuccess();
 
-  - Native SDK
-
-    ```java
-    CoordinationClient client = CoordinationClient.newClient(transport);
-    client.createNode(nodePath).join().expectSuccess();
-
-    try (CoordinationSession session = client.createSession(nodePath)) {
-        session.connect().join().expectSuccess();
-        SemaphoreLease lease = session.acquireEphemeralSemaphore(semaphoreName, true, Duration.ofMinutes(5))
-                .join().getValue();
-        try {
-            // монопольная работа с ресурсом
-        } finally {
-            lease.release().join();
-        }
-    }
-    ```
-
-  - JDBC
-
-    Сервис координации доступен через нативный API; при использовании только JDBC подключите `GrpcTransport` и модуль `coordination` либо выполняйте управление блокировками через сценарии на стороне приложения.
-
-  {% endlist %}
+  try (CoordinationSession session = client.createSession(nodePath)) {
+      session.connect().join().expectSuccess();
+      SemaphoreLease lease = session.acquireEphemeralSemaphore(semaphoreName, true, Duration.ofMinutes(5))
+              .join().getValue();
+      try {
+          // монопольная работа с ресурсом
+      } finally {
+          lease.release().join();
+      }
+  }
+  ```
 
 {% endlist %}

@@ -78,61 +78,22 @@
 
 - Java
 
-  {% list tabs %}
-
-  - Native SDK
-
     Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
 
     ```java
     import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
     import tech.ydb.query.tools.SessionRetryContext;
-
+    
     String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
-
+    
     try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-         QueryClient queryClient = QueryClient.newClient(transport).build()) {
-
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        // retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery(...)))
+       QueryClient queryClient = QueryClient.newClient(transport).build()) {
+    
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      // retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery(...)))
     }
     ```
-
-  - JDBC
-
-    Для JDBC и фреймворков вокруг него (Spring Boot, ORM и т.п.) передавайте значения через **параметры запроса** (`PreparedStatement`, именованные параметры в YQL), а не подстановкой в текст запроса конкатенацией строк.
-
-    Ниже — полный пример подключения и создания таблицы с теми же полями, что в таблице во введении к рецепту: `id`, `document`, `embedding` (тип `String` для сериализованного вектора). Дальнейшие вставка векторов и поиск выполняйте с параметризованными запросами в разделах [«Вставка векторов»](#insert-vectors) и [«Поиск ближайших векторов»](#search-by-vector).
-
-    ```java
-    import java.sql.Connection;
-    import java.sql.DriverManager;
-    import java.sql.SQLException;
-    import java.sql.Statement;
-
-    public class VectorSearchJdbc {
-        public static void main(String[] args) throws SQLException {
-            String url = "jdbc:ydb:grpc://localhost:2136/local";
-            try (Connection connection = DriverManager.getConnection(url);
-                 Statement statement = connection.createStatement()) {
-
-                String createDocumentsTable = """
-                    CREATE TABLE IF NOT EXISTS documents (
-                        id Utf8,
-                        document Utf8,
-                        embedding String,
-                        PRIMARY KEY (id)
-                    );
-                    """;
-                statement.execute(createDocumentsTable);
-            }
-            // Вставка и KNN-поиск: PreparedStatement с параметрами, см. разделы «Вставка векторов» и «Поиск ближайших векторов»
-        }
-    }
-    ```
-
-  {% endlist %}
 
 {% endlist %}
 
@@ -221,30 +182,30 @@
     }
     ```
 
-- Java (Native SDK)
+- Java
 
-    ```java
-    import tech.ydb.common.transaction.TxMode;
-    import tech.ydb.query.tools.QueryReader;
-    import tech.ydb.query.tools.SessionRetryContext;
-    import tech.ydb.table.query.Params;
-
-    void createVectorTable(SessionRetryContext retryCtx, String tableName) {
-        String query = String.format("""
-                CREATE TABLE IF NOT EXISTS `%s` (
-                    id Utf8,
-                    document Utf8,
-                    embedding String,
-                    PRIMARY KEY (id)
-                );""", tableName);
-
-        retryCtx.supplyResult(session -> QueryReader.readFrom(
-                session.createQuery(query, TxMode.NONE, Params.empty())
-        )).join().getValue();
-
-        System.out.println("Vector table created: " + tableName);
-    }
-    ```
+  ```java
+  import tech.ydb.common.transaction.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.table.query.Params;
+  
+  void createVectorTable(SessionRetryContext retryCtx, String tableName) {
+      String query = String.format("""
+              CREATE TABLE IF NOT EXISTS `%s` (
+                  id Utf8,
+                  document Utf8,
+                  embedding String,
+                  PRIMARY KEY (id)
+              );""", tableName);
+  
+      retryCtx.supplyResult(session -> QueryReader.readFrom(
+              session.createQuery(query, TxMode.NONE, Params.empty())
+      )).join().getValue();
+  
+      System.out.println("Vector table created: " + tableName);
+  }
+  ```
 
 {% endlist %}
 
@@ -429,7 +390,7 @@
 
     {% endnote %}
 
-- Java (Native SDK)
+- Java
 
     ```java
     import java.nio.ByteBuffer;
@@ -510,6 +471,76 @@
     В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
 
     {% endnote %}
+
+    Вариант с передачей компонентов вектора как `List<Float>` и преобразованием на стороне YQL через `Knn::ToBinaryStringFloat` — по той же схеме, что для альтернативных примеров на Python и C++ ниже:
+
+    ```java
+    import java.util.ArrayList;
+    import java.util.List;
+
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
+    import tech.ydb.table.values.ListType;
+    import tech.ydb.table.values.ListValue;
+    import tech.ydb.table.values.PrimitiveType;
+    import tech.ydb.table.values.PrimitiveValue;
+    import tech.ydb.table.values.StructType;
+    import tech.ydb.table.values.Value;
+
+    void insertItemsAsFloatList(SessionRetryContext retryCtx, String tableName, List<Item> items) {
+        String query = String.format("""
+                DECLARE $items AS List<Struct<
+                    id: Utf8,
+                    document: Utf8,
+                    embedding: List<Float>
+                >>;
+
+                UPSERT INTO `%s`
+                (
+                    id,
+                    document,
+                    embedding
+                )
+                SELECT
+                    id,
+                    document,
+                    Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+                FROM AS_TABLE($items);""", tableName);
+
+        StructType rowType = StructType.of(
+                "id", PrimitiveType.Text,
+                "document", PrimitiveType.Text,
+                "embedding", ListType.of(PrimitiveType.Float)
+        );
+
+        List<Value<?>> rows = new ArrayList<>(items.size());
+        for (Item item : items) {
+            Value<?>[] emb = new Value<?>[item.embedding().length];
+            for (int i = 0; i < item.embedding().length; i++) {
+                emb[i] = PrimitiveValue.newFloat(item.embedding()[i]);
+            }
+            ListValue embList = ListType.of(PrimitiveType.Float).newValueOwn(emb);
+            rows.add(rowType.newValue(
+                    "id", PrimitiveValue.newText(item.id()),
+                    "document", PrimitiveValue.newText(item.document()),
+                    "embedding", embList
+            ));
+        }
+
+        ListValue itemsParam = ListType.of(rowType).newValue(rows);
+        Params params = Params.of("$items", itemsParam);
+
+        retryCtx.supplyResult(session -> QueryReader.readFrom(
+                session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+        )).join().getValue();
+
+        System.out.println(items.size() + " items inserted");
+    }
+
+    // record Item(String id, String document, float[] embedding) {}
+    ```
 
 - Python (альтернативный)
 
@@ -651,76 +682,6 @@
 
         std::cout << items.size() << " items inserted" << std::endl;
     }
-    ```
-
-- Java (Native SDK, альтернативный)
-
-    ```java
-    import java.util.ArrayList;
-    import java.util.List;
-
-    import tech.ydb.common.transaction.TxMode;
-    import tech.ydb.query.tools.QueryReader;
-    import tech.ydb.query.tools.SessionRetryContext;
-    import tech.ydb.table.query.Params;
-    import tech.ydb.table.values.ListType;
-    import tech.ydb.table.values.ListValue;
-    import tech.ydb.table.values.PrimitiveType;
-    import tech.ydb.table.values.PrimitiveValue;
-    import tech.ydb.table.values.StructType;
-    import tech.ydb.table.values.Value;
-
-    void insertItemsAsFloatList(SessionRetryContext retryCtx, String tableName, List<Item> items) {
-        String query = String.format("""
-                DECLARE $items AS List<Struct<
-                    id: Utf8,
-                    document: Utf8,
-                    embedding: List<Float>
-                >>;
-
-                UPSERT INTO `%s`
-                (
-                    id,
-                    document,
-                    embedding
-                )
-                SELECT
-                    id,
-                    document,
-                    Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
-                FROM AS_TABLE($items);""", tableName);
-
-        StructType rowType = StructType.of(
-                "id", PrimitiveType.Text,
-                "document", PrimitiveType.Text,
-                "embedding", ListType.of(PrimitiveType.Float)
-        );
-
-        List<Value<?>> rows = new ArrayList<>(items.size());
-        for (Item item : items) {
-            Value<?>[] emb = new Value<?>[item.embedding().length];
-            for (int i = 0; i < item.embedding().length; i++) {
-                emb[i] = PrimitiveValue.newFloat(item.embedding()[i]);
-            }
-            ListValue embList = ListType.of(PrimitiveType.Float).newValueOwn(emb);
-            rows.add(rowType.newValue(
-                    "id", PrimitiveValue.newText(item.id()),
-                    "document", PrimitiveValue.newText(item.document()),
-                    "embedding", embList
-            ));
-        }
-
-        ListValue itemsParam = ListType.of(rowType).newValue(rows);
-        Params params = Params.of("$items", itemsParam);
-
-        retryCtx.supplyResult(session -> QueryReader.readFrom(
-                session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
-        )).join().getValue();
-
-        System.out.println(items.size() + " items inserted");
-    }
-
-    // record Item(String id, String document, float[] embedding) {}
     ```
 
 {% endlist %}
@@ -889,7 +850,7 @@
     }
     ```
 
-- Java (Native SDK)
+- Java
 
     ```java
     import tech.ydb.core.grpc.GrpcTransport;
@@ -1124,7 +1085,7 @@
     }
     ```
 
-- Java (Native SDK)
+- Java
 
     ```java
     import java.nio.ByteBuffer;
@@ -1172,6 +1133,76 @@
                 """, strategy, tableName, viewIndex, sortOrder, limit);
 
         Params params = Params.of("$embedding", PrimitiveValue.newBytes(convertVectorToBytes(embedding)));
+
+        QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+        )).join().getValue();
+
+        List<ResultItem> result = new ArrayList<>();
+        ResultSetReader rs = reader.getResultSet(0);
+        while (rs.next()) {
+            result.add(new ResultItem(
+                    rs.getColumn("id").getText(),
+                    rs.getColumn("document").getText(),
+                    rs.getColumn("score").getFloat()
+            ));
+        }
+        return result;
+    }
+
+    // record ResultItem(String id, String document, float score) {}
+    ```
+
+    Тот же поиск с передачей запросного вектора как `List<Float>`:
+
+    ```java
+    import java.util.ArrayList;
+    import java.util.List;
+    import java.util.Optional;
+
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
+    import tech.ydb.table.result.ResultSetReader;
+    import tech.ydb.table.values.ListType;
+    import tech.ydb.table.values.ListValue;
+    import tech.ydb.table.values.PrimitiveType;
+    import tech.ydb.table.values.PrimitiveValue;
+    import tech.ydb.table.values.Value;
+
+    List<ResultItem> searchItemsAsFloatList(
+            SessionRetryContext retryCtx,
+            String tableName,
+            float[] embedding,
+            String strategy,
+            long limit,
+            Optional<String> indexName) {
+
+        String viewIndex = indexName.map(n -> "VIEW " + n).orElse("");
+        String sortOrder = strategy.endsWith("Similarity") ? "DESC" : "ASC";
+
+        String query = String.format("""
+                DECLARE $embedding as List<Float>;
+
+                $target_embedding = Knn::ToBinaryStringFloat($embedding);
+
+                SELECT
+                    id,
+                    document,
+                    Knn::%s(embedding, $target_embedding) as score
+                FROM %s %s
+                ORDER BY score
+                %s
+                LIMIT %d;
+                """, strategy, tableName, viewIndex, sortOrder, limit);
+
+        Value<?>[] floats = new Value<?>[embedding.length];
+        for (int i = 0; i < embedding.length; i++) {
+            floats[i] = PrimitiveValue.newFloat(embedding[i]);
+        }
+        ListValue emb = ListType.of(PrimitiveType.Float).newValueOwn(floats);
+        Params params = Params.of("$embedding", emb);
 
         QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
                 session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
@@ -1356,76 +1387,6 @@
 
         return result;
     }
-    ```
-
-- Java (Native SDK, альтернативный)
-
-    ```java
-    import java.util.ArrayList;
-    import java.util.List;
-    import java.util.Optional;
-
-    import tech.ydb.common.transaction.TxMode;
-    import tech.ydb.query.tools.QueryReader;
-    import tech.ydb.query.tools.SessionRetryContext;
-    import tech.ydb.table.query.Params;
-    import tech.ydb.table.result.ResultSetReader;
-    import tech.ydb.table.values.ListType;
-    import tech.ydb.table.values.ListValue;
-    import tech.ydb.table.values.PrimitiveType;
-    import tech.ydb.table.values.PrimitiveValue;
-    import tech.ydb.table.values.Value;
-
-    List<ResultItem> searchItemsAsFloatList(
-            SessionRetryContext retryCtx,
-            String tableName,
-            float[] embedding,
-            String strategy,
-            long limit,
-            Optional<String> indexName) {
-
-        String viewIndex = indexName.map(n -> "VIEW " + n).orElse("");
-        String sortOrder = strategy.endsWith("Similarity") ? "DESC" : "ASC";
-
-        String query = String.format("""
-                DECLARE $embedding as List<Float>;
-
-                $target_embedding = Knn::ToBinaryStringFloat($embedding);
-
-                SELECT
-                    id,
-                    document,
-                    Knn::%s(embedding, $target_embedding) as score
-                FROM %s %s
-                ORDER BY score
-                %s
-                LIMIT %d;
-                """, strategy, tableName, viewIndex, sortOrder, limit);
-
-        Value<?>[] floats = new Value<?>[embedding.length];
-        for (int i = 0; i < embedding.length; i++) {
-            floats[i] = PrimitiveValue.newFloat(embedding[i]);
-        }
-        ListValue emb = ListType.of(PrimitiveType.Float).newValueOwn(floats);
-        Params params = Params.of("$embedding", emb);
-
-        QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
-                session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
-        )).join().getValue();
-
-        List<ResultItem> result = new ArrayList<>();
-        ResultSetReader rs = reader.getResultSet(0);
-        while (rs.next()) {
-            result.add(new ResultItem(
-                    rs.getColumn("id").getText(),
-                    rs.getColumn("document").getText(),
-                    rs.getColumn("score").getFloat()
-            ));
-        }
-        return result;
-    }
-
-    // record ResultItem(String id, String document, float score) {}
     ```
 
 {% endlist %}
@@ -1707,7 +1668,7 @@
 
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
 
-- Java (Native SDK)
+- Java
 
     Пример объединяет шаги из разделов выше: `QueryClient` + `SessionRetryContext` для YQL и `TableClient` + `SessionRetryContext` для `ALTER TABLE` с переименованием индекса. Методы `createVectorTable`, `insertItemsAsBytes`, `searchItemsAsBytes`, `addVectorIndex` и тип `Item` / `ResultItem` — как в соответствующих фрагментах этой страницы.
 

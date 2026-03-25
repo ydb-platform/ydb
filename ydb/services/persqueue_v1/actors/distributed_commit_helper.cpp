@@ -104,7 +104,7 @@ void TDistributedCommitHelper::CompareGenerations(NKqp::TEvKqp::TEvQueryResponse
         return queryResponse;
     };
 
-    Y_VERIFY(record.GetYdbStatus() == Ydb::StatusIds::SUCCESS);
+    AFL_ENSURE(record.GetYdbStatus() == Ydb::StatusIds::SUCCESS);
 
     if (resp.GetYdbResults().empty()) {
         TString errorMessage = "Incorrect consumer group generation";

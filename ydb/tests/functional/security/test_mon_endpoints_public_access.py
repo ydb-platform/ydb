@@ -11,7 +11,6 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-
 TOKENS = [
     None,
     'user@builtin',
@@ -170,10 +169,21 @@ def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
     ), f'Expected {endpoint_path} with token={token_desc} to return {expected_status}, got {response.status_code}'
 
 
-def _test_endpoints(cluster, expected_results):
+def _get_base_url(cluster):
     host = cluster.nodes[1].host
     mon_port = cluster.nodes[1].mon_port
-    base_url = f'https://{host}:{mon_port}'
+    return f'https://{host}:{mon_port}'
+
+
+def _probe_status(base_url, endpoint_path, token):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    return requests.get(f'{base_url}{endpoint_path}', headers=headers, verify=False).status_code
+
+
+def _test_endpoints(cluster, expected_results):
+    base_url = _get_base_url(cluster)
 
     for endpoint_path, expected_statuses in expected_results.items():
         endpoint_url = f'{base_url}{endpoint_path}'
@@ -192,6 +202,7 @@ EXPECTED_RESULTS = {
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
+    # Feature flag
     '/counters': {
         None: 200,
         'user@builtin': 200,
@@ -200,6 +211,7 @@ EXPECTED_RESULTS = {
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
+    # Feature flag
     '/counters/hosts': {
         None: 200,
         'user@builtin': 200,
@@ -240,7 +252,7 @@ EXPECTED_RESULTS = {
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
-    # BUG healthcheck is under restrictions
+    # BUG healthcheck must be under restrictions
     '/healthcheck?format=prometheus': {
         None: 200,
         'user@builtin': 200,
@@ -257,6 +269,7 @@ EXPECTED_RESULTS = {
         'monitoring@builtin': 400,
         'root@builtin': 400,
     },
+    # Feature flag
     '/monitoring/': {
         None: 200,
         'user@builtin': 200,
@@ -270,3 +283,22 @@ EXPECTED_RESULTS = {
 
 def test_public_access(ydb_cluster_with_enforce_user_token):
     _test_endpoints(ydb_cluster_with_enforce_user_token, EXPECTED_RESULTS)
+
+
+def test_public_access_hierarchy(ydb_cluster_with_enforce_user_token):
+    base_url = _get_base_url(ydb_cluster_with_enforce_user_token)
+
+    for endpoint_path in EXPECTED_RESULTS:
+        statuses = [_probe_status(base_url, endpoint_path, token) for token in TOKENS]
+        grants = [status < 400 for status in statuses]
+
+        seen_granted = False
+        for token, status, granted in zip(TOKENS, statuses, grants):
+            if granted:
+                seen_granted = True
+            elif seen_granted:
+                token_desc = token if token is not None else 'null'
+                raise AssertionError(
+                    f'Access hierarchy violation for {endpoint_path}: token={token_desc} returned {status}; '
+                    f'statuses={statuses}'
+                )

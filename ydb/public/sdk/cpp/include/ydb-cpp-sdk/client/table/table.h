@@ -265,7 +265,7 @@ public:
         Partition = 4,
     };
 
-    TMetricsSettings(EMetricsLevel metricsLevel);
+    explicit TMetricsSettings(EMetricsLevel metricsLevel);
 
     /**
      * Return the configured metrics level.
@@ -291,7 +291,7 @@ public:
     void SerializeTo(Ydb::Table::MetricsSettings& proto) const;
 
 private:
-    EMetricsLevel MetricsLevel;
+    EMetricsLevel MetricsLevel_;
 };
 
 struct TGlobalIndexSettings {
@@ -712,9 +712,7 @@ private:
 class TAlterTtlSettings {
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
-    TAlterTtlSettings()
-        : Action_(true)
-    {}
+    TAlterTtlSettings() = default;
 
     template <typename... Args>
     explicit TAlterTtlSettings(Args&&... args)
@@ -741,7 +739,7 @@ public:
 
 private:
     std::variant<
-        bool, // EAction::Drop
+        std::monostate, // EAction::Drop
         TTtlSettings // EAction::Set
     > Action_;
 };
@@ -755,9 +753,7 @@ private:
      * The constructor, which configures the ALTER TABLE request to remove
      * the current metrics configuration.
      */
-    TAlterMetricsSettings()
-        : Action(true)
-    {}
+    TAlterMetricsSettings() = default;
 
     /**
      * The constructor, which configures the ALTER TABLE request to use
@@ -769,7 +765,7 @@ private:
      */
     template <typename... Args>
     explicit TAlterMetricsSettings(Args&&... args)
-        : Action(TMetricsSettings(std::forward<Args>(args)...))
+        : Action_(TMetricsSettings(std::forward<Args>(args)...))
     {}
 
 public:
@@ -798,13 +794,13 @@ public:
     }
 
     /**
-     * Configure the ALTER TABLE request to remove the current metrics configuration.
+     * Configure the ALTER TABLE request to update the current metrics configuration.
      *
      * @tparam Args The types of arguments for the TMetricsSettings constructor
      *
      * @param[in] args The arguments for the TMetricsSettings constructor
      *
-     * @return The metrics configuration holder for the EAction::Drop action
+     * @return The metrics configuration holder for the EAction::Set action
      */
     template <typename... Args>
     static TAlterMetricsSettings Set(Args&&... args) {
@@ -817,7 +813,7 @@ public:
      * @return The action for the metrics configuration
      */
     EAction GetAction() const {
-        return static_cast<EAction>(Action.index());
+        return static_cast<EAction>(Action_.index());
     }
 
     /**
@@ -826,7 +822,7 @@ public:
      * @return The current metrics configuration
      */
     const TMetricsSettings& GetMetricsSettings() const {
-        return std::get<TMetricsSettings>(Action);
+        return std::get<TMetricsSettings>(Action_);
     }
 
 private:
@@ -837,7 +833,7 @@ private:
      *       If the second variant is set, the metrics configuration will be set
      *       to the given values.
      */
-    std::variant<bool, TMetricsSettings> Action;
+    std::variant<std::monostate, TMetricsSettings> Action_;
 };
 
 //! Represents table storage settings
@@ -1872,10 +1868,10 @@ public:
     TAlterTableSettings& EndAlterMetricsSettings();
 
 private:
-    TAlterTableSettings& Parent;
+    TAlterTableSettings& Parent_;
 
     class TImpl;
-    std::shared_ptr<TImpl> Impl;
+    std::shared_ptr<TImpl> Impl_;
 };
 
 class TAlterAttributesBuilder {

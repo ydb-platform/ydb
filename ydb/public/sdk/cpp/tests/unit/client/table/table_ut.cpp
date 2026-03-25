@@ -10,6 +10,8 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 
+#include <gtest/gtest.h>
+
 using namespace NYdb;
 
 namespace {
@@ -157,302 +159,299 @@ namespace {
 } // namespace <anonymous>
 
 /**
- * The unit tests for the Table client in the C++ SDK.
+ * Verify that the SDK creates the CREATE TABLE request correctly,
+ * when no metrics configuration is provided.
  */
-Y_UNIT_TEST_SUITE(Table) {
-    /**
-     * Verify that the SDK creates the CREATE TABLE request correctly,
-     * when no metrics configuration is provided.
-     */
-    Y_UNIT_TEST(CreateTableNoMetricsSettings) {
-        // Start the mocked table API service
-        TMockTableService tableService;
-        std::unique_ptr<grpc::Server> grpcServer;
-        std::unique_ptr<TDriver> driver;
-        std::unique_ptr<NTable::TTableClient> tableClient;
-        std::unique_ptr<NTable::TSession> tableSession;
+TEST(TableTest, CreateTableNoMetricsSettings) {
+    // Start the mocked table API service
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
 
-        StartServerWithTableService(
-            tableService,
-            grpcServer,
-            driver,
-            tableClient,
-            tableSession
-        );
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
 
-        // Call the CreateTable() API without any metrics configuration
+    // Call the CreateTable() API without any metrics configuration
+    auto requestFuture = tableSession->CreateTable(
+        "/Root/My/DB/test_table",
+        NTable::TTableBuilder()
+            .Build()
+    );
+
+    ASSERT_TRUE(requestFuture.Wait(TDuration::Seconds(10)));
+
+    auto result = requestFuture.ExtractValueSync();
+    ASSERT_TRUE(result.IsSuccess());
+
+    // Make sure the metrics configuration was not set in the CreateTable request
+    ASSERT_TRUE(tableService.LastCreateTableRequest.has_value());
+    ASSERT_TRUE(!tableService.LastCreateTableRequest->has_metrics_settings());
+}
+
+/**
+ * Verify that the SDK creates the CREATE TABLE request correctly,
+ * when the metrics configuration is provided.
+ */
+TEST(TableTest, CreateTableWithMetricsSettings) {
+    // Start the mocked table API service
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
+
+    // Call the CreateTable() API with the metrics configuration configured
+    // to every allowed metrics level
+    const auto verifyMetricsLevelFunc = [&](
+        const TString& metricsLevelName,
+        NTable::TMetricsSettings::EMetricsLevel metricsLevel,
+        Ydb::Table::MetricsSettings::MetricsLevel protoMetricsLevel
+    ) {
+        SCOPED_TRACE(testing::Message() << "Metrics level: " << metricsLevelName);
+
         auto requestFuture = tableSession->CreateTable(
             "/Root/My/DB/test_table",
             NTable::TTableBuilder()
+                .SetMetricsSettings(metricsLevel)
                 .Build()
         );
 
-        UNIT_ASSERT(requestFuture.Wait(TDuration::Seconds(10)));
+        ASSERT_TRUE(requestFuture.Wait(TDuration::Seconds(10)));
 
         auto result = requestFuture.ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        ASSERT_TRUE(result.IsSuccess());
 
-        // Make sure the metrics configuration was not set in the CreateTable request
-        UNIT_ASSERT(tableService.LastCreateTableRequest.has_value());
-        UNIT_ASSERT(!tableService.LastCreateTableRequest->has_metrics_settings());
-    }
+        // Make sure the metrics configuration is set in the CreateTable request
+        ASSERT_TRUE(tableService.LastCreateTableRequest.has_value());
+        ASSERT_TRUE(tableService.LastCreateTableRequest->has_metrics_settings());
 
-    /**
-     * Verify that the SDK creates the CREATE TABLE request correctly,
-     * when the metrics configuration is provided.
-     */
-    Y_UNIT_TEST(CreateTableWithMetricsSettings) {
-        // Start the mocked table API service
-        TMockTableService tableService;
-        std::unique_ptr<grpc::Server> grpcServer;
-        std::unique_ptr<TDriver> driver;
-        std::unique_ptr<NTable::TTableClient> tableClient;
-        std::unique_ptr<NTable::TSession> tableSession;
-
-        StartServerWithTableService(
-            tableService,
-            grpcServer,
-            driver,
-            tableClient,
-            tableSession
+        ASSERT_EQ(
+            tableService.LastCreateTableRequest->metrics_settings().metrics_level(),
+            protoMetricsLevel
         );
+    };
 
-        // Call the CreateTable() API with the metrics configuration configured
-        // to every allowed metrics level
-        const auto verifyMetricsLevelFunc = [&](
-            const TString& metricsLevelName,
-            NTable::TMetricsSettings::EMetricsLevel metricsLevel,
-            Ydb::Table::MetricsSettings::MetricsLevel protoMetricsLevel
-        ) {
-            auto requestFuture = tableSession->CreateTable(
-                "/Root/My/DB/test_table",
-                NTable::TTableBuilder()
-                    .SetMetricsSettings(metricsLevel)
-                    .Build()
-            );
+    verifyMetricsLevelFunc(
+        "UNSPECIFIED",
+        NTable::TMetricsSettings::EMetricsLevel::Unspecified,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED
+    );
 
-            UNIT_ASSERT(requestFuture.Wait(TDuration::Seconds(10)));
+    verifyMetricsLevelFunc(
+        "DISABLED",
+        NTable::TMetricsSettings::EMetricsLevel::Disabled,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED
+    );
 
-            auto result = requestFuture.ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
+    verifyMetricsLevelFunc(
+        "DATABASE",
+        NTable::TMetricsSettings::EMetricsLevel::Database,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE
+    );
 
-            // Make sure the metrics configuration is set in the CreateTable request
-            UNIT_ASSERT(tableService.LastCreateTableRequest.has_value());
-            UNIT_ASSERT(tableService.LastCreateTableRequest->has_metrics_settings());
+    verifyMetricsLevelFunc(
+        "TABLE",
+        NTable::TMetricsSettings::EMetricsLevel::Table,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE
+    );
 
-            UNIT_ASSERT_EQUAL_C(
-                tableService.LastCreateTableRequest->metrics_settings().metrics_level(),
-                protoMetricsLevel,
-                "Incorrect metrics level for " << metricsLevelName
-            );
-        };
+    verifyMetricsLevelFunc(
+        "PARTITION",
+        NTable::TMetricsSettings::EMetricsLevel::Partition,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION
+    );
+}
 
-        verifyMetricsLevelFunc(
-            "UNSPECIFIED",
-            NTable::TMetricsSettings::EMetricsLevel::Unspecified,
-            Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED
-        );
+/**
+ * Verify that the SDK creates the ALTER TABLE request correctly,
+ * when no metrics configuration is provided.
+ */
+TEST(TableTest, AlterTableNoMetricsSettings) {
+    // Start the mocked table API service
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
 
-        verifyMetricsLevelFunc(
-            "DISABLED",
-            NTable::TMetricsSettings::EMetricsLevel::Disabled,
-            Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED
-        );
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
 
-        verifyMetricsLevelFunc(
-            "DATABASE",
-            NTable::TMetricsSettings::EMetricsLevel::Database,
-            Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE
-        );
+    // Call the AlterTable() API without any metrics configuration
+    auto requestFuture = tableSession->AlterTable(
+        "/Root/My/DB/test_table",
+        NTable::TAlterTableSettings()
+    );
 
-        verifyMetricsLevelFunc(
-            "TABLE",
-            NTable::TMetricsSettings::EMetricsLevel::Table,
-            Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE
-        );
+    ASSERT_TRUE(requestFuture.Wait(TDuration::Seconds(10)));
 
-        verifyMetricsLevelFunc(
-            "PARTITION",
-            NTable::TMetricsSettings::EMetricsLevel::Partition,
-            Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION
-        );
-    }
+    auto result = requestFuture.ExtractValueSync();
+    ASSERT_TRUE(result.IsSuccess());
 
-    /**
-     * Verify that the SDK creates the ALTER TABLE request correctly,
-     * when no metrics configuration is provided.
-     */
-    Y_UNIT_TEST(AlterTableNoMetricsSettings) {
-        // Start the mocked table API service
-        TMockTableService tableService;
-        std::unique_ptr<grpc::Server> grpcServer;
-        std::unique_ptr<TDriver> driver;
-        std::unique_ptr<NTable::TTableClient> tableClient;
-        std::unique_ptr<NTable::TSession> tableSession;
+    // Make sure the metrics configuration was not set in the AlterTable request
+    ASSERT_TRUE(tableService.LastAlterTableRequest.has_value());
 
-        StartServerWithTableService(
-            tableService,
-            grpcServer,
-            driver,
-            tableClient,
-            tableSession
-        );
+    ASSERT_EQ(
+        tableService.LastAlterTableRequest->metrics_settings_action_case(),
+        Ydb::Table::AlterTableRequest::METRICS_SETTINGS_ACTION_NOT_SET
+    );
 
-        // Call the AlterTable() API without any metrics configuration
-        auto requestFuture = tableSession->AlterTable(
-            "/Root/My/DB/test_table",
-            NTable::TAlterTableSettings()
-        );
+    ASSERT_TRUE(!tableService.LastAlterTableRequest->has_set_metrics_settings());
+    ASSERT_TRUE(!tableService.LastAlterTableRequest->has_drop_metrics_settings());
+}
 
-        UNIT_ASSERT(requestFuture.Wait(TDuration::Seconds(10)));
+/**
+ * Verify that the SDK creates the ALTER TABLE request correctly,
+ * when the metrics configuration is explicitly dropped.
+ */
+TEST(TableTest, AlterTableDroppedMetricsSettings) {
+    // Start the mocked table API service
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
 
-        auto result = requestFuture.ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
 
-        // Make sure the metrics configuration was not set in the AlterTable request
-        UNIT_ASSERT(tableService.LastAlterTableRequest.has_value());
+    // Call the AlterTable() API with the metrics configuration dropped
+    auto requestFuture = tableSession->AlterTable(
+        "/Root/My/DB/test_table",
+        NTable::TAlterTableSettings()
+            .BeginAlterMetricsSettings()
+            .Drop()
+            .EndAlterMetricsSettings()
+    );
 
-        UNIT_ASSERT_EQUAL(
-            tableService.LastAlterTableRequest->metrics_settings_action_case(),
-            Ydb::Table::AlterTableRequest::METRICS_SETTINGS_ACTION_NOT_SET
-        );
+    ASSERT_TRUE(requestFuture.Wait(TDuration::Seconds(10)));
 
-        UNIT_ASSERT(!tableService.LastAlterTableRequest->has_set_metrics_settings());
-        UNIT_ASSERT(!tableService.LastAlterTableRequest->has_drop_metrics_settings());
-    }
+    auto result = requestFuture.ExtractValueSync();
+    ASSERT_TRUE(result.IsSuccess());
 
-    /**
-     * Verify that the SDK creates the ALTER TABLE request correctly,
-     * when the metrics configuration is explicitly dropped.
-     */
-    Y_UNIT_TEST(AlterTableDroppedMetricsSettings) {
-        // Start the mocked table API service
-        TMockTableService tableService;
-        std::unique_ptr<grpc::Server> grpcServer;
-        std::unique_ptr<TDriver> driver;
-        std::unique_ptr<NTable::TTableClient> tableClient;
-        std::unique_ptr<NTable::TSession> tableSession;
+    // Make sure the metrics configuration was not set in the AlterTable request
+    ASSERT_TRUE(tableService.LastAlterTableRequest.has_value());
 
-        StartServerWithTableService(
-            tableService,
-            grpcServer,
-            driver,
-            tableClient,
-            tableSession
-        );
+    ASSERT_EQ(
+        tableService.LastAlterTableRequest->metrics_settings_action_case(),
+        Ydb::Table::AlterTableRequest::kDropMetricsSettings
+    );
 
-        // Call the AlterTable() API with the metrics configuration dropped
+    ASSERT_TRUE(!tableService.LastAlterTableRequest->has_set_metrics_settings());
+    ASSERT_TRUE(tableService.LastAlterTableRequest->has_drop_metrics_settings());
+}
+
+/**
+ * Verify that the SDK creates the ALTER TABLE request correctly,
+ * when the metrics configuration is explicitly set.
+ */
+TEST(TableTest, AlterTableSetMetricsSettings) {
+    // Start the mocked table API service
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
+
+    // Call the AlterTable() API with the metrics configuration set explicitly
+    // to every allowed metrics level
+    const auto verifyMetricsLevelFunc = [&](
+        const TString& metricsLevelName,
+        NTable::TMetricsSettings::EMetricsLevel metricsLevel,
+        Ydb::Table::MetricsSettings::MetricsLevel protoMetricsLevel
+    ) {
+        SCOPED_TRACE(testing::Message() << "Metrics level: " << metricsLevelName);
+
         auto requestFuture = tableSession->AlterTable(
             "/Root/My/DB/test_table",
             NTable::TAlterTableSettings()
                 .BeginAlterMetricsSettings()
-                .Drop()
+                .Set(metricsLevel)
                 .EndAlterMetricsSettings()
         );
 
-        UNIT_ASSERT(requestFuture.Wait(TDuration::Seconds(10)));
+        ASSERT_TRUE(requestFuture.Wait(TDuration::Seconds(10)));
 
         auto result = requestFuture.ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        ASSERT_TRUE(result.IsSuccess());
 
-        // Make sure the metrics configuration was not set in the AlterTable request
-        UNIT_ASSERT(tableService.LastAlterTableRequest.has_value());
+        // Make sure the metrics configuration was set in the AlterTable request
+        ASSERT_TRUE(tableService.LastAlterTableRequest.has_value());
 
-        UNIT_ASSERT_EQUAL(
+        ASSERT_EQ(
             tableService.LastAlterTableRequest->metrics_settings_action_case(),
-            Ydb::Table::AlterTableRequest::kDropMetricsSettings
+            Ydb::Table::AlterTableRequest::kSetMetricsSettings
         );
 
-        UNIT_ASSERT(!tableService.LastAlterTableRequest->has_set_metrics_settings());
-        UNIT_ASSERT(tableService.LastAlterTableRequest->has_drop_metrics_settings());
-    }
-
-    /**
-     * Verify that the SDK creates the ALTER TABLE request correctly,
-     * when the metrics configuration is explicitly set.
-     */
-    Y_UNIT_TEST(AlterTableSetMetricsSettings) {
-        // Start the mocked table API service
-        TMockTableService tableService;
-        std::unique_ptr<grpc::Server> grpcServer;
-        std::unique_ptr<TDriver> driver;
-        std::unique_ptr<NTable::TTableClient> tableClient;
-        std::unique_ptr<NTable::TSession> tableSession;
-
-        StartServerWithTableService(
-            tableService,
-            grpcServer,
-            driver,
-            tableClient,
-            tableSession
+        ASSERT_EQ(
+            tableService.LastAlterTableRequest->set_metrics_settings().metrics_level(),
+            protoMetricsLevel
         );
 
-        // Call the AlterTable() API with the metrics configuration set explicitly
-        // to every allowed metrics level
-        const auto verifyMetricsLevelFunc = [&](
-            const TString& metricsLevelName,
-            NTable::TMetricsSettings::EMetricsLevel metricsLevel,
-            Ydb::Table::MetricsSettings::MetricsLevel protoMetricsLevel
-        ) {
-            auto requestFuture = tableSession->AlterTable(
-                "/Root/My/DB/test_table",
-                NTable::TAlterTableSettings()
-                    .BeginAlterMetricsSettings()
-                    .Set(metricsLevel)
-                    .EndAlterMetricsSettings()
-            );
+        ASSERT_TRUE(tableService.LastAlterTableRequest->has_set_metrics_settings());
+        ASSERT_TRUE(!tableService.LastAlterTableRequest->has_drop_metrics_settings());
+    };
 
-            UNIT_ASSERT(requestFuture.Wait(TDuration::Seconds(10)));
+    verifyMetricsLevelFunc(
+        "UNSPECIFIED",
+        NTable::TMetricsSettings::EMetricsLevel::Unspecified,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED
+    );
 
-            auto result = requestFuture.ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
+    verifyMetricsLevelFunc(
+        "DISABLED",
+        NTable::TMetricsSettings::EMetricsLevel::Disabled,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED
+    );
 
-            // Make sure the metrics configuration was set in the AlterTable request
-            UNIT_ASSERT(tableService.LastAlterTableRequest.has_value());
+    verifyMetricsLevelFunc(
+        "DATABASE",
+        NTable::TMetricsSettings::EMetricsLevel::Database,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE
+    );
 
-            UNIT_ASSERT_EQUAL(
-                tableService.LastAlterTableRequest->metrics_settings_action_case(),
-                Ydb::Table::AlterTableRequest::kSetMetricsSettings
-            );
+    verifyMetricsLevelFunc(
+        "TABLE",
+        NTable::TMetricsSettings::EMetricsLevel::Table,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE
+    );
 
-            UNIT_ASSERT_EQUAL_C(
-                tableService.LastAlterTableRequest->set_metrics_settings().metrics_level(),
-                protoMetricsLevel,
-                "Incorrect metrics level for " << metricsLevelName
-            );
-
-            UNIT_ASSERT(tableService.LastAlterTableRequest->has_set_metrics_settings());
-            UNIT_ASSERT(!tableService.LastAlterTableRequest->has_drop_metrics_settings());
-        };
-
-        verifyMetricsLevelFunc(
-            "UNSPECIFIED",
-            NTable::TMetricsSettings::EMetricsLevel::Unspecified,
-            Ydb::Table::MetricsSettings::METRICS_LEVEL_UNSPECIFIED
-        );
-
-        verifyMetricsLevelFunc(
-            "DISABLED",
-            NTable::TMetricsSettings::EMetricsLevel::Disabled,
-            Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED
-        );
-
-        verifyMetricsLevelFunc(
-            "DATABASE",
-            NTable::TMetricsSettings::EMetricsLevel::Database,
-            Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE
-        );
-
-        verifyMetricsLevelFunc(
-            "TABLE",
-            NTable::TMetricsSettings::EMetricsLevel::Table,
-            Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE
-        );
-
-        verifyMetricsLevelFunc(
-            "PARTITION",
-            NTable::TMetricsSettings::EMetricsLevel::Partition,
-            Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION
-        );
-    }
+    verifyMetricsLevelFunc(
+        "PARTITION",
+        NTable::TMetricsSettings::EMetricsLevel::Partition,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION
+    );
 }

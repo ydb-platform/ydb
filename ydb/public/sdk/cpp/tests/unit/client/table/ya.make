@@ -1,8 +1,8 @@
-UNITTEST()
+GTEST()
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -10,6 +10,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
+    library/cpp/testing/unittest
     ydb/public/api/grpc
     ydb/public/sdk/cpp/src/client/table
 )

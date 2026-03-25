@@ -2503,7 +2503,7 @@ void TReadReplicasSettings::SerializeTo(Ydb::Table::ReadReplicasSettings& proto)
     }
 }
 
-std::optional<TMetricsSettings> TMetricsSettings::TMetricsSettings::FromProto(
+std::optional<TMetricsSettings> TMetricsSettings::FromProto(
     const Ydb::Table::MetricsSettings& proto
 ) {
     switch (proto.metrics_level()) {
@@ -3756,14 +3756,11 @@ TAlterTableSettings& TAlterTtlSettingsBuilder::EndAlterTtlSettings() {
  */
 class TAlterMetricsSettingsBuilder::TImpl {
 public:
-    TImpl() {
-    }
-
     /**
      * Configure the ALTER TABLE request to remove the metrics configuration.
      */
     void Drop() {
-        AlterMetricsSettings = TAlterMetricsSettings::Drop();
+        AlterMetricsSettings_ = TAlterMetricsSettings::Drop();
     }
 
     /**
@@ -3772,7 +3769,7 @@ public:
      * @param[in] settings The metrics configuration to use
      */
     void Set(TMetricsSettings&& settings) {
-        AlterMetricsSettings = TAlterMetricsSettings::Set(std::move(settings));
+        AlterMetricsSettings_ = TAlterMetricsSettings::Set(std::move(settings));
     }
 
     /**
@@ -3781,7 +3778,7 @@ public:
      * @param[in] settings The metrics configuration to use
      */
     void Set(const TMetricsSettings& settings) {
-        AlterMetricsSettings = TAlterMetricsSettings::Set(settings);
+        AlterMetricsSettings_ = TAlterMetricsSettings::Set(settings);
     }
 
     /**
@@ -3790,30 +3787,30 @@ public:
      * @return The current metrics configuration
      */
     const std::optional<TAlterMetricsSettings>& GetAlterMetricsSettings() const {
-        return AlterMetricsSettings;
+        return AlterMetricsSettings_;
     }
 
 private:
-    std::optional<TAlterMetricsSettings> AlterMetricsSettings;
+    std::optional<TAlterMetricsSettings> AlterMetricsSettings_;
 };
 
 TAlterMetricsSettingsBuilder::TAlterMetricsSettingsBuilder(TAlterTableSettings& parent)
-    : Parent(parent)
-    , Impl(std::make_shared<TImpl>())
+    : Parent_(parent)
+    , Impl_(std::make_shared<TImpl>())
 { }
 
 TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Drop() {
-    Impl->Drop();
+    Impl_->Drop();
     return *this;
 }
 
 TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Set(TMetricsSettings&& settings) {
-    Impl->Set(std::move(settings));
+    Impl_->Set(std::move(settings));
     return *this;
 }
 
 TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Set(const TMetricsSettings& settings) {
-    Impl->Set(settings);
+    Impl_->Set(settings);
     return *this;
 }
 
@@ -3822,7 +3819,7 @@ TAlterMetricsSettingsBuilder& TAlterMetricsSettingsBuilder::Set(TMetricsSettings
 }
 
 TAlterTableSettings& TAlterMetricsSettingsBuilder::EndAlterMetricsSettings() {
-    return Parent.SetAlterMetricsSettings(Impl->GetAlterMetricsSettings());
+    return Parent_.SetAlterMetricsSettings(Impl_->GetAlterMetricsSettings());
 }
 
 class TAlterTableSettings::TImpl {
@@ -3843,7 +3840,7 @@ public:
      * @param[in] settings The metrics configuration to use
      */
     void SetAlterMetricsSettings(const std::optional<TAlterMetricsSettings>& settings) {
-        AlterMetricsSettings = settings;
+        AlterMetricsSettings_ = settings;
     }
 
     /**
@@ -3852,12 +3849,12 @@ public:
      * @return The current metrics configuration
      */
     const std::optional<TAlterMetricsSettings>& GetAlterMetricsSettings() const {
-        return AlterMetricsSettings;
+        return AlterMetricsSettings_;
     }
 
 private:
     std::optional<TAlterTtlSettings> AlterTtlSettings_;
-    std::optional<TAlterMetricsSettings> AlterMetricsSettings;
+    std::optional<TAlterMetricsSettings> AlterMetricsSettings_;
 };
 
 TAlterTableSettings::TAlterTableSettings()
@@ -3900,11 +3897,11 @@ uint64_t TReadReplicasSettings::GetReadReplicasCount() const {
 }
 
 TMetricsSettings::TMetricsSettings(EMetricsLevel metricsLevel)
-    : MetricsLevel(metricsLevel) {
+    : MetricsLevel_(metricsLevel) {
 }
 
 TMetricsSettings::EMetricsLevel TMetricsSettings::GetMetricsLevel() const {
-    return MetricsLevel;
+    return MetricsLevel_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

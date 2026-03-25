@@ -22,6 +22,14 @@ void AddReadOperation(NKikimrPQ::TDataTransaction& tx)
     op->SetCommitOffsetsEnd(0);
 }
 
+void AddKafkaReadOperation(NKikimrPQ::TDataTransaction& tx)
+{
+    auto* op = tx.AddOperations();
+    op->SetKafkaTransaction(true);
+    op->SetCommitOffsetsBegin(0);
+    op->SetCommitOffsetsEnd(0);
+}
+
 void AddWriteOperation(NKikimrPQ::TDataTransaction& tx, bool skipConflictCheck)
 {
     auto* op = tx.AddOperations();
@@ -52,7 +60,7 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataOnlyReads)
 
     auto* tx = event.Record.MutableData();
     AddReadOperation(*tx);
-    AddReadOperation(*tx);
+    AddKafkaReadOperation(*tx);
 
     UNIT_ASSERT_FALSE(event.GetSkipSrcIdInfo());
 }

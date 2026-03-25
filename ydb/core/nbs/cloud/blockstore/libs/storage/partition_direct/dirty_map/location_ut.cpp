@@ -325,6 +325,46 @@ Y_UNIT_TEST_SUITE(TLocationTest)
         UNIT_ASSERT(foundHOPBuffer0);
         UNIT_ASSERT(foundHOPBuffer1);
     }
+
+    Y_UNIT_TEST(TestTranslateDDiskToPBuffer)
+    {
+        // Test translation from DDisk to PBuffer
+        UNIT_ASSERT_EQUAL(
+            ELocation::PBuffer0,
+            TranslateDDiskToPBuffer(ELocation::DDisk0));
+        UNIT_ASSERT_EQUAL(
+            ELocation::PBuffer1,
+            TranslateDDiskToPBuffer(ELocation::DDisk1));
+        UNIT_ASSERT_EQUAL(
+            ELocation::PBuffer2,
+            TranslateDDiskToPBuffer(ELocation::DDisk2));
+        UNIT_ASSERT_EQUAL(
+            ELocation::HOPBuffer0,
+            TranslateDDiskToPBuffer(ELocation::HODDisk0));
+        UNIT_ASSERT_EQUAL(
+            ELocation::HOPBuffer1,
+            TranslateDDiskToPBuffer(ELocation::HODDisk1));
+    }
+
+    Y_UNIT_TEST(TestTranslatePBufferToDDisk)
+    {
+        // Test translation from PBuffer to DDisk
+        UNIT_ASSERT_EQUAL(
+            ELocation::DDisk0,
+            TranslatePBufferToDDisk(ELocation::PBuffer0));
+        UNIT_ASSERT_EQUAL(
+            ELocation::DDisk1,
+            TranslatePBufferToDDisk(ELocation::PBuffer1));
+        UNIT_ASSERT_EQUAL(
+            ELocation::DDisk2,
+            TranslatePBufferToDDisk(ELocation::PBuffer2));
+        UNIT_ASSERT_EQUAL(
+            ELocation::HODDisk0,
+            TranslatePBufferToDDisk(ELocation::HOPBuffer0));
+        UNIT_ASSERT_EQUAL(
+            ELocation::HODDisk1,
+            TranslatePBufferToDDisk(ELocation::HOPBuffer1));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

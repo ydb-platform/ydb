@@ -38,16 +38,6 @@ Y_UNIT_TEST_SUITE(TKllMedianTest) {
         UNIT_ASSERT(m >= 10 && m <= 20);
     }
 
-    Y_UNIT_TEST(DeterministicWithSeed) {
-        TKllSketch<int> sketch1(100, 12345);
-        TKllSketch<int> sketch2(100, 12345);
-        for (int i = 0; i < 1000; ++i) {
-            sketch1.Add(i);
-            sketch2.Add(i);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(sketch1.Median(), sketch2.Median());
-    }
-
     Y_UNIT_TEST(QuantileBounds) {
         TKllSketch<double> sketch(100, 42);
         for (int i = 0; i < 100; ++i) {

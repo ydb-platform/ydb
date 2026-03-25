@@ -22,7 +22,7 @@ private:
     void RemoveOldSketches(TInstant now);
 
     static constexpr auto DEFAULT_SKETCH_LEVEL_SIZE = 100;
-    static constexpr auto DEFAULT_MIN_WEIGHT = 512; // 512 bytes
+    static constexpr auto DEFAULT_MIN_WEIGHT = 16; // 16 bytes
 
     struct KllSketchWrapper {
         NKll::TDynamicKllSketch<TUint128> Sketch;

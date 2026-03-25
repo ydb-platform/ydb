@@ -56,7 +56,7 @@ bool TLogCache::Pop() {
 }
 
 bool TLogCache::Insert(TCacheRecord&& value) {
-    auto  offset = value.Offset;
+    auto offset = value.Offset;
     auto [it, inserted] = Index.try_emplace(offset, std::move(value));
     List.PushFront(&it->second);
     return inserted;

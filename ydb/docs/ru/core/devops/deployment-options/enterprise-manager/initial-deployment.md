@@ -1,0 +1,331 @@
+# Развёртывание {{ ydb-short-name }} Enterprise Manager
+
+<!-- markdownlint-disable blanks-around-fences -->
+
+В этом руководстве описан процесс первоначального развёртывания {{ ydb-short-name }} Enterprise Manager (далее — YDB EM) для управления кластерами {{ ydb-short-name }}. Установка выполняется с помощью [Ansible](https://www.ansible.com/).
+
+## Перед началом работы {#before-start}
+
+### Требования {#requirements}
+
+Для развёртывания YDB EM необходимо выполнение следующих условий:
+
+1. Развёрнут и функционирует кластер {{ ydb-short-name }}. Подробнее о развёртывании кластера — в разделе [{#T}](../ansible/initial-deployment/index.md) или [{#T}](../manual/index.md).
+
+1. Известны параметры подключения к базе данных {{ ydb-short-name }}, которая будет использоваться для хранения метаданных YDB EM:
+    * Эндпоинт (например, `grpcs://ydb-node01.ru-central1.internal:2135`).
+    * Имя пользователя и пароль для получения токена авторизации.
+
+1. Узлы кластера {{ ydb-short-name }}, на которых будут размещены динамические слоты, подготовлены:
+    * Время синхронизировано между узлами (например, с помощью `ntpd` или `chrony`).
+    * Имена хостов соответствуют их полным доменным именам (FQDN).
+    * TLS-сертификаты подготовлены для каждого узла.
+    * Бинарные файлы {{ ydb-short-name }} установлены в директорию `/opt/ydb`.
+    * Кластер {{ ydb-short-name }} настроен с [динамической конфигурацией](../../configuration-management/configuration-v2/index.md).
+
+1. На машине, с которой выполняется установка, доступен [Ansible](https://www.ansible.com/) версии 2.14 или выше.
+
+1. Настроен SSH-доступ ко всем серверам, на которые будут установлены компоненты YDB EM.
+
+### Сетевые требования {#network-requirements}
+
+Сетевая конфигурация должна разрешать TCP-соединения по следующим портам (значения по умолчанию):
+
+Порт | Компонент | Назначение
+--- | --- | ---
+8787 | YDB EM Control Plane | gRPC-взаимодействие (Gateway ↔ CP, Agent ↔ CP)
+8789 | YDB EM Gateway | HTTP/HTTPS-интерфейс (веб-интерфейс и API)
+2135 | {{ ydb-short-name }} | gRPC-подключение к базе данных YDB EM DB
+
+## Загрузка пакета {#download}
+
+Скачайте последнюю версию пакета YDB EM:
+
+Версия | Ссылка
+--- | ---
+1.0.11 | `http://binaries.ydbem.website.yandexcloud.net/builds/1.0.11/ydb-em-1.0.11-stable-linux-amd64.tar.xz`
+
+Распакуйте скачанный архив:
+
+```bash
+tar -xf ydb-em-1.0.11-stable-linux-amd64.tar.xz
+```
+
+Содержимое пакета:
+
+Файл | Описание
+--- | ---
+`bin/ydb-em-gateway` | Бинарный файл YDB EM Gateway
+`bin/ydb-em-cp` | Бинарный файл YDB EM Control Plane
+`bin/ydb-em-agent` | Бинарный файл YDB EM Agent
+`collections/ydb_platform-ydb-XXX.tar.gz` | Ansible-коллекция для {{ ydb-short-name }}
+`collections/ydb_platform-ydb_em-YYY.tar.gz` | Ansible-коллекция для YDB EM
+`examples.tar.gz` | Примеры конфигурации для Ansible
+`install.sh` | Скрипт автоматической установки
+
+## Установка Ansible-коллекций {#install-collections}
+
+Установите Ansible-коллекцию для {{ ydb-short-name }}, если она ещё не установлена:
+
+```bash
+ansible-galaxy collection install collections/ydb_platform-ydb-2.0.0.tar.gz
+```
+
+Установите Ansible-коллекцию для YDB EM:
+
+```bash
+ansible-galaxy collection install collections/ydb_platform-ydb_em-1.0.4.tar.gz
+```
+
+{% note info %}
+
+Версии Ansible-коллекций в командах выше приведены для примера. Используйте версии, входящие в состав вашего пакета YDB EM.
+
+{% endnote %}
+
+## Подготовка конфигурации {#prepare-configuration}
+
+### Распаковка примеров {#unpack-examples}
+
+Распакуйте архив с примерами конфигурации:
+
+```bash
+tar -xf examples.tar.gz
+```
+
+### Размещение файлов {#place-files}
+
+1. Скопируйте бинарные файлы из директории `bin/` пакета в директорию `examples/files/`:
+
+    ```bash
+    cp bin/ydb-em-gateway bin/ydb-em-cp bin/ydb-em-agent examples/files/
+    ```
+
+1. Разместите TLS-сертификаты в директории `examples/files/certs/`:
+
+    ```bash
+    cp /path/to/your/certs/* examples/files/certs/
+    ```
+
+### Настройка инвентаря Ansible {#configure-inventory}
+
+Конфигурация инвентаря выполняется в двух файлах:
+
+* `examples/inventory/50-inventory.yaml` — основные параметры подключения и список хостов.
+* `examples/inventory/99-inventory-vault.yaml` — конфиденциальные данные (пароли).
+
+#### Настройка списка хостов {#configure-hosts}
+
+Откройте файл `examples/inventory/50-inventory.yaml` и настройте группы хостов.
+
+В группу `ydb_em` включите хосты, на которых будут установлены компоненты **Gateway** и **Control Plane**:
+
+```yaml
+ydb_em:
+  hosts:
+    ydb-node01.ru-central1.internal:
+```
+
+В группу `ydbd_dynamic` включите узлы кластера {{ ydb-short-name }}, на которых будет установлен **Agent** для управления динамическими слотами:
+
+```yaml
+ydb:
+  children:
+    ydbd_dynamic:
+      hosts:
+        ydb-node01.ru-central1.internal:
+            ydb_em_agent_cpu: 4
+            ydb_em_agent_memory: 8
+            location: db-dc-1
+        ydb-node02.ru-central1.internal:
+            ydb_em_agent_cpu: 4
+            ydb_em_agent_memory: 16
+            location: db-dc-2
+        ydb-node03.ru-central1.internal:
+            location: db-dc-3
+    ydb_em:
+      hosts:
+        ydb-node01.ru-central1.internal:
+```
+
+Для каждого хоста в группе `ydbd_dynamic` можно указать дополнительные параметры:
+
+Параметр | Описание
+--- | ---
+`ydb_em_agent_cpu` | Количество CPU, доступных для динамических слотов на хосте
+`ydb_em_agent_memory` | Объём RAM (в гигабайтах), доступный для динамических слотов на хосте
+`ydb_em_agent_name` | Имя хоста, используемое агентом
+`location` | Расположение хоста (зона доступности)
+
+{% note warning %}
+
+Бинарные файлы {{ ydb-short-name }} должны быть установлены на всех хостах группы `ydbd_dynamic` до начала развёртывания YDB EM. Подробнее — в разделе [{#T}](../ansible/initial-deployment/index.md).
+
+{% endnote %}
+
+#### Настройка SSH-подключения {#configure-ssh}
+
+В файле `examples/inventory/50-inventory.yaml` проверьте параметры SSH-подключения:
+
+```yaml
+# Удалённый пользователь с правами sudo
+ansible_user: ansible
+
+# Настройки для подключения через Bastion/Jump host (JUMP_IP)
+# ansible_ssh_common_args: "-o ProxyJump=ansible@{{ lookup('env','JUMP_IP') }} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+
+# Общие настройки SSH
+ansible_ssh_common_args: "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+
+# Приватный ключ для подключения
+ansible_ssh_private_key_file: "~/.ssh/id_ed25519"
+```
+
+{% note info %}
+
+Если для доступа к серверам используется Bastion/Jump host, раскомментируйте и настройте соответствующую строку `ansible_ssh_common_args`.
+
+{% endnote %}
+
+#### Настройка подключения к базе данных {{ ydb-short-name }} {#configure-ydb-connection}
+
+В файле `examples/inventory/50-inventory.yaml` укажите параметры подключения к базе данных {{ ydb-short-name }}, которая будет использоваться для хранения метаданных YDB EM:
+
+```yaml
+# Эндпоинт подключения к YDB
+ydb_em_db_connection_endpoint: "grpcs://ydb-node01.ru-central1.internal:2135"
+# Корневой домен
+ydb_em_db_connection_db_root: "/Root"
+# Имя базы данных
+ydb_em_db_connection_db: "db"
+# Пользователь YDB
+ydb_user: root
+```
+
+Пароль пользователя {{ ydb-short-name }} задаётся в файле `examples/inventory/99-inventory-vault.yaml`:
+
+```yaml
+ydb_password: <пароль>
+```
+
+{% note tip %}
+
+Для защиты конфиденциальных данных рекомендуется шифровать файл `99-inventory-vault.yaml` с помощью [Ansible Vault](https://docs.ansible.com/ansible/latest/vault_guide/index.html):
+
+```bash
+ansible-vault encrypt examples/inventory/99-inventory-vault.yaml
+```
+
+{% endnote %}
+
+#### Настройка подключения к Control Plane {#configure-cp-connection}
+
+В файле `examples/inventory/50-inventory.yaml` укажите эндпоинт подключения к YDB EM Control Plane:
+
+```yaml
+# Эндпоинт должен указывать на хост из группы ydb_em
+ydb_em_cp_connection_endpoint: "grpcs://ydb-node01.ru-central1.internal:8787"
+```
+
+Этот параметр используется в конфигурации **Gateway** и **Agent** для подключения к **Control Plane**.
+
+{% note info %}
+
+При необходимости обеспечения высокой доступности вместо прямого адреса хоста можно указать адрес балансировщика нагрузки (например, L3/L4 балансировщик или DNS-балансировка).
+
+{% endnote %}
+
+## Запуск установки {#run-installation}
+
+После завершения настройки конфигурации перейдите в директорию `examples` и выполните установку одним из способов:
+
+### Автоматическая установка {#auto-install}
+
+Запустите скрипт автоматической установки:
+
+```bash
+cd examples
+./install.sh
+```
+
+Скрипт автоматически выполнит все необходимые шаги по развёртыванию компонентов YDB EM.
+
+### Ручной запуск Ansible {#manual-install}
+
+Также можно выполнить установку вручную, запустив плейбук Ansible:
+
+```bash
+ansible-playbook ydb_platform.ydb_em.initial_setup
+```
+
+{% note info %}
+
+Если файл `99-inventory-vault.yaml` зашифрован с помощью Ansible Vault, добавьте флаг `--ask-vault-pass`:
+
+```bash
+ansible-playbook ydb_platform.ydb_em.initial_setup --ask-vault-pass
+```
+
+{% endnote %}
+
+## Проверка установки {#verify}
+
+После успешного завершения установки откройте веб-интерфейс YDB EM в браузере:
+
+```
+https://<FQDN хоста из группы ydb_em>:8789/ui/clusters
+```
+
+Например:
+
+```
+https://ydb-node01.ru-central1.internal:8789/ui/clusters
+```
+
+В веб-интерфейсе должна отобразиться страница со списком кластеров {{ ydb-short-name }}.
+
+## Устранение неполадок {#troubleshooting}
+
+### Не удаётся подключиться к веб-интерфейсу {#cannot-connect-ui}
+
+1. Убедитесь, что порт `8789` доступен с вашей машины:
+
+    ```bash
+    curl -k https://<FQDN>:8789/ui/clusters
+    ```
+
+1. Проверьте статус сервиса YDB EM Gateway на целевом хосте:
+
+    ```bash
+    sudo systemctl status ydb-em-gateway
+    ```
+
+1. Проверьте логи сервиса:
+
+    ```bash
+    sudo journalctl -u ydb-em-gateway -n 100
+    ```
+
+### Агент не подключается к Control Plane {#agent-not-connected}
+
+1. Убедитесь, что порт `8787` доступен между узлами кластера и хостом Control Plane.
+
+1. Проверьте статус сервиса YDB EM Agent на узле:
+
+    ```bash
+    sudo systemctl status ydb-em-agent
+    ```
+
+1. Проверьте корректность TLS-сертификатов и эндпоинта Control Plane в конфигурации агента.
+
+### Ошибки подключения к базе данных {{ ydb-short-name }} {#db-connection-errors}
+
+1. Убедитесь, что эндпоинт, имя базы данных, пользователь и пароль указаны корректно.
+
+1. Проверьте сетевую доступность порта `2135` на узле {{ ydb-short-name }} с хоста YDB EM.
+
+1. Проверьте логи YDB EM Control Plane:
+
+    ```bash
+    sudo journalctl -u ydb-em-cp -n 100
+    ```

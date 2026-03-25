@@ -185,10 +185,14 @@ public:
     }
 
     NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus /*currentState*/) override {
+        auto now = TInstant::Now();
         const auto writeSpeedUsagePercent = SumWrittenBytes->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
         const auto sourceIdWindow = TDuration::Seconds(std::min<ui32>(5, Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
-        const auto sourceIdCount = SourceIdCounter.Count(TInstant::Now() - sourceIdWindow);
-        const auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
+        const auto sourceIdCount = SourceIdCounter.Count(now - sourceIdWindow);
+        auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
+        if (AppData()->FeatureFlags.GetEnableTopicPartitionSplitBasedOnKllSketch()) {
+            canSplit = KeysManager.MoreThanOneKey(now - sourceIdWindow);
+        }
 
         // LOG_D("TPartition::CheckScaleStatus"
         //         << " splitMergeAvgWriteBytes# " << SumWrittenBytes->GetValue()

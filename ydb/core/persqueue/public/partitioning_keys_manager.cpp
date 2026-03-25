@@ -13,11 +13,13 @@ TPartitioningKeysManager::TPartitioningKeysManager(size_t numSketches, TDuration
 }
 
 void TPartitioningKeysManager::Add(const TString& key, ui64 msgSize) {
+    auto now = Now();
+    KeysCounter.Use(key, now);
     RemoveOldSketches();
-    if (Sketches.empty() || Sketches.back().StartTime + SketchWindowSize <= Now()) {
+    if (Sketches.empty() || Sketches.back().StartTime + SketchWindowSize <= now) {
         Sketches.emplace_back(
             NKll::TDynamicKllSketch<TString>(DEFAULT_SKETCH_K, std::random_device{}(), DEFAULT_MIN_WEIGHT),
-            Now());
+            now);
     }
     Sketches.back().Sketch.Add(key, msgSize);
 }
@@ -46,6 +48,10 @@ void TPartitioningKeysManager::RemoveOldSketches() {
     while (!Sketches.empty() && Sketches.front().StartTime + WindowSize < Now()) {
         Sketches.pop_front();
     }
+}
+
+bool TPartitioningKeysManager::MoreThanOneKey(TInstant since) {
+    return KeysCounter.Count(since) > 1;
 }
 
 } // namespace NKikimr::NPQ

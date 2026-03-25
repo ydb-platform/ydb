@@ -1,5 +1,7 @@
 #pragma once
 
+#include "utils.h"
+
 #include <util/datetime/base.h>
 #include <ydb/library/kll_median/dynamic_sketch.h>
 
@@ -11,6 +13,7 @@ struct TPartitioningKeysManager {
     TPartitioningKeysManager(size_t numSketches, TDuration windowSize);
     void Add(const TString& key, ui64 msgSize);
     TString GetMedianKey();
+    bool MoreThanOneKey(TInstant since);
 
 private:
     void RemoveOldSketches();
@@ -26,6 +29,7 @@ private:
     std::deque<KllSketchWrapper> Sketches;
     const TDuration WindowSize;
     const TDuration SketchWindowSize;
+    TLastCounter KeysCounter;
 };
 
 } // namespace NKikimr::NPQ

@@ -69,54 +69,61 @@ mkdir files
 - inventory/50-inventory.yaml
 
   ```yaml
-all:
-  children:
-    ydb:
-      hosts:
-        static-node-1.ydb-cluster.com: null
-        static-node-2.ydb-cluster.com: null
-        static-node-3.ydb-cluster.com: null
-    vars:
-      ansible_user: имя_пользователя
-      ansible_ssh_private_key_file: /путь/к/вашему/id_rsa
-      system_timezone: UTC
-      system_ntp_servers:
-        - time.cloudflare.com
-        - time.google.com
-        - ntp.ripe.net
-        - pool.ntp.org
-      ydb_config: '{{ ansible_config_file | dirname }}/files/config.yaml'
-      ydb_version: версия_системы
-      ydb_use_dynamic_config: true
-      ydb_custom_dynconfig: '{{ ansible_config_file | dirname }}/files/dynamic-config.yaml'
-      ydb_user: root
-      ydb_domain: Root
-      ydb_dbname: database
-      ydb_enforce_user_token_requirement: false
-      ydb_request_client_certificate: false
-      ydb_cores_static: 8
-      ydb_disks:
-        - name: /dev/vdb
-          label: ydb_disk_1
-        - name: /dev/vdc
-          label: ydb_disk_2
-        - name: /dev/vdd
-          label: ydb_disk_3
-      ydb_allow_format_drives: true
-      ydb_skip_data_loss_confirmation_prompt: false
-      ydb_pool_kind: ssd
-      ydb_database_groups: 8
-      ydb_cores_dynamic: 8
-      ydb_dynnodes:
-        - instance: a
-          offset: 0
-        - instance: b
-          offset: 1
-      ydb_brokers:
-        - static-node-1.ydb-cluster.com
-        - static-node-2.ydb-cluster.com
-        - static-node-3.ydb-cluster.com
-      ydbops_local: true
+  all:
+    children:
+      ydb:
+        # Серверы
+        hosts:
+          static-node-1.ydb-cluster.com:
+          static-node-2.ydb-cluster.com:
+          static-node-3.ydb-cluster.com:
+
+        vars:
+          # Ansible
+          ansible_user: имя_пользователя
+          ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
+
+          # Система
+          system_timezone: UTC
+          system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
+
+          # Узлы
+          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_version: "версия_системы"
+          ydb_use_dynamic_config: true
+          ydb_custom_dynconfig: "{{ ansible_config_file | dirname }}/files/dynamic-config.yaml"
+
+          # База данных
+          ydb_user: root
+          ydb_domain: Root
+          ydb_dbname: database
+
+          # Настройки авторизации
+          ydb_enforce_user_token_requirement: false
+          ydb_request_client_certificate: false
+
+          # Хранилище
+          ydb_cores_static: 8
+          ydb_disks:
+            - name: /dev/vdb
+              label: ydb_disk_1
+            - name: /dev/vdc
+              label: ydb_disk_2
+            - name: /dev/vdd
+              label: ydb_disk_3
+          ydb_allow_format_drives: true
+          ydb_skip_data_loss_confirmation_prompt: false
+          ydb_pool_kind: ssd
+          ydb_database_groups: 8
+          ydb_cores_dynamic: 8
+          ydb_dynnodes:
+            - { instance: 'a', offset: 0 }
+            - { instance: 'b', offset: 1 }
+          ydb_brokers:
+            - static-node-1.ydb-cluster.com
+            - static-node-2.ydb-cluster.com
+            - static-node-3.ydb-cluster.com
+          ydbops_local: true
   ```
 
 {% endlist %}

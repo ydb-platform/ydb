@@ -13,11 +13,12 @@ from collections.abc import (
 import pprint
 from typing import Any
 
-from .util import deprecate_argument
+from .util import deprecate_argument, _is_iterable, _flatten
 
 
 str_type: tuple[type, ...] = (str, bytes)
 _generator_type = type((_ for _ in ()))
+NULL_SLICE: slice = slice(None)
 
 
 class _ParseResultsWithOffset:
@@ -276,6 +277,11 @@ class ParseResults:
     def __delitem__(self, i):
         if not isinstance(i, (int, slice)):
             del self._tokdict[i]
+            return
+
+        # slight optimization if del results[:]
+        if i == NULL_SLICE:
+            self._toklist.clear()
             return
 
         mylen = len(self._toklist)
@@ -611,17 +617,8 @@ class ParseResults:
            New ``flatten`` argument.
         """
 
-        def flattened(pr):
-            to_visit = collections.deque([*self])
-            while to_visit:
-                to_do = to_visit.popleft()
-                if isinstance(to_do, ParseResults):
-                    to_visit.extendleft(to_do[::-1])
-                else:
-                    yield to_do
-
         if flatten:
-            return [*flattened(self)]
+            return [*_flatten(self)]
         else:
             return [
                 res.as_list() if isinstance(res, ParseResults) else res
@@ -900,22 +897,12 @@ class ParseResults:
         name-value relations as results names. If an optional ``name`` argument is
         given, a nested :class:`ParseResults` will be returned.
         """
-
-        def is_iterable(obj):
-            try:
-                iter(obj)
-            except Exception:
-                return False
-            # str's are iterable, but in pyparsing, we don't want to iterate over them
-            else:
-                return not isinstance(obj, str_type)
-
         ret = cls([])
         for k, v in other.items():
             if isinstance(v, Mapping):
                 ret += cls.from_dict(v, name=k)
             else:
-                ret += cls([v], name=k, aslist=is_iterable(v))
+                ret += cls([v], name=k, aslist=_is_iterable(v))
         if name is not None:
             ret = cls([ret], name=name)
         return ret

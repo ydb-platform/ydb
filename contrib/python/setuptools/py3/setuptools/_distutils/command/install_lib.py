@@ -142,7 +142,6 @@ class install_lib(Command):
                 optimize=0,
                 force=self.force,
                 prefix=install_root,
-                dry_run=self.dry_run,
             )
         if self.optimize > 0:
             byte_compile(
@@ -151,7 +150,6 @@ class install_lib(Command):
                 force=self.force,
                 prefix=install_root,
                 verbose=self.verbose,
-                dry_run=self.dry_run,
             )
 
     # -- Utility methods -----------------------------------------------

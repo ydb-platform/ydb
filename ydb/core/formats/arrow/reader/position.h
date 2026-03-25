@@ -181,6 +181,10 @@ public:
         return CompareImpl(position, item, itemPosition, item.PositionAddress.size());
     }
 
+    std::partial_ordering ComparePrefix(const ui64 position, const TSortableScanData& item, const ui64 itemPosition, const ui32 prefixSize) const {
+        return CompareImpl(position, item, itemPosition, prefixSize);
+    }
+
     std::partial_ordering ComparePartial(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
         return CompareImpl(position, item, itemPosition, std::min<ui32>(PositionAddress.size(), item.PositionAddress.size()));
     }
@@ -482,6 +486,12 @@ public:
         Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
         Y_ABORT_UNLESS(item.Sorting->GetColumns().size() == Sorting->GetColumns().size());
         const auto directResult = Sorting->Compare(Position, *item.Sorting, item.GetPosition());
+        return ApplyOptionalReverseForCompareResult(directResult);
+    }
+
+    std::partial_ordering ComparePrefix(const TSortableBatchPosition& item, const ui32 prefixSize)  const {
+        Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
+        const auto directResult = Sorting->ComparePrefix(Position, *item.Sorting, item.GetPosition(), prefixSize);
         return ApplyOptionalReverseForCompareResult(directResult);
     }
 

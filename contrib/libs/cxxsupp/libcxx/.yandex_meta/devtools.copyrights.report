@@ -78,6 +78,7 @@ BELONGS ya.make
     Files with this license:
         include/__atomic/atomic_ref.h [9:10]
         include/__fwd/mdspan.h [9:10]
+        include/__mdspan/aligned_accessor.h [9:10]
         include/__mdspan/default_accessor.h [9:10]
         include/__mdspan/extents.h [9:10]
         include/__mdspan/layout_left.h [9:10]

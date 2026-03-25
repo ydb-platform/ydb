@@ -47,7 +47,7 @@ static constexpr const char *kErrorMessage = "error.message";
   additional filters are applied.
   <p>
   If the operation has completed successfully, instrumentations SHOULD NOT set @code error.type
-  @endcode. <p> If a specific domain defines its own set of error identifiers (such as HTTP or gRPC
+  @endcode. <p> If a specific domain defines its own set of error identifiers (such as HTTP or RPC
   status codes), it's RECOMMENDED to: <ul> <li>Use a domain-specific attribute</li> <li>Set @code
   error.type @endcode to capture all errors, regardless of whether they are defined within the
   domain-specific set or not.</li>

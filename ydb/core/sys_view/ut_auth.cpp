@@ -1,8 +1,7 @@
-#include "ut_common.h"
-
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/sys_view/ut_common.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -67,7 +66,6 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
     Y_UNIT_TEST(AuthUsers) {
         TTestEnv env;
         SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
 
         env.GetClient().CreateUser("/Root", "user1", "password1");
         env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
@@ -78,10 +76,16 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         env.GetClient().CreateGroup("/Root/Tenant2", "group3");
         env.GetClient().CreateGroup("/Root/Tenant2", "group4");
 
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off);
+        auto driver = TDriver(driverConfig);
+
         {
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid, IsEnabled, IsLockedOut, LastSuccessfulAttemptAt, LastFailedAttemptAt, FailedAttemptCount
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
@@ -92,9 +96,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         }
 
         {
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT PasswordHash
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
             )").GetValueSync();
 
             auto actual = NKqp::StreamResultToYson(it);
@@ -126,9 +131,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         }
 
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid, IsEnabled, IsLockedOut, LastSuccessfulAttemptAt, LastFailedAttemptAt, FailedAttemptCount
-                FROM `Root/Tenant1/.sys/auth_users`
+                FROM `/Root/Tenant1/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
@@ -139,9 +145,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         }
 
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid, IsEnabled, IsLockedOut, LastSuccessfulAttemptAt, LastFailedAttemptAt, FailedAttemptCount
-                FROM `Root/Tenant2/.sys/auth_users`
+                FROM `/Root/Tenant2/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
@@ -166,7 +173,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid, IsEnabled, IsLockedOut, LastSuccessfulAttemptAt, LastFailedAttemptAt, FailedAttemptCount
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
@@ -212,7 +219,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid, IsEnabled, IsLockedOut, FailedAttemptCount
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
@@ -247,7 +254,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid, IsEnabled, IsLockedOut, FailedAttemptCount
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
@@ -279,7 +286,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid, IsEnabled, IsLockedOut, FailedAttemptCount
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
@@ -293,36 +300,38 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
     Y_UNIT_TEST(AuthUsers_Access) {
         TTestEnv env;
         SetupAuthAccessEnvironment(env);
-        TTableClient client(env.GetDriver());
 
         { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint());
+                .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off);
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/.sys/auth_users`
+                    FROM `/Root/.sys/auth_users`
                 )").GetValueSync();
 
                 CheckEmpty(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_users`
+                    FROM `/Root/Tenant1/.sys/auth_users`
                 )").GetValueSync();
 
                 CheckEmpty(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant2/.sys/auth_users`
+                    FROM `/Root/Tenant2/.sys/auth_users`
                 )").GetValueSync();
 
                 CheckEmpty(it);
@@ -332,17 +341,18 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         { // user1rootadmin is /Root admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off)
                 .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
                     .User = "user1rootadmin",
                     .Password = "password1",
                 }));
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/.sys/auth_users`
+                    FROM `/Root/.sys/auth_users`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -354,9 +364,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_users`
+                    FROM `/Root/Tenant1/.sys/auth_users`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -367,9 +378,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant2/.sys/auth_users`
+                    FROM `/Root/Tenant2/.sys/auth_users`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -382,17 +394,18 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         { // user2 isn't /Root admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off)
                 .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
                     .User = "user2",
                     .Password = "password2",
                 }));
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/.sys/auth_users`
+                    FROM `/Root/.sys/auth_users`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -402,18 +415,20 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_users`
+                    FROM `/Root/Tenant1/.sys/auth_users`
                 )").GetValueSync();
 
                 CheckEmpty(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant2/.sys/auth_users`
+                    FROM `/Root/Tenant2/.sys/auth_users`
                 )").GetValueSync();
 
                 CheckEmpty(it);
@@ -423,17 +438,18 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         { // user6tenant1admin is /Root/Tenant1 admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off)
                 .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
                     .User = "user6tenant1admin",
                     .Password = "password6",
                 }));
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/.sys/auth_users`
+                    FROM `/Root/.sys/auth_users`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -443,9 +459,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_users`
+                    FROM `/Root/Tenant1/.sys/auth_users`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -456,9 +473,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant2/.sys/auth_users`
+                    FROM `/Root/Tenant2/.sys/auth_users`
                 )").GetValueSync();
 
                 CheckEmpty(it);
@@ -488,7 +506,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
 
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT Sid
-            FROM `Root/.sys/auth_users`
+            FROM `/Root/.sys/auth_users`
         )").GetValueSync();
 
         auto expected = R"([
@@ -524,7 +542,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
             )").GetValueSync();
 
             auto expected = R"([
@@ -540,7 +558,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
                 WHERE Sid >= "user2"
             )").GetValueSync();
 
@@ -556,7 +574,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
                 WHERE Sid > "user2"
             )").GetValueSync();
 
@@ -571,7 +589,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
                 WHERE Sid <= "user3"
             )").GetValueSync();
 
@@ -587,7 +605,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
                 WHERE Sid < "user3"
             )").GetValueSync();
 
@@ -602,7 +620,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
                 WHERE Sid > "user1" AND Sid <= "user3"
             )").GetValueSync();
 
@@ -617,7 +635,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid
-                FROM `Root/.sys/auth_users`
+                FROM `/Root/.sys/auth_users`
                 WHERE Sid >= "user2" AND Sid < "user3"
             )").GetValueSync();
 
@@ -632,7 +650,6 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
     Y_UNIT_TEST(AuthGroups) {
         TTestEnv env;
         SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
 
         env.GetClient().CreateUser("/Root", "user1", "password1");
         env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
@@ -643,10 +660,16 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         env.GetClient().CreateGroup("/Root/Tenant2", "group3");
         env.GetClient().CreateGroup("/Root/Tenant2", "group4");
 
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off);
+        auto driver = TDriver(driverConfig);
+
         {
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_groups`
+                FROM `/Root/.sys/auth_groups`
             )").GetValueSync();
 
             auto expected = R"([
@@ -657,9 +680,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         }
 
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant1/.sys/auth_groups`
+                FROM `/Root/Tenant1/.sys/auth_groups`
             )").GetValueSync();
 
             auto expected = R"([
@@ -670,9 +694,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         }
 
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant2/.sys/auth_groups`
+                FROM `/Root/Tenant2/.sys/auth_groups`
             )").GetValueSync();
 
             auto expected = R"([
@@ -697,32 +722,35 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
 
         { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint());
+                .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off);
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/.sys/auth_groups`
+                    FROM `/Root/.sys/auth_groups`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_groups`
+                    FROM `/Root/Tenant1/.sys/auth_groups`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant2/.sys/auth_groups`
+                    FROM `/Root/Tenant2/.sys/auth_groups`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
@@ -732,17 +760,18 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         { // user1rootadmin is /Root admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off)
                 .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
                     .User = "user1rootadmin",
                     .Password = "password1",
                 }));
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/.sys/auth_groups`
+                    FROM `/Root/.sys/auth_groups`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -753,9 +782,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_groups`
+                    FROM `/Root/Tenant1/.sys/auth_groups`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -766,9 +796,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant2/.sys/auth_groups`
+                    FROM `/Root/Tenant2/.sys/auth_groups`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -781,35 +812,38 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         { // user2 isn't /Root admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off)
                 .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
                     .User = "user2",
                     .Password = "password2",
                 }));
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/.sys/auth_groups`
+                    FROM `/Root/.sys/auth_groups`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_groups`
+                    FROM `/Root/Tenant1/.sys/auth_groups`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant2/.sys/auth_groups`
+                    FROM `/Root/Tenant2/.sys/auth_groups`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
@@ -819,26 +853,28 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         { // user6tenant1admin is /Root/Tenant1 admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off)
                 .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
                     .User = "user6tenant1admin",
                     .Password = "password6",
                 }));
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/.sys/auth_groups`
+                    FROM `/Root/.sys/auth_groups`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_groups`
+                    FROM `/Root/Tenant1/.sys/auth_groups`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -849,9 +885,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT Sid
-                    FROM `Root/Tenant2/.sys/auth_groups`
+                    FROM `/Root/Tenant2/.sys/auth_groups`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
@@ -881,7 +918,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
 
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT *
-            FROM `Root/.sys/auth_groups`
+            FROM `/Root/.sys/auth_groups`
         )").GetValueSync();
 
         auto expected = R"([
@@ -917,7 +954,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid
-                FROM `Root/.sys/auth_groups`
+                FROM `/Root/.sys/auth_groups`
                 WHERE Sid > "group1" AND Sid <= "group3"
             )").GetValueSync();
 
@@ -933,7 +970,6 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
     Y_UNIT_TEST(AuthGroupMembers) {
         TTestEnv env;
         SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
 
         env.GetClient().CreateUser("/Root", "user1", "password1");
         env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
@@ -953,10 +989,16 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "group3");
         env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "group4");
 
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off);
+        auto driver = TDriver(driverConfig);
+
         {
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `/Root/.sys/auth_group_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -967,9 +1009,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         }
 
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant1/.sys/auth_group_members`
+                FROM `/Root/Tenant1/.sys/auth_group_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -980,9 +1023,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         }
 
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/Tenant2/.sys/auth_group_members`
+                FROM `/Root/Tenant2/.sys/auth_group_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -1016,32 +1060,35 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
 
         { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint());
+                .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off);
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/.sys/auth_group_members`
+                    FROM `/Root/.sys/auth_group_members`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/Tenant1/.sys/auth_group_members`
+                    FROM `/Root/Tenant1/.sys/auth_group_members`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/Tenant2/.sys/auth_group_members`
+                    FROM `/Root/Tenant2/.sys/auth_group_members`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
@@ -1051,17 +1098,18 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         { // user1rootadmin is /Root admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off)
                 .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
                     .User = "user1rootadmin",
                     .Password = "password1",
                 }));
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/.sys/auth_group_members`
+                    FROM `/Root/.sys/auth_group_members`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -1072,9 +1120,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/Tenant1/.sys/auth_group_members`
+                    FROM `/Root/Tenant1/.sys/auth_group_members`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -1085,9 +1134,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/Tenant2/.sys/auth_group_members`
+                    FROM `/Root/Tenant2/.sys/auth_group_members`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -1100,35 +1150,38 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         { // user2 isn't /Root admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off)
                 .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
                     .User = "user2",
                     .Password = "password2",
                 }));
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/.sys/auth_group_members`
+                    FROM `/Root/.sys/auth_group_members`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/Tenant1/.sys/auth_group_members`
+                    FROM `/Root/Tenant1/.sys/auth_group_members`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/Tenant2/.sys/auth_group_members`
+                    FROM `/Root/Tenant2/.sys/auth_group_members`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
@@ -1138,26 +1191,28 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         { // user6tenant1admin is /Root/Tenant1 admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off)
                 .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
                     .User = "user6tenant1admin",
                     .Password = "password6",
                 }));
             auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/.sys/auth_group_members`
+                    FROM `/Root/.sys/auth_group_members`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/Tenant1/.sys/auth_group_members`
+                    FROM `/Root/Tenant1/.sys/auth_group_members`
                 )").GetValueSync();
 
                 auto expected = R"([
@@ -1168,9 +1223,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
-                    FROM `Root/Tenant2/.sys/auth_group_members`
+                    FROM `/Root/Tenant2/.sys/auth_group_members`
                 )").GetValueSync();
 
                 CheckAuthAdministratorAccessIsRequired(it);
@@ -1213,7 +1269,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
 
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT *
-            FROM `Root/.sys/auth_group_members`
+            FROM `/Root/.sys/auth_group_members`
         )").GetValueSync();
 
         auto expected = R"([
@@ -1264,7 +1320,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `/Root/.sys/auth_group_members`
             )").GetValueSync();
 
             auto expected = R"([
@@ -1283,7 +1339,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `/Root/.sys/auth_group_members`
                 WHERE GroupSid > "group1" AND GroupSid <= "group3"
             )").GetValueSync();
 
@@ -1301,7 +1357,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `/Root/.sys/auth_group_members`
                 WHERE GroupSid >= "group2"
             )").GetValueSync();
 
@@ -1319,7 +1375,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `/Root/.sys/auth_group_members`
                 WHERE GroupSid > "group2"
             )").GetValueSync();
 
@@ -1334,7 +1390,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `/Root/.sys/auth_group_members`
                 WHERE GroupSid <= "group2"
             )").GetValueSync();
 
@@ -1352,7 +1408,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `/Root/.sys/auth_group_members`
                 WHERE GroupSid < "group2"
             )").GetValueSync();
 
@@ -1367,7 +1423,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `/Root/.sys/auth_group_members`
                 WHERE GroupSid = "group2" AND MemberSid >= "user2"
             )").GetValueSync();
 
@@ -1382,7 +1438,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `/Root/.sys/auth_group_members`
                 WHERE GroupSid = "group2" AND MemberSid > "user2"
             )").GetValueSync();
 
@@ -1396,7 +1452,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `/Root/.sys/auth_group_members`
                 WHERE GroupSid = "group2" AND MemberSid <= "user2"
             )").GetValueSync();
 
@@ -1411,7 +1467,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
-                FROM `Root/.sys/auth_group_members`
+                FROM `/Root/.sys/auth_group_members`
                 WHERE GroupSid = "group2" AND MemberSid < "user2"
             )").GetValueSync();
 
@@ -1423,8 +1479,8 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(AuthOwners, EnableRealSystemViewPaths) {
-        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
+    Y_UNIT_TEST(AuthOwners) {
+        TTestEnv env;
         SetupAuthEnvironment(env);
 
         {
@@ -1455,219 +1511,165 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         auto driverConfig = TDriverConfig()
             .SetEndpoint(env.GetEndpoint())
             .SetDiscoveryMode(EDiscoveryMode::Off);
+        auto driver = TDriver(driverConfig);
 
         {
-            driverConfig.SetDatabase("/Root");
-            auto driver = TDriver(driverConfig);
-
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/.sys/auth_owners`
             )").GetValueSync();
 
-            TString expectedYson;
-            if (EnableRealSystemViewPaths) {
-                expectedYson = R"([
-                    [["/Root"];["root@builtin"]];
-                    [["/Root/.metadata"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                    [["/Root/.sys"];["metadata@system"]];[["/Root/.sys/auth_effective_permissions"];["metadata@system"]];
-                    [["/Root/.sys/auth_group_members"];["metadata@system"]];
-                    [["/Root/.sys/auth_groups"];["metadata@system"]];
-                    [["/Root/.sys/auth_owners"];["metadata@system"]];
-                    [["/Root/.sys/auth_permissions"];["metadata@system"]];
-                    [["/Root/.sys/auth_users"];["metadata@system"]];
-                    [["/Root/.sys/compile_cache_queries"];["metadata@system"]];
-                    [["/Root/.sys/ds_groups"];["metadata@system"]];
-                    [["/Root/.sys/ds_pdisks"];["metadata@system"]];
-                    [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
-                    [["/Root/.sys/ds_storage_stats"];["metadata@system"]];
-                    [["/Root/.sys/ds_vslots"];["metadata@system"]];
-                    [["/Root/.sys/hive_tablets"];["metadata@system"]];
-                    [["/Root/.sys/nodes"];["metadata@system"]];
-                    [["/Root/.sys/partition_stats"];["metadata@system"]];
-                    [["/Root/.sys/pg_class"];["metadata@system"]];
-                    [["/Root/.sys/pg_tables"];["metadata@system"]];
-                    [["/Root/.sys/query_metrics_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/query_sessions"];["metadata@system"]];
-                    [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
-                    [["/Root/.sys/resource_pools"];["metadata@system"]];
-                    [["/Root/.sys/streaming_queries"];["metadata@system"]];
-                    [["/Root/.sys/tables"];["metadata@system"]];
-                    [["/Root/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/top_partitions_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_partitions_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
-                    [["/Root/Dir1"];["user1"]];
-                    [["/Root/Dir1/SubDir1"];["user1"]];
-                    [["/Root/Table0"];["root@builtin"]];
-                ])";
-            } else {
-                expectedYson = R"([
-                    [["/Root"];["root@builtin"]];
-                    [["/Root/.metadata"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                    [["/Root/Dir1"];["user1"]];
-                    [["/Root/Dir1/SubDir1"];["user1"]];
-                    [["/Root/Table0"];["root@builtin"]];
-                ])";
-            }
+            TString expectedYson = R"([
+                [["/Root"];["root@builtin"]];
+                [["/Root/.metadata"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                [["/Root/.sys"];["metadata@system"]];[["/Root/.sys/auth_effective_permissions"];["metadata@system"]];
+                [["/Root/.sys/auth_group_members"];["metadata@system"]];
+                [["/Root/.sys/auth_groups"];["metadata@system"]];
+                [["/Root/.sys/auth_owners"];["metadata@system"]];
+                [["/Root/.sys/auth_permissions"];["metadata@system"]];
+                [["/Root/.sys/auth_users"];["metadata@system"]];
+                [["/Root/.sys/compile_cache_queries"];["metadata@system"]];
+                [["/Root/.sys/ds_groups"];["metadata@system"]];
+                [["/Root/.sys/ds_pdisks"];["metadata@system"]];
+                [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
+                [["/Root/.sys/ds_storage_stats"];["metadata@system"]];
+                [["/Root/.sys/ds_vslots"];["metadata@system"]];
+                [["/Root/.sys/hive_tablets"];["metadata@system"]];
+                [["/Root/.sys/nodes"];["metadata@system"]];
+                [["/Root/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/.sys/pg_class"];["metadata@system"]];
+                [["/Root/.sys/pg_tables"];["metadata@system"]];
+                [["/Root/.sys/query_metrics_one_minute"];["metadata@system"]];
+                [["/Root/.sys/query_sessions"];["metadata@system"]];
+                [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
+                [["/Root/.sys/resource_pools"];["metadata@system"]];
+                [["/Root/.sys/streaming_queries"];["metadata@system"]];
+                [["/Root/.sys/tables"];["metadata@system"]];
+                [["/Root/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
+                [["/Root/.sys/top_partitions_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_partitions_one_minute"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                [["/Root/Dir1"];["user1"]];
+                [["/Root/Dir1/SubDir1"];["user1"]];
+                [["/Root/Table0"];["root@builtin"]];
+            ])";
 
             NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
 
         {
-            driverConfig.SetDatabase("/Root/Tenant1");
-            auto driver = TDriver(driverConfig);
-
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/Tenant1/.sys/auth_owners`
             )").GetValueSync();
 
-            TString expectedYson;
-            if (EnableRealSystemViewPaths) {
-                expectedYson = R"([
-                    [["/Root/Tenant1"];["root@builtin"]];
-                    [["/Root/Tenant1/.metadata"];["metadata@system"]];
-                    [["/Root/Tenant1/.metadata/workload_manager"];["metadata@system"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools"];["metadata@system"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/auth_effective_permissions"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/auth_group_members"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/auth_groups"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/auth_owners"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/auth_permissions"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/auth_users"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/compile_cache_queries"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/nodes"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/partition_stats"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/pg_class"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/pg_tables"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/query_metrics_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/query_sessions"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/resource_pool_classifiers"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/resource_pools"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/streaming_queries"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/tables"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_partitions_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_partitions_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant1/Dir2"];["user2"]];[["/Root/Tenant1/Dir2/SubDir2"];["user2"]];
-                    [["/Root/Tenant1/Table1"];["root@builtin"]];
-                ])";
-            } else {
-                expectedYson = R"([
-                    [["/Root/Tenant1"];["root@builtin"]];
-                    [["/Root/Tenant1/.metadata"];["metadata@system"]];
-                    [["/Root/Tenant1/.metadata/workload_manager"];["metadata@system"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools"];["metadata@system"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                    [["/Root/Tenant1/Dir2"];["user2"]];
-                    [["/Root/Tenant1/Dir2/SubDir2"];["user2"]];
-                    [["/Root/Tenant1/Table1"];["root@builtin"]];
-                ])";
-            }
+            TString expectedYson = R"([
+                [["/Root/Tenant1"];["root@builtin"]];
+                [["/Root/Tenant1/.metadata"];["metadata@system"]];
+                [["/Root/Tenant1/.metadata/workload_manager"];["metadata@system"]];
+                [["/Root/Tenant1/.metadata/workload_manager/pools"];["metadata@system"]];
+                [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                [["/Root/Tenant1/.sys"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/auth_effective_permissions"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/auth_group_members"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/auth_groups"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/auth_owners"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/auth_permissions"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/auth_users"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/compile_cache_queries"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/nodes"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/pg_class"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/pg_tables"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/query_metrics_one_minute"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/query_sessions"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/resource_pool_classifiers"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/resource_pools"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/streaming_queries"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/tables"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_partitions_one_hour"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_partitions_one_minute"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                [["/Root/Tenant1/Dir2"];["user2"]];[["/Root/Tenant1/Dir2/SubDir2"];["user2"]];
+                [["/Root/Tenant1/Table1"];["root@builtin"]];
+            ])";
 
             NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
 
         {
-            driverConfig.SetDatabase("/Root/Tenant2");
-            auto driver = TDriver(driverConfig);
-
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/Tenant2/.sys/auth_owners`
             )").GetValueSync();
 
-            TString expectedYson;
-            if (EnableRealSystemViewPaths) {
-                expectedYson = R"([
-                    [["/Root/Tenant2"];["root@builtin"]];
-                    [["/Root/Tenant2/.metadata"];["metadata@system"]];
-                    [["/Root/Tenant2/.metadata/workload_manager"];["metadata@system"]];
-                    [["/Root/Tenant2/.metadata/workload_manager/pools"];["metadata@system"]];
-                    [["/Root/Tenant2/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/auth_effective_permissions"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/auth_group_members"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/auth_groups"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/auth_owners"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/auth_permissions"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/auth_users"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/compile_cache_queries"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/nodes"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/partition_stats"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/pg_class"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/pg_tables"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/query_metrics_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/query_sessions"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/resource_pool_classifiers"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/resource_pools"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/streaming_queries"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/tables"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_partitions_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_partitions_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
-                    [["/Root/Tenant2/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
-                    [["/Root/Tenant2/Dir3"];["user3"]];
-                    [["/Root/Tenant2/Dir3/SubDir33"];["group1"]];
-                    [["/Root/Tenant2/Dir3/SubDir34"];["root@builtin"]];
-                    [["/Root/Tenant2/Dir4"];["user4"]];
-                    [["/Root/Tenant2/Dir4/SubDir45"];["root@builtin"]];
-                    [["/Root/Tenant2/Dir4/SubDir46"];["user4"]];
-                    [["/Root/Tenant2/Table2"];["root@builtin"]];
-                ])";
-            } else {
-                expectedYson = R"([
-                    [["/Root/Tenant2"];["root@builtin"]];
-                    [["/Root/Tenant2/.metadata"];["metadata@system"]];
-                    [["/Root/Tenant2/.metadata/workload_manager"];["metadata@system"]];
-                    [["/Root/Tenant2/.metadata/workload_manager/pools"];["metadata@system"]];
-                    [["/Root/Tenant2/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                    [["/Root/Tenant2/Dir3"];["user3"]];
-                    [["/Root/Tenant2/Dir3/SubDir33"];["group1"]];
-                    [["/Root/Tenant2/Dir3/SubDir34"];["root@builtin"]];
-                    [["/Root/Tenant2/Dir4"];["user4"]];
-                    [["/Root/Tenant2/Dir4/SubDir45"];["root@builtin"]];
-                    [["/Root/Tenant2/Dir4/SubDir46"];["user4"]];
-                    [["/Root/Tenant2/Table2"];["root@builtin"]];
-                ])";
-            }
+            TString expectedYson = R"([
+                [["/Root/Tenant2"];["root@builtin"]];
+                [["/Root/Tenant2/.metadata"];["metadata@system"]];
+                [["/Root/Tenant2/.metadata/workload_manager"];["metadata@system"]];
+                [["/Root/Tenant2/.metadata/workload_manager/pools"];["metadata@system"]];
+                [["/Root/Tenant2/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                [["/Root/Tenant2/.sys"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/auth_effective_permissions"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/auth_group_members"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/auth_groups"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/auth_owners"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/auth_permissions"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/auth_users"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/compile_cache_queries"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/nodes"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/pg_class"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/pg_tables"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/query_metrics_one_minute"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/query_sessions"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/resource_pool_classifiers"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/resource_pools"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/streaming_queries"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/tables"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_partitions_one_hour"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_partitions_one_minute"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                [["/Root/Tenant2/Dir3"];["user3"]];
+                [["/Root/Tenant2/Dir3/SubDir33"];["group1"]];
+                [["/Root/Tenant2/Dir3/SubDir34"];["root@builtin"]];
+                [["/Root/Tenant2/Dir4"];["user4"]];
+                [["/Root/Tenant2/Dir4/SubDir45"];["root@builtin"]];
+                [["/Root/Tenant2/Dir4/SubDir46"];["user4"]];
+                [["/Root/Tenant2/Table2"];["root@builtin"]];
+            ])";
 
             NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
@@ -1691,10 +1693,9 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             .SetDiscoveryMode(EDiscoveryMode::Off);
 
         { // anonymous login gives `ydb.granular.describe_schema` access
-            driverConfig.SetDatabase("/Root");
             auto driver = TDriver(driverConfig);
 
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/.sys/auth_owners`
@@ -1718,12 +1719,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                     .Password = "password1",
                 })
             );
+            auto driver = TDriver(driverConfig);
 
             {
-                driverConfig.SetDatabase("/Root");
-                auto driver = TDriver(driverConfig);
-
-                TTableClient client(driver);
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
                     FROM `/Root/.sys/auth_owners`
@@ -1741,10 +1740,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
-                driverConfig.SetDatabase("/Root/Tenant1");
-                auto driver = TDriver(driverConfig);
-
-                TTableClient client(driver);
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
                     FROM `/Root/Tenant1/.sys/auth_owners`
@@ -1773,10 +1769,9 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                     .Password = "password1",
                 })
             );
-            driverConfig.SetDatabase("/Root");
             auto driver = TDriver(driverConfig);
 
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/.sys/auth_owners`
@@ -1846,8 +1841,8 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST_TWIN(AuthOwners_TableRange, EnableRealSystemViewPaths) {
-        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
+    Y_UNIT_TEST(AuthOwners_TableRange) {
+        TTestEnv env;
         SetupAuthEnvironment(env);
 
         {
@@ -1890,93 +1885,65 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 FROM `/Root/.sys/auth_owners`
             )").GetValueSync();
 
-            TString expectedYson;
-            if (EnableRealSystemViewPaths) {
-                expectedYson = R"([
-                    [["/Root"];["root@builtin"]];
-                    [["/Root/.metadata"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                    [["/Root/.sys"];["metadata@system"]];[["/Root/.sys/auth_effective_permissions"];["metadata@system"]];
-                    [["/Root/.sys/auth_group_members"];["metadata@system"]];
-                    [["/Root/.sys/auth_groups"];["metadata@system"]];
-                    [["/Root/.sys/auth_owners"];["metadata@system"]];
-                    [["/Root/.sys/auth_permissions"];["metadata@system"]];
-                    [["/Root/.sys/auth_users"];["metadata@system"]];
-                    [["/Root/.sys/compile_cache_queries"];["metadata@system"]];
-                    [["/Root/.sys/ds_groups"];["metadata@system"]];
-                    [["/Root/.sys/ds_pdisks"];["metadata@system"]];
-                    [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
-                    [["/Root/.sys/ds_storage_stats"];["metadata@system"]];
-                    [["/Root/.sys/ds_vslots"];["metadata@system"]];
-                    [["/Root/.sys/hive_tablets"];["metadata@system"]];
-                    [["/Root/.sys/nodes"];["metadata@system"]];
-                    [["/Root/.sys/partition_stats"];["metadata@system"]];
-                    [["/Root/.sys/pg_class"];["metadata@system"]];
-                    [["/Root/.sys/pg_tables"];["metadata@system"]];
-                    [["/Root/.sys/query_metrics_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/query_sessions"];["metadata@system"]];
-                    [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
-                    [["/Root/.sys/resource_pools"];["metadata@system"]];
-                    [["/Root/.sys/streaming_queries"];["metadata@system"]];
-                    [["/Root/.sys/tables"];["metadata@system"]];
-                    [["/Root/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/top_partitions_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_partitions_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
-                    [["/Root/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
-                    [["/Root/Dir0"];["root@builtin"]];
-                    [["/Root/Dir0/SubDir0"];["root@builtin"]];
-                    [["/Root/Dir0/SubDir1"];["root@builtin"]];
-                    [["/Root/Dir0/SubDir2"];["root@builtin"]];
-                    [["/Root/Dir1"];["root@builtin"]];
-                    [["/Root/Dir1/SubDir0"];["user0"]];
-                    [["/Root/Dir1/SubDir1"];["user1"]];
-                    [["/Root/Dir1/SubDir2"];["user2"]];
-                    [["/Root/Dir2"];["root@builtin"]];
-                    [["/Root/Dir2/SubDir0"];["root@builtin"]];
-                    [["/Root/Dir2/SubDir1"];["root@builtin"]];
-                    [["/Root/Dir2/SubDir2"];["root@builtin"]];
-                    [["/Root/Dir3"];["root@builtin"]];
-                    [["/Root/Dir3/SubDir0"];["root@builtin"]];
-                    [["/Root/Dir3/SubDir1"];["root@builtin"]];
-                    [["/Root/Dir3/SubDir2"];["root@builtin"]];
-                    [["/Root/Table0"];["root@builtin"]];
-                ])";
-            } else {
-                expectedYson = R"([
-                    [["/Root"];["root@builtin"]];
-                    [["/Root/.metadata"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                    [["/Root/Dir0"];["root@builtin"]];
-                    [["/Root/Dir0/SubDir0"];["root@builtin"]];
-                    [["/Root/Dir0/SubDir1"];["root@builtin"]];
-                    [["/Root/Dir0/SubDir2"];["root@builtin"]];
-                    [["/Root/Dir1"];["root@builtin"]];
-                    [["/Root/Dir1/SubDir0"];["user0"]];
-                    [["/Root/Dir1/SubDir1"];["user1"]];
-                    [["/Root/Dir1/SubDir2"];["user2"]];
-                    [["/Root/Dir2"];["root@builtin"]];
-                    [["/Root/Dir2/SubDir0"];["root@builtin"]];
-                    [["/Root/Dir2/SubDir1"];["root@builtin"]];
-                    [["/Root/Dir2/SubDir2"];["root@builtin"]];
-                    [["/Root/Dir3"];["root@builtin"]];
-                    [["/Root/Dir3/SubDir0"];["root@builtin"]];
-                    [["/Root/Dir3/SubDir1"];["root@builtin"]];
-                    [["/Root/Dir3/SubDir2"];["root@builtin"]];
-                    [["/Root/Table0"];["root@builtin"]];
-                ])";
-            }
+            TString expectedYson = R"([
+                [["/Root"];["root@builtin"]];
+                [["/Root/.metadata"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
+                [["/Root/.sys"];["metadata@system"]];[["/Root/.sys/auth_effective_permissions"];["metadata@system"]];
+                [["/Root/.sys/auth_group_members"];["metadata@system"]];
+                [["/Root/.sys/auth_groups"];["metadata@system"]];
+                [["/Root/.sys/auth_owners"];["metadata@system"]];
+                [["/Root/.sys/auth_permissions"];["metadata@system"]];
+                [["/Root/.sys/auth_users"];["metadata@system"]];
+                [["/Root/.sys/compile_cache_queries"];["metadata@system"]];
+                [["/Root/.sys/ds_groups"];["metadata@system"]];
+                [["/Root/.sys/ds_pdisks"];["metadata@system"]];
+                [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
+                [["/Root/.sys/ds_storage_stats"];["metadata@system"]];
+                [["/Root/.sys/ds_vslots"];["metadata@system"]];
+                [["/Root/.sys/hive_tablets"];["metadata@system"]];
+                [["/Root/.sys/nodes"];["metadata@system"]];
+                [["/Root/.sys/partition_stats"];["metadata@system"]];
+                [["/Root/.sys/pg_class"];["metadata@system"]];
+                [["/Root/.sys/pg_tables"];["metadata@system"]];
+                [["/Root/.sys/query_metrics_one_minute"];["metadata@system"]];
+                [["/Root/.sys/query_sessions"];["metadata@system"]];
+                [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
+                [["/Root/.sys/resource_pools"];["metadata@system"]];
+                [["/Root/.sys/streaming_queries"];["metadata@system"]];
+                [["/Root/.sys/tables"];["metadata@system"]];
+                [["/Root/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
+                [["/Root/.sys/top_partitions_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_partitions_one_minute"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_cpu_time_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_cpu_time_one_minute"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_duration_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_duration_one_minute"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_read_bytes_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
+                [["/Root/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                [["/Root/Dir0"];["root@builtin"]];
+                [["/Root/Dir0/SubDir0"];["root@builtin"]];
+                [["/Root/Dir0/SubDir1"];["root@builtin"]];
+                [["/Root/Dir0/SubDir2"];["root@builtin"]];
+                [["/Root/Dir1"];["root@builtin"]];
+                [["/Root/Dir1/SubDir0"];["user0"]];
+                [["/Root/Dir1/SubDir1"];["user1"]];
+                [["/Root/Dir1/SubDir2"];["user2"]];
+                [["/Root/Dir2"];["root@builtin"]];
+                [["/Root/Dir2/SubDir0"];["root@builtin"]];
+                [["/Root/Dir2/SubDir1"];["root@builtin"]];
+                [["/Root/Dir2/SubDir2"];["root@builtin"]];
+                [["/Root/Dir3"];["root@builtin"]];
+                [["/Root/Dir3/SubDir0"];["root@builtin"]];
+                [["/Root/Dir3/SubDir1"];["root@builtin"]];
+                [["/Root/Dir3/SubDir2"];["root@builtin"]];
+                [["/Root/Table0"];["root@builtin"]];
+            ])";
 
             NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
@@ -2271,12 +2238,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         auto driverConfig = TDriverConfig()
             .SetEndpoint(env.GetEndpoint())
             .SetDiscoveryMode(EDiscoveryMode::Off);
+        auto driver = TDriver(driverConfig);
 
         {
-            driverConfig.SetDatabase("/Root");
-            auto driver = TDriver(driverConfig);
-
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/.sys/auth_permissions`
@@ -2295,10 +2260,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         }
 
         {
-            driverConfig.SetDatabase("/Root/Tenant1");
-            auto driver = TDriver(driverConfig);
-
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/Tenant1/.sys/auth_permissions`
@@ -2315,10 +2277,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         }
 
         {
-            driverConfig.SetDatabase("/Root/Tenant2");
-            auto driver = TDriver(driverConfig);
-
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/Tenant2/.sys/auth_permissions`
@@ -2370,10 +2329,9 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             .SetDiscoveryMode(EDiscoveryMode::Off);
 
         { // anonymous login gives `ydb.granular.describe_schema` access
-            driverConfig.SetDatabase("/Root");
             auto driver = TDriver(driverConfig);
 
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/.sys/auth_permissions`
@@ -2399,12 +2357,10 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                     .Password = "password1",
                 })
             );
+            auto driver = TDriver(driverConfig);
 
             {
-                driverConfig.SetDatabase("/Root");
-                auto driver = TDriver(driverConfig);
-
-                TTableClient client(driver);
+                TTableClient client(driver, TClientSettings().Database("/Root"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
                     FROM `/Root/.sys/auth_permissions`
@@ -2424,10 +2380,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             }
 
             {
-                driverConfig.SetDatabase("/Root/Tenant1");
-                auto driver = TDriver(driverConfig);
-
-                TTableClient client(driver);
+                TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
                 auto it = client.StreamExecuteScanQuery(R"(
                     SELECT *
                     FROM `/Root/Tenant1/.sys/auth_permissions`
@@ -2454,10 +2407,9 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                     .Password = "password1",
                 })
             );
-            driverConfig.SetDatabase("/Root");
             auto driver = TDriver(driverConfig);
 
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/.sys/auth_permissions`
@@ -2552,8 +2504,8 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST_TWIN(AuthEffectivePermissions, EnableRealSystemViewPaths) {
-        TTestEnv env({ .EnableRealSystemViewPaths = EnableRealSystemViewPaths });
+    Y_UNIT_TEST(AuthEffectivePermissions) {
+        TTestEnv env;
         SetupAuthEnvironment(env);
 
         {
@@ -2578,159 +2530,119 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
         auto driverConfig = TDriverConfig()
             .SetEndpoint(env.GetEndpoint())
             .SetDiscoveryMode(EDiscoveryMode::Off);
+        auto driver = TDriver(driverConfig);
 
         {
-            driverConfig.SetDatabase("/Root");
-            auto driver = TDriver(driverConfig);
-
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/.sys/auth_effective_permissions`
             )").GetValueSync();
 
-            TString expectedYson;
-            if (EnableRealSystemViewPaths) {
-                expectedYson = R"([
-                    [["/Root"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.metadata"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/auth_effective_permissions"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/auth_group_members"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/auth_groups"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/auth_users"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/ds_groups"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/ds_pdisks"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/ds_storage_pools"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/ds_storage_stats"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/ds_vslots"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/hive_tablets"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/nodes"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/pg_class"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/pg_tables"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/query_metrics_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/resource_pools"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/streaming_queries"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/tables"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_partitions_by_tli_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_partitions_by_tli_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_partitions_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_partitions_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_queries_by_cpu_time_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_queries_by_cpu_time_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_queries_by_duration_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_queries_by_duration_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_queries_by_read_bytes_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_queries_by_request_units_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.sys/top_queries_by_request_units_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Table0"];["ydb.generic.use"];["user1"]];
-                ])";
-            } else {
-                expectedYson = R"([
-                    [["/Root"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.metadata"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Table0"];["ydb.generic.use"];["user1"]];
-                ])";
-            }
+            TString expectedYson = R"([
+                [["/Root"];["ydb.generic.use"];["user1"]];
+                [["/Root/.metadata"];["ydb.generic.use"];["user1"]];
+                [["/Root/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
+                [["/Root/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
+                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/auth_effective_permissions"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/auth_group_members"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/auth_groups"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/auth_users"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/ds_groups"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/ds_pdisks"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/ds_storage_pools"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/ds_storage_stats"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/ds_vslots"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/hive_tablets"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/nodes"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/pg_class"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/pg_tables"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/query_metrics_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/resource_pools"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/streaming_queries"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/tables"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_partitions_by_tli_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_partitions_by_tli_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_partitions_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_partitions_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_queries_by_cpu_time_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_queries_by_cpu_time_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_queries_by_duration_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_queries_by_duration_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_queries_by_read_bytes_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_queries_by_request_units_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/top_queries_by_request_units_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
+                [["/Root/Table0"];["ydb.generic.use"];["user1"]];
+            ])";
 
             NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
 
         {
-            driverConfig.SetDatabase("/Root/Tenant1");
-            auto driver = TDriver(driverConfig);
-
-            TTableClient client(driver);
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
                 FROM `/Root/Tenant1/.sys/auth_effective_permissions`
             )").GetValueSync();
 
-            TString expectedYson;
-            if (EnableRealSystemViewPaths) {
-                expectedYson = R"([
-                    [["/Root/Tenant1"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.metadata"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/auth_effective_permissions"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/auth_group_members"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/auth_groups"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/auth_users"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/nodes"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/pg_class"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/pg_tables"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/query_metrics_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/resource_pools"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/streaming_queries"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/tables"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_partitions_by_tli_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_partitions_by_tli_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_partitions_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_partitions_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_duration_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_duration_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_request_units_one_hour"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.sys/top_queries_by_request_units_one_minute"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/Dir2"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/Dir2"];["ydb.granular.select_row"];["user2"]];
-                    [["/Root/Tenant1/Table1"];["ydb.generic.use"];["user1"]];
-                ])";
-            } else {
-                expectedYson = R"([
-                    [["/Root/Tenant1"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.metadata"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                    [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/Dir2"];["ydb.generic.use"];["user1"]];
-                    [["/Root/Tenant1/Dir2"];["ydb.granular.select_row"];["user2"]];
-                    [["/Root/Tenant1/Table1"];["ydb.generic.use"];["user1"]];
-                ])";
-            }
+            TString expectedYson = R"([
+                [["/Root/Tenant1"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.metadata"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
+                [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
+                [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
+                [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
+                [["/Root/Tenant1/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/auth_effective_permissions"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/auth_group_members"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/auth_groups"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/auth_users"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/nodes"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/pg_class"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/pg_tables"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/query_metrics_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/resource_pools"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/streaming_queries"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/tables"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_partitions_by_tli_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_partitions_by_tli_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_partitions_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_partitions_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_queries_by_cpu_time_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_queries_by_duration_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_queries_by_duration_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_queries_by_request_units_one_hour"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/top_queries_by_request_units_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/Dir2"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/Dir2"];["ydb.granular.select_row"];["user2"]];
+                [["/Root/Tenant1/Table1"];["ydb.generic.use"];["user1"]];
+            ])";
 
             NKqp::CompareYson(expectedYson, NKqp::StreamResultToYson(it));
         }
@@ -2864,6 +2776,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }
+
 }
 
 } // NSysView

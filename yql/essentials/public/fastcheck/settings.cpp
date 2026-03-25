@@ -5,8 +5,7 @@
 
 #include <library/cpp/resource/resource.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 namespace {
 
@@ -59,7 +58,6 @@ bool BuildSqlTranslationSettings(
     settings.Arena = arena;
     settings.File = request.File;
     FillClusters(request, settings);
-    settings.EmitReadsForExists = true;
     settings.Antlr4Parser = true;
     settings.AnsiLexer = request.IsAnsiLexer;
     settings.SyntaxVersion = request.SyntaxVersion;
@@ -194,5 +192,4 @@ bool BuildLexerSettings(
     return result.Settings.ApplyTo(settings, issues);
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

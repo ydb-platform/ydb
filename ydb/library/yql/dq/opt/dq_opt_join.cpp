@@ -1326,7 +1326,8 @@ TExprBase DqBuildHashJoin(
     IOptimizationContext& optCtx,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
-    bool useBlockHashJoin
+    bool useBlockHashJoin,
+    bool blockHashJoinBuildSideLeft
 ) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
@@ -1684,13 +1685,23 @@ TExprBase DqBuildHashJoin(
         }
     }
 
+    static const std::set<std::string_view> blockHashJoinSupportedTypes = {"Inner"sv, "Left"sv, "LeftSemi"sv, "LeftOnly"sv};
+    useBlockHashJoin = useBlockHashJoin && blockHashJoinSupportedTypes.contains(joinType);
+
     TExprNode::TPtr hashJoin;
     switch (mode) {
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                // Create TDqPhyBlockHashJoin node with structured inputs - peephole will handle conversion
-                // Pass the original structured inputs, not wide flows
+                TVector<TCoNameValueTuple> joinSettings;
+                if (blockHashJoinBuildSideLeft && joinType == "Left"sv) {
+                    joinSettings.push_back(
+                        Build<TCoNameValueTuple>(ctx, join.Pos())
+                            .Name().Build("BuildSide")
+                            .Value<TCoAtom>().Build("Left")
+                            .Done());
+                }
+
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)
                     .RightInput(rightInputArg)
@@ -1700,6 +1711,9 @@ TExprBase DqBuildHashJoin(
                     .JoinKeys(join.JoinKeys())
                     .LeftJoinKeyNames(join.LeftJoinKeyNames())
                     .RightJoinKeyNames(join.RightJoinKeyNames())
+                    .Settings()
+                        .Add(joinSettings)
+                        .Build()
                     .Done().Ptr();
                 break;
             }

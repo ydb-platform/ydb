@@ -24,10 +24,11 @@ struct TStorageOptions
     TString DiskId;
     TString ClientId;
     ui32 BlockSize = 0;
+    ui64 StripeSize = 0;
     ui64 BlocksCount = 0;
     ui32 VhostQueuesCount = 0;
     bool UnalignedRequestsDisabled = false;
-    bool CheckBufferModificationDuringWriting = false;
+    bool CreateOverlappedRequestsGuard = true;
     NProto::EStorageMediaKind StorageMediaKind = NProto::STORAGE_MEDIA_DEFAULT;
     bool DiscardEnabled = false;
     ui32 MaxZeroBlocksSubRequestSize = 0;

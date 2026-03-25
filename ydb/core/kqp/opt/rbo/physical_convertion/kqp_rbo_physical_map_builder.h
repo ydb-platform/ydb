@@ -10,7 +10,7 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalMapBuilder: public TPhysicalUnaryOpBuilder {
 public:
-    TPhysicalMapBuilder(std::shared_ptr<TOpMap> map, TExprContext& ctx, TPositionHandle pos)
+    TPhysicalMapBuilder(TIntrusivePtr<TOpMap> map, TExprContext& ctx, TPositionHandle pos)
         : TPhysicalUnaryOpBuilder(ctx, pos)
         , Map(map) {
     }
@@ -18,5 +18,5 @@ public:
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
 
 private:
-    std::shared_ptr<TOpMap> Map;
+    TIntrusivePtr<TOpMap> Map;
 };

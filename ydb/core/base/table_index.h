@@ -54,7 +54,6 @@ NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase ty
 std::span<const std::string_view> GetImplTables(
     NKikimrSchemeOp::EIndexType indexType,
     std::span<const TString> indexKeys);
-std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout);
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
 
@@ -94,6 +93,11 @@ inline constexpr const double DefaultOverlapRatio = 0;
 
 inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
 
+// Impl table positions in partitioning setting list
+inline constexpr const int LevelTablePosition = 0;
+inline constexpr const int PostingTablePosition = 1;
+inline constexpr const int PrefixTablePosition = 2;
+
 bool HasPostingParentFlag(TClusterId parent);
 void EnsureNoPostingParentFlag(TClusterId parent);
 TClusterId SetPostingParentFlag(TClusterId parent);
@@ -126,14 +130,20 @@ namespace NFulltext {
 
     inline constexpr const char* FullTextRelevanceColumn = "__ydb_full_text_relevance";
 
-    enum class EQueryMode {
+    // Impl table positions in partitioning setting list
+    inline constexpr const int DictTablePosition = 0;
+    inline constexpr const int DocsTablePosition = 1;
+    inline constexpr const int StatsTablePosition = 2;
+    inline constexpr const int PostingTablePosition = 3;
+
+    enum class EDefaultOperator {
         Invalid,
         And,
         Or
     };
 
-    EQueryMode QueryModeFromString(const TString& mode, TString& explain);
-    ui32 MinimumShouldMatchFromString(i32 wordsCount, EQueryMode queryMode, const TString& minimumShouldMatch, TString& explain);
+    EDefaultOperator DefaultOperatorFromString(const TString& mode, TString& explain);
+    ui32 MinimumShouldMatchFromString(i32 wordsCount, EDefaultOperator defaultOperator, const TString& minimumShouldMatch, TString& explain);
 }
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);

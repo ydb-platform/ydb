@@ -110,7 +110,7 @@ void TKqpComputeActor::DoBootstrap() {
     if (Meta) {
         YQL_ENSURE(ComputeCtx.GetTableScans().empty());
 
-        ComputeCtx.AddTableScan(0, *Meta, GetStatsMode());
+        ComputeCtx.AddTableScan(0, *Meta, GetStatsMode(), &TaskRunner->GetTypeEnv());
         ScanData = &ComputeCtx.GetTableScan(0);
 
         columns.reserve(Meta->ColumnsSize());

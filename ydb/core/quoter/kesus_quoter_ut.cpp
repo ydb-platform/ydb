@@ -84,8 +84,9 @@ Y_UNIT_TEST_SUITE(QuoterWithKesusTest) {
         setup.CreateKesusResource(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", cfg);
 
         setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf"); // stabilization
-        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", rate * prefetch * 0.9, TDuration::MilliSeconds(500));
-        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", rate * prefetch * 0.2, TDuration::MilliSeconds(500));
+        // Consume exactly both ticks' worth: rate * prefetch * 2 = 200,000
+        setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", rate * prefetch * 2, TDuration::Seconds(10));
+        // Channel is now exhausted and Balance = 0. This must timeout.
         setup.GetQuota(TKesusQuoterTestSetup::DEFAULT_KESUS_PATH, "root/leaf", 1, TDuration::MilliSeconds(500), TEvQuota::TEvClearance::EResult::Deadline);
     }
 

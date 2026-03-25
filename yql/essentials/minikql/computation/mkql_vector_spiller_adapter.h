@@ -1,6 +1,7 @@
 #pragma once
 
 #include <queue>
+#include <utility>
 
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/computation/mkql_spiller.h>
@@ -23,7 +24,7 @@ public:
     };
 
     TVectorSpillerAdapter(ISpiller::TPtr spiller, size_t sizeLimit)
-        : Spiller_(spiller)
+        : Spiller_(std::move(spiller))
         , SizeLimit_(sizeLimit)
     {
     }

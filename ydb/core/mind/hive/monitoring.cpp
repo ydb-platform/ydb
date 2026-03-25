@@ -2980,7 +2980,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        auto cgi = GetParams(ev->Get());
+        auto cgi = GetParams(Event.Get());
         MaxMovements = FromStringWithDefault(cgi.Get("movements"), MaxMovements);
         MaxInFlight = FromStringWithDefault(cgi.Get("inflight"), MaxInFlight);
     }
@@ -3019,7 +3019,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        auto cgi = GetParams(ev->Get());
+        auto cgi = GetParams(Event.Get());
         Settings.NumReassigns = FromStringWithDefault(cgi.Get("reassigns"), 1000);
         Settings.MaxInFlight = FromStringWithDefault(cgi.Get("inflight"), 1);
         Settings.StoragePool = cgi.Get("pool");
@@ -3053,7 +3053,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        TenantName = GetParams(ev->Get()).Get("tenantName");
+        TenantName = GetParams(Event.Get()).Get("tenantName");
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE_FROM_SCRATCH; }

@@ -68,5 +68,19 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
         sockopt_windows.go
         sockoptip.go
     )
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND NOT CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        errno_unix.go
+        fd.go
+        fd_fsync_posix.go
+        fd_mutex.go
+        fd_poll_runtime.go
+        fd_posix.go
+        fd_unix.go
+        fd_wasip1.go
+        hook_unix.go
+        sendfile.go
+        sys_cloexec.go
+    )
 ENDIF()
 END()

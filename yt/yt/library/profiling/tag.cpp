@@ -180,9 +180,20 @@ void TTagSet::AddTagWithChild(TTag tag, int child)
 
 TDynamicTagPtr TTagSet::AddDynamicTag(int index)
 {
-    auto tag = New<TDynamicTag>();
+    const auto& [name, value] = Tags_[index];
+    auto tag = New<TDynamicTag>(std::pair{name, value});
     DynamicTags_.emplace_back(tag, index);
     return tag;
+}
+
+void TTagSet::ApplyDynamicTag(TDynamicTagPtr dynamicTag)
+{
+    for (auto& [tag, index] : DynamicTags_) {
+        if (tag == dynamicTag) {
+            const auto& [name, value] = dynamicTag->Tag.Load();
+            Tags_[index] = {name, value};
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

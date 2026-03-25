@@ -8,8 +8,7 @@
 #include <util/generic/strbuf.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 using TDataTypeId = ui16;
 
@@ -257,6 +256,7 @@ struct TDataTypeInfo {
     ui8 DecimalDigits;
 };
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 extern const TDataTypeInfo DataTypeInfos[DataSlotCount];
 
 inline const TDataTypeInfo& GetDataTypeInfo(EDataSlot slot) {
@@ -321,6 +321,11 @@ inline bool IsValidLayoutValue<TInterval>(typename TDataType<TInterval>::TLayout
 }
 
 template <>
+inline bool IsValidLayoutValue<TInterval64>(typename TDataType<TInterval64>::TLayout value) {
+    return value >= -MAX_INTERVAL64 && value <= MAX_INTERVAL64;
+}
+
+template <>
 inline bool IsValidLayoutValue<TDate32>(typename TDataType<TDate32>::TLayout value) {
     return value >= MIN_DATE32 && value <= MAX_DATE32;
 }
@@ -355,5 +360,4 @@ inline IOutputStream& operator<<(IOutputStream& os, EDataSlot slot) {
     return os;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

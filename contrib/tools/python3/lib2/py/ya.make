@@ -17,20 +17,14 @@ NO_CHECK_IMPORTS(
     asyncio.unix_events
     asyncio.windows_events
     asyncio.windows_utils
-    crypt
     ctypes.wintypes
     curses.*
     dbm.gnu
     dbm.ndbm
     dbm.sqlite3
-    distutils._msvccompiler
-    distutils.command.bdist_msi
-    distutils.msvc9compiler
-    encodings.cp65001
     encodings.mbcs
     encodings.oem
     lzma
-    msilib.*
     multiprocessing.popen_fork
     multiprocessing.popen_forkserver
     multiprocessing.popen_spawn_posix
@@ -65,13 +59,11 @@ PY_SRCS(
     _pylong.py
     _pyrepl/__init__.py
     _pyrepl/__main__.py
-    _pyrepl/_minimal_curses.py
     _pyrepl/_threading_handler.py
     _pyrepl/base_eventqueue.py
     _pyrepl/commands.py
     _pyrepl/completing_reader.py
     _pyrepl/console.py
-    _pyrepl/curses.py
     _pyrepl/fancy_termios.py
     _pyrepl/historical_reader.py
     _pyrepl/input.py
@@ -81,6 +73,7 @@ PY_SRCS(
     _pyrepl/reader.py
     _pyrepl/readline.py
     _pyrepl/simple_interact.py
+    _pyrepl/terminfo.py
     _pyrepl/trace.py
     _pyrepl/types.py
     _pyrepl/unix_console.py
@@ -452,6 +445,7 @@ PY_SRCS(
     pyclbr.py
     pydoc.py
     pydoc_data/__init__.py
+    pydoc_data/module_docs.py
     pydoc_data/topics.py
     queue.py
     quopri.py

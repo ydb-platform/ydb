@@ -28,7 +28,7 @@ void FillPQConfig(NKikimrPQ::TPQConfig& pqConfig, const TString& dbRoot, bool is
 }
 
 void PQTabletPrepare(const TTabletPreparationParameters& parameters,
-                     const TVector<std::pair<TString, bool>>& users,
+                    const TConstArrayRef<TConsumerPreparationParameters> users,
                      TTestActorRuntime& runtime,
                      ui64 tabletId,
                      TActorId edge) {
@@ -65,9 +65,11 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             tabletConfig->SetTopic("topic");
             tabletConfig->SetVersion(version);
             tabletConfig->SetLocalDC(parameters.localDC);
-            auto* consumer = tabletConfig->AddConsumers();
-            consumer->SetName("user");
-            consumer->SetReadFromTimestampsMs(parameters.readFromTimestampsMs);
+            if (parameters.AddDefaultConsumer) {
+                auto* consumer = tabletConfig->AddConsumers();
+                consumer->SetName("user");
+                consumer->SetReadFromTimestampsMs(parameters.readFromTimestampsMs);
+            }
             tabletConfig->SetMeteringMode(parameters.meteringMode);
             auto partitionConfig = tabletConfig->MutablePartitionConfig();
             if (parameters.writeSpeed > 0) {
@@ -100,10 +102,16 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 tabletConfig->SetMonitoringProjectId(*parameters.monitoringProjectId);
             }
 
-            for (auto& u : users) {
+            for (const auto& u : users) {
                 auto* consumer = tabletConfig->AddConsumers();
-                consumer->SetName(u.first);
-                consumer->SetImportant(u.second);
+                consumer->SetName(u.Name);
+                consumer->SetImportant(u.Important);
+                if (u.MonitoringProjectId.has_value()) {
+                    consumer->SetMonitoringProjectId(*u.MonitoringProjectId);
+                }
+                if (u.MetricsLevel.has_value()) {
+                    consumer->SetMetricsLevel(*u.MetricsLevel);
+                }
             }
 
             runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
@@ -143,8 +151,15 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
 }
 
 void PQTabletPrepare(const TTabletPreparationParameters& parameters,
-                     const TVector<std::pair<TString, bool>>& users,
+                     const TVector<std::pair<TString, bool>>& usersWithImportantFlag,
                      TTestContext& context) {
+    TVector<TConsumerPreparationParameters> users(Reserve(usersWithImportantFlag.size()));
+    for (const auto& [name, important] : usersWithImportantFlag) {
+        users.push_back(TConsumerPreparationParameters{
+            .Name = name,
+            .Important = important,
+        });
+    }
     PQTabletPrepare(parameters, users, *context.Runtime, context.TabletId, context.Edge);
 }
 
@@ -1008,7 +1023,11 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
     UNIT_ASSERT_EQUAL_C(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK, result->Record.DebugString());
     if (!settings.DirectReadId) {
         UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
-        auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
+        const auto& res = result->Record.GetPartitionResponse().GetCmdReadResult();
+
+        if (settings.SizeLag) {
+            *settings.SizeLag = res.GetSizeLag();
+        }
 
         UNIT_ASSERT_GE_C(res.ResultSize(), settings.ResCount,
                       "res.ResultSize()=" << res.ResultSize() << ", settings.ResCount=" << settings.ResCount);
@@ -1040,13 +1059,30 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
 
 void CmdRead(
         const ui32 partition, const ui64 offset, const ui32 count, const ui32 size, const ui32 resCount, bool timeouted,
-        TTestContext& tc, TVector<i32> offsets, const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString user
+        TTestContext& tc, TVector<i32> offsets, const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString user,
+        ui64* sizeLag
 ) {
     return CmdRead(
             TPQCmdReadSettings("", partition, offset, count, size, resCount, timeouted,
-                               offsets, maxTimeLagMs, readTimestampMs, user),
+                               offsets, maxTimeLagMs, readTimestampMs, user,
+                               0, // lastOffset
+                               sizeLag),
             tc
     );
+}
+
+ui64 GetSizeLag(const ui32 partition,
+                const ui64 offset,
+                bool isEndOffset,
+                TTestContext& tc)
+{
+    ui64 sizeLag = 0;
+    if (isEndOffset) {
+        CmdRead(partition, offset, 1, Max<i32>(), 0, false, tc, {}, 0, 0, "user", &sizeLag);
+    } else {
+        CmdRead(partition, offset, 1, Max<i32>(), 1, false, tc, {static_cast<i32>(offset)}, 0, 0, "user", &sizeLag);
+    }
+    return sizeLag;
 }
 
 void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)

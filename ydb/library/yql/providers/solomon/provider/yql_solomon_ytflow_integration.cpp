@@ -78,6 +78,19 @@ public:
         return maybeWriteToShard.Cast().Input().Ptr();
     }
 
+    TExprNode::TPtr UpdateWriteContent(
+        const TExprNode::TPtr& write,
+        const TExprNode::TPtr& content,
+        TExprContext& ctx
+    ) override {
+        auto maybeWriteToShard = TMaybeNode<TSoWriteToShard>(write);
+        YQL_ENSURE(maybeWriteToShard);
+        return Build<TSoWriteToShard>(ctx, write->Pos())
+            .InitFrom(maybeWriteToShard.Cast())
+            .Input(content)
+            .Done().Ptr();
+    }
+
     void FillSourceSettings(
         const TExprNode& /*source*/, ::google::protobuf::Any& /*settings*/, TExprContext& /*ctx*/
     ) override {
@@ -91,11 +104,11 @@ public:
         YQL_ENSURE(maybeWriteToShard);
 
         auto writeToShard = maybeWriteToShard.Cast();
-        auto* listType = writeToShard.Input().Ref().GetTypeAnn();
-        auto* itemType = listType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        auto listType = writeToShard.Input().Ref().GetTypeAnn();
+        auto itemType = listType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
         NYtflow::NProto::TSolomonSinkMessage sinkSettings;
-        for (auto* structItem : itemType->GetItems()) {
+        for (auto structItem : itemType->GetItems()) {
             TString itemName(structItem->GetName());
             const TDataExprType* itemType = nullptr;
 

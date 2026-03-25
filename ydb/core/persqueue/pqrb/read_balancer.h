@@ -143,6 +143,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&);
 
     ui64 PartitionReserveSize() {
         return TopicPartitionReserveSize(TabletConfig);
@@ -154,6 +155,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();
 
+    void ProcessPendingMLPGetPartitionRequests(const TActorContext& ctx);
+    void UpdateActivePartitions();
 
     bool Inited;
     ui64 PathId;
@@ -224,6 +227,7 @@ private:
 
         ui64 Round = 0;
         ui64 NextCookie = 0;
+        bool StatsReceived = false;
     };
     TStatsRequestTracker StatsRequestTracker;
 
@@ -234,6 +238,7 @@ private:
 
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
+    std::deque<TEvPQ::TEvMLPGetPartitionRequest::TPtr> PendingMLPGetPartitionRequests;
 
     TActorId FindSubDomainPathIdActor;
 
@@ -244,6 +249,7 @@ private:
     bool SubDomainOutOfSpace = false;
 
     TPartitionGraph PartitionGraph;
+    std::vector<ui32> ActivePartitions;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

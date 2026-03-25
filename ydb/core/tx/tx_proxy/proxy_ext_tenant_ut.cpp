@@ -22,10 +22,9 @@ void DeclareAndLs(TTestEnv& env) {
         auto ls = env.GetClient().Ls(env.GetRoot());
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, env.GetSettings().FeatureFlags.GetEnableRealSystemViewPaths() ? 8 : 5);
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 8);
     }
 }
-
 
 void DeclareAndDrop(TTestEnv& env) {
     {
@@ -41,7 +40,7 @@ void DeclareAndDrop(TTestEnv& env) {
         auto ls = env.GetClient().Ls(env.GetRoot());
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, env.GetSettings().FeatureFlags.GetEnableRealSystemViewPaths() ? 10 : 7);
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 10);
     }
 
 }
@@ -57,6 +56,7 @@ void DeclareAndDefineWithoutNodes(TTestEnvWithPoolsSupport& env) {
         auto subdomain = GetSubDomainDefaultSetting("USER_0", storagePool);
         subdomain.SetExternalSchemeShard(true);
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS, env.GetClient().AlterExtSubdomain("/dc-1", subdomain, TDuration::MilliSeconds(500)));
+        Sleep(SchemeShardInitDuration);
     }
 
     {
@@ -68,7 +68,7 @@ void DeclareAndDefineWithoutNodes(TTestEnvWithPoolsSupport& env) {
         auto ls = env.GetClient().Ls(env.GetRoot());
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 5);
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 8);
     }
 }
 
@@ -86,6 +86,7 @@ void DeclareAndDefineWithNodes(TTestEnvWithPoolsSupport& env) {
         subdomain.SetExternalSchemeShard(true);
         subdomain.SetExternalHive(true);
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterExtSubdomain("/dc-1", subdomain, WaitTimeOut));
+        Sleep(SchemeShardInitDuration);
     }
 
     {
@@ -93,14 +94,14 @@ void DeclareAndDefineWithNodes(TTestEnvWithPoolsSupport& env) {
         NTestLs::IsExtSubdomain(ls); //root TSS
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 5 : 4));
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 8 : 7));
     }
 
     {
         auto ls = env.GetClient().Ls(env.GetRoot());
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 5);
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 8);
     }
 }
 
@@ -120,16 +121,18 @@ void CreateTableInsideAndLs(TTestEnvWithPoolsSupport& env) {
         subdomain.SetExternalSchemeShard(true);
         subdomain.SetExternalHive(true);
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterExtSubdomain("/dc-1", subdomain));
+        Sleep(SchemeShardInitDuration);
 
         auto ls = env.GetClient().Ls("/dc-1/USER_0");
         NTestLs::IsExtSubdomain(ls); //root TSS
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_UNEQUAL(ver.OwnerId, rootSchemeShard);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 5 : 4));
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 8 : 7));
     }
 
     {
+        TLocalPathId tablePathId = GetNextLocalPathId(env, "/dc-1/USER_0");
         auto tableDesc = GetTableSimpleDescription("SimpleTable");
         UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc),
                                  NMsgBusProxy::MSTATUS_OK);
@@ -138,7 +141,7 @@ void CreateTableInsideAndLs(TTestEnvWithPoolsSupport& env) {
         NTestLs::IsTable(ls);
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_UNEQUAL(ver.OwnerId, rootSchemeShard);
-        UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(ver.PathId, tablePathId);
         UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
     }
 
@@ -147,7 +150,7 @@ void CreateTableInsideAndLs(TTestEnvWithPoolsSupport& env) {
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_UNEQUAL(ver.OwnerId, rootSchemeShard);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 7 : 6));
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 14 : 13));
     }
 
     UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().ForceDeleteSubdomain("/dc-1", "USER_0"));
@@ -157,7 +160,7 @@ void CreateTableInsideAndLs(TTestEnvWithPoolsSupport& env) {
         auto ver = NTestLs::ExtractPathVersion(ls);
         UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, rootSchemeShard);
         UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 7);
+        UNIT_ASSERT_VALUES_EQUAL(ver.Version, 10);
     }
 }
 
@@ -192,6 +195,7 @@ void DeclareAndAlterPools(TTestEnvWithPoolsSupport& env) {
         auto subdomain = GetSubDomainDefaultSetting("USER_0");
         subdomain.SetExternalSchemeShard(true);
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterExtSubdomain("/dc-1", subdomain));
+        Sleep(SchemeShardInitDuration);
 
         auto ls = env.GetClient().Ls("/dc-1/USER_0");
         NTestLs::IsExtSubdomain(ls); //root TSS ready
@@ -199,6 +203,7 @@ void DeclareAndAlterPools(TTestEnvWithPoolsSupport& env) {
     }
 
     {
+        TLocalPathId tablePathId = GetNextLocalPathId(env, "/dc-1/USER_0");
         auto tableDesc = GetTableSimpleDescription("SimpleTable");
         UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc),
                                  NMsgBusProxy::MSTATUS_OK);
@@ -206,7 +211,7 @@ void DeclareAndAlterPools(TTestEnvWithPoolsSupport& env) {
         auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
         NTestLs::IsTable(ls);
         auto ver = NTestLs::ExtractPathVersion(ls);
-        UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(ver.PathId, tablePathId);
         UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
     }
 
@@ -241,6 +246,7 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
             subdomain.SetExternalHive(true);
             subdomain.SetExternalSchemeShard(true);
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterExtSubdomain("/dc-1", subdomain));
+            Sleep(SchemeShardInitDuration);
 
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             NTestLs::IsExtSubdomain(ls);  // extsubdomain's SS is ready
@@ -251,10 +257,11 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
                 UNIT_ASSERT_VALUES_UNEQUAL(schemeshards[x], schemeshards[x-1]);
             }
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 5 : 4));
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 8 : 7));
         }
 
         {
+            TLocalPathId tablePathId = GetNextLocalPathId(env, "/dc-1/USER_0");
             auto tableDesc = GetTableSimpleDescription("SimpleTable");
             UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc),
                                      NMsgBusProxy::MSTATUS_OK);
@@ -264,7 +271,7 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
             NTestLs::PathType(ls, NKikimrSchemeOp::EPathTypeTable);
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, schemeshards[x]);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, tablePathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
         }
 
@@ -274,7 +281,7 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, schemeshards[x]);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 7 : 6));
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 14 : 13));
 
 
             ls = env.GetClient().Ls("/dc-1");
@@ -294,7 +301,7 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, rootSchemeShard);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 7 + x * 4);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 10 + x * 4);
 
             env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0");
             ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -302,184 +309,6 @@ void CreateTableInsideThenStopTenantAndForceDeleteSubDomain(TTestEnvWithPoolsSup
         }
     }
 }
-
-void CreateTableInsideAndDeleteTable(TTestEnvWithPoolsSupport& env) {
-    ui64 rootSchemeShard = Tests::ChangeStateStorage(Tests::SchemeRoot, 1);
-    auto storagePool = env.CreatePoolsForTenant("USER_0");
-    const ui32 triesNum = 3;
-    TVector<ui64> schemeshards(triesNum, 0);
-    for (ui32 x = 0; x < triesNum; ++x) {
-        {
-            auto subdomain_0 = GetSubDomainDeclareSetting("USER_0");
-            subdomain_0.SetExternalHive(true);
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateExtSubdomain("/dc-1", subdomain_0));
-
-            auto ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsUnavailable(ls); //root TSS not ready yet
-
-            ls = env.GetClient().Ls("/dc-1");
-            NTestLs::ChildrenCount(ls, 1);
-            NTestLs::HasChild(ls, "USER_0", NKikimrSchemeOp::EPathTypeExtSubDomain);
-        }
-
-        env.GetTenants().Run("/dc-1/USER_0");
-
-        {
-            auto subdomain = GetSubDomainDefaultSetting("USER_0", storagePool);
-            subdomain.SetExternalHive(true);
-            subdomain.SetExternalSchemeShard(true);
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterExtSubdomain("/dc-1", subdomain));
-
-            auto ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsExtSubdomain(ls); //root TSS ready
-            auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_UNEQUAL(ver.OwnerId, rootSchemeShard);
-            schemeshards[x] = ver.OwnerId;
-            if (x) {
-                UNIT_ASSERT_VALUES_UNEQUAL(schemeshards[x], schemeshards[x-1]);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 4);
-        }
-
-        {
-            auto tableDesc = GetTableSimpleDescription("SimpleTable");
-            UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc),
-                                     NMsgBusProxy::MSTATUS_OK);
-
-            env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0/SimpleTable");
-            auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
-            NTestLs::PathType(ls, NKikimrSchemeOp::EPathTypeTable);
-            auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, schemeshards[x]);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
-
-            UNIT_ASSERT_VALUES_EQUAL(env.GetClient().DeleteTable("/dc-1/USER_0", "SimpleTable"),
-                                     NMsgBusProxy::MSTATUS_OK);
-
-            auto shards = NTestLs::ExtractTablePartitions(ls);
-            for (auto shard : shards) {
-                bool success = env.GetClient().WaitForTabletDown(&env.GetRuntime(), shard.GetDatashardId(), true, TDuration::Seconds(60));
-                UNIT_ASSERT(success);
-            }
-
-        }
-        {
-            env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0/SimpleTable");
-            auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
-            NTestLs::IsDoesNotExist(ls);
-        }
-
-        env.GetTenants().Stop();
-
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().ForceDeleteSubdomain("/dc-1", "USER_0"));
-
-        {
-            auto ls = env.GetClient().Ls("/dc-1");
-            NTestLs::NoChildren(ls);
-            auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, rootSchemeShard);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 7 + x * 4);
-
-            env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0");
-            ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsDoesNotExist(ls); //root TSS deleted
-        }
-    }
-}
-
-void CreateTableInsideAndAlterTable(TTestEnvWithPoolsSupport& env) {
-    ui64 rootSchemeShard = Tests::ChangeStateStorage(Tests::SchemeRoot, 1);
-    auto storagePool = env.CreatePoolsForTenant("USER_0");
-    const ui32 triesNum = 3;
-    TVector<ui64> schemeshards(triesNum, 0);
-    for (ui32 x = 0; x < triesNum; ++x) {
-        {
-            auto subdomain_0 = GetSubDomainDeclareSetting("USER_0");
-            subdomain_0.SetExternalHive(true);
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateExtSubdomain("/dc-1", subdomain_0));
-
-            auto ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsUnavailable(ls); //root TSS not ready yet
-
-            ls = env.GetClient().Ls("/dc-1");
-            NTestLs::ChildrenCount(ls, 1);
-            NTestLs::HasChild(ls, "USER_0", NKikimrSchemeOp::EPathTypeExtSubDomain);
-        }
-
-        env.GetTenants().Run("/dc-1/USER_0");
-
-        {
-            auto subdomain = GetSubDomainDefaultSetting("USER_0", storagePool);
-            subdomain.SetExternalHive(true);
-            subdomain.SetExternalSchemeShard(true);
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterExtSubdomain("/dc-1", subdomain));
-
-            auto ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsExtSubdomain(ls); //root TSS ready
-            auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_UNEQUAL(ver.OwnerId, rootSchemeShard);
-            schemeshards[x] = ver.OwnerId;
-            if (x) {
-                UNIT_ASSERT_VALUES_UNEQUAL(schemeshards[x], schemeshards[x-1]);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 4);
-        }
-
-        {
-            auto tableDesc = GetTableSimpleDescription("SimpleTable");
-            UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc),
-                                     NMsgBusProxy::MSTATUS_OK);
-
-            env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0/SimpleTable");
-            auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
-            NTestLs::PathType(ls, NKikimrSchemeOp::EPathTypeTable);
-            auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, schemeshards[x]);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
-
-            NKikimrSchemeOp::TTableDescription description = NTestLs::ExtractTableDescription(ls);
-
-            description.ClearColumns();
-            description.ClearKeyColumnIds();
-            description.ClearKeyColumnNames();
-            description.ClearSplitBoundary();
-            description.ClearTableIndexes();
-            description.MutablePartitionConfig()->SetFollowerCount(1);
-
-            UNIT_ASSERT_VALUES_EQUAL(env.GetClient().AlterTable("/dc-1/USER_0", description),
-                                     NMsgBusProxy::MSTATUS_OK);
-        }
-        {
-            env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0/SimpleTable");
-            auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
-            NKikimrSchemeOp::TTableDescription description = NTestLs::ExtractTableDescription(ls);
-            UNIT_ASSERT_VALUES_EQUAL(description.GetPartitionConfig().GetFollowerCount(), 1);
-        }
-
-        env.GetTenants().Stop();
-
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().ForceDeleteSubdomain("/dc-1", "USER_0"));
-
-        {
-            auto ls = env.GetClient().Ls("/dc-1");
-            NTestLs::NoChildren(ls);
-            auto ver = NTestLs::ExtractPathVersion(ls);
-            UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, rootSchemeShard);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 7 + x * 4);
-
-            env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0");
-            ls = env.GetClient().Ls("/dc-1/USER_0");
-            NTestLs::IsDoesNotExist(ls); //root TSS deleted
-        }
-    }
-}
-
 
 void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
     ui64 rootSchemeShard = Tests::ChangeStateStorage(Tests::SchemeRoot, 1);
@@ -505,6 +334,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             auto subdomain = GetSubDomainDefaultSetting("USER_0", storagePool);
             subdomain.SetExternalSchemeShard(true);
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterExtSubdomain("/dc-1", subdomain));
+            Sleep(SchemeShardInitDuration);
 
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
             NTestLs::IsExtSubdomain(ls);  // extsubdomain's SS is ready
@@ -515,10 +345,12 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
                 UNIT_ASSERT_VALUES_UNEQUAL(schemeshards[x], schemeshards[x-1]);
             }
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 4);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 7);
         }
 
+        TLocalPathId tablePathId;
         {
+            tablePathId = GetNextLocalPathId(env, "/dc-1/USER_0");
             auto tableDesc = GetTableSimpleDescription("SimpleTable");
             tableDesc.MutablePartitionConfig()->SetFollowerCount(0);
 
@@ -530,7 +362,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             NTestLs::PathType(ls, NKikimrSchemeOp::EPathTypeTable);
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, schemeshards[x]);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, tablePathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
         }
         {
@@ -549,7 +381,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
 
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 6);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 13);
         }
 
         {
@@ -567,7 +399,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
                 UNIT_ASSERT_VALUES_UNEQUAL(schemeshards[x], schemeshards[x-1]);
             }
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 8 : 7));
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, (env.GetSettings().FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst() ? 15 : 14));
 
             NKikimrSubDomains::TDomainDescription description = NTestLs::ExtractDomainDescription(ls);
             UNIT_ASSERT_VALUES_UNEQUAL(description.GetProcessingParams().GetHive(), 0);
@@ -579,7 +411,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             NTestLs::PathType(ls, NKikimrSchemeOp::EPathTypeTable);
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, schemeshards[x]);
-            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 2);
+            UNIT_ASSERT_VALUES_EQUAL(ver.PathId, tablePathId);
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 3);
 
 
@@ -612,7 +444,7 @@ void CreateTableInsideAndAlterDomainAndTable(TTestEnvWithPoolsSupport& env) {
             auto ver = NTestLs::ExtractPathVersion(ls);
             UNIT_ASSERT_VALUES_EQUAL(ver.OwnerId, rootSchemeShard);
             UNIT_ASSERT_VALUES_EQUAL(ver.PathId, 1);
-            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 7 + x * 4);
+            UNIT_ASSERT_VALUES_EQUAL(ver.Version, 10 + x * 4);
 
             env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0");
             ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -633,8 +465,8 @@ void GenericCases(TTestEnvWithPoolsSupport& env) {
     auto storagePools = env.CreatePoolsForTenant("USER_0");
     auto alter = GetSubDomainDefaultSetting("USER_0", storagePools);
     alter.SetExternalSchemeShard(true);
-    UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                             env.GetClient().AlterExtSubdomain("/dc-1", alter, WaitTimeOut));
+    UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterExtSubdomain("/dc-1", alter, WaitTimeOut));
+    Sleep(SchemeShardInitDuration);
 
     {
         auto ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -704,13 +536,13 @@ void GenericCases(TTestEnvWithPoolsSupport& env) {
 }
 
 Y_UNIT_TEST_SUITE(TExtSubDomainTest) {
-    Y_UNIT_TEST_FLAG(DeclareAndLs, EnableRealSystemViewPaths) {
-        TTestEnv env(1, 0, EnableRealSystemViewPaths);
+    Y_UNIT_TEST(DeclareAndLs) {
+        TTestEnv env(1, 0);
         DeclareAndLs(env);
     }
 
-    Y_UNIT_TEST_FLAG(DeclareAndDrop, EnableRealSystemViewPaths) {
-        TTestEnv env(1, 0, EnableRealSystemViewPaths);
+    Y_UNIT_TEST(DeclareAndDrop) {
+        TTestEnv env(1, 0);
         DeclareAndDrop(env);
     }
 

@@ -189,7 +189,8 @@ namespace NKikimr::NStorage {
         std::unique_ptr<IActor> actor;
 
         if (ddisk) {
-            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, AppData()->Counters));
+            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {},
+                NDDisk::TDDiskConfig{}, AppData()->Counters));
         } else {
             baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
             baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;
@@ -217,6 +218,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
             vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
             vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
+            vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
             vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
             vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
 
@@ -243,6 +245,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
             vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
+            vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 

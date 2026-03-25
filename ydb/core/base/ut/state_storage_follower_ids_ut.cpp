@@ -25,6 +25,16 @@ namespace {
 const ui32 TEST_NODE_COUNT = 3;
 
 /**
+ * The number of followers created for each node.
+ */
+const ui32 FOLLOWER_COUNT_PER_NODE = 3;
+
+/**
+ * The total number of followers to be created for the test tablet.
+ */
+const ui32 TOTAL_FOLLOWER_COUNT = TEST_NODE_COUNT * FOLLOWER_COUNT_PER_NODE - 1;
+
+/**
  * The domain name used in tests.
  */
 const char* TEST_DOMAIN_NAME = "dc-1";
@@ -445,44 +455,40 @@ void StartTabletWithFollowers(
     );
 
     auto followerGroup = ev->Record.AddFollowerGroups();
-    followerGroup->SetFollowerCount(TEST_NODE_COUNT - 1);
+    followerGroup->SetFollowerCount(TOTAL_FOLLOWER_COUNT);
     followerGroup->SetAllowLeaderPromotion(true);
 
     tabletId = SendCreateTabletMessage(runtime, hiveTabletId, testerTabletId, std::move(ev), 0);
 
-    // Wait for the leader and all followers to start
-    NTabletPipe::TClientConfig pipeConfig;
-
-    pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-    pipeConfig.ForceLocal = true;
-    pipeConfig.AllowFollower = true;
-
-    bool leaderFound = false;
+    // Build a translation from the node ID to node index
+    std::unordered_map<ui32, ui32> nodeIdToNodeIndex;
 
     for (ui32 nodeIndex = 0; nodeIndex < TEST_NODE_COUNT; ++nodeIndex) {
-        TActorId senderActorId = runtime.AllocateEdgeActor(nodeIndex);
-        runtime.ConnectToPipe(tabletId, senderActorId, nodeIndex, pipeConfig);
-
-        // Wait until the tablet starts on this node
-        for (;;) {
-            TAutoPtr<IEventHandle> handle;
-            auto clientConnectedResult = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(handle);
-
-            if (handle->Recipient == senderActorId) {
-                UNIT_ASSERT(clientConnectedResult->Status == NKikimrProto::OK);
-
-                if (clientConnectedResult->Leader) {
-                    UNIT_ASSERT(!leaderFound);
-                    leaderFound = true;
-                    leaderNodeIndex = nodeIndex;
-                }
-
-                break;
-            }
-        }
+        nodeIdToNodeIndex[runtime.GetNodeId(nodeIndex)] = nodeIndex;
     }
 
-    UNIT_ASSERT(leaderFound);
+    // Wait for the leader and all followers to start
+    const TActorId senderActorId = runtime.AllocateEdgeActor();
+
+    for (;;) {
+        runtime.Send(
+            new IEventHandle(
+                MakeStateStorageProxyID(),
+                senderActorId,
+                new TEvStateStorage::TEvLookup(tabletId, 123456789)
+            )
+        );
+
+        auto tabletInfo = runtime.GrabEdgeEventRethrow<TEvStateStorage::TEvInfo>(senderActorId)->Release();
+
+        UNIT_ASSERT(tabletInfo != nullptr);
+        UNIT_ASSERT_EQUAL(tabletInfo->TabletID, tabletId);
+
+        if (tabletInfo->Followers.size() == TOTAL_FOLLOWER_COUNT) {
+            leaderNodeIndex = nodeIdToNodeIndex[tabletInfo->CurrentLeaderTablet.NodeId()];
+            break;
+        }
+    }
 }
 
 /**
@@ -516,7 +522,7 @@ TAutoPtr<TEvStateStorage::TEvInfo> LookupTabletInfo(
 
     // Make sure the leader and all followers are spread across all nodes
     UNIT_ASSERT_EQUAL(tabletInfo->TabletID, tabletId);
-    UNIT_ASSERT_EQUAL(tabletInfo->Followers.size(), TEST_NODE_COUNT - 1);
+    UNIT_ASSERT_EQUAL(tabletInfo->Followers.size(), TOTAL_FOLLOWER_COUNT);
 
     std::unordered_set<ui32> nodeIds = {tabletInfo->CurrentLeader.NodeId()};
     std::unordered_set<ui32> expectedNodeIds;
@@ -544,6 +550,8 @@ TAutoPtr<TEvStateStorage::TEvInfo> LookupTabletInfo(
  * @param[in] tabletId The ID of the tablet for which to retrieve the data
  * @param[in] followerId The ID of the follower to which to connect (0 == leader)
  * @param[in] expectConnectError If true, expect the connect request to fail
+ * @param[in] impliedFollowerId If true, only AllowFollower flag is set, not FollowerId
+ * @param[in] senderNodeId If impliedFollowerId is set, specifies the node ID for sending requests
  *
  * @return The ID of the actor, which responded with the TEvRemoteHttpInfoRes response
  *         (will be set to an empty ID if there is a connection error)
@@ -552,19 +560,45 @@ TActorId SendPingThroughTabletPipe(
     TTestBasicRuntime& runtime,
     ui64 tabletId,
     ui32 followerId,
-    bool expectConnectError = false
+    bool expectConnectError = false,
+    bool impliedFollowerId = false,
+    ui32 senderNodeId = 0
 ) {
-    const TActorId senderActorId = runtime.AllocateEdgeActor();
+    // NOTE: If an explicit follower ID is requested, always connect to node 0,
+    //       because it should not matter. For the implicit leader/follower selection
+    //       connect to the same node as the follower ID because the Tablet Resolver
+    //       always prefers local tablets.
+    ui32 senderNodeIndex = (impliedFollowerId) ? TEST_NODE_COUNT : 0;
+
+    if (impliedFollowerId) {
+        // Translate the node ID to the corresponding node index
+        for (ui32 i = 0; i < TEST_NODE_COUNT; ++i) {
+            if (runtime.GetNodeId(i) == senderNodeId) {
+                senderNodeIndex = i;
+                break;
+            }
+        }
+
+        UNIT_ASSERT_C(
+            senderNodeIndex < TEST_NODE_COUNT,
+            "Invalid node ID for sending tablet pipe requests: " << senderNodeId
+        );
+    }
+
+    const TActorId senderActorId = runtime.AllocateEdgeActor(senderNodeIndex);
 
     // NOTE: Sending requests with an explicit follower ID to connect
     //       to a specific leader/follower may fail because the given follower ID
     //       either does not exist or may not be known yet. To avoid infinite loops,
     //       the pipe must be configured with a very small number of retries
     NTabletPipe::TClientConfig pipeConfig;
-
     pipeConfig.RetryPolicy = {.RetryLimitCount = 2};
-    pipeConfig.FollowerId = followerId;
-    pipeConfig.PreferLocal = true;
+
+    if (!impliedFollowerId) {
+        pipeConfig.FollowerId = followerId;
+    } else {
+        pipeConfig.AllowFollower = (followerId != 0);
+    }
 
     // NOTE: This test creates tablets of the type TTabletTypes::Dummy,
     //       which is mapped to TDummyFlatTablet. And this tablet does not respond
@@ -578,7 +612,7 @@ TActorId SendPingThroughTabletPipe(
         tabletId,
         senderActorId,
         new NMon::TEvRemoteHttpInfo(),
-        0,
+        senderNodeIndex,
         pipeConfig
     );
 
@@ -643,7 +677,13 @@ void KillNodeAndWaitForRestart(
     //
     //         * Starting a new follower (as a replacement for the killed follower)
     TDispatchOptions options;
-    options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, (expectLeaderPromotion) ? 3 : 1);
+
+    options.FinalEvents.emplace_back(
+        TEvLocal::EvTabletStatus,
+        (expectLeaderPromotion)
+            ? 3 + FOLLOWER_COUNT_PER_NODE - 1
+            : FOLLOWER_COUNT_PER_NODE
+    );
 
     runtime.DispatchEvents(options);
 }
@@ -712,11 +752,11 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
             followerActors[followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
         }
 
-        UNIT_ASSERT_EQUAL(followerActors.size(), TEST_NODE_COUNT);
+        UNIT_ASSERT_EQUAL(followerActors.size(), TOTAL_FOLLOWER_COUNT + 1);
 
         // Send a request to ping the tablet to each follower (and the leader)
         // to verify that the Tablet Resolver correctly resolves follower IDs
-        for (ui32 followerId = 0; followerId < TEST_NODE_COUNT; ++followerId) {
+        for (ui32 followerId = 0; followerId <= TOTAL_FOLLOWER_COUNT; ++followerId) {
             Cerr << "---- TEST ---- Resolving followerId " << followerId << "\n";
 
             auto tabletActorId = SendPingThroughTabletPipe(runtime, tabletId, followerId);
@@ -727,6 +767,119 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
                 "Selected actor " << tabletActorId << ", expected " << followerActors[followerId]
             );
         }
+    }
+
+    /**
+     * Verify that the Tablet Resolver correctly resolves the leader implicitly
+     * when the client does not specify an explicit follower ID == 0
+     * (when the table pipe client is used to send messages to the tablet)
+     * in the case when all nodes are correctly reporting follower IDs.
+     */
+    Y_UNIT_TEST(ResolverImplicitLeader) {
+        TTestBasicRuntime runtime(TEST_NODE_COUNT, false /* useRealThreads */);
+        SetupRuntimeAndHive(runtime);
+
+        ui64 tabletId;
+        ui32 leaderNodeIndex;
+        StartTabletWithFollowers(runtime, tabletId, leaderNodeIndex);
+
+        // Figure out the translation from FollowerId to the tablet actor ID
+        auto tabletInfo = LookupTabletInfo(runtime, tabletId);
+
+        // Send a request to ping the leader implicitly (without the follower ID)
+        Cerr << "---- TEST ---- Resolving the leader implicitly\n";
+
+        auto tabletActorId = SendPingThroughTabletPipe(
+            runtime,
+            tabletId,
+            0 /* followerId */,
+            false /* expectConnectError */,
+            true /* impliedFollowerId */,
+            runtime.GetNodeId(leaderNodeIndex)
+        );
+
+        UNIT_ASSERT_EQUAL_C(
+            tabletActorId,
+            tabletInfo->CurrentLeaderTablet,
+            "Selected actor " << tabletActorId << ", expected " << tabletInfo->CurrentLeaderTablet
+        );
+    }
+
+    /**
+     * Verify that the Tablet Resolver correctly resolves the followers implicitly
+     * when the client does not specify an explicit follower ID != 0
+     * (when the table pipe client is used to send messages to the tablet)
+     * in the case when all nodes are correctly reporting follower IDs.
+     */
+    Y_UNIT_TEST(ResolverImplicitFollowers) {
+        TTestBasicRuntime runtime(TEST_NODE_COUNT, false /* useRealThreads */);
+        SetupRuntimeAndHive(runtime);
+
+        ui64 tabletId;
+        ui32 leaderNodeIndex;
+        StartTabletWithFollowers(runtime, tabletId, leaderNodeIndex);
+
+        // Figure out the translation from FollowerId to the tablet actor ID
+        auto tabletInfo = LookupTabletInfo(runtime, tabletId);
+
+        std::unordered_set<TActorId> followerTabletIds = {
+            tabletInfo->CurrentLeaderTablet, // The leader is not in the list of followers!
+        };
+
+        std::unordered_map<ui32, TActorId> followerActors = {
+            {0, tabletInfo->CurrentLeaderTablet}, // The leader is not in the list of followers!
+        };
+
+        std::unordered_map<TActorId, ui32> followerTabletIdToFollowerId = {
+            {tabletInfo->CurrentLeaderTablet, 0}, // The leader is not in the list of followers!
+        };
+
+        for (const auto& followerInfo : tabletInfo->Followers) {
+            UNIT_ASSERT(followerInfo.FollowerId.Defined());
+
+            followerTabletIds.insert(followerInfo.FollowerTablet);
+            followerActors[followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
+            followerTabletIdToFollowerId[followerInfo.FollowerTablet] = followerInfo.FollowerId.Get();
+        }
+
+        UNIT_ASSERT_EQUAL(followerTabletIds.size(), TOTAL_FOLLOWER_COUNT + 1);
+        UNIT_ASSERT_EQUAL(followerActors.size(), TOTAL_FOLLOWER_COUNT + 1);
+        UNIT_ASSERT_EQUAL(followerTabletIdToFollowerId.size(), TOTAL_FOLLOWER_COUNT + 1);
+
+        // Send a request to ping the tablet to any follower/leader (implicitly),
+        // but since the follower selection is random, repeat this many times
+        // and expect all followers to be chosen eventually
+        std::unordered_set<TActorId> chosenFollowerTabletIds;
+
+        for (ui32 i = 0; i < 100; ++i) {
+            for (ui32 followerId = 0; followerId <= TOTAL_FOLLOWER_COUNT; ++followerId) {
+                Cerr << "---- TEST ---- Resolving followerId " << followerId
+                    << ", iteration " << i
+                    << "\n";
+
+                auto tabletActorId = SendPingThroughTabletPipe(
+                    runtime,
+                    tabletId,
+                    followerId,
+                    false /* expectConnectError */,
+                    true /* impliedFollowerId */,
+                    followerActors[followerId].NodeId()
+                );
+
+                Cerr << "---- TEST ---- Resolved followerId " << followerId
+                    << ", tabletId " << tabletActorId
+                    << ", followerId " << followerTabletIdToFollowerId[tabletActorId]
+                    << "\n";
+
+                chosenFollowerTabletIds.insert(tabletActorId);
+            }
+        }
+
+        UNIT_ASSERT_EQUAL_C(
+            followerTabletIds,
+            chosenFollowerTabletIds,
+            "Not all followers were chosen implicitly"
+        );
     }
 
     /**
@@ -849,11 +1002,11 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
             followerActors[followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
         }
 
-        UNIT_ASSERT_EQUAL(followerActors.size(), TEST_NODE_COUNT - 1);
+        UNIT_ASSERT_EQUAL(followerActors.size(), TOTAL_FOLLOWER_COUNT);
 
         // Send a request to ping the tablet to each follower (and the leader)
         // to verify that the Tablet Resolver correctly resolves follower IDs
-        for (ui32 followerId = 0; followerId < TEST_NODE_COUNT; ++followerId) {
+        for (ui32 followerId = 0; followerId <= TOTAL_FOLLOWER_COUNT; ++followerId) {
             Cerr << "---- TEST ---- Resolving followerId " << followerId << "\n";
 
             auto followerIdIt = followerActors.find(followerId);
@@ -959,7 +1112,7 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
         // to verify that the Tablet Resolver correctly resolves follower IDs
         auto tabletInfo = LookupTabletInfo(runtime, tabletId);
 
-        for (ui32 followerId = 0; followerId < TEST_NODE_COUNT; ++followerId) {
+        for (ui32 followerId = 0; followerId <= TOTAL_FOLLOWER_COUNT; ++followerId) {
             Cerr << "---- TEST ---- Resolving followerId " << followerId << "\n";
 
             const bool expectConnectError = (followerId != 0);
@@ -1067,11 +1220,11 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
             followerActors[followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
         }
 
-        UNIT_ASSERT_EQUAL(followerActors.size(), TEST_NODE_COUNT);
+        UNIT_ASSERT_EQUAL(followerActors.size(), TOTAL_FOLLOWER_COUNT + 1);
 
         // Send a request to ping the tablet to each follower (and the leader)
         // to verify that the Tablet Resolver correctly resolves follower IDs
-        for (ui32 followerId = 0; followerId < TEST_NODE_COUNT; ++followerId) {
+        for (ui32 followerId = 0; followerId <= TOTAL_FOLLOWER_COUNT; ++followerId) {
             Cerr << "---- TEST ---- Resolving followerId " << followerId << "\n";
 
             auto tabletActorId = SendPingThroughTabletPipe(runtime, tabletId, followerId);
@@ -1174,11 +1327,11 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
             followerActors[followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
         }
 
-        UNIT_ASSERT_EQUAL(followerActors.size(), TEST_NODE_COUNT);
+        UNIT_ASSERT_EQUAL(followerActors.size(), TOTAL_FOLLOWER_COUNT + 1);
 
         // Send a request to ping the tablet to each follower (and the leader)
         // to verify that the Tablet Resolver correctly resolves follower IDs
-        for (ui32 followerId = 0; followerId < TEST_NODE_COUNT; ++followerId) {
+        for (ui32 followerId = 0; followerId <= TOTAL_FOLLOWER_COUNT; ++followerId) {
             Cerr << "---- TEST ---- Resolving followerId " << followerId << "\n";
 
             auto tabletActorId = SendPingThroughTabletPipe(runtime, tabletId, followerId);

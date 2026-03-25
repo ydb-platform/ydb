@@ -1,5 +1,7 @@
 #pragma once
 
+#include "tx_mode.h"
+
 #include <library/cpp/json/json_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/library/accessor/accessor.h>
@@ -7,6 +9,8 @@
 #include <util/generic/map.h>
 
 namespace NYdb::NConsoleClient::BenchmarkUtils {
+
+using NYdb::NConsoleClient::ETxMode;
 
 // Default number of rows to store per result index for output and comparison
 constexpr size_t DefaultMaxRowsPerResultIndex = 100;
@@ -105,6 +109,7 @@ struct TQueryBenchmarkSettings {
     TQueryBenchmarkDeadline Deadline;
     std::optional<TString> PlanFileName;
     bool WithProgress = false;
+    ETxMode TxMode = ETxMode::SerializableRW;
     NYdb::NRetry::TRetryOperationSettings RetrySettings;
     // Maximum number of rows to store per result index.
     // Used both for CompareWithExpected and for output.

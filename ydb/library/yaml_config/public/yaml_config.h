@@ -233,6 +233,17 @@ void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TNodeRef& volatile
 void AppendDatabaseConfig(NFyaml::TDocument& config, NFyaml::TDocument& databaseConfig);
 
 /**
+ * Fuses base config with console config (top-level per-key merge)
+ * - Console config values take precedence (console wins)
+ * - Base config fills in missing top-level keys only
+ * - metadata, allowed_labels, selector_config from console preserved
+ * @param baseConfig - simple format config (just fields, no metadata/selectors)
+ * @param consoleConfig - full format config (metadata, config, allowed_labels, selector_config)
+ * @return fused config document
+ */
+NFyaml::TDocument FuseConfigs(const TString& baseConfig, const TString& consoleConfig);
+
+/**
  * Parses config version
  */
 ui64 GetVersion(const TString& config);

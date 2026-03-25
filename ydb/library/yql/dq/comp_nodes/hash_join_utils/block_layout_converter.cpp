@@ -604,7 +604,6 @@ class TBlockLayoutConverter : public IBlockLayoutConverter {
     auto GetColumns_(const TVector<arrow::Datum>& columns, TVector<std::shared_ptr<arrow::Buffer>>& nullBitmapRelocationBuffer) {
         Y_ENSURE(columns.size() == Extractors_.size());
 
-        std::fill(IsBitmapNull_.begin(), IsBitmapNull_.end(), false);
         TVector<const ui8*> columnsData;
         TVector<const ui8*> columnsNullBitmap;
 
@@ -616,8 +615,8 @@ class TBlockLayoutConverter : public IBlockLayoutConverter {
 
             auto nullBitmap = Extractors_[i]->GetNullBitmapConst(column.array(), nullBitmapRelocationBuffer);
             columnsNullBitmap.insert(columnsNullBitmap.end(), nullBitmap.begin(), nullBitmap.end());
-            if (nullBitmap.front() == nullptr) {
-                IsBitmapNull_[i] = true;
+            if (nullBitmap.front() != nullptr) {
+                IsBitmapNull_[i] = false;
             }
         }
 
@@ -633,7 +632,7 @@ public:
         : Extractors_(std::move(extractors))
         , InnerMapping_(Extractors_.size())
         , RememberNullBitmaps_(rememberNullBitmaps)
-        , IsBitmapNull_(Extractors_.size(), false)
+        , IsBitmapNull_(Extractors_.size(), true)
     {
         Y_ENSURE(roles.size() == Extractors_.size());
 

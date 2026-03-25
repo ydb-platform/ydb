@@ -69,6 +69,7 @@ def _init_common(name: str, options: Sequence[Any], default: Any) -> None:
 
 
 _init_common('autogenerate_session_id', (True, False), True)
+_init_common('autogenerate_query_id', (True, False), True)
 _init_common('dict_parameter_format', ('json', 'map'), 'json')
 _init_common('invalid_setting_action', ('send', 'drop', 'error'), 'error')
 _init_common('max_connection_age', (), 10 * 60)  # Max time in seconds to keep reusing a database TCP connection

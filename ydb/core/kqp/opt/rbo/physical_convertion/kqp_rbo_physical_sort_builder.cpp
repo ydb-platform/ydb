@@ -102,11 +102,11 @@ TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     // Expand narrow input.
     input = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputs, Ctx);
 
-    if (Sort->LimitCond) {
+    if (Sort->LimitCond.has_value()) {
         // clang-format off
         input = Build<TCoWideTopSort>(Ctx, Pos)
             .Input(input)
-            .Count(Sort->LimitCond)
+            .Count(Sort->LimitCond->GetExpressionBody())
             .Keys<TCoSortKeys>()
                 .Add(BuildSortKeysForWideSort(inputs, sortElements))
             .Build()

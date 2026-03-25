@@ -50,12 +50,13 @@
                                                     {
                                                         "BFactor": "\"0.75\"",
                                                         "Columns": "Key, Text, __ydb_full_text_relevance",
+                                                        "DefaultOperator": "\"and\"",
                                                         "Index": "fulltext_relevance_idx",
                                                         "Inputs": [],
+                                                        "ItemsLimit": "\"1001\"",
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats dogs\"",
                                                         "QueryColumns": "Text",
-                                                        "QueryMode": "\"and\"",
                                                         "RelevanceQuery": "True",
                                                         "SearchTerms": "cats, dogs",
                                                         "Table": "/local/base_fulltext_relevance_b_sql_plan/FullTextTable"

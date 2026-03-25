@@ -134,8 +134,7 @@ TEST(TSyncInvokerTest, SleepyFiber)
         .AsyncVia(invoker)
         .Run();
 
-    AllSucceeded(std::vector<TFuture<void>>{asyncA, asyncC})
-        .Get()
+    WaitForFast(AllSucceeded(std::vector<TFuture<void>>{asyncA, asyncC}))
         .ThrowOnError();
 
     std::vector<TString> expectedEvents{
@@ -189,8 +188,7 @@ TEST(TInvokerWaitTimeTest, SerializedInvoker)
     auto async3 = BIND(action)
         .AsyncVia(serializedInvoker).Run();
 
-    AllSucceeded(std::vector<TFuture<void>>{async1, async2, async3})
-        .Get()
+    WaitForFast(AllSucceeded(std::vector<TFuture<void>>{async1, async2, async3}))
         .ThrowOnError();
 
     registry->ProcessRegistrations();
@@ -225,8 +223,7 @@ TEST(TInvokerWaitTimeTest, PrioritizedInvoker)
     auto async = BIND(action)
         .AsyncVia(invoker).Run();
 
-    AllSucceeded(std::vector<TFuture<void>>{async})
-        .Get()
+    WaitForFast(AllSucceeded(std::vector<TFuture<void>>{async}))
         .ThrowOnError();
 
     registry->ProcessRegistrations();

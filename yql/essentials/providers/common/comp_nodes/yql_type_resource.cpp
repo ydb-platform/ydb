@@ -1,8 +1,7 @@
 #include "yql_type_resource.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 struct TComputationContext;
 
@@ -31,5 +30,4 @@ NYql::TExprNode::TPtr GetYqlCode(const NUdf::TUnboxedValue& value) {
     return dynamic_cast<TYqlCodeResource*>(value.AsBoxed().Get())->Get()->second;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

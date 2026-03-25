@@ -4,6 +4,8 @@
 #include <yt/yt/client/signature/signature.h>
 #include <yt/yt/client/signature/validator.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/yson/string.h>
 
 #include <yt/yt/core/ytree/convert.h>
@@ -15,6 +17,7 @@ namespace {
 
 using namespace NYson;
 using namespace NYTree;
+using namespace NConcurrency;
 
 const auto YsonSignature = TYsonString(
     R"({"header"="DummySignature";"payload"="payload";"signature"="abacaba";})"_sb);
@@ -37,7 +40,7 @@ TEST(TDummySignatureValidatorTest, GenerateValidate)
     auto generator = CreateDummySignatureGenerator();
     auto validator = CreateDummySignatureValidator();
     auto signature = generator->Sign("payload");
-    EXPECT_TRUE(validator->Validate(signature).Get().Value());
+    EXPECT_TRUE(WaitForFast(validator->Validate(signature)).Value());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

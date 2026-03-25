@@ -16,11 +16,6 @@ using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NYql::NDq;
 
-// Temporary solution, should be replaced with constraints
-// copy-past from old engine algo: https://a.yandex-team.ru/arc_vcs/yql/providers/kikimr/yql_kikimr_opt.cpp?rev=e592a5a9509952f1c29f1ec02343dd4c05fe426d#L122
-
-using TTableData = std::pair<const NYql::TKikimrTableDescription*, NYql::TKqpReadTableSettings>;
-
 TKqpTable GetTable(TExprBase input, bool isReadRanges) {
     if (isReadRanges) {
         return input.Cast<TKqlReadTableRangesBase>().Table();
@@ -82,10 +77,6 @@ TExprBase KqpRemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx,
         }
     } else if (input.Maybe<TKqpReadTable>()) {
         pointPrefix = settings.PointPrefixLen;
-    }
-
-    if (!kqpCtx.Config->GetEnablePointPredicateSortAutoSelectIndex()){
-        pointPrefix = 0;
     }
 
     if (!IsSortKeyPrimary(keySelector, tableDesc, passthroughFields, pointPrefix)) {

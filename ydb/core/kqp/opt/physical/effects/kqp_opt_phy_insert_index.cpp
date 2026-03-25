@@ -136,7 +136,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     std::optional<TExprBase> insertRows;
     if (needPrecompute) {
         // TODO: don't use precompute here!
-        auto conditionalInsertRows = MakeConditionalInsertRows(insert.Input(), table, inputColumnsSet, abortOnError, insert.Pos(), ctx);
+        auto conditionalInsertRows = MakeConditionalInsertRows(insert.Input(), table, inputColumnsSet, abortOnError, insert.Pos(), ctx, kqpCtx);
         if (!conditionalInsertRows) {
             return node;
         }
@@ -204,6 +204,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
         std::optional<TExprBase> upsertIndexRows;
         switch (indexDesc->Type) {
+            case TIndexDescription::EType::GlobalJson:
             case TIndexDescription::EType::GlobalAsync:
                 AFL_ENSURE(false);
             case TIndexDescription::EType::GlobalSync:
@@ -239,9 +240,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 auto insertPrecompute = ReadInputToPrecompute(*insertRows, insert.Pos(), ctx);
                 upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertPrecompute, inputColumnsSet, indexTableColumns,
                     false /*forDelete*/, insert.Pos(), ctx);
-                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
-                YQL_ENSURE(fulltextDesc);
-                const bool withRelevance = fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                const bool withRelevance = indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance;
                 if (withRelevance) {
                     // Update dictionary rows
                     const auto& dictTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
@@ -269,6 +268,9 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 }
                 break;
             }
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
+                break;
         }
         Y_ENSURE(upsertIndexRows.has_value());
         Y_ENSURE(indexTableColumns);

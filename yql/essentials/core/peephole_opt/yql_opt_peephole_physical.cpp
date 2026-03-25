@@ -6225,10 +6225,6 @@ private:
 
     // Rewrite if present via BlockIf + BlockExists + BlockValidUnwrap.
     TExprNode::TPtr RewriteIfPresent(TIfPresentCallableView ifPresentView, TRewritesMap& rewrites, const TNodeSet& nonStrictNodes) {
-        // Block Coalesce and block exists between two scalars are available only since 63 version.
-        if constexpr (NKikimr::NMiniKQL::RuntimeVersion < 63U) {
-            return nullptr;
-        }
         // Check that lambda return type is valid.
         if (!IsSupportedAsBlockType(ifPresentView.Lambda()->Pos(), *ifPresentView.Lambda()->GetTypeAnn(), Ctx_, Types_, true)) {
             YQL_CLOG(TRACE, CorePeepHole) << Log(ifPresentView.Lambda().Get()) << "Lambda return type is not supported";
@@ -8769,7 +8765,7 @@ TExprNode::TPtr CompareTagged(const TExprNode& node, TExprContext& ctx) {
 template<bool IsScore>
 TExprNode::TPtr ExpandFulltextBuiltin(const TExprNode::TPtr& node, TExprContext& ctx) {
     TString type = IsScore ? "Double" : "Bool";
-    TString error = TStringBuilder() << "Fulltext " << (IsScore ? "score" : "contains") << " is not implemented yet";
+    TString error = TStringBuilder() << "Fulltext " << (IsScore ? "score" : "match") << " is not implemented yet";
     auto nullNode = ctx.NewCallable(node->Pos(), "Nothing", {
         ctx.NewCallable(node->Pos(), "OptionalType", {
             ctx.NewCallable(node->Pos(), "DataType", {ctx.NewAtom(node->Pos(), type, TNodeFlags::Default) }) }) });
@@ -9288,7 +9284,7 @@ struct TPeepHoleRules {
         {"RangeToPg", &ExpandRangeToPg},
         {"ToFlow", &DropToFlowDeps},
         {"FulltextScore", &ExpandFulltextBuiltin<true>},
-        {"FulltextContains", &ExpandFulltextBuiltin<false>},
+        {"FulltextMatch", &ExpandFulltextBuiltin<false>},
         {"CheckedAdd", &ExpandCheckedAdd},
         {"CheckedSub", &ExpandCheckedSub},
         {"CheckedMul", &ExpandCheckedMul},

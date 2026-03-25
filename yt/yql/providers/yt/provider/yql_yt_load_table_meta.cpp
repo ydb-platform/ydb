@@ -30,6 +30,45 @@ namespace {
 
 using namespace NNodes;
 
+const NSQLTranslation::TSqlFlags& UncoditionallyAllowedViewCompilationSqlFlags() {
+    static const NSQLTranslation::TSqlFlags flags = {
+        "WindowNewPipeline",
+        "DisableWindowNewPipeline"};
+    return flags;
+}
+
+NSQLTranslation::TSqlFlags FilterAllowedFlags(const NSQLTranslation::TSqlFlags& sqlFlags) {
+    NSQLTranslation::TSqlFlags result;
+    for (const auto& flag : sqlFlags) {
+        if (UncoditionallyAllowedViewCompilationSqlFlags().contains(flag)) {
+            result.insert(flag);
+        }
+    }
+    return result;
+}
+
+// Extract SQL flags used for view compilation from the main query.
+// We must ensure that every SQL VIEW is compiled with the same translator flags as the main query.
+// However, for now, we allow omitting SQL flags since not all clients have been migrated yet.
+NSQLTranslation::TSqlFlags ExtractViewCompilationSqlFlags(TYtState::TPtr ytState) {
+// TODO(YQL-20958): Enable this check when removing TRANSLATOR_FLAGS_IN_MIGRATION_MODE.
+#if !defined(TRANSLATOR_FLAGS_IN_MIGRATION_MODE)
+    YQL_ENSURE(ytState->Types->SqlFlags.Defined(), "SqlFlags must be defined. "
+                                                   "This at least ensures that every SQL VIEW"
+                                                   " is compiled with the same flags as the main query.");
+#else  // !defined(TRANSLATOR_FLAGS_IN_MIGRATION_MODE)
+    if (!ytState->Types->SqlFlags.Defined()) {
+        return NSQLTranslation::TSqlFlags();
+    }
+#endif // !defined(TRANSLATOR_FLAGS_IN_MIGRATION_MODE)
+
+    const auto& sqlFlags = *ytState->Types->SqlFlags;
+    if (!ytState->Configuration->PassSqlFlagsForViewTranslation.Get().GetOrElse(DEFAULT_PASS_SQL_FLAGS_FOR_VIEW_TRANSLATION)) {
+        return FilterAllowedFlags(sqlFlags);
+    }
+    return sqlFlags;
+}
+
 class TYtLoadTableMetadataTransformer : public TGraphTransformerBase {
 private:
     struct TLoadContext: public TThrRefBase {
@@ -107,7 +146,8 @@ public:
                             clusterAndTable.first, clusterAndTable.second, State_->Types->QContext, ctx,
                             State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
                             State_->Configuration->ViewIsolation.Get().GetOrElse(false),
-                            State_->Types->UdfResolver
+                            State_->Types->UdfResolver,
+                            ExtractViewCompilationSqlFlags(State_)
                         )) {
                             return TStatus::Error;
                         }
@@ -261,7 +301,8 @@ public:
                         cluster, tableName, State_->Types->QContext, ctx,
                         State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
                         State_->Configuration->ViewIsolation.Get().GetOrElse(false),
-                        State_->Types->UdfResolver
+                        State_->Types->UdfResolver,
+                        ExtractViewCompilationSqlFlags(State_)
                     )) {
                         return TStatus::Error;
                     }

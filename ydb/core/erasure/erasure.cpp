@@ -984,6 +984,7 @@ public:
     void EoMainRestorePartsWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet& partSet, ui64 readPosition,
             ui32 endBlockIdx, ui32 missingDataPartIdxA, ui32 missingDataPartIdxB) {
         VERBOSE_COUT("Start of EoMainRestorePartsWhole" << Endl);
+        Y_ABORT_UNLESS(missingDataPartIdxB >= missingDataPartIdxA);
         ui32 lastColumn = reversed ? DataParts + 2 : DataParts + 1;
         const ui32 m = Prime;
         // Use all whole columns of all the parts
@@ -2049,6 +2050,10 @@ ui64 TErasureType::PartSize(ECrcMode crcMode, ui64 dataSize) const {
             } else {
                 return 0;
             }
+#ifdef NDEBUG
+        default:
+            return dataSize;
+#endif
         }
         ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
     case TErasureType::ErasureParityBlock:
@@ -2061,6 +2066,10 @@ ui64 TErasureType::PartSize(ECrcMode crcMode, ui64 dataSize) const {
                 return partSize;
             case CrcModeWholePart:
                 return partSize + sizeof(ui32);
+#ifdef NDEBUG
+            default:
+                return partSize;
+#endif
             }
             ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
         }

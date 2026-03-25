@@ -2,6 +2,7 @@ LIBRARY(topic_workload)
 
 SRCS(
     topic_workload_clean.cpp
+    topic_workload_configurator.cpp
     topic_workload_describe.cpp
     topic_workload_init.cpp
     topic_workload_params.cpp
@@ -12,6 +13,8 @@ SRCS(
     topic_workload_stats_collector.cpp
     topic_workload_writer.cpp
     topic_workload_writer_producer.cpp
+    topic_workload_keyed_writer.cpp
+    topic_workload_keyed_writer_producer.cpp
     topic_workload_reader.cpp
     topic_workload_reader_transaction_support.cpp
     topic_workload.cpp

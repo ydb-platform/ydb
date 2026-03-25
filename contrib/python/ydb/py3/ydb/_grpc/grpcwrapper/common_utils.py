@@ -200,7 +200,12 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
     def close(self) -> None:
         self.from_client_grpc.put_nowait(_stop_grpc_connection_marker)
         if self._stream_call:
-            self._stream_call.cancel()
+            if hasattr(self._stream_call, "cancel"):
+                # for ordinal grpc calls
+                self._stream_call.cancel()
+            elif hasattr(self._stream_call, "close"):
+                # for OpenTelemetry intercepted grpc calls (generator)
+                self._stream_call.close()
 
         self._clean_executor(wait=True)
 

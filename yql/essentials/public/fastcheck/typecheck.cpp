@@ -12,8 +12,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/config/yql_config_provider.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 namespace {
 
@@ -90,5 +89,4 @@ std::unique_ptr<ICheckRunner> MakeTypecheckRunner() {
     return std::make_unique<TTypecheckRunner>();
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

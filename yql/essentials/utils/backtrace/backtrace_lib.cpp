@@ -12,7 +12,7 @@
 
 namespace {
 const size_t Limit = 400;
-void* Stack[Limit];
+void* Stack[Limit]; // NOLINT(modernize-avoid-c-arrays)
 
 struct TDllInfo {
     const char* Path;
@@ -20,14 +20,14 @@ struct TDllInfo {
 };
 
 const size_t MaxDLLCnt = 100;
-TDllInfo DLLs[MaxDLLCnt];
+TDllInfo DLLs[MaxDLLCnt]; // NOLINT(modernize-avoid-c-arrays)
 size_t DLLCount = 0;
 
 #if defined(_linux_) && defined(_x86_64_)
 int DlIterCallback(struct dl_phdr_info* info, size_t, void* data) {
     if (*info->dlpi_name) {
         if (DLLCount + 1 < MaxDLLCnt) {
-            reinterpret_cast<std::remove_reference_t<decltype(DLLs[0])>*>(data)[DLLCount++] = {info->dlpi_name, (ui64)info->dlpi_addr};
+            reinterpret_cast<std::remove_reference_t<decltype(DLLs[0])>*>(data)[DLLCount++] = {.Path = info->dlpi_name, .BaseAddress = (ui64)info->dlpi_addr};
         }
     }
     return 0;
@@ -39,8 +39,7 @@ bool Comp(const TDllInfo& a, const TDllInfo& b) {
 
 } // namespace
 
-namespace NYql {
-namespace NBacktrace {
+namespace NYql::NBacktrace {
 TCollectedFrame::TCollectedFrame(uintptr_t addr) {
     File = GetPersistentExecPath().c_str();
     Address = addr;
@@ -74,5 +73,4 @@ size_t CollectFrames(TCollectedFrame* frames, void** stack, size_t cnt) {
     }
     return cnt;
 }
-} // namespace NBacktrace
-} // namespace NYql
+} // namespace NYql::NBacktrace

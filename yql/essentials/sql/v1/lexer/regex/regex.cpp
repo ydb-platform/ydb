@@ -121,7 +121,7 @@ private:
             TString lower(char(ToLower(letter)));
             TString upper(char(ToUpper(letter)));
             rules.emplace_back(RegexRewriteRule(
-                "([^'\\w\\[\\]]|^)" + upper + "([^'\\w\\[\\]]|$)",
+                R"(([^'\w\[\]]|^))" + upper + R"(([^'\w\[\]]|$))",
                 "\\1[" + lower + upper + "]\\2"));
         }
     }

@@ -806,13 +806,13 @@ SIMPLE_UDF(TFromCodePointList, TUtf8(TAutoMap<TListType<ui32>>)) {
     buffer.reserve(TUnboxedValuePod::InternalBufferSize);
 
     const auto& iter = input.GetListIterator();
-    char runeBuffer[4] = {};
+    std::array<char, 4> runeBuffer = {};
     for (NUdf::TUnboxedValue item; iter.Next(item);) {
         const wchar32 rune = item.Get<ui32>();
         size_t written = 0;
-        WideToUTF8(&rune, 1, runeBuffer, written);
+        WideToUTF8(&rune, 1, runeBuffer.data(), written);
         Y_ENSURE(written <= 4);
-        buffer.insert(buffer.end(), runeBuffer, runeBuffer + written);
+        buffer.insert(buffer.end(), runeBuffer.data(), runeBuffer.data() + written);
     }
 
     return valueBuilder->NewString(TStringRef(buffer.data(), buffer.size()));

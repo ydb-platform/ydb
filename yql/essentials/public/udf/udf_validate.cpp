@@ -2,8 +2,7 @@
 #include <util/string/join.h>
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 #define SWITCH_ENUM_TYPE_TO_STR(name, val) \
     case val:                              \
@@ -63,5 +62,4 @@ EValidateDatumMode ToDatumValidateMode(EValidateMode validateMode) {
             return EValidateDatumMode::Expensive;
     }
 }
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

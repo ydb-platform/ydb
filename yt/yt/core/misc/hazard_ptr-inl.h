@@ -53,8 +53,9 @@ template <class T, class TReclaimer>
 void RetireHazardPointer(T* ptr, TReclaimer /*reclaimer*/)
 {
     RetireHazardPointer(
-        reinterpret_cast<TPackedPtr>(ptr),
-        [] (TPackedPtr packedPtr) { TReclaimer()(reinterpret_cast<T*>(packedPtr)); });
+        ptr,
+        ptr,
+        [] (void* reclaimPtr) { TReclaimer()(static_cast<T*>(reclaimPtr)); });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -69,7 +70,7 @@ THazardPtr<T>::THazardPtr(THazardPtr&& other) noexcept
 }
 
 template <class T>
-THazardPtr<T>& THazardPtr<T>::operator=(THazardPtr&& other)
+THazardPtr<T>& THazardPtr<T>::operator=(THazardPtr&& other) noexcept
 {
     if (this != &other) {
         Reset();
@@ -126,7 +127,7 @@ THazardPtr<T> THazardPtr<T>::Acquire(TPtrLoader&& ptrLoader)
 }
 
 template <class T>
-void THazardPtr<T>::Reset()
+void THazardPtr<T>::Reset() noexcept
 {
     if (Ptr_) {
 #ifdef NDEBUG

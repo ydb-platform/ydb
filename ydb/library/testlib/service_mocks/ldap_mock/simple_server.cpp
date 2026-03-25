@@ -48,12 +48,12 @@ void TSimpleServer::Stop() {
     if (ListenSocket >= 0) {
         ::shutdown(ListenSocket, SHUT_RDWR);
         ::close(ListenSocket);
-        ListenSocket = -1;
     }
 
     if (Worker.joinable()) {
         Worker.join();
     }
+    ListenSocket = -1;
     if (Ctx) {
         Ctx.Destroy();
     }
@@ -85,9 +85,9 @@ void TSimpleServer::HandleClient_(int fd) {
     if (Opt.UseTls) {
         socket->UpgradeToTls(Ctx.Get());
     }
+    TLdapRequestProcessor requestProcessor(socket, Opt.ExternalAuthMap);
 
     while (Running) {
-        TLdapRequestProcessor requestProcessor(socket);
         unsigned char elementType = requestProcessor.GetByte();
         if (elementType != EElementType::SEQUENCE) {
             if (TLdapResponse().Send(socket)) {
@@ -187,7 +187,6 @@ bool TSimpleServer::InitTlsCtx() {
             return false;
         }
     }
-
 
     int mode = SSL_VERIFY_NONE;
     if (Opt.RequireClientCert) {

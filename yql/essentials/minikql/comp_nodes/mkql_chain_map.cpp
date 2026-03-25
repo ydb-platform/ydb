@@ -129,14 +129,19 @@ public:
                 if (!Init.IsInvalid()) {
                     ComputationNodes.StateArg->SetValue(CompCtx, std::move(Init));
                     Init = NUdf::TUnboxedValue::Invalid();
+                } else {
+                    ComputationNodes.StateArg->SetValue(CompCtx, std::move(PreservedState));
                 }
 
-                if (!Iter.Next(ComputationNodes.ItemArg->RefValue(CompCtx))) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                if (!Iter.Next(fetchResult)) {
                     return false;
                 }
 
+                ComputationNodes.ItemArg->SetValue(CompCtx, std::move(fetchResult));
+
                 value = ComputationNodes.NewItem->GetValue(CompCtx);
-                ComputationNodes.StateArg->SetValue(CompCtx, ComputationNodes.NewState->GetValue(CompCtx));
+                PreservedState = ComputationNodes.NewState->GetValue(CompCtx);
                 return true;
             }
 
@@ -144,6 +149,7 @@ public:
             const TComputationNodes& ComputationNodes;
             const NUdf::TUnboxedValue Iter;
             NUdf::TUnboxedValue Init;
+            NUdf::TUnboxedValue PreservedState;
         };
 
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, NUdf::TUnboxedValue&& init, const TComputationNodes& computationNodes)
@@ -202,10 +208,13 @@ public:
                 Init = NUdf::TUnboxedValuePod::Invalid();
             }
 
-            const auto status = List.Fetch(ComputationNodes.ItemArg->RefValue(CompCtx));
+            NYql::NUdf::TUnboxedValue fetchResult;
+            const auto status = List.Fetch(fetchResult);
             if (status != NUdf::EFetchStatus::Ok) {
                 return status;
             }
+
+            ComputationNodes.ItemArg->SetValue(CompCtx, std::move(fetchResult));
 
             value = ComputationNodes.NewItem->GetValue(CompCtx);
             ComputationNodes.StateArg->SetValue(CompCtx, ComputationNodes.NewState->GetValue(CompCtx));
@@ -244,7 +253,9 @@ public:
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = IsStream ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
+        const auto funcType = IsStream
+                                  ? FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false)
+                                  : FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -256,6 +267,7 @@ public:
         ctx.Ctx = &*args;
         const auto containerArg = &*++args;
         const auto initArg = &*++args;
+        const auto stateArg = IsStream ? nullptr : &*++args;
         const auto valuePtr = &*++args;
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
@@ -264,23 +276,33 @@ public:
         const auto container = static_cast<Value*>(containerArg);
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
+        const auto state = IsStream ? nullptr : BasicBlock::Create(context, "state", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
 
         const auto load = new LoadInst(valueType, initArg, "load", block);
-        BranchInst::Create(work, init, IsInvalid(load, block, context), block);
+        BranchInst::Create(IsStream ? work : state, init, IsInvalid(load, block, context), block);
         block = init;
 
         codegenStateArg->CreateSetValue(ctx, block, initArg);
         new StoreInst(GetInvalid(context), initArg, block);
         BranchInst::Create(work, block);
 
+        if constexpr (IsStream) {
+            Y_ABORT_UNLESS(stateArg == nullptr);
+        } else {
+            block = state;
+            codegenStateArg->CreateSetValue(ctx, block, stateArg);
+            BranchInst::Create(work, block);
+        }
+
         block = work;
 
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        const auto itemPtr = codegenItemArg->CreateRefValue(ctx, block);
-        const auto status = IsStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItemArg, ctx, block, [&](Value* itemPtr) {
+            return IsStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
 
         const auto icmp = IsStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::getFalse(context), "cond", block);
 
@@ -292,7 +314,13 @@ public:
 
         const auto newState = GetNodeValue(ComputationNodes.NewState, ctx, block);
 
-        codegenStateArg->CreateSetValue(ctx, block, newState);
+        if constexpr (IsStream) {
+            codegenStateArg->CreateSetValue(ctx, block, newState);
+        } else {
+            ValueUnRef(EValueRepresentation::Any, stateArg, ctx, block);
+            new StoreInst(newState, stateArg, block);
+            ValueAddRef(EValueRepresentation::Any, stateArg, ctx, block);
+        }
 
         BranchInst::Create(done, block);
         block = done;
@@ -301,7 +329,7 @@ public:
         return ctx.Func;
     }
 
-    using TChainMapPtr = std::conditional_t<IsStream, TStreamCodegenStatefulValue::TFetchPtr, TCustomListCodegenStatefulValue::TNextPtr>;
+    using TChainMapPtr = std::conditional_t<IsStream, TStreamCodegenStatefulValue::TFetchPtr, TCustomListCodegenStatefulValueT<TCodegenStableStatefulIterator<>>::TNextPtr>;
 
     Function* ChainMapFunc = nullptr;
 
@@ -391,7 +419,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     NUdf::TUnboxedValuePod MakeLazyList(TComputationContext& ctx, const NUdf::TUnboxedValuePod value, const NUdf::TUnboxedValuePod init) const {
-        return ctx.HolderFactory.Create<TCustomListCodegenStatefulValue>(ChainMap, &ctx, value, init);
+        return ctx.HolderFactory.Create<TCustomListCodegenStatefulValueT<TCodegenStableStatefulIterator<>>>(ChainMap, &ctx, value, init);
     }
 
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
@@ -465,12 +493,9 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListChainMapWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType(), init->getType()}, false);
-            const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-            const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list, init}, "value", block);
+            const auto value = EmitFunctionCall<&TListChainMapWrapper::MakeLazyList>(list->getType(), {self, ctx.Ctx, list, init}, ctx, block);
             map->addIncoming(value, block);
             BranchInst::Create(done, block);
         }

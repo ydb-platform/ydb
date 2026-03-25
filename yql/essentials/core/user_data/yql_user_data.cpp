@@ -1,8 +1,7 @@
 #include "yql_user_data.h"
 #include <util/folder/iterator.h>
 
-namespace NYql {
-namespace NUserData {
+namespace NYql::NUserData {
 
 void TUserData::UserDataToLibraries(
     const TVector<TUserData>& userData,
@@ -28,14 +27,13 @@ void TUserData::FillFromFolder(
     }
     root = root.RealPath();
     TDirIterator dir(root, TDirIterator::TOptions(FTS_LOGICAL));
-    for (auto file = dir.begin(), end = dir.end(); file != end; ++file) {
-        if (file->fts_level == FTS_ROOTLEVEL) {
+    for (const auto& file : dir) {
+        if (file.fts_level == FTS_ROOTLEVEL) {
             continue;
         }
-        TFsPath filePath(file->fts_path);
+        TFsPath filePath(file.fts_path);
         userData.push_back({type, EDisposition::FILESYSTEM, filePath.RelativeTo(root), filePath});
     }
 }
 
-} // namespace NUserData
-} // namespace NYql
+} // namespace NYql::NUserData

@@ -18,7 +18,16 @@ namespace {
 
 class TFmrTableDataServiceClient: public ITableDataService {
 public:
-    TFmrTableDataServiceClient(ITableDataServiceDiscovery::TPtr discovery): TableDataServiceDiscovery_(discovery) {}
+    TFmrTableDataServiceClient(
+        ITableDataServiceDiscovery::TPtr discovery,
+        IFmrTvmClient::TPtr tvmClient = nullptr,
+        TTvmId destinationTvmId = 0
+    )
+        : TableDataServiceDiscovery_(discovery)
+        , TvmClient_(tvmClient)
+        , DestinationTvmId_(destinationTvmId)
+    {
+    }
 
     NThreading::TFuture<bool> Put(const TString& group, const TString& chunkId, const TString& value) override {
         TString putRequestUrl = "/put_data?group=" + group + "&chunkId=" + chunkId;
@@ -32,8 +41,9 @@ public:
 
         auto putTableDataServiceFunc = [&]() {
             try {
-                httpClient.DoPost(putRequestUrl, value, &outputStream, GetHeadersWithLogContext(Headers_));
+                auto statusCode = httpClient.DoPost(putRequestUrl, value, &outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
                 TString serializedResponse = outputStream.ReadAll();
+                HandleHttpError(statusCode, serializedResponse);
                 NProto::TTableDataServicePutResponse protoPutResponse;
                 YQL_ENSURE(protoPutResponse.ParseFromString(serializedResponse));
                 bool putSuccess = TableDataServicePutResponseFromProto(protoPutResponse);
@@ -61,8 +71,9 @@ public:
 
         auto getTableDataServiceFunc = [&]() {
             try {
-                httpClient.DoGet(getRequestUrl,&outputStream, GetHeadersWithLogContext(Headers_));
+                auto statusCode = httpClient.DoGet(getRequestUrl,&outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
                 TString serializedResponse = outputStream.ReadAll();
+                HandleHttpError(statusCode, serializedResponse);
                 NProto::TTableDataServiceGetResponse protoGetResponse;
                 YQL_ENSURE(protoGetResponse.ParseFromString(serializedResponse));
                 TMaybe<TString> getResponse = TableDataServiceGetResponseFromProto(protoGetResponse);
@@ -84,12 +95,14 @@ public:
         auto tableDataServiceWorkerNum = std::hash<TString>()(group + chunkId) % workersNum;
         auto workerConnection = TableDataServiceDiscovery_->GetHosts()[tableDataServiceWorkerNum];
         auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
+        TStringStream outputStream;
         YQL_CLOG(TRACE, FastMapReduce) << "Sending delete request with url: " << deleteRequestUrl <<
             " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
 
         auto deleteTableDataServiceFunc = [&]() {
             try {
-                httpClient.DoRequest("DELETE", deleteRequestUrl, "", nullptr, GetHeadersWithLogContext(Headers_));
+                auto statusCode = httpClient.DoRequest("DELETE", deleteRequestUrl, "", &outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
+                HandleHttpError(statusCode, outputStream.ReadAll());
                 return NThreading::MakeFuture();
             } catch (...) {
                 return NThreading::MakeErrorFuture<void>(std::current_exception());
@@ -108,12 +121,14 @@ public:
         for (ui64 workerNum = 0; workerNum < totalWorkersNum; ++workerNum) {
             auto workerConnection = TableDataServiceDiscovery_->GetHosts()[workerNum];
             auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
+            TStringStream outputStream;
             YQL_CLOG(TRACE, FastMapReduce) << "Sending delete groups request with url: " << deleteGroupsRequestUrl <<
                 " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
             auto deletionRequestFunc = [&]() {
                 try {
                     auto protobufHeaders = TKeepAliveHttpClient::THeaders{{"Content-Type", "application/x-protobuf"}};
-                    httpClient.DoPost(deleteGroupsRequestUrl, serializedProtoDeletionRequest, nullptr, GetHeadersWithLogContext(protobufHeaders));
+                    auto statusCode = httpClient.DoPost(deleteGroupsRequestUrl, serializedProtoDeletionRequest, &outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
+                    HandleHttpError(statusCode, outputStream.ReadAll());
                     return NThreading::MakeFuture();
                 } catch (...) {
                     return NThreading::MakeErrorFuture<void>(std::current_exception());
@@ -130,10 +145,12 @@ public:
         for (ui64 workerNum = 0; workerNum < totalWorkersNum; ++workerNum) {
             auto workerConnection = TableDataServiceDiscovery_->GetHosts()[workerNum];
             auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
+            TStringStream outputStream;
             YQL_CLOG(TRACE, FastMapReduce) << "Sending clear request with url: " << clearRequestUrl <<
                 " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
             try {
-                httpClient.DoPost(clearRequestUrl, TString(), nullptr, GetHeadersWithLogContext(Headers_));
+                auto statusCode = httpClient.DoPost(clearRequestUrl, TString(), &outputStream, GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false));
+                HandleHttpError(statusCode, outputStream.ReadAll());
             } catch (...) {
                 YQL_CLOG(ERROR, FastMapReduce) << "Failed to clear table data service host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port)
                     << "with error message: " << CurrentExceptionMessage();
@@ -145,6 +162,8 @@ public:
 private:
     ITableDataServiceDiscovery::TPtr TableDataServiceDiscovery_;
     TKeepAliveHttpClient::THeaders Headers_{};
+    IFmrTvmClient::TPtr TvmClient_;
+    ui32 DestinationTvmId_ = 0;
 
     std::shared_ptr<IRetryPolicy<const yexception&>> RetryPolicy_ = IRetryPolicy<const yexception&>::GetExponentialBackoffPolicy(
         /*retryClassFunction*/ [] (const yexception&) {
@@ -163,8 +182,10 @@ private:
 
 } // namespace
 
-ITableDataService::TPtr MakeTableDataServiceClient(ITableDataServiceDiscovery::TPtr discovery) {
-    return MakeIntrusive<TFmrTableDataServiceClient>(discovery);
+ITableDataService::TPtr MakeTableDataServiceClient(
+    ITableDataServiceDiscovery::TPtr discovery, IFmrTvmClient::TPtr tvmClient, TTvmId destinationTvmId
+) {
+    return MakeIntrusive<TFmrTableDataServiceClient>(discovery, tvmClient, destinationTvmId);
 }
 
 } // namespace NYql::NFmr

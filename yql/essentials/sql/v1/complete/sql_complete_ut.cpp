@@ -184,42 +184,42 @@ TVector<TCandidate> CompleteTop(size_t limit, ISqlCompletionEngine::TPtr& engine
 
 Y_UNIT_TEST(Beginning) {
     TVector<TCandidate> expected = {
-        {Keyword, "ALTER"},
-        {Keyword, "ANALYZE"},
-        {Keyword, "BACKUP"},
-        {Keyword, "BATCH"},
-        {Keyword, "COMMIT"},
-        {Keyword, "CREATE"},
-        {Keyword, "DECLARE"},
-        {Keyword, "DEFINE"},
-        {Keyword, "DELETE FROM"},
-        {Keyword, "DISCARD"},
-        {Keyword, "DO"},
-        {Keyword, "DROP"},
-        {Keyword, "EVALUATE"},
-        {Keyword, "EXPLAIN"},
-        {Keyword, "EXPORT"},
-        {Keyword, "FOR"},
-        {Keyword, "FROM"},
-        {Keyword, "GRANT"},
-        {Keyword, "IF"},
-        {Keyword, "IMPORT"},
-        {Keyword, "INSERT"},
-        {Keyword, "PARALLEL"},
-        {Keyword, "PRAGMA"},
-        {Keyword, "PROCESS"},
-        {Keyword, "REDUCE"},
-        {Keyword, "REPLACE"},
-        {Keyword, "RESTORE"},
-        {Keyword, "REVOKE"},
-        {Keyword, "ROLLBACK"},
-        {Keyword, "SELECT"},
-        {Keyword, "SHOW CREATE"},
-        {Keyword, "TRUNCATE TABLE"},
-        {Keyword, "UPDATE"},
-        {Keyword, "UPSERT"},
-        {Keyword, "USE"},
-        {Keyword, "VALUES"},
+        {.Kind = Keyword, .Content = "ALTER"},
+        {.Kind = Keyword, .Content = "ANALYZE"},
+        {.Kind = Keyword, .Content = "BACKUP"},
+        {.Kind = Keyword, .Content = "BATCH"},
+        {.Kind = Keyword, .Content = "COMMIT"},
+        {.Kind = Keyword, .Content = "CREATE"},
+        {.Kind = Keyword, .Content = "DECLARE"},
+        {.Kind = Keyword, .Content = "DEFINE"},
+        {.Kind = Keyword, .Content = "DELETE FROM"},
+        {.Kind = Keyword, .Content = "DISCARD"},
+        {.Kind = Keyword, .Content = "DO"},
+        {.Kind = Keyword, .Content = "DROP"},
+        {.Kind = Keyword, .Content = "EVALUATE"},
+        {.Kind = Keyword, .Content = "EXPLAIN"},
+        {.Kind = Keyword, .Content = "EXPORT"},
+        {.Kind = Keyword, .Content = "FOR"},
+        {.Kind = Keyword, .Content = "FROM"},
+        {.Kind = Keyword, .Content = "GRANT"},
+        {.Kind = Keyword, .Content = "IF"},
+        {.Kind = Keyword, .Content = "IMPORT"},
+        {.Kind = Keyword, .Content = "INSERT"},
+        {.Kind = Keyword, .Content = "PARALLEL"},
+        {.Kind = Keyword, .Content = "PRAGMA"},
+        {.Kind = Keyword, .Content = "PROCESS"},
+        {.Kind = Keyword, .Content = "REDUCE"},
+        {.Kind = Keyword, .Content = "REPLACE"},
+        {.Kind = Keyword, .Content = "RESTORE"},
+        {.Kind = Keyword, .Content = "REVOKE"},
+        {.Kind = Keyword, .Content = "ROLLBACK"},
+        {.Kind = Keyword, .Content = "SELECT"},
+        {.Kind = Keyword, .Content = "SHOW CREATE"},
+        {.Kind = Keyword, .Content = "TRUNCATE TABLE"},
+        {.Kind = Keyword, .Content = "UPDATE"},
+        {.Kind = Keyword, .Content = "UPSERT"},
+        {.Kind = Keyword, .Content = "USE"},
+        {.Kind = Keyword, .Content = "VALUES"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -235,9 +235,9 @@ Y_UNIT_TEST(Beginning) {
 
 Y_UNIT_TEST(Use) {
     TVector<TCandidate> expected = {
-        {ClusterName, "example"},
-        {ClusterName, "loggy"},
-        {ClusterName, "saurus"},
+        {.Kind = ClusterName, .Content = "example"},
+        {.Kind = ClusterName, .Content = "loggy"},
+        {.Kind = ClusterName, .Content = "saurus"},
     };
     auto engine = MakeSqlCompletionEngineUT();
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE "), expected);
@@ -257,25 +257,25 @@ Y_UNIT_TEST(UseClusterResultion) {
         };
 
         TVector<TCandidate> expected = {
-            {TableName, "`maxim`"},
-            {BindingName, "$cluster_name"},
-            {ClusterName, "example"},
-            {ClusterName, "loggy"},
-            {ClusterName, "saurus"},
+            {.Kind = TableName, .Content = "`maxim`"},
+            {.Kind = BindingName, .Content = "$cluster_name"},
+            {.Kind = ClusterName, .Content = "example"},
+            {.Kind = ClusterName, .Content = "loggy"},
+            {.Kind = ClusterName, .Content = "saurus"},
         };
 
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query, env), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {FolderName, "`.sys/`", 1},
-            {FolderName, "`local/`", 1},
-            {FolderName, "`prod/`", 1},
-            {FolderName, "`test/`", 1},
-            {ClusterName, "example"},
-            {ClusterName, "loggy"},
-            {ClusterName, "saurus"},
-            {Keyword, "ANY"},
+            {.Kind = FolderName, .Content = "`.sys/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`local/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`prod/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`test/`", .CursorShift = 1},
+            {.Kind = ClusterName, .Content = "example"},
+            {.Kind = ClusterName, .Content = "loggy"},
+            {.Kind = ClusterName, .Content = "saurus"},
+            {.Kind = Keyword, .Content = "ANY"},
         };
         UNIT_ASSERT_VALUES_EQUAL(
             CompleteTop(
@@ -289,21 +289,21 @@ Y_UNIT_TEST(UseClusterResultion) {
 
 Y_UNIT_TEST(Alter) {
     TVector<TCandidate> expected = {
-        {Keyword, "ASYNC REPLICATION"},
-        {Keyword, "BACKUP COLLECTION"},
-        {Keyword, "DATABASE"},
-        {Keyword, "EXTERNAL"},
-        {Keyword, "GROUP"},
-        {Keyword, "OBJECT"},
-        {Keyword, "RESOURCE POOL"},
-        {Keyword, "SECRET"},
-        {Keyword, "SEQUENCE"},
-        {Keyword, "STREAMING QUERY"},
-        {Keyword, "TABLE"},
-        {Keyword, "TABLESTORE"},
-        {Keyword, "TOPIC"},
-        {Keyword, "TRANSFER"},
-        {Keyword, "USER"},
+        {.Kind = Keyword, .Content = "ASYNC REPLICATION"},
+        {.Kind = Keyword, .Content = "BACKUP COLLECTION"},
+        {.Kind = Keyword, .Content = "DATABASE"},
+        {.Kind = Keyword, .Content = "EXTERNAL"},
+        {.Kind = Keyword, .Content = "GROUP"},
+        {.Kind = Keyword, .Content = "OBJECT"},
+        {.Kind = Keyword, .Content = "RESOURCE POOL"},
+        {.Kind = Keyword, .Content = "SECRET"},
+        {.Kind = Keyword, .Content = "SEQUENCE"},
+        {.Kind = Keyword, .Content = "STREAMING QUERY"},
+        {.Kind = Keyword, .Content = "TABLE"},
+        {.Kind = Keyword, .Content = "TABLESTORE"},
+        {.Kind = Keyword, .Content = "TOPIC"},
+        {.Kind = Keyword, .Content = "TRANSFER"},
+        {.Kind = Keyword, .Content = "USER"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -312,23 +312,23 @@ Y_UNIT_TEST(Alter) {
 
 Y_UNIT_TEST(Create) {
     TVector<TCandidate> expected = {
-        {Keyword, "ASYNC REPLICATION"},
-        {Keyword, "BACKUP COLLECTION"},
-        {Keyword, "EXTERNAL"},
-        {Keyword, "GROUP"},
-        {Keyword, "OBJECT"},
-        {Keyword, "OR REPLACE"},
-        {Keyword, "RESOURCE POOL"},
-        {Keyword, "SECRET"},
-        {Keyword, "STREAMING QUERY"},
-        {Keyword, "TABLE"},
-        {Keyword, "TABLESTORE"},
-        {Keyword, "TEMP TABLE"},
-        {Keyword, "TEMPORARY TABLE"},
-        {Keyword, "TOPIC"},
-        {Keyword, "TRANSFER"},
-        {Keyword, "USER"},
-        {Keyword, "VIEW"},
+        {.Kind = Keyword, .Content = "ASYNC REPLICATION"},
+        {.Kind = Keyword, .Content = "BACKUP COLLECTION"},
+        {.Kind = Keyword, .Content = "EXTERNAL"},
+        {.Kind = Keyword, .Content = "GROUP"},
+        {.Kind = Keyword, .Content = "OBJECT"},
+        {.Kind = Keyword, .Content = "OR REPLACE"},
+        {.Kind = Keyword, .Content = "RESOURCE POOL"},
+        {.Kind = Keyword, .Content = "SECRET"},
+        {.Kind = Keyword, .Content = "STREAMING QUERY"},
+        {.Kind = Keyword, .Content = "TABLE"},
+        {.Kind = Keyword, .Content = "TABLESTORE"},
+        {.Kind = Keyword, .Content = "TEMP TABLE"},
+        {.Kind = Keyword, .Content = "TEMPORARY TABLE"},
+        {.Kind = Keyword, .Content = "TOPIC"},
+        {.Kind = Keyword, .Content = "TRANSFER"},
+        {.Kind = Keyword, .Content = "USER"},
+        {.Kind = Keyword, .Content = "VIEW"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -339,20 +339,20 @@ Y_UNIT_TEST(CreateTable) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {FolderName, "`.sys/`", 1},
-            {FolderName, "`local/`", 1},
-            {FolderName, "`prod/`", 1},
-            {FolderName, "`test/`", 1},
-            {ClusterName, "example"},
-            {ClusterName, "loggy"},
-            {ClusterName, "saurus"},
-            {Keyword, "IF NOT EXISTS"},
+            {.Kind = FolderName, .Content = "`.sys/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`local/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`prod/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`test/`", .CursorShift = 1},
+            {.Kind = ClusterName, .Content = "example"},
+            {.Kind = ClusterName, .Content = "loggy"},
+            {.Kind = ClusterName, .Content = "saurus"},
+            {.Kind = Keyword, .Content = "IF NOT EXISTS"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "CREATE TABLE #"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {FolderName, "service/"},
+            {.Kind = FolderName, .Content = "service/"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "CREATE TABLE `test/#`"), expected);
     }
@@ -360,7 +360,7 @@ Y_UNIT_TEST(CreateTable) {
 
 Y_UNIT_TEST(Delete) {
     TVector<TCandidate> expected = {
-        {Keyword, "FROM"},
+        {.Kind = Keyword, .Content = "FROM"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -369,20 +369,20 @@ Y_UNIT_TEST(Delete) {
 
 Y_UNIT_TEST(Drop) {
     TVector<TCandidate> expected = {
-        {Keyword, "ASYNC REPLICATION"},
-        {Keyword, "BACKUP COLLECTION"},
-        {Keyword, "EXTERNAL"},
-        {Keyword, "GROUP"},
-        {Keyword, "OBJECT"},
-        {Keyword, "RESOURCE POOL"},
-        {Keyword, "SECRET"},
-        {Keyword, "STREAMING QUERY"},
-        {Keyword, "TABLE"},
-        {Keyword, "TABLESTORE"},
-        {Keyword, "TOPIC"},
-        {Keyword, "TRANSFER"},
-        {Keyword, "USER"},
-        {Keyword, "VIEW"},
+        {.Kind = Keyword, .Content = "ASYNC REPLICATION"},
+        {.Kind = Keyword, .Content = "BACKUP COLLECTION"},
+        {.Kind = Keyword, .Content = "EXTERNAL"},
+        {.Kind = Keyword, .Content = "GROUP"},
+        {.Kind = Keyword, .Content = "OBJECT"},
+        {.Kind = Keyword, .Content = "RESOURCE POOL"},
+        {.Kind = Keyword, .Content = "SECRET"},
+        {.Kind = Keyword, .Content = "STREAMING QUERY"},
+        {.Kind = Keyword, .Content = "TABLE"},
+        {.Kind = Keyword, .Content = "TABLESTORE"},
+        {.Kind = Keyword, .Content = "TOPIC"},
+        {.Kind = Keyword, .Content = "TRANSFER"},
+        {.Kind = Keyword, .Content = "USER"},
+        {.Kind = Keyword, .Content = "VIEW"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -391,14 +391,14 @@ Y_UNIT_TEST(Drop) {
 
 Y_UNIT_TEST(DropObject) {
     TVector<TCandidate> expected = {
-        {FolderName, "`.sys/`", 1},
-        {FolderName, "`local/`", 1},
-        {FolderName, "`prod/`", 1},
-        {FolderName, "`test/`", 1},
-        {ClusterName, "example"},
-        {ClusterName, "loggy"},
-        {ClusterName, "saurus"},
-        {Keyword, "IF EXISTS"},
+        {.Kind = FolderName, .Content = "`.sys/`", .CursorShift = 1},
+        {.Kind = FolderName, .Content = "`local/`", .CursorShift = 1},
+        {.Kind = FolderName, .Content = "`prod/`", .CursorShift = 1},
+        {.Kind = FolderName, .Content = "`test/`", .CursorShift = 1},
+        {.Kind = ClusterName, .Content = "example"},
+        {.Kind = ClusterName, .Content = "loggy"},
+        {.Kind = ClusterName, .Content = "saurus"},
+        {.Kind = Keyword, .Content = "IF EXISTS"},
     };
     auto engine = MakeSqlCompletionEngineUT();
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "DROP TABLE "), expected);
@@ -407,42 +407,42 @@ Y_UNIT_TEST(DropObject) {
 
 Y_UNIT_TEST(Explain) {
     TVector<TCandidate> expected = {
-        {Keyword, "ALTER"},
-        {Keyword, "ANALYZE"},
-        {Keyword, "BACKUP"},
-        {Keyword, "BATCH"},
-        {Keyword, "COMMIT"},
-        {Keyword, "CREATE"},
-        {Keyword, "DECLARE"},
-        {Keyword, "DEFINE"},
-        {Keyword, "DELETE FROM"},
-        {Keyword, "DISCARD"},
-        {Keyword, "DO"},
-        {Keyword, "DROP"},
-        {Keyword, "EVALUATE"},
-        {Keyword, "EXPORT"},
-        {Keyword, "FOR"},
-        {Keyword, "FROM"},
-        {Keyword, "GRANT"},
-        {Keyword, "IF"},
-        {Keyword, "IMPORT"},
-        {Keyword, "INSERT"},
-        {Keyword, "PARALLEL"},
-        {Keyword, "PRAGMA"},
-        {Keyword, "PROCESS"},
-        {Keyword, "QUERY PLAN"},
-        {Keyword, "REDUCE"},
-        {Keyword, "REPLACE"},
-        {Keyword, "RESTORE"},
-        {Keyword, "REVOKE"},
-        {Keyword, "ROLLBACK"},
-        {Keyword, "SELECT"},
-        {Keyword, "SHOW CREATE"},
-        {Keyword, "TRUNCATE TABLE"},
-        {Keyword, "UPDATE"},
-        {Keyword, "UPSERT"},
-        {Keyword, "USE"},
-        {Keyword, "VALUES"},
+        {.Kind = Keyword, .Content = "ALTER"},
+        {.Kind = Keyword, .Content = "ANALYZE"},
+        {.Kind = Keyword, .Content = "BACKUP"},
+        {.Kind = Keyword, .Content = "BATCH"},
+        {.Kind = Keyword, .Content = "COMMIT"},
+        {.Kind = Keyword, .Content = "CREATE"},
+        {.Kind = Keyword, .Content = "DECLARE"},
+        {.Kind = Keyword, .Content = "DEFINE"},
+        {.Kind = Keyword, .Content = "DELETE FROM"},
+        {.Kind = Keyword, .Content = "DISCARD"},
+        {.Kind = Keyword, .Content = "DO"},
+        {.Kind = Keyword, .Content = "DROP"},
+        {.Kind = Keyword, .Content = "EVALUATE"},
+        {.Kind = Keyword, .Content = "EXPORT"},
+        {.Kind = Keyword, .Content = "FOR"},
+        {.Kind = Keyword, .Content = "FROM"},
+        {.Kind = Keyword, .Content = "GRANT"},
+        {.Kind = Keyword, .Content = "IF"},
+        {.Kind = Keyword, .Content = "IMPORT"},
+        {.Kind = Keyword, .Content = "INSERT"},
+        {.Kind = Keyword, .Content = "PARALLEL"},
+        {.Kind = Keyword, .Content = "PRAGMA"},
+        {.Kind = Keyword, .Content = "PROCESS"},
+        {.Kind = Keyword, .Content = "QUERY PLAN"},
+        {.Kind = Keyword, .Content = "REDUCE"},
+        {.Kind = Keyword, .Content = "REPLACE"},
+        {.Kind = Keyword, .Content = "RESTORE"},
+        {.Kind = Keyword, .Content = "REVOKE"},
+        {.Kind = Keyword, .Content = "ROLLBACK"},
+        {.Kind = Keyword, .Content = "SELECT"},
+        {.Kind = Keyword, .Content = "SHOW CREATE"},
+        {.Kind = Keyword, .Content = "TRUNCATE TABLE"},
+        {.Kind = Keyword, .Content = "UPDATE"},
+        {.Kind = Keyword, .Content = "UPSERT"},
+        {.Kind = Keyword, .Content = "USE"},
+        {.Kind = Keyword, .Content = "VALUES"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -451,23 +451,23 @@ Y_UNIT_TEST(Explain) {
 
 Y_UNIT_TEST(Grant) {
     TVector<TCandidate> expected = {
-        {Keyword, "ALL"},
-        {Keyword, "ALTER SCHEMA"},
-        {Keyword, "CONNECT"},
-        {Keyword, "CREATE"},
-        {Keyword, "DESCRIBE SCHEMA"},
-        {Keyword, "DROP"},
-        {Keyword, "ERASE ROW"},
-        {Keyword, "FULL"},
-        {Keyword, "GRANT"},
-        {Keyword, "INSERT"},
-        {Keyword, "LIST"},
-        {Keyword, "MANAGE"},
-        {Keyword, "MODIFY"},
-        {Keyword, "REMOVE SCHEMA"},
-        {Keyword, "SELECT"},
-        {Keyword, "UPDATE ROW"},
-        {Keyword, "USE"},
+        {.Kind = Keyword, .Content = "ALL"},
+        {.Kind = Keyword, .Content = "ALTER SCHEMA"},
+        {.Kind = Keyword, .Content = "CONNECT"},
+        {.Kind = Keyword, .Content = "CREATE"},
+        {.Kind = Keyword, .Content = "DESCRIBE SCHEMA"},
+        {.Kind = Keyword, .Content = "DROP"},
+        {.Kind = Keyword, .Content = "ERASE ROW"},
+        {.Kind = Keyword, .Content = "FULL"},
+        {.Kind = Keyword, .Content = "GRANT"},
+        {.Kind = Keyword, .Content = "INSERT"},
+        {.Kind = Keyword, .Content = "LIST"},
+        {.Kind = Keyword, .Content = "MANAGE"},
+        {.Kind = Keyword, .Content = "MODIFY"},
+        {.Kind = Keyword, .Content = "REMOVE SCHEMA"},
+        {.Kind = Keyword, .Content = "SELECT"},
+        {.Kind = Keyword, .Content = "UPDATE ROW"},
+        {.Kind = Keyword, .Content = "USE"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -476,8 +476,8 @@ Y_UNIT_TEST(Grant) {
 
 Y_UNIT_TEST(Insert) {
     TVector<TCandidate> expected = {
-        {Keyword, "INTO"},
-        {Keyword, "OR"},
+        {.Kind = Keyword, .Content = "INTO"},
+        {.Kind = Keyword, .Content = "OR"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -488,46 +488,46 @@ Y_UNIT_TEST(Pragma) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {Keyword, "ANSI"},
-            {PragmaName, "yson.CastToString"},
-            {PragmaName, "yt.RuntimeCluster"},
-            {PragmaName, "yt.RuntimeClusterSelection"}};
-        auto completion = engine->Complete({"PRAGMA "}).GetValueSync();
+            {.Kind = Keyword, .Content = "ANSI"},
+            {.Kind = PragmaName, .Content = "yson.CastToString"},
+            {.Kind = PragmaName, .Content = "yt.RuntimeCluster"},
+            {.Kind = PragmaName, .Content = "yt.RuntimeClusterSelection"}};
+        auto completion = engine->Complete({.Text = "PRAGMA "}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
     }
     {
         TVector<TCandidate> expected = {
-            {PragmaName, "yson.CastToString"}};
-        auto completion = engine->Complete({"PRAGMA ys"}).GetValueSync();
+            {.Kind = PragmaName, .Content = "yson.CastToString"}};
+        auto completion = engine->Complete({.Text = "PRAGMA ys"}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "ys");
     }
     {
         TVector<TCandidate> expected = {
-            {PragmaName, "yson.CastToString"}};
-        auto completion = engine->Complete({"PRAGMA yson"}).GetValueSync();
+            {.Kind = PragmaName, .Content = "yson.CastToString"}};
+        auto completion = engine->Complete({.Text = "PRAGMA yson"}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "yson");
     }
     {
         TVector<TCandidate> expected = {
-            {PragmaName, "CastToString"}};
-        auto completion = engine->Complete({"PRAGMA yson."}).GetValueSync();
+            {.Kind = PragmaName, .Content = "CastToString"}};
+        auto completion = engine->Complete({.Text = "PRAGMA yson."}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
     }
     {
         TVector<TCandidate> expected = {
-            {PragmaName, "CastToString"}};
-        auto completion = engine->Complete({"PRAGMA yson.cast"}).GetValueSync();
+            {.Kind = PragmaName, .Content = "CastToString"}};
+        auto completion = engine->Complete({.Text = "PRAGMA yson.cast"}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "cast");
     }
     {
         TVector<TCandidate> expected = {
-            {PragmaName, "RuntimeCluster"},
-            {PragmaName, "RuntimeClusterSelection"}};
+            {.Kind = PragmaName, .Content = "RuntimeCluster"},
+            {.Kind = PragmaName, .Content = "RuntimeClusterSelection"}};
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "pragma yt."), expected);
         UNIT_ASSERT_VALUES_EQUAL(
             Complete(engine, "pragma yt.RuntimeClusterSelection='force';\npragma yt.Ru"),
@@ -535,8 +535,8 @@ Y_UNIT_TEST(Pragma) {
     }
     {
         TVector<TCandidate> expected = {
-            {PragmaName, "RuntimeCluster"},
-            {PragmaName, "RuntimeClusterSelection"}};
+            {.Kind = PragmaName, .Content = "RuntimeCluster"},
+            {.Kind = PragmaName, .Content = "RuntimeClusterSelection"}};
         UNIT_ASSERT_VALUES_EQUAL(
             Complete(engine, "pragma yt.Ru#\n"),
             expected);
@@ -545,44 +545,44 @@ Y_UNIT_TEST(Pragma) {
 
 Y_UNIT_TEST(Select) {
     TVector<TCandidate> expected = {
-        {Keyword, "ALL"},
-        {Keyword, "BITCAST()", 1},
-        {Keyword, "CASE"},
-        {Keyword, "CAST()", 1},
-        {Keyword, "CURRENT_DATE"},
-        {Keyword, "CURRENT_TIME"},
-        {Keyword, "CURRENT_TIMESTAMP"},
-        {TypeName, "Callable<>", 1},
-        {Keyword, "DISTINCT"},
-        {FunctionName, "DateTime::Split()", 1},
-        {TypeName, "Decimal()", 1},
-        {TypeName, "Dict<>", 1},
-        {TypeName, "DynamicLinear<>", 1},
-        {Keyword, "EMPTY_ACTION"},
-        {Keyword, "EXISTS()", 1},
-        {TypeName, "Enum<>", 1},
-        {Keyword, "FALSE"},
-        {TypeName, "Flow<>", 1},
-        {Keyword, "JSON_EXISTS()", 1},
-        {Keyword, "JSON_QUERY()", 1},
-        {Keyword, "JSON_VALUE()", 1},
-        {TypeName, "Linear<>", 1},
-        {TypeName, "List<>", 1},
-        {Keyword, "NOT"},
-        {Keyword, "NULL"},
-        {TypeName, "Optional<>", 1},
-        {FunctionName, "Python::__private()", 1},
-        {TypeName, "Resource<>", 1},
-        {Keyword, "STREAM"},
-        {TypeName, "Set<>", 1},
-        {FunctionName, "StartsWith()", 1},
-        {TypeName, "Stream<>", 1},
-        {TypeName, "Struct<>", 1},
-        {Keyword, "TRUE"},
-        {TypeName, "Tagged<>", 1},
-        {TypeName, "Tuple<>", 1},
-        {TypeName, "Uint64"},
-        {TypeName, "Variant<>", 1},
+        {.Kind = Keyword, .Content = "ALL"},
+        {.Kind = Keyword, .Content = "BITCAST()", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "CASE"},
+        {.Kind = Keyword, .Content = "CAST()", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "CURRENT_DATE"},
+        {.Kind = Keyword, .Content = "CURRENT_TIME"},
+        {.Kind = Keyword, .Content = "CURRENT_TIMESTAMP"},
+        {.Kind = TypeName, .Content = "Callable<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "DISTINCT"},
+        {.Kind = FunctionName, .Content = "DateTime::Split()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Decimal()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Dict<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "DynamicLinear<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "EMPTY_ACTION"},
+        {.Kind = Keyword, .Content = "EXISTS()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Enum<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "FALSE"},
+        {.Kind = TypeName, .Content = "Flow<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "JSON_EXISTS()", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "JSON_QUERY()", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "JSON_VALUE()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Linear<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "List<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "NOT"},
+        {.Kind = Keyword, .Content = "NULL"},
+        {.Kind = TypeName, .Content = "Optional<>", .CursorShift = 1},
+        {.Kind = FunctionName, .Content = "Python::__private()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Resource<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "STREAM"},
+        {.Kind = TypeName, .Content = "Set<>", .CursorShift = 1},
+        {.Kind = FunctionName, .Content = "StartsWith()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Stream<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Struct<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "TRUE"},
+        {.Kind = TypeName, .Content = "Tagged<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Tuple<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Uint64"},
+        {.Kind = TypeName, .Content = "Variant<>", .CursorShift = 1},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -594,31 +594,31 @@ Y_UNIT_TEST(SelectFrom) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {FolderName, "`.sys/`", 1},
-            {FolderName, "`local/`", 1},
-            {FolderName, "`prod/`", 1},
-            {FolderName, "`test/`", 1},
-            {ClusterName, "example"},
-            {ClusterName, "loggy"},
-            {ClusterName, "saurus"},
-            {Keyword, "ANY"},
-            {FunctionName, "CONCAT()", 1},
-            {FunctionName, "EACH()", 1},
-            {FunctionName, "FILTER()", 1},
-            {FunctionName, "FOLDER()", 1},
-            {FunctionName, "LIKE()", 1},
-            {FunctionName, "PARTITIONS()", 1},
-            {FunctionName, "PARTITION_LIST()", 1},
-            {FunctionName, "RANGE()", 1},
-            {FunctionName, "REGEXP()", 1},
-            {FunctionName, "WalkFolders()", 1},
+            {.Kind = FolderName, .Content = "`.sys/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`local/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`prod/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`test/`", .CursorShift = 1},
+            {.Kind = ClusterName, .Content = "example"},
+            {.Kind = ClusterName, .Content = "loggy"},
+            {.Kind = ClusterName, .Content = "saurus"},
+            {.Kind = Keyword, .Content = "ANY"},
+            {.Kind = FunctionName, .Content = "CONCAT()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "EACH()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "FILTER()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "FOLDER()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "LIKE()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "PARTITIONS()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "PARTITION_LIST()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "RANGE()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "REGEXP()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "WalkFolders()", .CursorShift = 1},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM "), expected);
     }
     {
         TString input = "SELECT * FROM pr";
         TVector<TCandidate> expected = {
-            {FolderName, "`prod/`", 1},
+            {.Kind = FolderName, .Content = "`prod/`", .CursorShift = 1},
         };
         TCompletion actual = engine->Complete(SharpedInput(input)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
@@ -626,20 +626,20 @@ Y_UNIT_TEST(SelectFrom) {
     }
     {
         TVector<TCandidate> expected = {
-            {FolderName, ".sys/`", 1},
-            {FolderName, "local/`", 1},
-            {FolderName, "prod/`", 1},
-            {FolderName, "test/`", 1},
+            {.Kind = FolderName, .Content = ".sys/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "local/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "prod/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "test/`", .CursorShift = 1},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `#"), expected);
     }
     {
         TString input = "SELECT * FROM `#`";
         TVector<TCandidate> expected = {
-            {FolderName, ".sys/"},
-            {FolderName, "local/"},
-            {FolderName, "prod/"},
-            {FolderName, "test/"},
+            {.Kind = FolderName, .Content = ".sys/"},
+            {.Kind = FolderName, .Content = "local/"},
+            {.Kind = FolderName, .Content = "prod/"},
+            {.Kind = FolderName, .Content = "test/"},
         };
         TCompletion actual = engine->Complete(SharpedInput(input)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
@@ -648,9 +648,9 @@ Y_UNIT_TEST(SelectFrom) {
     {
         TString input = "SELECT * FROM `local/#`";
         TVector<TCandidate> expected = {
-            {TableName, "abacaba"},
-            {TableName, "account"},
-            {TableName, "example"},
+            {.Kind = TableName, .Content = "abacaba"},
+            {.Kind = TableName, .Content = "account"},
+            {.Kind = TableName, .Content = "example"},
         };
         TCompletion actual = engine->Complete(SharpedInput(input)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
@@ -659,8 +659,8 @@ Y_UNIT_TEST(SelectFrom) {
     {
         TString input = "SELECT * FROM `local/a#`";
         TVector<TCandidate> expected = {
-            {TableName, "abacaba"},
-            {TableName, "account"},
+            {.Kind = TableName, .Content = "abacaba"},
+            {.Kind = TableName, .Content = "account"},
         };
         TCompletion actual = engine->Complete(SharpedInput(input)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
@@ -669,7 +669,7 @@ Y_UNIT_TEST(SelectFrom) {
     {
         TString input = "SELECT * FROM `.sy#`";
         TVector<TCandidate> expected = {
-            {FolderName, ".sys/"},
+            {.Kind = FolderName, .Content = ".sys/"},
         };
         TCompletion actual = engine->Complete(SharpedInput(input)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
@@ -678,7 +678,7 @@ Y_UNIT_TEST(SelectFrom) {
     {
         TString input = "SELECT * FROM `/test/ser#vice/`";
         TVector<TCandidate> expected = {
-            {FolderName, "service/"},
+            {.Kind = FolderName, .Content = "service/"},
         };
         TCompletion actual = engine->Complete(SharpedInput(input)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
@@ -690,17 +690,17 @@ Y_UNIT_TEST(SelectFromUnclosedIdQuoted) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {FolderName, ".sys/`", 1},
-            {FolderName, "local/`", 1},
-            {FolderName, "prod/`", 1},
-            {FolderName, "test/`", 1},
+            {.Kind = FolderName, .Content = ".sys/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "local/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "prod/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "test/`", .CursorShift = 1},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(4, engine, "SELECT * FROM `#"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {TableName, "meta`"},
-            {FolderName, "service/`", 1},
+            {.Kind = TableName, .Content = "meta`"},
+            {.Kind = FolderName, .Content = "service/`", .CursorShift = 1},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `test/"), expected);
     }
@@ -710,33 +710,33 @@ Y_UNIT_TEST(SelectFromCluster) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {ClusterName, "example"},
-            {ClusterName, "loggy"},
-            {ClusterName, "saurus"},
+            {.Kind = ClusterName, .Content = "example"},
+            {.Kind = ClusterName, .Content = "loggy"},
+            {.Kind = ClusterName, .Content = "saurus"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM yt:"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {ClusterName, "saurus"},
+            {.Kind = ClusterName, .Content = "saurus"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM yt:saurus#"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {TableName, "`maxim`"},
+            {.Kind = TableName, .Content = "`maxim`"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT * FROM yt:saurus."), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {TableName, "`people`"},
+            {.Kind = TableName, .Content = "`people`"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT * FROM example."), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {TableName, "tutorial"},
+            {.Kind = TableName, .Content = "tutorial"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT * FROM example.`/yql/t#`"), expected);
     }
@@ -746,39 +746,39 @@ Y_UNIT_TEST(SelectFromWithUse) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {TableName, "`maxim`"},
-            {ClusterName, "example"},
-            {ClusterName, "loggy"},
-            {ClusterName, "saurus"},
-            {Keyword, "ANY"},
+            {.Kind = TableName, .Content = "`maxim`"},
+            {.Kind = ClusterName, .Content = "example"},
+            {.Kind = ClusterName, .Content = "loggy"},
+            {.Kind = ClusterName, .Content = "saurus"},
+            {.Kind = Keyword, .Content = "ANY"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, "USE yt:saurus; SELECT * FROM "), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {TableName, "`people`"},
-            {FolderName, "`yql/`", 1},
+            {.Kind = TableName, .Content = "`people`"},
+            {.Kind = FolderName, .Content = "`yql/`", .CursorShift = 1},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "USE yt:saurus; SELECT * FROM example."), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {TableName, "`maxim`"},
-            {ClusterName, "example"},
-            {ClusterName, "loggy"},
-            {ClusterName, "saurus"},
-            {Keyword, "ANY"},
+            {.Kind = TableName, .Content = "`maxim`"},
+            {.Kind = ClusterName, .Content = "example"},
+            {.Kind = ClusterName, .Content = "loggy"},
+            {.Kind = ClusterName, .Content = "saurus"},
+            {.Kind = Keyword, .Content = "ANY"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, "USE example; USE yt:saurus; SELECT * FROM "), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {TableName, "`maxim`"},
-            {BindingName, "$hello"},
-            {ClusterName, "example"},
-            {ClusterName, "loggy"},
-            {ClusterName, "saurus"},
-            {Keyword, "ANY"},
+            {.Kind = TableName, .Content = "`maxim`"},
+            {.Kind = BindingName, .Content = "$hello"},
+            {.Kind = ClusterName, .Content = "example"},
+            {.Kind = ClusterName, .Content = "loggy"},
+            {.Kind = ClusterName, .Content = "saurus"},
+            {.Kind = Keyword, .Content = "ANY"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(6, engine, R"(
                 USE example;
@@ -790,13 +790,13 @@ Y_UNIT_TEST(SelectFromWithUse) {
     }
     {
         TVector<TCandidate> expected = {
-            {TableName, "`people`"},
-            {FolderName, "`yql/`", 1},
-            {BindingName, "$action"},
-            {ClusterName, "example"},
-            {ClusterName, "loggy"},
-            {ClusterName, "saurus"},
-            {Keyword, "ANY"},
+            {.Kind = TableName, .Content = "`people`"},
+            {.Kind = FolderName, .Content = "`yql/`", .CursorShift = 1},
+            {.Kind = BindingName, .Content = "$action"},
+            {.Kind = ClusterName, .Content = "example"},
+            {.Kind = ClusterName, .Content = "loggy"},
+            {.Kind = ClusterName, .Content = "saurus"},
+            {.Kind = Keyword, .Content = "ANY"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(7, engine, R"(
                 USE example;
@@ -813,41 +813,41 @@ Y_UNIT_TEST(SelectFromWithUse) {
 
 Y_UNIT_TEST(SelectWhere) {
     TVector<TCandidate> expected = {
-        {Keyword, "BITCAST()", 1},
-        {Keyword, "CASE"},
-        {Keyword, "CAST()", 1},
-        {Keyword, "CURRENT_DATE"},
-        {Keyword, "CURRENT_TIME"},
-        {Keyword, "CURRENT_TIMESTAMP"},
-        {TypeName, "Callable<>", 1},
-        {FunctionName, "DateTime::Split()", 1},
-        {TypeName, "Decimal()", 1},
-        {TypeName, "Dict<>", 1},
-        {TypeName, "DynamicLinear<>", 1},
-        {Keyword, "EMPTY_ACTION"},
-        {Keyword, "EXISTS()", 1},
-        {TypeName, "Enum<>", 1},
-        {Keyword, "FALSE"},
-        {TypeName, "Flow<>", 1},
-        {Keyword, "JSON_EXISTS()", 1},
-        {Keyword, "JSON_QUERY()", 1},
-        {Keyword, "JSON_VALUE()", 1},
-        {TypeName, "Linear<>", 1},
-        {TypeName, "List<>", 1},
-        {Keyword, "NOT"},
-        {Keyword, "NULL"},
-        {TypeName, "Optional<>", 1},
-        {FunctionName, "Python::__private()", 1},
-        {TypeName, "Resource<>", 1},
-        {TypeName, "Set<>", 1},
-        {FunctionName, "StartsWith()", 1},
-        {TypeName, "Stream<>", 1},
-        {TypeName, "Struct<>", 1},
-        {Keyword, "TRUE"},
-        {TypeName, "Tagged<>", 1},
-        {TypeName, "Tuple<>", 1},
-        {TypeName, "Uint64"},
-        {TypeName, "Variant<>", 1},
+        {.Kind = Keyword, .Content = "BITCAST()", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "CASE"},
+        {.Kind = Keyword, .Content = "CAST()", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "CURRENT_DATE"},
+        {.Kind = Keyword, .Content = "CURRENT_TIME"},
+        {.Kind = Keyword, .Content = "CURRENT_TIMESTAMP"},
+        {.Kind = TypeName, .Content = "Callable<>", .CursorShift = 1},
+        {.Kind = FunctionName, .Content = "DateTime::Split()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Decimal()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Dict<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "DynamicLinear<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "EMPTY_ACTION"},
+        {.Kind = Keyword, .Content = "EXISTS()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Enum<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "FALSE"},
+        {.Kind = TypeName, .Content = "Flow<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "JSON_EXISTS()", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "JSON_QUERY()", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "JSON_VALUE()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Linear<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "List<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "NOT"},
+        {.Kind = Keyword, .Content = "NULL"},
+        {.Kind = TypeName, .Content = "Optional<>", .CursorShift = 1},
+        {.Kind = FunctionName, .Content = "Python::__private()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Resource<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Set<>", .CursorShift = 1},
+        {.Kind = FunctionName, .Content = "StartsWith()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Stream<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Struct<>", .CursorShift = 1},
+        {.Kind = Keyword, .Content = "TRUE"},
+        {.Kind = TypeName, .Content = "Tagged<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Tuple<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Uint64"},
+        {.Kind = TypeName, .Content = "Variant<>", .CursorShift = 1},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -858,7 +858,7 @@ Y_UNIT_TEST(SelectSubquery) {
     auto engine = MakeSqlCompletionEngineUT();
 
     TVector<TCandidate> expected = {
-        {Keyword, "SELECT"},
+        {.Kind = Keyword, .Content = "SELECT"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "$x = sel#"), expected);
@@ -869,8 +869,8 @@ Y_UNIT_TEST(SelectSubquery) {
 
 Y_UNIT_TEST(Upsert) {
     TVector<TCandidate> expected = {
-        {Keyword, "INTO"},
-        {Keyword, "OBJECT"},
+        {.Kind = Keyword, .Content = "INTO"},
+        {.Kind = Keyword, .Content = "OBJECT"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -881,20 +881,20 @@ Y_UNIT_TEST(UpsertInto) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {FolderName, "`.sys/`", 1},
-            {FolderName, "`local/`", 1},
-            {FolderName, "`prod/`", 1},
-            {FolderName, "`test/`", 1},
-            {ClusterName, "example"},
-            {ClusterName, "loggy"},
-            {ClusterName, "saurus"},
+            {.Kind = FolderName, .Content = "`.sys/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`local/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`prod/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`test/`", .CursorShift = 1},
+            {.Kind = ClusterName, .Content = "example"},
+            {.Kind = ClusterName, .Content = "loggy"},
+            {.Kind = ClusterName, .Content = "saurus"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "UPSERT INTO "), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {TableName, "meta"},
-            {FolderName, "service/"},
+            {.Kind = TableName, .Content = "meta"},
+            {.Kind = FolderName, .Content = "service/"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "UPSERT INTO `test/#`"), expected);
     }
@@ -908,32 +908,32 @@ Y_UNIT_TEST(AlterObject) {
         )sql";
 
     TVector<TCandidate> expected = {
-        {FolderName, "yql/"},
-        {UnknownName, "link"},
-        {UnknownName, "topic"},
+        {.Kind = FolderName, .Content = "yql/"},
+        {.Kind = UnknownName, .Content = "link"},
+        {.Kind = UnknownName, .Content = "topic"},
     };
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query), expected);
 }
 
 Y_UNIT_TEST(TypeName) {
     TVector<TCandidate> expected = {
-        {TypeName, "Callable<>", 1},
-        {TypeName, "Decimal()", 1},
-        {TypeName, "Dict<>", 1},
-        {TypeName, "DynamicLinear<>", 1},
-        {TypeName, "Enum<>", 1},
-        {TypeName, "Flow<>", 1},
-        {TypeName, "Linear<>", 1},
-        {TypeName, "List<>", 1},
-        {TypeName, "Optional<>", 1},
-        {TypeName, "Resource<>", 1},
-        {TypeName, "Set<>", 1},
-        {TypeName, "Stream<>", 1},
-        {TypeName, "Struct<>", 1},
-        {TypeName, "Tagged<>", 1},
-        {TypeName, "Tuple<>", 1},
-        {TypeName, "Uint64"},
-        {TypeName, "Variant<>", 1},
+        {.Kind = TypeName, .Content = "Callable<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Decimal()", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Dict<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "DynamicLinear<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Enum<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Flow<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Linear<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "List<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Optional<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Resource<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Set<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Stream<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Struct<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Tagged<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Tuple<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Uint64"},
+        {.Kind = TypeName, .Content = "Variant<>", .CursorShift = 1},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -947,13 +947,13 @@ Y_UNIT_TEST(TypeNameAsArgument) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {TypeName, "Uint64"},
+            {.Kind = TypeName, .Content = "Uint64"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Nothing(Uint"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {TypeName, "Optional<>", 1},
+            {.Kind = TypeName, .Content = "Optional<>", .CursorShift = 1},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Nothing(Option"), expected);
     }
@@ -963,32 +963,32 @@ Y_UNIT_TEST(FunctionName) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {FunctionName, "DateTime::Split()", 1},
+            {.Kind = FunctionName, .Content = "DateTime::Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({"SELECT Date"}).GetValueSync();
+        auto completion = engine->Complete({.Text = "SELECT Date"}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "Date");
     }
     {
         TVector<TCandidate> expected = {
-            {FunctionName, "Split()", 1},
+            {.Kind = FunctionName, .Content = "Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({"SELECT DateTime:"}).GetValueSync();
+        auto completion = engine->Complete({.Text = "SELECT DateTime:"}).GetValueSync();
         UNIT_ASSERT(completion.Candidates.empty());
     }
     {
         TVector<TCandidate> expected = {
-            {FunctionName, "Split()", 1},
+            {.Kind = FunctionName, .Content = "Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({"SELECT DateTime::"}).GetValueSync();
+        auto completion = engine->Complete({.Text = "SELECT DateTime::"}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
     }
     {
         TVector<TCandidate> expected = {
-            {FunctionName, "Split()", 1},
+            {.Kind = FunctionName, .Content = "Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({"SELECT DateTime::s"}).GetValueSync();
+        auto completion = engine->Complete({.Text = "SELECT DateTime::s"}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "s");
     }
@@ -998,25 +998,25 @@ Y_UNIT_TEST(SelectTableHintName) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {HintName, "XLOCK"},
+            {.Kind = HintName, .Content = "XLOCK"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "PROCESS my_table USING $udf(TableRows()) WITH "), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {Keyword, "COLUMNS"},
-            {Keyword, "SCHEMA"},
-            {Keyword, "WATERMARK"},
-            {HintName, "XLOCK"},
+            {.Kind = Keyword, .Content = "COLUMNS"},
+            {.Kind = Keyword, .Content = "SCHEMA"},
+            {.Kind = Keyword, .Content = "WATERMARK"},
+            {.Kind = HintName, .Content = "XLOCK"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "REDUCE my_table WITH "), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {Keyword, "COLUMNS"},
-            {Keyword, "SCHEMA"},
-            {Keyword, "WATERMARK"},
-            {HintName, "XLOCK"},
+            {.Kind = Keyword, .Content = "COLUMNS"},
+            {.Kind = Keyword, .Content = "SCHEMA"},
+            {.Kind = Keyword, .Content = "WATERMARK"},
+            {.Kind = HintName, .Content = "XLOCK"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT key FROM my_table WITH "), expected);
     }
@@ -1024,10 +1024,10 @@ Y_UNIT_TEST(SelectTableHintName) {
 
 Y_UNIT_TEST(InsertTableHintName) {
     TVector<TCandidate> expected = {
-        {Keyword, "COLUMNS"},
-        {HintName, "EXPIRATION"},
-        {Keyword, "SCHEMA"},
-        {Keyword, "WATERMARK"},
+        {.Kind = Keyword, .Content = "COLUMNS"},
+        {.Kind = HintName, .Content = "EXPIRATION"},
+        {.Kind = Keyword, .Content = "SCHEMA"},
+        {.Kind = Keyword, .Content = "WATERMARK"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -1038,43 +1038,43 @@ Y_UNIT_TEST(CursorPosition) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {Keyword, "AND"},
-            {Keyword, "AS"},
-            {Keyword, "ASSUME"},
-            {Keyword, "BETWEEN"},
-            {Keyword, "COLLATE"},
-            {Keyword, "EXCEPT"},
-            {Keyword, "FROM"},
-            {Keyword, "GLOB"},
-            {Keyword, "GROUP"},
-            {Keyword, "HAVING"},
-            {Keyword, "ILIKE"},
-            {Keyword, "IN"},
-            {Keyword, "INTERSECT"},
-            {Keyword, "INTO RESULT"},
-            {Keyword, "IS"},
-            {Keyword, "ISNULL"},
-            {Keyword, "LIKE"},
-            {Keyword, "LIMIT"},
-            {Keyword, "MATCH"},
-            {Keyword, "NOT"},
-            {Keyword, "NOTNULL"},
-            {Keyword, "OR"},
-            {Keyword, "ORDER BY"},
-            {Keyword, "REGEXP"},
-            {Keyword, "RLIKE"},
-            {Keyword, "UNION"},
-            {Keyword, "WHERE"},
-            {Keyword, "WINDOW"},
-            {Keyword, "WITHOUT"},
-            {Keyword, "XOR"},
+            {.Kind = Keyword, .Content = "AND"},
+            {.Kind = Keyword, .Content = "AS"},
+            {.Kind = Keyword, .Content = "ASSUME"},
+            {.Kind = Keyword, .Content = "BETWEEN"},
+            {.Kind = Keyword, .Content = "COLLATE"},
+            {.Kind = Keyword, .Content = "EXCEPT"},
+            {.Kind = Keyword, .Content = "FROM"},
+            {.Kind = Keyword, .Content = "GLOB"},
+            {.Kind = Keyword, .Content = "GROUP"},
+            {.Kind = Keyword, .Content = "HAVING"},
+            {.Kind = Keyword, .Content = "ILIKE"},
+            {.Kind = Keyword, .Content = "IN"},
+            {.Kind = Keyword, .Content = "INTERSECT"},
+            {.Kind = Keyword, .Content = "INTO RESULT"},
+            {.Kind = Keyword, .Content = "IS"},
+            {.Kind = Keyword, .Content = "ISNULL"},
+            {.Kind = Keyword, .Content = "LIKE"},
+            {.Kind = Keyword, .Content = "LIMIT"},
+            {.Kind = Keyword, .Content = "MATCH"},
+            {.Kind = Keyword, .Content = "NOT"},
+            {.Kind = Keyword, .Content = "NOTNULL"},
+            {.Kind = Keyword, .Content = "OR"},
+            {.Kind = Keyword, .Content = "ORDER BY"},
+            {.Kind = Keyword, .Content = "REGEXP"},
+            {.Kind = Keyword, .Content = "RLIKE"},
+            {.Kind = Keyword, .Content = "UNION"},
+            {.Kind = Keyword, .Content = "WHERE"},
+            {.Kind = Keyword, .Content = "WINDOW"},
+            {.Kind = Keyword, .Content = "WITHOUT"},
+            {.Kind = Keyword, .Content = "XOR"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT `a`"), expected);
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT `a`#FROM"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {Keyword, "FROM"},
+            {.Kind = Keyword, .Content = "FROM"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM# "), expected);
     }
@@ -1131,27 +1131,27 @@ Y_UNIT_TEST(Bindings) {
 
     {
         TVector<TCandidate> expected = {
-            {BindingName, "$a"},
-            {BindingName, "$abac"},
+            {.Kind = BindingName, .Content = "$a"},
+            {.Kind = BindingName, .Content = "$abac"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {BindingName, "$abac"},
+            {.Kind = BindingName, .Content = "$abac"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query + "ab"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {BindingName, "$a"},
-            {BindingName, "$abac"},
+            {.Kind = BindingName, .Content = "$a"},
+            {.Kind = BindingName, .Content = "$abac"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query + "$"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {BindingName, "$abac"},
+            {.Kind = BindingName, .Content = "$abac"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query + "$ab"), expected);
     }
@@ -1189,7 +1189,7 @@ Y_UNIT_TEST(TableFunction) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {FunctionName, "CONCAT()", 1},
+            {.Kind = FunctionName, .Content = "CONCAT()", .CursorShift = 1},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT * FROM Conca#"), expected);
     }
@@ -1208,14 +1208,14 @@ Y_UNIT_TEST(BeforeTableFunction) {
     )sql";
 
     TVector<TCandidate> expected = {
-        {TableName, "`people`"},
-        {FolderName, "`yql/`", 1},
-        {ClusterName, "example"},
-        {ClusterName, "loggy"},
-        {ClusterName, "saurus"},
-        {Keyword, "ANY"},
-        {FunctionName, "CONCAT()", 1},
-        {FunctionName, "EACH()", 1},
+        {.Kind = TableName, .Content = "`people`"},
+        {.Kind = FolderName, .Content = "`yql/`", .CursorShift = 1},
+        {.Kind = ClusterName, .Content = "example"},
+        {.Kind = ClusterName, .Content = "loggy"},
+        {.Kind = ClusterName, .Content = "saurus"},
+        {.Kind = Keyword, .Content = "ANY"},
+        {.Kind = FunctionName, .Content = "CONCAT()", .CursorShift = 1},
+        {.Kind = FunctionName, .Content = "EACH()", .CursorShift = 1},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(8, engine, query), expected);
@@ -1225,18 +1225,18 @@ Y_UNIT_TEST(TableAsFunctionArgument) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {FolderName, "`.sys/`", 1},
-            {FolderName, "`local/`", 1},
-            {FolderName, "`prod/`", 1},
-            {FolderName, "`test/`", 1},
+            {.Kind = FolderName, .Content = "`.sys/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`local/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`prod/`", .CursorShift = 1},
+            {.Kind = FolderName, .Content = "`test/`", .CursorShift = 1},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(4, engine, "SELECT * FROM CONCAT(#)"), expected);
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(4, engine, "SELECT * FROM CONCAT(a, #)"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {TableName, "`people`"},
-            {FolderName, "`yql/`", 1},
+            {.Kind = TableName, .Content = "`people`"},
+            {.Kind = FolderName, .Content = "`yql/`", .CursorShift = 1},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "USE example; SELECT * FROM Concat(#)"), expected);
     }
@@ -1252,7 +1252,7 @@ Y_UNIT_TEST(TableAsFunctionArgument) {
     }
     {
         TVector<TCandidate> expected = {
-            {TableName, "example"},
+            {.Kind = TableName, .Content = "example"},
         };
         UNIT_ASSERT_VALUES_EQUAL(
             CompleteTop(10, engine, "SELECT * FROM Range(`test/service`, `#`)"), expected);
@@ -1268,8 +1268,8 @@ Y_UNIT_TEST(TableAsFunctionArgument) {
 Y_UNIT_TEST(TableFunctionCluster) {
     auto engine = MakeSqlCompletionEngineUT();
     TVector<TCandidate> expected = {
-        {TableName, "`people`"},
-        {FolderName, "`yql/`", 1},
+        {.Kind = TableName, .Content = "`people`"},
+        {.Kind = FolderName, .Content = "`yql/`", .CursorShift = 1},
     };
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT * FROM example.Concat(#)"), expected);
 }
@@ -1278,44 +1278,44 @@ Y_UNIT_TEST(ColumnsAtSimpleSelect) {
     auto engine = MakeSqlCompletionEngineUT();
     {
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "Name"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT # FROM example.`/people`"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {Keyword, "ALL"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = Keyword, .Content = "ALL"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT a# FROM example.`/people`"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "Name"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "USE example; SELECT # FROM `/people`"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "Name"},
-            {ColumnName, "x.Age"},
-            {ColumnName, "x.Name"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
+            {.Kind = ColumnName, .Content = "x.Age"},
+            {.Kind = ColumnName, .Content = "x.Name"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, "SELECT # FROM example.`/people` AS x"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "Name"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, "SELECT x.# FROM example.`/people` AS x"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
+            {.Kind = ColumnName, .Content = "Age"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT x.a# FROM example.`/people` AS x"), expected);
     }
@@ -1335,16 +1335,16 @@ Y_UNIT_TEST(ColumnsAtJoin) {
             )";
 
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "Name"},
-            {ColumnName, "course"},
-            {ColumnName, "room"},
-            {ColumnName, "time"},
-            {ColumnName, "ep.Age"},
-            {ColumnName, "ep.Name"},
-            {ColumnName, "et.course"},
-            {ColumnName, "et.room"},
-            {ColumnName, "et.time"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
+            {.Kind = ColumnName, .Content = "course"},
+            {.Kind = ColumnName, .Content = "room"},
+            {.Kind = ColumnName, .Content = "time"},
+            {.Kind = ColumnName, .Content = "ep.Age"},
+            {.Kind = ColumnName, .Content = "ep.Name"},
+            {.Kind = ColumnName, .Content = "et.course"},
+            {.Kind = ColumnName, .Content = "et.room"},
+            {.Kind = ColumnName, .Content = "et.time"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
     }
@@ -1360,15 +1360,15 @@ Y_UNIT_TEST(ColumnsAtSubquery) {
             )";
 
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "Name"},
-            {ColumnName, "Room"},
-            {ColumnName, "time"},
-            {ColumnName, "ep.Age"},
-            {ColumnName, "ep.Name"},
-            {ColumnName, "et.Room"},
-            {ColumnName, "et.time"},
-            {Keyword, "ALL"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
+            {.Kind = ColumnName, .Content = "Room"},
+            {.Kind = ColumnName, .Content = "time"},
+            {.Kind = ColumnName, .Content = "ep.Age"},
+            {.Kind = ColumnName, .Content = "ep.Name"},
+            {.Kind = ColumnName, .Content = "et.Room"},
+            {.Kind = ColumnName, .Content = "et.time"},
+            {.Kind = Keyword, .Content = "ALL"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
     }
@@ -1380,13 +1380,13 @@ Y_UNIT_TEST(ColumnsAtSubquery) {
             )";
 
         TVector<TCandidate> expected = {
-            {ColumnName, "x.course"},
-            {ColumnName, "x.room"},
-            {ColumnName, "x.time"},
-            {ColumnName, "y.course"},
-            {ColumnName, "y.room"},
-            {ColumnName, "y.time"},
-            {Keyword, "ALL"},
+            {.Kind = ColumnName, .Content = "x.course"},
+            {.Kind = ColumnName, .Content = "x.room"},
+            {.Kind = ColumnName, .Content = "x.time"},
+            {.Kind = ColumnName, .Content = "y.course"},
+            {.Kind = ColumnName, .Content = "y.room"},
+            {.Kind = ColumnName, .Content = "y.time"},
+            {.Kind = Keyword, .Content = "ALL"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
     }
@@ -1394,7 +1394,7 @@ Y_UNIT_TEST(ColumnsAtSubquery) {
         TString query = "SELECT # FROM (SELECT 1 AS x)";
 
         TVector<TCandidate> expected = {
-            {ColumnName, "x"},
+            {.Kind = ColumnName, .Content = "x"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query), expected);
     }
@@ -1410,13 +1410,13 @@ Y_UNIT_TEST(ColumnsAtSubquery) {
             )";
 
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "Name"},
-            {ColumnName, "test"},
-            {ColumnName, "ep.Age"},
-            {ColumnName, "ep.Name"},
-            {ColumnName, "ep.test"},
-            {Keyword, "ALL"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
+            {.Kind = ColumnName, .Content = "test"},
+            {.Kind = ColumnName, .Content = "ep.Age"},
+            {.Kind = ColumnName, .Content = "ep.Name"},
+            {.Kind = ColumnName, .Content = "ep.test"},
+            {.Kind = Keyword, .Content = "ALL"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
     }
@@ -1435,15 +1435,15 @@ Y_UNIT_TEST(ColumnsAtSubquery) {
             )";
 
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "room"},
-            {ColumnName, "time"},
-            {ColumnName, "ep.Name"},
-            {ColumnName, "ep.room"},
-            {ColumnName, "ep.time"},
-            {ColumnName, "x.Age"},
-            {ColumnName, "x.Name"},
-            {Keyword, "ALL"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "room"},
+            {.Kind = ColumnName, .Content = "time"},
+            {.Kind = ColumnName, .Content = "ep.Name"},
+            {.Kind = ColumnName, .Content = "ep.room"},
+            {.Kind = ColumnName, .Content = "ep.time"},
+            {.Kind = ColumnName, .Content = "x.Age"},
+            {.Kind = ColumnName, .Content = "x.Name"},
+            {.Kind = Keyword, .Content = "ALL"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
     }
@@ -1459,7 +1459,7 @@ Y_UNIT_TEST(ColumnsFromNamedExpr) {
         };
 
         TVector<TCandidate> expected = {
-            {Keyword, "ALL"},
+            {.Kind = Keyword, .Content = "ALL"},
         };
 
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, queries[0]), expected);
@@ -1475,9 +1475,9 @@ Y_UNIT_TEST(ColumnsFromNamedExpr) {
         };
 
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "Name"},
-            {BindingName, "$x"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
+            {.Kind = BindingName, .Content = "$x"},
         };
 
         TEnvironment env = {
@@ -1498,7 +1498,7 @@ Y_UNIT_TEST(ColumnsFromNamedExpr) {
         };
 
         TVector<TCandidate> expected = {
-            {Keyword, "ALL"},
+            {.Kind = Keyword, .Content = "ALL"},
         };
 
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query, {}), expected);
@@ -1516,8 +1516,8 @@ Y_UNIT_TEST(ColumnFromTableFunction) {
     };
 
     TVector<TCandidate> expected = {
-        {ColumnName, "message"},
-        {ColumnName, "timestamp"},
+        {.Kind = ColumnName, .Content = "message"},
+        {.Kind = ColumnName, .Content = "timestamp"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, input[0]), expected);
@@ -1529,8 +1529,8 @@ Y_UNIT_TEST(ColumnPositions) {
     auto engine = MakeSqlCompletionEngineUT();
 
     TVector<TCandidate> expected = {
-        {ColumnName, "Age"},
-        {ColumnName, "Name"},
+        {.Kind = ColumnName, .Content = "Age"},
+        {.Kind = ColumnName, .Content = "Name"},
     };
 
     {
@@ -1593,10 +1593,10 @@ Y_UNIT_TEST(ColumnFiltration) {
         )sql";
 
     TVector<TCandidate> expected = {
-        {ColumnName, "room"},
-        {ColumnName, "query.room"},
-        {ColumnName, "roommate.Age"},
-        {ColumnName, "roommate.Name"},
+        {.Kind = ColumnName, .Content = "room"},
+        {.Kind = ColumnName, .Content = "query.room"},
+        {.Kind = ColumnName, .Content = "roommate.Age"},
+        {.Kind = ColumnName, .Content = "roommate.Name"},
     };
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
 }
@@ -1607,8 +1607,8 @@ Y_UNIT_TEST(QualifiedColumnAtWhere) {
     TString prefix = R"sql(SELECT * FROM example.`/people` AS x )sql";
 
     TVector<TCandidate> expected = {
-        {ColumnName, "Age"},
-        {ColumnName, "Name"},
+        {.Kind = ColumnName, .Content = "Age"},
+        {.Kind = ColumnName, .Content = "Name"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "WHERE x.#"), expected);
@@ -1622,10 +1622,10 @@ Y_UNIT_TEST(ColumnFromQualifiedAtWhere) {
     TString prefix = R"sql(SELECT * FROM example.`/people` AS x )sql";
 
     TVector<TCandidate> expected = {
-        {ColumnName, "Age"},
-        {ColumnName, "Name"},
-        {ColumnName, "x.Age"},
-        {ColumnName, "x.Name"},
+        {.Kind = ColumnName, .Content = "Age"},
+        {.Kind = ColumnName, .Content = "Name"},
+        {.Kind = ColumnName, .Content = "x.Age"},
+        {.Kind = ColumnName, .Content = "x.Name"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, prefix + "WHERE #"), expected);
@@ -1639,10 +1639,10 @@ Y_UNIT_TEST(ColumnFromQuotedAlias) {
         TString query;
 
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "Name"},
-            {ColumnName, "`per son`.Age"},
-            {ColumnName, "`per son`.Name"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
+            {.Kind = ColumnName, .Content = "`per son`.Age"},
+            {.Kind = ColumnName, .Content = "`per son`.Name"},
         };
 
         query = R"sql(SELECT # FROM example.`/people` AS `per son`)sql";
@@ -1652,8 +1652,8 @@ Y_UNIT_TEST(ColumnFromQuotedAlias) {
         TString query = R"sql(SELECT per# FROM example.`/people` AS `per son`)sql";
 
         TVector<TCandidate> expected = {
-            {ColumnName, "`per son`.Age"},
-            {ColumnName, "`per son`.Name"},
+            {.Kind = ColumnName, .Content = "`per son`.Age"},
+            {.Kind = ColumnName, .Content = "`per son`.Name"},
         };
 
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
@@ -1662,8 +1662,8 @@ Y_UNIT_TEST(ColumnFromQuotedAlias) {
         TString query = R"sql(SELECT `per son`.# FROM example.`/people` AS `per son`)sql";
 
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "Name"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
         };
 
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
@@ -1674,10 +1674,10 @@ Y_UNIT_TEST(ColumnFromFolderLikeQuotedAlias) {
     auto engine = MakeSqlCompletionEngineUT();
 
     TVector<TCandidate> expected = {
-        {ColumnName, "Age"},
-        {ColumnName, "Name"},
-        {ColumnName, "`people/`.Age"},
-        {ColumnName, "`people/`.Name"},
+        {.Kind = ColumnName, .Content = "Age"},
+        {.Kind = ColumnName, .Content = "Name"},
+        {.Kind = ColumnName, .Content = "`people/`.Age"},
+        {.Kind = ColumnName, .Content = "`people/`.Name"},
     };
 
     TString query;
@@ -1698,8 +1698,8 @@ Y_UNIT_TEST(ProjectionVisibility) {
         TString query = "SELECT Age as a, # FROM example.`/people`";
 
         TVector<TCandidate> expected = {
-            {ColumnName, "Age"},
-            {ColumnName, "Name"},
+            {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
         };
 
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
@@ -1708,8 +1708,8 @@ Y_UNIT_TEST(ProjectionVisibility) {
         TString query = "SELECT Age as a, b FROM example.`/people` ORDER BY #";
 
         TVector<TCandidate> expected = {
-            {ColumnName, "a"},
-            {ColumnName, "b"},
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
         };
 
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
@@ -1732,9 +1732,9 @@ Y_UNIT_TEST(ColumnFromNamedNode) {
     };
 
     TVector<TCandidate> expected = {
-        {ColumnName, "Age"},
-        {ColumnName, "Name"},
-        {BindingName, "$source"},
+        {.Kind = ColumnName, .Content = "Age"},
+        {.Kind = ColumnName, .Content = "Name"},
+        {.Kind = BindingName, .Content = "$source"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, input[0]), expected);
@@ -1752,7 +1752,7 @@ Y_UNIT_TEST(ColumnFromIndirectNamedNode) {
         )sql";
 
     TVector<TCandidate> expected = {
-        {ColumnName, "a"},
+        {.Kind = ColumnName, .Content = "a"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
@@ -1762,8 +1762,8 @@ Y_UNIT_TEST(ColumnQuoted) {
     auto engine = MakeSqlCompletionEngineUT();
 
     TVector<TCandidate> expected = {
-        {ColumnName, "`Y Q L`"},
-        {ColumnName, "`o````o`"},
+        {.Kind = ColumnName, .Content = "`Y Q L`"},
+        {.Kind = ColumnName, .Content = "`o````o`"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT # FROM saurus.maxim"), expected);
@@ -1783,10 +1783,10 @@ Y_UNIT_TEST(ColumnReplicationConflict) {
         )sql";
 
     TVector<TCandidate> expected = {
-        {ColumnName, "x.a"},
-        {ColumnName, "x.b"},
-        {ColumnName, "y.a"},
-        {ColumnName, "y.b"},
+        {.Kind = ColumnName, .Content = "x.a"},
+        {.Kind = ColumnName, .Content = "x.b"},
+        {.Kind = ColumnName, .Content = "y.a"},
+        {.Kind = ColumnName, .Content = "y.b"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
@@ -1802,12 +1802,12 @@ Y_UNIT_TEST(ColumnReplication) {
         )sql";
 
     TVector<TCandidate> expected = {
-        {ColumnName, "a"},
-        {ColumnName, "c"},
-        {ColumnName, "x.a"},
-        {ColumnName, "x.b"},
-        {ColumnName, "y.b"},
-        {ColumnName, "y.c"},
+        {.Kind = ColumnName, .Content = "a"},
+        {.Kind = ColumnName, .Content = "c"},
+        {.Kind = ColumnName, .Content = "x.a"},
+        {.Kind = ColumnName, .Content = "x.b"},
+        {.Kind = ColumnName, .Content = "y.b"},
+        {.Kind = ColumnName, .Content = "y.c"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
@@ -1823,10 +1823,10 @@ Y_UNIT_TEST(ColumnReplicationCaseSensivity) {
         )sql";
 
     TVector<TCandidate> expected = {
-        {ColumnName, "A"},
-        {ColumnName, "B"},
-        {ColumnName, "a"},
-        {ColumnName, "b"},
+        {.Kind = ColumnName, .Content = "A"},
+        {.Kind = ColumnName, .Content = "B"},
+        {.Kind = ColumnName, .Content = "a"},
+        {.Kind = ColumnName, .Content = "b"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
@@ -1841,8 +1841,8 @@ Y_UNIT_TEST(ColumnReplicationFiltration) {
     };
 
     TVector<TCandidate> expected = {
-        {ColumnName, "XXX"},
-        {ColumnName, "xxx.XXX"},
+        {.Kind = ColumnName, .Content = "XXX"},
+        {.Kind = ColumnName, .Content = "xxx.XXX"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, queries[0]), expected);
@@ -1861,7 +1861,7 @@ Y_UNIT_TEST(ColumnAtWhereInSubquery) {
         )sql";
 
     TVector<TCandidate> expected = {
-        {ColumnName, "a"},
+        {.Kind = ColumnName, .Content = "a"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
@@ -1878,7 +1878,7 @@ Y_UNIT_TEST(ColumnAtSubqueryExpresson) {
     };
 
     TVector<TCandidate> expected = {
-        {ColumnName, "a"},
+        {.Kind = ColumnName, .Content = "a"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, input[0]), expected);
@@ -1891,10 +1891,10 @@ Y_UNIT_TEST(NoBindingAtQuoted) {
     auto engine = MakeSqlCompletionEngineUT();
 
     TVector<TCandidate> expected = {
-        {FolderName, ".sys/"},
-        {FolderName, "local/"},
-        {FolderName, "prod/"},
-        {FolderName, "test/"},
+        {.Kind = FolderName, .Content = ".sys/"},
+        {.Kind = FolderName, .Content = "local/"},
+        {.Kind = FolderName, .Content = "prod/"},
+        {.Kind = FolderName, .Content = "test/"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "$x = 1; SELECT * FROM `#`"), expected);
@@ -1912,7 +1912,7 @@ Y_UNIT_TEST(Typing) {
 
     for (std::size_t size = 0; size <= queryUtf16.size(); ++size) {
         const TWtringBuf prefixUtf16(queryUtf16, 0, size);
-        TCompletion completion = engine->Complete({TString::FromUtf16(prefixUtf16)}).GetValueSync();
+        TCompletion completion = engine->Complete({.Text = TString::FromUtf16(prefixUtf16)}).GetValueSync();
         Y_DO_NOT_OPTIMIZE_AWAY(completion);
     }
 }
@@ -1952,7 +1952,7 @@ JOIN yt:$cluster_name.test;
 
 Y_UNIT_TEST(CaseInsensitivity) {
     TVector<TCandidate> expected = {
-        {Keyword, "SELECT"},
+        {.Kind = Keyword, .Content = "SELECT"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -1993,29 +1993,29 @@ Y_UNIT_TEST(DefaultNameService) {
     auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(service));
     {
         TVector<TCandidate> expected = {
-            {TypeName, "Uint64"},
-            {TypeName, "Uint32"},
-            {TypeName, "Utf8"},
-            {TypeName, "Uuid"},
-            {TypeName, "Uint8"},
-            {TypeName, "Unit"},
-            {TypeName, "Uint16"},
+            {.Kind = TypeName, .Content = "Uint64"},
+            {.Kind = TypeName, .Content = "Uint32"},
+            {.Kind = TypeName, .Content = "Utf8"},
+            {.Kind = TypeName, .Content = "Uuid"},
+            {.Kind = TypeName, .Content = "Uint8"},
+            {.Kind = TypeName, .Content = "Unit"},
+            {.Kind = TypeName, .Content = "Uint16"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Optional<U"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {PragmaName, "yson.DisableStrict"},
-            {PragmaName, "yson.AutoConvert"},
-            {PragmaName, "yson.Strict"},
-            {PragmaName, "yson.CastToString"},
-            {PragmaName, "yson.DisableCastToString"},
+            {.Kind = PragmaName, .Content = "yson.DisableStrict"},
+            {.Kind = PragmaName, .Content = "yson.AutoConvert"},
+            {.Kind = PragmaName, .Content = "yson.Strict"},
+            {.Kind = PragmaName, .Content = "yson.CastToString"},
+            {.Kind = PragmaName, .Content = "yson.DisableCastToString"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "PRAGMA yson"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {HintName, "IGNORE_TYPE_V3"},
+            {.Kind = HintName, .Content = "IGNORE_TYPE_V3"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "REDUCE a WITH ig"), expected);
     }
@@ -2033,7 +2033,7 @@ Y_UNIT_TEST(NameNormalization) {
     auto service = MakeStaticNameService(LoadDefaultNameSet(), LoadFrequencyData());
     auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(service));
     TVector<TCandidate> expected = {
-        {HintName, "IGNORE_TYPE_V3"},
+        {.Kind = HintName, .Content = "IGNORE_TYPE_V3"},
     };
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"REDUCE a WITH ignoret"}), expected);
 }
@@ -2072,48 +2072,48 @@ Y_UNIT_TEST(Ranking) {
     auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(service));
     {
         TVector<TCandidate> expected = {
-            {Keyword, "INSERT"},
-            {Keyword, "SELECT"},
+            {.Kind = Keyword, .Content = "INSERT"},
+            {.Kind = Keyword, .Content = "SELECT"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, ""), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {PragmaName, "DefaultMemoryLimit"},
-            {PragmaName, "Annotations"},
+            {.Kind = PragmaName, .Content = "DefaultMemoryLimit"},
+            {.Kind = PragmaName, .Content = "Annotations"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, "PRAGMA yt."), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {TypeName, "Int32"},
-            {TypeName, "Int64"},
-            {TypeName, "Interval"},
-            {TypeName, "Interval64"},
-            {TypeName, "Int16"},
-            {TypeName, "Int8"},
+            {.Kind = TypeName, .Content = "Int32"},
+            {.Kind = TypeName, .Content = "Int64"},
+            {.Kind = TypeName, .Content = "Interval"},
+            {.Kind = TypeName, .Content = "Interval64"},
+            {.Kind = TypeName, .Content = "Int16"},
+            {.Kind = TypeName, .Content = "Int8"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Optional<I"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {FunctionName, "Min()", 1},
-            {FunctionName, "Max()", 1},
-            {FunctionName, "MaxOf()", 1},
-            {FunctionName, "MaxBy()", 1},
-            {FunctionName, "MinBy()", 1},
-            {FunctionName, "Math::Abs()", 1},
-            {FunctionName, "Math::Acos()", 1},
-            {FunctionName, "Math::Asin()", 1},
+            {.Kind = FunctionName, .Content = "Min()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "Max()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "MaxOf()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "MaxBy()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "MinBy()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "Math::Abs()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "Math::Acos()", .CursorShift = 1},
+            {.Kind = FunctionName, .Content = "Math::Asin()", .CursorShift = 1},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, "SELECT m"), expected);
     }
     {
         TVector<TCandidate> expected = {
-            {HintName, "XLOCK"},
-            {HintName, "UNORDERED"},
-            {Keyword, "COLUMNS"},
-            {HintName, "FORCE_INFER_SCHEMA"},
+            {.Kind = HintName, .Content = "XLOCK"},
+            {.Kind = HintName, .Content = "UNORDERED"},
+            {.Kind = Keyword, .Content = "COLUMNS"},
+            {.Kind = HintName, .Content = "FORCE_INFER_SCHEMA"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, "SELECT * FROM a WITH "), expected);
     }
@@ -2179,7 +2179,7 @@ Y_UNIT_TEST(CachedSchema) {
             MakeCachedSimpleSchema(
                 caches, "alice",
                 MakeStaticSimpleSchema(TSchemaData{
-                    .Folders = {{"", {{"/", {{"Table", "alice"}}}}}},
+                    .Folders = {{"", {{"/", {{.Type = "Table", .Name = "alice"}}}}}},
                     .Tables = {{"", {{"/alice", {{"alice"}}}}}},
                 }))));
 
@@ -2188,7 +2188,7 @@ Y_UNIT_TEST(CachedSchema) {
             MakeCachedSimpleSchema(
                 caches, "petya",
                 MakeStaticSimpleSchema(TSchemaData{
-                    .Folders = {{"", {{"/", {{"Table", "petya"}}}}}},
+                    .Folders = {{"", {{"/", {{.Type = "Table", .Name = "petya"}}}}}},
                     .Tables = {{"", {{"/petya", {{"petya"}}}}}},
                 }))));
 
@@ -2197,16 +2197,16 @@ Y_UNIT_TEST(CachedSchema) {
 
     TVector<TCandidate> empty;
     {
-        TVector<TCandidate> aliceExpected = {{TableName, "`alice`"}};
-        TVector<TCandidate> petyaExpected = {{TableName, "`petya`"}};
+        TVector<TCandidate> aliceExpected = {{.Kind = TableName, .Content = "`alice`"}};
+        TVector<TCandidate> petyaExpected = {{.Kind = TableName, .Content = "`petya`"}};
 
         // Updates in backround
         UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), aliceExpected);
         UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT * FROM "), petyaExpected);
     }
     {
-        TVector<TCandidate> aliceExpected = {{ColumnName, "alice"}};
-        TVector<TCandidate> petyaExpected = {{ColumnName, "petya"}};
+        TVector<TCandidate> aliceExpected = {{.Kind = ColumnName, .Content = "alice"}};
+        TVector<TCandidate> petyaExpected = {{.Kind = ColumnName, .Content = "petya"}};
 
         // Updates in backround
         UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT a# FROM alice"), aliceExpected);

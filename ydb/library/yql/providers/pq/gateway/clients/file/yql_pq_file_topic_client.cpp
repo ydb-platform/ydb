@@ -328,7 +328,7 @@ private:
     uint64_t SeqNo = 0;
 };
 
-struct TDummyPartitionSession final : public TPartitionSession {
+struct TDummyPartitionSession final : public TPartitionSessionControl {
     TDummyPartitionSession(ui64 sessionId, const TString& topicPath, ui64 partId) {
         PartitionSessionId = sessionId;
         TopicPath = topicPath;
@@ -336,6 +336,19 @@ struct TDummyPartitionSession final : public TPartitionSession {
     }
 
     void RequestStatus() override {
+    }
+
+    void Commit(uint64_t /*startOffset*/, uint64_t /*endOffset*/) override {
+    }
+
+    void ConfirmCreate(std::optional<uint64_t> /*readOffset*/, std::optional<uint64_t> /*commitOffset*/) override {
+        // TODO seek to offset
+    }
+
+    void ConfirmDestroy() override {
+    }
+
+    void ConfirmEnd(std::span<const uint32_t> /*childIds*/) override {
     }
 };
 

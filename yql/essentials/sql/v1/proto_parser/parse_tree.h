@@ -14,4 +14,8 @@ bool IsSelect(const TRule_expr& msg);
 
 bool IsOnlySubExpr(const TRule_select_subexpr& msg);
 
+bool IsOnlySelect(const TRule_select_stmt& rule);
+
+const TRule_select_kind_partial& Unpack(const TRule_select_kind_parenthesis& rule);
+
 } // namespace NSQLTranslationV1

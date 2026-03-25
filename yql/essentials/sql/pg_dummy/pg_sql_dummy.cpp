@@ -50,8 +50,7 @@ NSQLTranslation::TTranslatorPtr MakeTranslator() {
 
 } // namespace NSQLTranslationPG
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 TString PgValueToString(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
     Y_UNUSED(value);
@@ -161,11 +160,9 @@ extern "C" void WriteSkiffPgValue(NKikimr::NMiniKQL::TPgType* type, const NKikim
     throw yexception() << "WriteSkiffPgValue: PG types are not supported";
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 void* PgInitializeMainContext() {
     return nullptr;
@@ -296,8 +293,7 @@ void RegisterPgBlockAggs(THashMap<TString, std::unique_ptr<IBlockAggregatorFacto
     Y_UNUSED(registry);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 

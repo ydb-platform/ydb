@@ -939,7 +939,7 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
 
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 
@@ -993,7 +993,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 
@@ -1078,7 +1078,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
 
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 
@@ -1168,7 +1168,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 
@@ -1191,6 +1191,9 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     YT_OPTIONAL_SET_PROTO(req, expression_builder_version, options.ExpressionBuilderVersion);
     YT_OPTIONAL_SET_PROTO(req, use_order_by_in_join_subqueries, options.UseOrderByInJoinSubqueries);
     YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
+    YT_OPTIONAL_SET_PROTO(req, max_join_batch_size, options.MaxJoinBatchSize);
+    YT_OPTIONAL_SET_PROTO(req, rowset_processing_batch_size, options.RowsetProcessingBatchSize);
+    YT_OPTIONAL_SET_PROTO(req, write_rowset_size, options.WriteRowsetSize);
     req->set_read_from(ToProto(options.ReadFrom));
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {

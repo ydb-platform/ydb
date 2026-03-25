@@ -11,8 +11,7 @@
 #include <util/generic/algorithm.h>
 #include <util/system/unaligned_mem.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NDetail;
 
@@ -1030,13 +1029,13 @@ private:
     }
 
     Y_FORCE_INLINE void WriteVar32(ui32 value) {
-        char buf[MAX_PACKED32_SIZE];
-        Out_.AppendNoAlias(buf, Pack32(value, buf));
+        std::array<char, MAX_PACKED32_SIZE> buf;
+        Out_.AppendNoAlias(buf.data(), Pack32(value, buf.data()));
     }
 
     Y_FORCE_INLINE void WriteVar64(ui64 value) {
-        char buf[MAX_PACKED64_SIZE];
-        Out_.AppendNoAlias(buf, Pack64(value, buf));
+        std::array<char, MAX_PACKED64_SIZE> buf;
+        Out_.AppendNoAlias(buf.data(), Pack64(value, buf.data()));
     }
 
 private:
@@ -2241,11 +2240,11 @@ private:
 };
 } // namespace
 
-TString SerializeNode(TNode* node, std::vector<TNode*>& nodeStack) noexcept {
+TString SerializeNode(TNode* node, std::vector<TNode*>& nodeStack) {
     return SerializeRuntimeNode(TRuntimeNode(node, true), nodeStack);
 }
 
-TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node, std::vector<TNode*>& nodeStack) noexcept {
+TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node, std::vector<TNode*>& nodeStack) {
     Y_UNUSED(nodeStack);
     TPrepareWriteNodeVisitor preparer;
     for (auto node : explorer.GetNodes()) {
@@ -2262,22 +2261,21 @@ TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node,
 
     return writer.GetOutput();
 }
-
-TString SerializeRuntimeNode(TRuntimeNode node, std::vector<TNode*>& nodeStack) noexcept {
+TString SerializeRuntimeNode(TRuntimeNode node, std::vector<TNode*>& nodeStack) {
     TExploringNodeVisitor explorer;
     explorer.Walk(node.GetNode(), nodeStack);
     return SerializeRuntimeNode(explorer, node, nodeStack);
 }
 
-TString SerializeNode(TNode* node, const TTypeEnvironment& env) noexcept {
+TString SerializeNode(TNode* node, const TTypeEnvironment& env) {
     return SerializeNode(node, env.GetNodeStack());
 }
 
-TString SerializeRuntimeNode(TRuntimeNode node, const TTypeEnvironment& env) noexcept {
+TString SerializeRuntimeNode(TRuntimeNode node, const TTypeEnvironment& env) {
     return SerializeRuntimeNode(node, env.GetNodeStack());
 }
 
-TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node, const TTypeEnvironment& env) noexcept {
+TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node, const TTypeEnvironment& env) {
     return SerializeRuntimeNode(explorer, node, env.GetNodeStack());
 }
 
@@ -2290,5 +2288,4 @@ TRuntimeNode DeserializeRuntimeNode(const TStringBuf& buffer, const TTypeEnviron
     return reader.Deserialize();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

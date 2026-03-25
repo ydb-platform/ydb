@@ -32,6 +32,7 @@ struct TFmrServices: public TYtBaseServices {
     IFileMetadataService::TPtr FileMetadataService;
     IFileUploadService::TPtr FileUploadService;
     IFmrJobPreparer::TPtr JobPreparer;
+    TMaybe<TFmrTvmGatewaySettings> TvmSettings;
 };
 
 struct TFmrYtGatewaySettings {

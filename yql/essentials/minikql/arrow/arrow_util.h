@@ -222,6 +222,8 @@ using NYql::NUdf::TTypedBufferBuilder;
 
 std::shared_ptr<arrow::Buffer> MakeEmptyBuffer();
 
+void UntrackDatum(const arrow::Datum& datum);
+
 } // namespace NKikimr::NMiniKQL
 
 namespace arrow {

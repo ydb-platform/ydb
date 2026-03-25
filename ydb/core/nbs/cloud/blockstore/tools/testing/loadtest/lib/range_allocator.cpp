@@ -29,15 +29,12 @@ TBlockRange64 TRangeAllocator::AllocateRange()
         RequestSizes.begin(),
         RequestSizes.end(),
         sample,
-        [] (const TRequestSize& a, const double b) {
-            return a.Cdf < b;
-        }
-    );
+        [](const TRequestSize& a, const double b) { return a.Cdf < b; });
 
     Y_ABORT_UNLESS(requestSize != RequestSizes.end());
 
-    auto size = requestSize->MinSize
-        + RandomNumber(requestSize->MaxSize - requestSize->MinSize + 1);
+    auto size = requestSize->MinSize +
+                RandomNumber(requestSize->MaxSize - requestSize->MinSize + 1);
 
     if (LoadType == NProto::LOAD_TYPE_SEQUENTIAL) {
         if (CurrentBlock > Range.End) {
@@ -56,10 +53,7 @@ TBlockRange64 TRangeAllocator::AllocateRange()
             SubRanges.begin(),
             SubRanges.end(),
             sample,
-            [] (const TSubRange& a, const double b) {
-                return a.Cdf < b;
-            }
-        );
+            [](const TSubRange& a, const double b) { return a.Cdf < b; });
 
         Y_ABORT_UNLESS(subRange != SubRanges.end());
 
@@ -84,10 +78,8 @@ void TRangeAllocator::SetupSubRanges(const NProto::TRangeTest& rangeTest)
         for (ui32 i = 0; i < rangeTest.SubRangesSize(); ++i) {
             const auto& r = rangeTest.GetSubRanges(i);
             cdf += r.GetProbability();
-            SubRanges.push_back({
-                cdf,
-                TBlockRange64::WithLength(start, r.GetLength())
-            });
+            SubRanges.push_back(
+                {cdf, TBlockRange64::WithLength(start, r.GetLength())});
             start += r.GetLength();
         }
 
@@ -114,11 +106,10 @@ void TRangeAllocator::SetupRequestSizes(const NProto::TRangeTest& rangeTest)
     }
 
     if (cdf < 1) {
-        RequestSizes.push_back({
-            1,
-            Max<ui32>(1, rangeTest.GetMinRequestSize()),
-            rangeTest.GetMaxRequestSize()
-        });
+        RequestSizes.push_back(
+            {1,
+             Max<ui32>(1, rangeTest.GetMinRequestSize()),
+             rangeTest.GetMaxRequestSize()});
     }
 
     for (const auto& requestSize: RequestSizes) {

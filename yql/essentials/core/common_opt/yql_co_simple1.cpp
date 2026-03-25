@@ -1,6 +1,7 @@
 #include "yql_co.h"
 #include "yql_co_sqlin.h"
 #include "yql_co_pgselect.h"
+#include "yql_co_sqlselect.h"
 #include "yql_co_yqlselect.h"
 
 #include <yql/essentials/core/sql_types/yql_atom_enums.h>
@@ -2971,7 +2972,7 @@ TExprNode::TPtr MergeCalcOverWindowFrames(const TExprNode::TPtr& frames, TExprCo
         if (frameIt == merged.UniqIndexes.end()) {
             YQL_ENSURE(merged.UniqIndexes.size() == merged.Frames.size());
             merged.UniqIndexes[frameSpec] = merged.Frames.size();
-            TWinOnContent content{std::move(args), winOn->Pos()};
+            TWinOnContent content{.Args=std::move(args), .Pos=winOn->Pos()};
             merged.Frames.emplace_back(std::move(content));
             ++uniqFrameSpecs;
         } else {
@@ -3010,7 +3011,7 @@ TExprNodeList DedupCalcOverWindowsOnSamePartitioning(const TExprNodeList& calcs,
         if (calc.Frames().Size() == 0 && calc.SessionColumns().Size() == 0) {
             continue;
         }
-        TDedupKey key{calc.Keys().Raw(), calc.SortSpec().Raw(), calc.SessionSpec().Raw()};
+        TDedupKey key{.Keys=calc.Keys().Raw(), .SortSpec=calc.SortSpec().Raw(), .SessionSpec=calc.SessionSpec().Raw()};
 
         auto it = uniqueIndexes.find(key);
         if (it == uniqueIndexes.end()) {
@@ -7157,13 +7158,13 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["PgSelect"] = &ExpandPgSelect;
-    map["PgIterate"] = &ExpandPgIterate;
-    map["PgIterateAll"] = &ExpandPgIterate;
+    map["PgSelect"] = &ExpandSqlSelect;
+    map["PgIterate"] = &ExpandSqlIterate;
+    map["PgIterateAll"] = &ExpandSqlIterate;
 
-    map["YqlSelect"] = &ExpandPgSelect;
-    map["YqlIterate"] = &ExpandPgIterate;
-    map["YqlIterateAll"] = &ExpandPgIterate;
+    map["YqlSelect"] = &ExpandSqlSelect;
+    map["YqlIterate"] = &ExpandSqlIterate;
+    map["YqlIterateAll"] = &ExpandSqlIterate;
 
     map["PgLike"] = &ExpandPgLike;
     map["PgILike"] = &ExpandPgLike;

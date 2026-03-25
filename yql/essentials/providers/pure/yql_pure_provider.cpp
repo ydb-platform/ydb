@@ -25,6 +25,8 @@
 
 #include <util/stream/length.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -228,8 +230,8 @@ THolder<TExecTransformerBase> CreatePureDataSourceExecTransformer(const TPureSta
 
 class TPureProvider: public TDataProviderBase {
 public:
-    explicit TPureProvider(const TPureState::TPtr& state)
-        : State_(state)
+    explicit TPureProvider(TPureState::TPtr state)
+        : State_(std::move(state))
         , ExecTransformer_([this]() { return CreatePureDataSourceExecTransformer(State_); })
     {
     }

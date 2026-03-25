@@ -28,11 +28,11 @@ struct TFmrTestSetup {
     }
 
     TStartOperationRequest CreateOperationRequest(
-        ETaskType taskType = ETaskType::Download,
+        EOperationType operationType = EOperationType::Download,
         TOperationParams operationParams = TFmrTestSetup::DownloadOperationParams)
     {
         return TStartOperationRequest{
-            .TaskType = taskType,
+            .OperationType = operationType,
             .OperationParams = operationParams,
             .SessionId = "test-session-id",
             .IdempotencyKey = "IdempotencyKey",
@@ -47,14 +47,14 @@ struct TFmrTestSetup {
     }
 
     std::vector<TStartOperationRequest> CreateSeveralOperationRequests(
-        ETaskType taskType = ETaskType::Download,
+        EOperationType operationType = EOperationType::Download,
         TOperationParams operationParams = TFmrTestSetup::DownloadOperationParams,
         int numRequests = 10)
     {
         std::vector<TStartOperationRequest> startOperationRequests(numRequests);
         for (int i = 0; i < numRequests; ++i) {
             startOperationRequests[i] = TStartOperationRequest{
-                .TaskType = taskType,
+                .OperationType = operationType,
                 .OperationParams = operationParams,
                 .SessionId = "test-session-id",
                 .IdempotencyKey = "IdempotencyKey_" + ToString(i),

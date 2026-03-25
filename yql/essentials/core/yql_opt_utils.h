@@ -207,7 +207,7 @@ bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
     return types.OptimizerFlags.contains(NormallizedName);
 }
 
-extern const char KeepWorldOptName[];
+extern const char KeepWorldOptName[]; // NOLINT(modernize-avoid-c-arrays)
 
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root);
 

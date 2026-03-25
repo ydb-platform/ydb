@@ -11,6 +11,4 @@ PEERDIR(
     contrib/tools/python3/Lib
 )
 
-SUPPRESSIONS(lsan.supp)
-
 END()

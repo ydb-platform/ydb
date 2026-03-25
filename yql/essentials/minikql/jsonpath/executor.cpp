@@ -895,7 +895,7 @@ TResult TExecutor::KeyValueMethod(const TJsonPathItem& item) {
         return input;
     }
     TJsonNodes result;
-    TPair row[2];
+    std::array<TPair, 2> row;
     TPair& nameEntry = row[0];
     TPair& valueEntry = row[1];
     for (const auto& node : OptionalUnwrapArrays(input.GetNodes())) {
@@ -913,7 +913,7 @@ TResult TExecutor::KeyValueMethod(const TJsonPathItem& item) {
             valueEntry.first = MakeString("value", ValueBuilder_);
             valueEntry.second = value.ConvertToUnboxedValue(ValueBuilder_);
 
-            result.push_back(TValue(MakeDict(row, 2)));
+            result.push_back(TValue(MakeDict(row.data(), 2)));
         }
     }
     return std::move(result);

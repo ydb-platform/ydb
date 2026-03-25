@@ -134,8 +134,10 @@ static int test(int flags, int expected_ctx, int min_wait, int write_delay,
 		io_uring_cqe_seen(&ring, cqe);
 	}
 
-	if (i != nr_cqes)
+	if (i != nr_cqes) {
 		fprintf(stderr, "Got %d CQEs, expected %d\n", i, nr_cqes);
+		return T_EXIT_FAIL;
+	}
 
 	pthread_join(thread, &tret);
 

@@ -4,8 +4,7 @@
 #include "udf_types.h"
 #include "udf_type_inspection.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TTypePrinter {
 public:
@@ -30,5 +29,4 @@ private:
     const TType* Type_;
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

@@ -10,6 +10,7 @@
 #include <util/datetime/base.h>
 
 #include <concepts>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -142,7 +143,7 @@ template <
     ui32 ScaleAfterSeconds>
 class TToUnits {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static TResult DateCore(ui16 value) {
         return value * ui32(86400) * TResult(ScaleAfterSeconds);
@@ -383,7 +384,7 @@ template <const char* TFuncName, typename TFieldStorage,
           TFieldStorage (*WAccessor)(const TUnboxedValuePod&),
           ui32 Divisor, ui32 Scale, ui32 Limit, bool Fractional>
 struct TGetTimeComponent {
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef(TFuncName, std::strlen(TFuncName));
@@ -680,11 +681,6 @@ inline bool ValidateMicrosecond(ui32 microsecond) {
     return microsecond < 1000000;
 }
 
-inline bool ValidateTimezoneId(ui16 timezoneId) {
-    const auto& zones = NTi::GetTimezones();
-    return timezoneId < zones.size() && !zones[timezoneId].empty();
-}
-
 inline bool ValidateMonthShortName(const std::string_view& monthName, ui8& month) {
     static constexpr auto Cmp = [](const std::string_view& a, const std::string_view& b) {
         int cmp = strnicmp(a.data(), b.data(), std::min(a.size(), b.size()));
@@ -741,29 +737,6 @@ inline bool ValidateMonthFullName(const std::string_view& monthName, ui8& month)
         return true;
     }
     return false;
-}
-
-template <typename TType>
-inline bool Validate(typename TDataType<TType>::TLayout arg);
-
-template <>
-inline bool Validate<TTimestamp>(ui64 timestamp) {
-    return timestamp < MAX_TIMESTAMP;
-}
-
-template <>
-inline bool Validate<TTimestamp64>(i64 timestamp) {
-    return timestamp >= MIN_TIMESTAMP64 && timestamp <= MAX_TIMESTAMP64;
-}
-
-template <>
-inline bool Validate<TInterval>(i64 interval) {
-    return interval > -i64(MAX_TIMESTAMP) && interval < i64(MAX_TIMESTAMP);
-}
-
-template <>
-inline bool Validate<TInterval64>(i64 interval) {
-    return interval >= -MAX_INTERVAL64 && interval <= MAX_INTERVAL64;
 }
 
 // Split
@@ -1311,7 +1284,7 @@ template <const char* TUdfName,
           typename TResultWType, TResultWType (*WAccessor)(const TUnboxedValuePod&)>
 class TGetDateComponent: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -1422,7 +1395,8 @@ private:
 template <const char* TUdfName, auto Accessor, auto WAccessor>
 class TGetDateComponentName: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
+
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
         return Name;
@@ -1645,7 +1619,7 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
 
 class TUpdate: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef::Of("Update");
@@ -1790,7 +1764,7 @@ private:
                 }
                 if (args[8]) {
                     auto timezoneId = args[8].Get<ui16>();
-                    if (!ValidateTimezoneId(timezoneId)) {
+                    if (!NMiniKQL::IsValidTimezoneId(timezoneId)) {
                         return TUnboxedValuePod();
                     }
                     SetTimezoneId<TResourceName>(result, timezoneId);
@@ -1828,7 +1802,7 @@ template <typename TInput, typename TOutput, i64 UsecMultiplier>
 inline TUnboxedValuePod TFromConverter(TInput arg) {
     using TLayout = TDataType<TOutput>::TLayout;
     const TLayout usec = TLayout(arg) * UsecMultiplier;
-    return Validate<TOutput>(usec) ? TUnboxedValuePod(usec) : TUnboxedValuePod();
+    return IsValidLayoutValue<TOutput>(usec) ? TUnboxedValuePod(usec) : TUnboxedValuePod();
 }
 
 template <typename TInput, typename TOutput, i64 UsecMultiplier>
@@ -1836,7 +1810,7 @@ using TFromConverterKernel = TUnaryUnsafeFixedSizeFilterKernel<TInput,
                                                                typename TDataType<TOutput>::TLayout, [](TInput arg) {
                                                                    using TLayout = TDataType<TOutput>::TLayout;
                                                                    const TLayout usec = TLayout(arg) * UsecMultiplier;
-                                                                   return std::make_pair(usec, Validate<TOutput>(usec));
+                                                                   return std::make_pair(usec, IsValidLayoutValue<TOutput>(usec));
                                                                }>;
 
 #define DATETIME_FROM_CONVERTER_UDF(name, retType, argType, usecMultiplier)              \
@@ -1880,7 +1854,7 @@ DATETIME_FROM_CONVERTER_UDF(Interval64FromMicroseconds, TInterval64, i64, 1);
 template <const char* TUdfName, typename TResult, typename TWResult, i64 ScaleSeconds>
 class TToConverter: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -2004,7 +1978,7 @@ TUnboxedValue SimpleDatetimeToDatetimeUdf(const IValueBuilder* valueBuilder, con
 template <const char* TUdfName, auto Boundary, auto WBoundary>
 class TBoundaryOf: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -2334,7 +2308,7 @@ TUnboxedValue SimpleDatetimeToIntervalUdf(const IValueBuilder* valueBuilder, con
 template <const char* TUdfName, auto Boundary, auto WBoundary>
 class TBoundaryOfInterval: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -2457,7 +2431,7 @@ struct TTimeOfDayKernelExec: TUnaryKernelExec<TTimeOfDayKernelExec, TReaderTrait
 
 class TTimeOfDay: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef::Of("TimeOfDay");
@@ -2584,7 +2558,7 @@ struct TAddKernelExec: TBinaryKernelExec<TAddKernelExec<Core>> {
 template <const char* TUdfName, auto Shifter, auto WShifter>
 class TShift: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -2759,6 +2733,8 @@ static size_t PrintTzOffset(char* out, i32 offset) {
 
 class TFormat: public TBoxedValue {
 public:
+    using TTypeAwareMarker = bool;
+
     explicit TFormat(TSourcePosition pos, size_t optionalArgs)
         : Pos_(pos)
         , OptionalArgs_(optionalArgs)
@@ -2781,7 +2757,7 @@ public:
         }
 
         size_t optionalArgs = 0;
-        if (builder.GetCurrentLangVer() >= NYql::MakeLangVersion(25, 5)) {
+        if (builder.GetCurrentLangVer() >= NYql::MakeLangVersion(2025, 5)) {
             optionalArgs = 2;
             builder.OptionalArgs(optionalArgs).Args()->Add<char*>().Add<TOptional<bool>>().Name("AlwaysWriteFractionalSeconds").Add<TOptional<bool>>().Name("WriteOffsetWithColon");
         } else {
@@ -2861,7 +2837,7 @@ private:
 
         TImpl(TSourcePosition pos, TUnboxedValue format, bool alwaysWriteFractionalSeconds, bool writeOffsetWithColon)
             : Pos_(pos)
-            , Format_(format)
+            , Format_(std::move(format))
         {
             const std::string_view formatView(Format_.AsStringRef());
             auto dataStart = formatView.begin();
@@ -2995,7 +2971,7 @@ private:
                     case 'b': {
                         static constexpr size_t Size = 3;
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            static constexpr std::string_view Mp[]{
+                            static constexpr auto Mp = std::to_array<std::string_view>({
                                 "Jan",
                                 "Feb",
                                 "Mar",
@@ -3007,7 +2983,8 @@ private:
                                 "Sep",
                                 "Oct",
                                 "Nov",
-                                "Dec"};
+                                "Dec",
+                            });
                             auto month = GetMonth<TM64ResourceName>(value);
                             Y_ENSURE(month > 0 && month <= sizeof(Mp) / sizeof(Mp[0]), "Invalid month value");
                             std::memcpy(out, Mp[month - 1].data(), Size);
@@ -3018,7 +2995,7 @@ private:
                     }
                     case 'B': {
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            static constexpr std::string_view Mp[]{
+                            static constexpr auto Mp = std::to_array<std::string_view>({
                                 "January",
                                 "February",
                                 "March",
@@ -3030,7 +3007,8 @@ private:
                                 "September",
                                 "October",
                                 "November",
-                                "December"};
+                                "December",
+                            });
                             auto month = GetMonth<TM64ResourceName>(value);
                             Y_ENSURE(month > 0 && month <= sizeof(Mp) / sizeof(Mp[0]), "Invalid month value");
                             const std::string_view monthFullName = Mp[month - 1];

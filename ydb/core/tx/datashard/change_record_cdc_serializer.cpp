@@ -327,6 +327,10 @@ protected:
             SerializeJsonValue(record.GetSchema(), json["newImage"], body.GetNewImage());
         }
 
+        if (Opts.UserSIDs && !record.GetUserSID().empty()) {
+            json["user"] = record.GetUserSID();
+        }
+
         const auto hasAnyImage = body.HasOldImage() || body.HasNewImage();
         switch (body.GetRowOperationCase()) {
         case NKikimrChangeExchange::TDataChange::kUpsert:
@@ -529,6 +533,17 @@ protected:
         default:
             Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
+
+        if (Opts.UserSIDs && !record.GetUserSID().empty()) {
+            auto& userIdentityJson = json["userIdentity"];
+            if (record.GetUserSID() == BUILTIN_ACL_CDC_TTL) {
+                userIdentityJson["type"] = "Service";   
+                userIdentityJson["principalId"] = "dynamodb.amazonaws.com";
+            } else {
+                userIdentityJson["type"] = "User";
+                userIdentityJson["principalId"] = record.GetUserSID();
+            }
+        }
     }
 
 public:
@@ -581,7 +596,8 @@ protected:
             }
         }
 
-        valueJson["payload"]["source"] = NJson::TJsonMap({
+        auto& sourceJson = valueJson["payload"]["source"];
+        sourceJson = NJson::TJsonMap({
             {"version", "1.0.0"},
             {"connector", "ydb"},
             {"ts_ms", record.GetApproximateCreationDateTime().MilliSeconds()},
@@ -590,6 +606,10 @@ protected:
             {"txId", record.GetTxId()},
             // TODO: db & table
         });
+
+        if (Opts.UserSIDs && !record.GetUserSID().empty()) {
+            sourceJson["user"] = record.GetUserSID();
+        }
     }
 
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {

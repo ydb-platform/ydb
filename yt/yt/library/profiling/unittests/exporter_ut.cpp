@@ -22,6 +22,23 @@ auto GetSensors(const std::string& json)
     return sensors->AsList()->GetChildren();
 }
 
+NYTree::INodePtr GetSensorByName(const std::vector<NYTree::INodePtr>& sensors, std::string_view sensorName)
+{
+    for (const auto& sensor : sensors) {
+        auto labels = sensor->AsMap()->GetChildOrThrow("labels")->AsMap();
+        if (labels->GetChildValueOrThrow<std::string>("sensor") == sensorName) {
+            return sensor;
+        }
+    }
+    THROW_ERROR_EXCEPTION("Sensor %Qv not found", sensorName);
+}
+
+std::optional<std::string> GetLabel(const NYTree::INodePtr& sensor, std::string_view labelName)
+{
+    auto labels = sensor->AsMap()->GetChildOrThrow("labels")->AsMap();
+    return labels->FindChildValue<std::string>(std::string(labelName));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST(TSolomonExporterTest, MemoryLeak)
@@ -301,7 +318,6 @@ TEST(TSolomonExporterTest, ReadSensorsSolomonAggregates)
     config->ReportKernelVersion = false;
     config->ReportRestart = false;
 
-    config->EnableSolomonAggregates = true;
     config->MarkAggregates = true;
     config->ExportSummaryAsSum = true;
     config->ExportSummaryAsMax = true;
@@ -311,9 +327,15 @@ TEST(TSolomonExporterTest, ReadSensorsSolomonAggregates)
 
     auto exporter = NYT::New<TSolomonExporter>(config, registry);
 
-    auto summaryDefault = TProfiler("", "", {}, registry).Summary("summary");
-    auto summaryMax = TProfiler("", "", {}, registry)
-        .Summary("max_only", ESummaryPolicy::Max | ESummaryPolicy::OmitNameLabelSuffix);
+    auto profiler = TProfiler("", "", {}, registry);
+    auto summaryDefault = profiler.Summary("summary");
+    auto summaryMax = profiler.Summary("max_only", ESummaryPolicy::Max | ESummaryPolicy::OmitNameLabelSuffix);
+
+    auto globalProfiler = profiler.WithGlobal();
+    auto sumGlobal = globalProfiler.Summary("sum_global");
+    auto maxGlobal = globalProfiler
+        .WithMemOnly()
+        .Summary("max_global", ESummaryPolicy::Max | ESummaryPolicy::OmitNameLabelSuffix);
 
     exporter->Start();
 
@@ -323,51 +345,70 @@ TEST(TSolomonExporterTest, ReadSensorsSolomonAggregates)
     summaryMax.Record(42);
     summaryMax.Record(21);
 
+    sumGlobal.Record(31);
+    sumGlobal.Record(4);
+
+    maxGlobal.Record(16);
+    maxGlobal.Record(6);
+
     Sleep(TDuration::Seconds(1));
 
     TReadOptions readOptions;
     readOptions.MarkAggregates = true;
     readOptions.SummaryPolicy = config->GetSummaryPolicy();
-    // Enable solomon aggregates.
-
-    auto findYtAggrValue = [&] (auto& sensors, std::string_view sensorName) {
-        for (const auto& sensor : sensors) {
-            auto labels = sensor->AsMap()->GetChildOrThrow("labels")->AsMap();
-            if (labels->GetChildOrThrow("sensor")->AsString()->GetValue() == sensorName) {
-                auto ytAggr = labels->FindChild("yt_aggr");
-                if (ytAggr) {
-                    return std::optional<std::string>(ytAggr->AsString()->GetValue());
-                }
-                break;
-            }
-        }
-        return std::optional<std::string>();
-    };
 
     {
         readOptions.EnableSolomonAggregates = true;
+        readOptions.ExportGlobalsAsMemOnly = true;
+
         std::optional<std::string> out = exporter->ReadJson(readOptions);
         ASSERT_TRUE(out);
         auto sensors = GetSensors(*out);
-        EXPECT_EQ("sum"sv, findYtAggrValue(sensors, "summary.sum"sv));
-        EXPECT_EQ("max"sv, findYtAggrValue(sensors, "summary.max"sv));
-        EXPECT_EQ("min"sv, findYtAggrValue(sensors, "summary.min"sv));
-        EXPECT_EQ("avg"sv, findYtAggrValue(sensors, "summary.avg"sv));
-        EXPECT_EQ("max"sv, findYtAggrValue(sensors, "max_only"sv));
+
+        auto checkSensor = [&](std::string_view name, bool global, std::string_view aggr) {
+            auto sensor = GetSensorByName(sensors, name);
+            EXPECT_EQ(aggr, GetLabel(sensor, "yt_aggr"));
+            EXPECT_NE("", GetLabel(sensor, "host"));
+            if (global) {
+                EXPECT_TRUE(sensor->AsMap()->GetChildValueOrDefault<bool>("memOnly", false));
+            } else {
+                EXPECT_FALSE(sensor->AsMap()->GetChildValueOrDefault<bool>("memOnly", false));
+            }
+        };
+
+        checkSensor("summary.sum"sv, false, "sum");
+        checkSensor("summary.max"sv, false, "max");
+        checkSensor("summary.min"sv, false, "min");
+        checkSensor("summary.avg"sv, false, "avg");
+        checkSensor("max_only"sv, false, "max");
+
+        checkSensor("max_global"sv, true, "max");
+        checkSensor("sum_global.sum"sv, true, "sum");
+        checkSensor("sum_global.max"sv, true, "max");
+        checkSensor("sum_global.min"sv, true, "min");
+        checkSensor("sum_global.avg"sv, true, "avg");
     }
 
     // Disable solomon aggregates.
     {
         readOptions.EnableSolomonAggregates = false;
+        readOptions.ExportGlobalsAsMemOnly = false;
+
         std::optional<std::string> out = exporter->ReadJson(readOptions);
         ASSERT_TRUE(out);
         auto sensors = GetSensors(*out);
 
-        EXPECT_EQ("1"sv, findYtAggrValue(sensors, "summary.sum"sv));
-        EXPECT_EQ(std::nullopt, findYtAggrValue(sensors, "summary.max"sv));
-        EXPECT_EQ(std::nullopt, findYtAggrValue(sensors, "summary.min"sv));
-        EXPECT_EQ(std::nullopt, findYtAggrValue(sensors, "summary.avg"sv));
-        EXPECT_EQ(std::nullopt, findYtAggrValue(sensors, "max_only"sv));
+        EXPECT_EQ("1", GetLabel(GetSensorByName(sensors, "summary.sum"sv), "yt_aggr"));
+        EXPECT_EQ(std::nullopt, GetLabel(GetSensorByName(sensors, "summary.max"sv), "yt_aggr"));
+        EXPECT_EQ(std::nullopt, GetLabel(GetSensorByName(sensors, "summary.min"sv), "yt_aggr"));
+        EXPECT_EQ(std::nullopt, GetLabel(GetSensorByName(sensors, "summary.avg"sv), "yt_aggr"));
+        EXPECT_EQ(std::nullopt, GetLabel(GetSensorByName(sensors, "sum_global.sum"sv), "yt_aggr"));
+
+        EXPECT_TRUE(GetSensorByName(sensors, "max_global"sv)->AsMap()->GetChildValueOrDefault<bool>("memOnly", false));
+        EXPECT_FALSE(GetSensorByName(sensors, "summary.sum"sv)->AsMap()->GetChildValueOrDefault<bool>("memOnly", false));
+
+        EXPECT_NE("", GetLabel(GetSensorByName(sensors, "summary.sum"sv), "host"));
+        EXPECT_EQ("", GetLabel(GetSensorByName(sensors, "sum_global.sum"sv), "host"));
     }
 
     exporter->Stop();

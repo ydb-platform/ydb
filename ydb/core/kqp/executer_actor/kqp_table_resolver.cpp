@@ -105,7 +105,7 @@ private:
                         stageMeta.TableKind = ETableKind::Olap;
                     }
 
-                    auto& stage = stageMeta.GetStage(stageId);
+                    const auto& stage = stageMeta.GetStage(stageId);
                     AFL_ENSURE(stage.GetSinks().size() == 1);
                     const auto& sink = stage.GetSinks(0);
 
@@ -351,8 +351,10 @@ private:
         for (auto& pair : TasksGraph.GetStagesInfo()) {
             auto& stageInfo = pair.second;
 
-            if (!stageInfo.Meta.ShardOperations.empty()) {
-                for (const auto& operation : stageInfo.Meta.ShardOperations) {
+            if (!stageInfo.Meta.ShardOperations.empty() || !stageInfo.Meta.AccessCheckOperations.empty()) {
+                auto ops = stageInfo.Meta.ShardOperations;
+                ops.insert(stageInfo.Meta.AccessCheckOperations.begin(), stageInfo.Meta.AccessCheckOperations.end());
+                for (const auto& operation : ops) {
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
                     if (tableInfo) {
                         if (ResolvingNamesFinished) {

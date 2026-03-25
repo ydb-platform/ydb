@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/tools/stress_tool/proto/device_perf_test.pb.h>
 #include <ydb/library/actors/core/probes.h>
 
@@ -13,6 +14,8 @@
 
 #include <util/generic/map.h>
 #include <util/stream/str.h>
+#include <util/string/cast.h>
+#include <util/string/split.h>
 
 #include <algorithm>
 #include <cmath>
@@ -62,6 +65,7 @@ public:
     virtual void AddSpeedAndIops(const TSpeedAndIops& data) = 0;
     virtual void SetTestType(const TString& testType) = 0;
     virtual void SetInFlight(ui32 inFlight) = 0;
+    virtual void SetSkipStatistics(bool skip) { Y_UNUSED(skip); }
 
     template<typename T>
     void AddGlobalParam(const TString& name, const T& value) {
@@ -106,6 +110,7 @@ public:
     TMap<ui32, TVector<TVector<TStringPair>>> RunsByInFlight; // Runs grouped by InFlight
     TMap<ui32, TVector<TSpeedAndIops>> SpeedAndIopsByInFlight; // Speed/IOPS grouped by InFlight
     bool HeaderPrinted = false;
+    bool SkipStatistics_ = false;
     NJson::TJsonWriter JsonWriter;
 
     void PrintGlobalParams() const {
@@ -513,6 +518,9 @@ public:
     void SetInFlight(ui32 inFlight) override {
         CurrentInFlight = inFlight;
     }
+    void SetSkipStatistics(bool skip) override {
+        SkipStatistics_ = skip;
+    }
 
     void PrintResults() override {
         if (Results.empty()) {
@@ -533,12 +541,12 @@ public:
                 break;
             }
         } else {
-            // Collect results grouped by InFlight for later statistics calculation
-            RunsByInFlight[CurrentInFlight].push_back(Results);
-            SpeedAndIopsByInFlight[CurrentInFlight].push_back(CurrentSpeedAndIops);
-            // Also keep flat lists for non-JSON formats
             AllRuns.push_back(Results);
-            AllSpeedAndIops.push_back(CurrentSpeedAndIops);
+            RunsByInFlight[CurrentInFlight].push_back(Results);
+            if (!SkipStatistics_) {
+                SpeedAndIopsByInFlight[CurrentInFlight].push_back(CurrentSpeedAndIops);
+                AllSpeedAndIops.push_back(CurrentSpeedAndIops);
+            }
         }
         Results.clear();
         CurrentSpeedAndIops = TSpeedAndIops();
@@ -579,15 +587,19 @@ public:
 
 
 struct TPerfTestConfig {
-    const TString Path;
+    TVector<TString> Paths;
+    const TString Path; // Paths[0] alias for backward compatibility
+    TVector<TIntrusivePtr<NPDisk::TSectorMap>> SectorMaps;
     const TString Name;
     ui16 MonPort;
     NPDisk::EDeviceType DeviceType;
     TResultPrinter::EOutputFormat OutputFormat;
     bool DoLockFile;
     ui32 RunCount;
-    ui32 InFlightFrom = 0; // 0 means not specified
-    ui32 InFlightTo = 0;   // 0 means not specified
+    ui32 InFlightFrom = 0;
+    ui32 InFlightTo = 0;
+    TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // SectorMaps[0] alias
+    bool DisablePDiskDataEncryption;
 
     TMap<const TString, NPDisk::EDeviceType> DeviceStrToType {
         {"ROT",  NPDisk::DEVICE_TYPE_ROT},
@@ -600,16 +612,51 @@ struct TPerfTestConfig {
         {"json", TResultPrinter::OUTPUT_FORMAT_JSON},
     };
 
-    TPerfTestConfig(const TString path, const TString name, const TString type, const TString outputFormatName,
+    static TIntrusivePtr<NPDisk::TSectorMap> TryParseSectorMap(const TString& path) {
+        if (!path.Contains(":")) {
+            return nullptr;
+        }
+        TVector<TString> splitted;
+        Split(path, ":", splitted);
+        if (splitted.size() >= 2 && splitted[0] == "SectorMap") {
+            ui32 defaultSizeGb = 100;
+            ui64 size = (ui64)defaultSizeGb << 30;
+            if (splitted.size() >= 3) {
+                size = (ui64)FromStringWithDefault<ui32>(splitted[2], defaultSizeGb) << 30;
+            }
+            auto diskMode = NPDisk::NSectorMap::DM_NONE;
+            if (splitted.size() >= 4) {
+                diskMode = NPDisk::NSectorMap::DiskModeFromString(splitted[3]);
+            }
+            auto sectorMap = MakeIntrusive<NPDisk::TSectorMap>(size, diskMode);
+            sectorMap->ZeroInit(1000);
+            return sectorMap;
+        }
+        return nullptr;
+    }
+
+    TPerfTestConfig(const TString& path, const TString name, const TString type, const TString outputFormatName,
             const TString monPort, bool doLockFile, const TString runCountStr = "1",
-            const TString inFlightFromStr = "0", const TString inFlightToStr = "0")
-        : Path(path)
+            const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
+            bool disablePDiskDataEncryption = false)
+        : TPerfTestConfig(TVector<TString>{path}, name, type, outputFormatName,
+                monPort, doLockFile, runCountStr, inFlightFromStr, inFlightToStr,
+                disablePDiskDataEncryption)
+    {}
+
+    TPerfTestConfig(const TVector<TString>& paths, const TString name, const TString type, const TString outputFormatName,
+            const TString monPort, bool doLockFile, const TString runCountStr = "1",
+            const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
+            bool disablePDiskDataEncryption = false)
+        : Paths(paths)
+        , Path(paths.at(0))
         , Name(name)
         , MonPort(std::strtol(monPort.c_str(), nullptr, 10))
         , DoLockFile(doLockFile)
         , RunCount(std::max(1, static_cast<int>(std::strtol(runCountStr.c_str(), nullptr, 10))))
         , InFlightFrom(std::strtol(inFlightFromStr.c_str(), nullptr, 10))
         , InFlightTo(std::strtol(inFlightToStr.c_str(), nullptr, 10))
+        , DisablePDiskDataEncryption(disablePDiskDataEncryption)
     {
         auto it_type = DeviceStrToType.find(type);
         if (it_type != DeviceStrToType.end()) {
@@ -623,6 +670,16 @@ struct TPerfTestConfig {
         } else {
             OutputFormat = TResultPrinter::OUTPUT_FORMAT_WIKI;
         }
+
+        SectorMaps.resize(Paths.size());
+        for (size_t i = 0; i < Paths.size(); ++i) {
+            SectorMaps[i] = TryParseSectorMap(Paths[i]);
+        }
+        SectorMap = SectorMaps[0];
+    }
+
+    ui32 NumDevices() const {
+        return Paths.size();
     }
 
     bool HasInFlightOverride() const {

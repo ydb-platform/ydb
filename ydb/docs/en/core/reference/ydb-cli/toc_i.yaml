@@ -138,6 +138,8 @@ items:
       href: workload-tpch.md
     - name: TPC-DS load
       href: workload-tpcds.md
+    - name: Query load
+      href: workload-query.md
   - name: Managing configuration
     href: configs.md
     include:

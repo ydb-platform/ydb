@@ -43,37 +43,44 @@ public:
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            const ui32 defaultFilledColumnCount) = 0;
+            const ui32 defaultFilledColumnCount,
+            const TString& userSID) = 0;
 
     virtual void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TString& userSID) = 0;
     
     virtual void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TString& userSID) = 0;
     
     virtual void InsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TString& userSID) = 0;
 
     virtual void UpdateRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TString& userSID) = 0;
 
     virtual void IncrementRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            bool insertMissing) = 0;
+            bool insertMissing,
+            const TString& userSID) = 0;
     
     virtual void EraseRow(
             const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key) = 0;
+            const TArrayRef<const TRawTypeValue> key,
+            const TString& userSID) = 0;
 
     virtual void CommitChanges(
             const TTableId& tableId,
@@ -148,37 +155,44 @@ public:
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            const ui32 defaultFilledColumnCount) override;
+            const ui32 defaultFilledColumnCount,
+            const TString& userSID) override;
 
     void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TString& userSID) override;
     
     void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TString& userSID) override;
             
     void InsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TString& userSID) override;
             
     void UpdateRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TString& userSID) override;
         
     void IncrementRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            bool insertMissing) override;
+            bool insertMissing,
+            const TString& userSID) override;
 
     void EraseRow(
             const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key) override;
+            const TArrayRef<const TRawTypeValue> key,
+            const TString& userSID) override;
 
     void CommitChanges(
             const TTableId& tableId, 
@@ -228,7 +242,8 @@ private:
 
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
-    void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+    void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, 
+        const TArrayRef<const NIceDb::TUpdateOp> ops, const TString& userSID);
     bool RowExists(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
     NTable::TRowState GetRowState(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TStackVec<NTable::TTag>& columns);
 

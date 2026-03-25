@@ -39,13 +39,13 @@ void TPutImpl::RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutR
     TBatchedVec<TBlackboard::TFinishedBlob> finished;
     const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, AccelerationParams, &finished, &expired);
     for (const TBlackboard::TFinishedBlob& item : finished) {
-        Y_ABORT_UNLESS(item.BlobIdx < Blobs.size());
-        Y_ABORT_UNLESS(!IsDone[item.BlobIdx]);
+        Y_VERIFY_S(item.BlobIdx < Blobs.size(), "State# " << DumpFullState() << " BlobIdx# " << item.BlobIdx);
+        Y_VERIFY_S(!IsDone[item.BlobIdx], "State# " << DumpFullState() << " BlobIdx# " << item.BlobIdx);
         PrepareOneReply(item.Status, item.BlobIdx, logCtx, item.ErrorReason, outPutResults);
-        Y_VERIFY_S(IsDone[item.BlobIdx], "State# " << DumpFullState());
+        Y_VERIFY_S(IsDone[item.BlobIdx], "State# " << DumpFullState() << " BlobIdx# " << item.BlobIdx);
     }
     if (outcome == EStrategyOutcome::DONE) {
-        for (const auto& done : IsDone) {
+        for (const bool done : IsDone) {
             Y_VERIFY_S(done, "finished.size# " << finished.size() << " State# " << DumpFullState());
         }
     }

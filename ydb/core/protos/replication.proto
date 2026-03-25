@@ -1,7 +1,12 @@
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/base.proto";
+import "ydb/core/protos/metrics_config.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/draft/ydb_replication.proto";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
@@ -119,6 +124,8 @@ message TReplicationConfig {
 
     optional TConnectionParams SrcConnectionParams = 1;
     optional TConsistencySettings ConsistencySettings = 7;
+    optional NKikimrProto.NMetricsConfig.TMetricsConfig MetricsConfig = 9;
+    optional TReplicationLocationConfig Location = 10;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.
@@ -165,13 +172,43 @@ message TReplicationState {
     }
 }
 
+message TReplicationStats {
+
+    message TTransferSpecific {
+        repeated Ydb.Replication.DescribeTransferResult.Stats.WorkerStats WorkersStats = 1;
+        optional google.protobuf.Duration MinWorkerUptime = 2;
+        optional Ydb.Replication.MultipleWindowsStat ProcessingCpuTime = 3;
+    };
+
+    optional Ydb.Replication.MultipleWindowsStat ReadBytes = 1;
+    optional Ydb.Replication.MultipleWindowsStat ReadMessages = 2;
+    optional Ydb.Replication.MultipleWindowsStat WriteBytes = 3;
+    optional Ydb.Replication.MultipleWindowsStat WriteRows = 4;
+    optional Ydb.Replication.MultipleWindowsStat DecompressionCpuTime = 5;
+
+    optional google.protobuf.Timestamp StatsCollectionStart = 6;
+
+    oneof SpecificStats {
+        TTransferSpecific Transfer = 7;
+    }
+}
+
 message TOperationId {
     optional uint64 TxId = 1;
     optional uint32 PartId = 2;
 }
 
+message TReplicationLocationConfig {
+    optional string Path = 1;
+    optional string YcResourceId = 2;
+    optional string YcFolderId = 3;
+    optional string YcCloudId = 4;
+    optional string MonitoringProjectId = 5;
+}
+
 message TEvCreateReplication {
     optional NKikimrProto.TPathID PathId = 1;
+    optional TReplicationLocationConfig Location = 5;
     optional TOperationId OperationId = 2;
     optional TReplicationConfig Config = 3;
     optional string Database = 4;
@@ -191,6 +228,7 @@ message TEvCreateReplicationResult {
 
 message TEvAlterReplication {
     optional NKikimrProto.TPathID PathId = 1;
+    optional TReplicationLocationConfig Location = 5;
     optional TOperationId OperationId = 2;
     optional TReplicationState SwitchState = 3;
     optional TReplicationConfig Config = 4;
@@ -243,6 +281,7 @@ message TEvDescribeReplicationResult {
     repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
     optional TReplicationState State = 4;
     optional TReplicationConfig.TTransferSpecific TransferSpecific = 6;
+    optional TReplicationStats Stats = 7;
 }
 
 message TControllerIdentity {
@@ -295,6 +334,8 @@ message TRunWorkerCommand {
 
     optional TConsistencySettings ConsistencySettings = 3;
     optional string Database = 5;
+    optional NKikimrProto.NMetricsConfig.TMetricsConfig.EMetricsLevel MetricsLevel = 6;
+    optional TReplicationLocationConfig ReplicationLocation = 7;
 }
 
 message TEvRunWorker {
@@ -306,6 +347,43 @@ message TEvRunWorker {
 message TEvStopWorker {
     optional TControllerIdentity Controller = 1;
     optional TWorkerIdentity Worker = 2;
+}
+
+
+message TWorkerStats {
+    enum EWorkOperation {
+        OPERATION_UNSPECIFIED = 0;
+        OPERATION_READ = 1;
+        OPERATION_DECOMPRESS = 2;
+        OPERATION_PROCESS = 3;
+        OPERATION_WRITE = 4;
+    };
+
+    enum EStatsKeys {
+        READ_TIME = 1;
+        DECOMPRESS_ELAPSED_CPU = 2;
+        PROCESSING_TIME = 3;
+        PROCESSING_ELAPSED_CPU = 4;
+        WRITE_TIME = 5;
+        READ_BYTES = 6;
+        READ_MESSAGES = 7;
+        WRITE_BYTES = 8;
+        WRITE_ROWS = 9;
+        READ_PARTITION = 10;
+        READ_OFFSET = 11;
+        READ_ERRORS = 12;
+        PROCESSING_ERRORS = 13;
+        WRITE_ERRORS = 14;
+        WORK_OPERATION = 15;
+    };
+
+    message TWorkerStatItem {
+        optional uint64 Key = 1;
+        optional int64 Value = 2;
+    }
+
+    optional google.protobuf.Timestamp StartTime = 2;
+    repeated TWorkerStatItem Values = 3;
 }
 
 message TEvWorkerStatus {
@@ -320,6 +398,7 @@ message TEvWorkerStatus {
         REASON_ACK = 1;
         REASON_ERROR = 2;
         REASON_INFO = 3;
+        REASON_STATS = 4;
     }
 
     optional TWorkerIdentity Worker = 1;
@@ -327,6 +406,7 @@ message TEvWorkerStatus {
     optional EReason Reason = 3;
     optional string ErrorDescription = 4;
     optional uint32 LagMilliSeconds = 5;
+    optional TWorkerStats Stats = 6;
 }
 
 message TEvWorkerDataEnd {

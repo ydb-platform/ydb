@@ -5,12 +5,8 @@
 #include <util/generic/vector.h>
 #include <util/stream/str.h>
 
-namespace NYql {
-namespace NPureCalc {
-namespace NPrivate {
+namespace NYql::NPureCalc::NPrivate {
 NYT::TNode GetSchema(
     const TVector<TString>& fields,
     const TVector<TString>& optionalFields = {});
-} // namespace NPrivate
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc::NPrivate

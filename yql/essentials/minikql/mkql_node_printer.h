@@ -2,10 +2,8 @@
 #include "defs.h"
 #include "mkql_node.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TString PrintNode(const TNode* node, bool singleLine = false);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -16,19 +16,13 @@ private:
     NColumnShard::TSchemeShardLocalPathId ExternalPathId;
     ui32 PortionsCount;
     
-private:
-    TDataSourceConstructor(
-        const NColumnShard::TSchemeShardLocalPathId& externalPathId, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule)
+public:
+    TDataSourceConstructor(const NColumnShard::TSchemeShardLocalPathId& externalPathId, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule)
         : TBase(tabletId, TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId), TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId))
         , Granule(granule)
         , ExternalPathId(externalPathId)
         , PortionsCount(Granule->GetPortions().size())
     {
-    }
-
-public:
-    TDataSourceConstructor(const IPathIdTranslator& translator, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule)
-        : TDataSourceConstructor(translator.ResolveSchemeShardLocalPathIdVerified(granule->GetPathId()), tabletId, granule) {
     }
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
@@ -49,8 +43,11 @@ class TConstructor: public NAbstract::TConstructor<TDataSourceConstructor> {
 private:
     using TBase = NAbstract::TConstructor<TDataSourceConstructor>;
 public:
-    TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
-        const std::optional<NOlap::TInternalPathId> internalPathId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
+    TConstructor(const IPathIdTranslator& translator,
+        const NColumnShard::TUnifiedOptionalPathId& unifiedPathId,
+        const IColumnEngine& engine,
+        const ui64 tabletId,
+        const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
         const ERequestSorting sorting);
 };
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NGranules

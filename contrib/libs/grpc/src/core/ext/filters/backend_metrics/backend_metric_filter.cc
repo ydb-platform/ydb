@@ -17,7 +17,6 @@
 #include "src/core/ext/filters/backend_metrics/backend_metric_filter.h"
 
 #include <inttypes.h>
-#include <limits.h>
 #include <stddef.h>
 
 #include <functional>
@@ -26,16 +25,15 @@
 #include <utility>
 
 #include "y_absl/strings/string_view.h"
-#include "upb/upb.h"
+#include "upb/base/string_view.h"
 #include "upb/upb.hpp"
 #include "xds/data/orca/v3/orca_load_report.upb.h"
 
-#include <grpc/grpc.h>
+#include <grpc/impl/channel_arg_names.h>
 #include <grpc/support/log.h>
 
 #include "src/core/ext/filters/client_channel/lb_policy/backend_metric_data.h"
 #include "src/core/lib/channel/channel_stack.h"
-#include "src/core/lib/channel/channel_stack_builder.h"
 #include "src/core/lib/channel/context.h"
 #include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/debug/trace.h"
@@ -65,6 +63,11 @@ y_absl::optional<TString> BackendMetricFilter::MaybeSerializeBackendMetrics(
   if (data.mem_utilization != -1) {
     xds_data_orca_v3_OrcaLoadReport_set_mem_utilization(response,
                                                         data.mem_utilization);
+    has_data = true;
+  }
+  if (data.application_utilization != -1) {
+    xds_data_orca_v3_OrcaLoadReport_set_application_utilization(
+        response, data.application_utilization);
     has_data = true;
   }
   if (data.qps != -1) {
@@ -146,14 +149,9 @@ ArenaPromise<ServerMetadataHandle> BackendMetricFilter::MakeCallPromise(
 }
 
 void RegisterBackendMetricFilter(CoreConfiguration::Builder* builder) {
-  builder->channel_init()->RegisterStage(
-      GRPC_SERVER_CHANNEL, INT_MAX, [](ChannelStackBuilder* builder) {
-        if (builder->channel_args().Contains(
-                GRPC_ARG_SERVER_CALL_METRIC_RECORDING)) {
-          builder->PrependFilter(&BackendMetricFilter::kFilter);
-        }
-        return true;
-      });
+  builder->channel_init()
+      ->RegisterFilter(GRPC_SERVER_CHANNEL, &BackendMetricFilter::kFilter)
+      .IfHasChannelArg(GRPC_ARG_SERVER_CALL_METRIC_RECORDING);
 }
 
 }  // namespace grpc_core

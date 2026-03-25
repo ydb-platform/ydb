@@ -28,7 +28,7 @@ public:
     }
 
 private:
-    typedef TProtoMultiOutput<T...> (*initfunc)(google::protobuf::Message*);
+    using initfunc = TProtoMultiOutput<T...> (*)(google::protobuf::Message*);
 
     template <size_t... I>
     inline std::array<initfunc, sizeof...(T)> BuildInitFuncs(std::index_sequence<I...>) {

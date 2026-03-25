@@ -3,7 +3,7 @@
 С помощью [Terraform](https://www.terraform.io/) можно создавать, удалять и изменять следующие объекты внутри кластера {{ ydb-short-name }}:
 
 * [строковые](../concepts/datamodel/table.md#row-oriented-tables) таблицы;
-* [вторичные индексы](../concepts/secondary_indexes.md) для строковых таблиц;
+* [вторичные индексы](../concepts/query_execution/secondary_indexes.md) для строковых таблиц;
 * [потоки изменений](../concepts/cdc.md) строковых таблиц;
 * [топики](../concepts/datamodel/topic.md).
 
@@ -340,7 +340,7 @@ ttl {
 
 ### Вторичный индекс строковой таблицы {#ydb-table-index}
 
-Для работы с индексом строковой таблицы используется ресурс [ydb_table_index](../concepts/secondary_indexes.md).
+Для работы с индексом строковой таблицы используется ресурс [ydb_table_index](../concepts/query_execution/secondary_indexes.md).
 
 Пример:
 

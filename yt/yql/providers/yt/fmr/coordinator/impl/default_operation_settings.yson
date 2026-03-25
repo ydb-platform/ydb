@@ -8,6 +8,9 @@
         "read_block_count" = 4;
         "read_block_size" = 1048576;
     };
+    "sort" = {
+        "max_merge_tables_allowed" = 100;
+    };
     "job_io" = {
         "fmr_table_reader" = {
             "inflight_chunks" = 1;

@@ -361,6 +361,12 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
         );
     }
 
+    if (item.SysView) {
+        record.Update(
+            NIceDb::TUpdate<Schema::ImportItems::SysView>(item.SysView->SerializeAsString())
+        );
+    }
+
     if (!item.CreationQuery.empty()) {
         record.Update(
             NIceDb::TUpdate<Schema::ImportItems::CreationQuery>(item.CreationQuery)
@@ -468,13 +474,10 @@ void TSchemeShard::LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* 
 }
 
 bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
-    if (importInfo.Kind != TImportInfo::EKind::S3) {
-        return true;
-    }
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     auto& item = importInfo.Items.at(itemIdx);
 
-    switch (importInfo.GetS3Settings().index_population_mode()) {
+    switch (importInfo.GetIndexPopulationMode()) {
         case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD:
             return true;
         case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:

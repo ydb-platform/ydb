@@ -90,6 +90,7 @@ namespace NActors {
 
 #define SESSION_EVENTS(HANDLER)                                \
     fFunc(TEvInterconnect::EvForward, HANDLER)                 \
+    fFunc(TEvForwardSubscribeSession::EventType, HANDLER)      \
     fFunc(TEvInterconnect::TEvConnectNode::EventType, HANDLER) \
     fFunc(TEvents::TEvSubscribe::EventType, HANDLER)           \
     fFunc(TEvents::TEvUnsubscribe::EventType, HANDLER)
@@ -108,6 +109,7 @@ namespace NActors {
     STATEFN(STATE) {                                                                            \
         const ui32 type = ev->GetTypeRewrite();                                                 \
         const bool profiled = type != TEvInterconnect::EvForward                                \
+            && type != TEvForwardSubscribeSession::EventType                                    \
             && type != TEvInterconnect::EvConnectNode                                           \
             && type != TEvents::TSystem::Subscribe                                              \
             && type != TEvents::TSystem::Unsubscribe;                                           \
@@ -175,6 +177,7 @@ namespace NActors {
 
         const char* State = nullptr;
         TInstant StateSwitchTime;
+        bool InErrorState = false;
 
         template <typename... TArgs>
         void SwitchToState(int line, const char* name, TArgs&&... args) {
@@ -194,6 +197,11 @@ namespace NActors {
                         {}, nullptr, 0));
                     PassAwayScheduled = true;
                 }
+            }
+            if (CurrentStateFunc() == &TThis::HoldByError) {
+                InErrorState = true;
+            } else if (CurrentStateFunc() == &TThis::StateWork || CurrentStateFunc() == &TThis::PendingActivation) {
+                InErrorState = false;
             }
         }
 

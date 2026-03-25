@@ -323,6 +323,7 @@ message TBridgePileInfo {
     optional string Name = 2;
     optional Ydb.Bridge.PileState.State State = 3;
     optional uint32 Nodes = 4;
+    map<string, uint32> GroupStatuses = 5; // UNKNOWN (grey), FULL (green), PARTIAL (yellow), DEGRADED (yellow), DISINTEGRATED (red)
 }
 
 message TBridgeInfo {
@@ -933,7 +934,7 @@ message TDatabaseStats {
     // grpc
     optional uint64 GrpcRequestBytes = 101;
     optional uint64 GrpcResponseBytes = 102;
-    
+
     // database nodes
     optional uint32 DatabaseNodes = 201;
     optional float DatabaseCpuUsage = 202;

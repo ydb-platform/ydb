@@ -244,10 +244,11 @@ public:
             StopWorker_ = true;
             WorkerState_->State = EFmrWorkerRuntimeState::Stopped;
         }
-        JobFactory_->Stop();
+
         if (MainThread_.joinable()) {
             MainThread_.join();
         }
+        JobFactory_->Stop();
     }
 
     EFmrWorkerRuntimeState GetWorkerState() const override {

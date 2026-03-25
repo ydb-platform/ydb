@@ -2,12 +2,14 @@
 
 #include "mlp.h"
 #include "mlp_common.h"
+#include "mlp_consumer_order.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/util/backoff.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -20,10 +22,13 @@ using namespace NActors;
 class TConsumerActor : public TBaseTabletActor<TConsumerActor>
                      , public TConstantLogPrefix {
     static constexpr TDuration WakeupInterval = TDuration::Seconds(1);
+    static constexpr TDuration NoMessagesTimeout = TDuration::Seconds(1);
 
 public:
     TConsumerActor(const TString& database, ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
-        const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig& topicConfig, const NKikimrPQ::TPQTabletConfig::TConsumer& config,
+        const TActorId& partitionActorId,
+        ui64 partitionGeneration,
+        const NKikimrPQ::TPQTabletConfig& topicConfig, const NKikimrPQ::TPQTabletConfig::TConsumer& config,
         std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset, NMonitoring::TDynamicCounterPtr& detailedMetricsRoot);
 
     void Bootstrap();
@@ -37,11 +42,15 @@ private:
     void Queue(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Queue(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Queue(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Queue(TEvPQ::TEvMLPPurgeRequest::TPtr&);
+    void Queue(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
 
     void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPPurgeRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
 
     void Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr&);
     void HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr&);
@@ -72,6 +81,7 @@ private:
 
     void Restart(TString&& error);
 
+    void ScheduleProcessing();
     void ProcessEventQueue();
     bool FetchMessagesIfNeeded();
     void ReadSnapshot();
@@ -87,10 +97,20 @@ private:
 
     void UpdateMetrics();
 
+    bool UseForReading() const;
+    void NotifyPQRB(bool force = false);
+
+    const NKikimrPQ::TPQTabletConfig::TPartition& GetPartitionConfig() const;
+    const NKikimrPQ::TPQTabletConfig::TPartition& GetPartitionConfig(ui32 partitionId) const;
+    bool EnumerateChildrenPartitionsWithKeepOrder();
+    void UpdateLockedGroupsIdInChildPartitions(bool force);
+    void UpdateChildPartitionsOnCommit();
+
 private:
     const TString Database;
     const ui32 PartitionId;
     const TActorId PartitionActorId;
+    const ui64 PartitionGeneration;
     NKikimrPQ::TPQTabletConfig TopicConfig;
     NKikimrPQ::TPQTabletConfig::TConsumer Config;
     std::optional<TDuration> RetentionPeriod;
@@ -108,11 +128,17 @@ private:
     std::deque<TEvPQ::TEvMLPCommitRequest::TPtr> CommitRequestsQueue;
     std::deque<TEvPQ::TEvMLPUnlockRequest::TPtr> UnlockRequestsQueue;
     std::deque<TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr> ChangeMessageDeadlineRequestsQueue;
+    std::deque<TEvPQ::TEvMLPPurgeRequest::TPtr> PurgeRequestsQueue;
+    std::deque<TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr> UpdateExternalLockedMessageGroupsIdRequestsQueue;
 
     std::deque<TReadResult> PendingReadQueue;
     std::deque<TResult> PendingCommitQueue;
     std::deque<TResult> PendingUnlockQueue;
     std::deque<TResult> PendingChangeMessageDeadlineQueue;
+    std::deque<TResult> PendingPurgeQueue;
+
+    bool ProcessingScheduled = false;
+    TInstant NextProcessingTime;
 
     ui64 LastWALIndex = 0;
     bool HasSnapshot = false;
@@ -122,6 +148,12 @@ private:
     ui64 CPUUsageMetric = 0;
     NMonitoring::TDynamicCounterPtr DetailedMetricsRoot;
     std::unique_ptr<TDetailedMetrics> DetailedMetrics;
+
+    TInstant LastTimeWithMessages;
+    bool LastUseForReading = false;
+
+    TChildPartitionsOrderManager ChildPartitionsOrderManager;
+    ui32 ChildrenPartitionWithKeepOrderCookie = 2;
 };
 
 class TDetailedMetrics {

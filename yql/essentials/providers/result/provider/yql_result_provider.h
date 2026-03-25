@@ -3,6 +3,8 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_execution.h>
 
+#include <utility>
+
 namespace NYql {
 
 class IResultWriter: public TThrRefBase {
@@ -25,7 +27,7 @@ struct TResultProviderConfig: TThrRefBase {
                           IDataProvider::EResultFormat format, const TString& formatDetails, TResultWriterFactory writerFactory)
         : Types(types)
         , FunctionRegistry(functionRegistry)
-        , WriterFactory(writerFactory)
+        , WriterFactory(std::move(writerFactory))
     {
         FillSettings.Format = format;
         FillSettings.FormatDetails = formatDetails;

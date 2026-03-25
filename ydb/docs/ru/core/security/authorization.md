@@ -39,7 +39,7 @@
 
 * [Ansible](../devops/deployment-options/ansible/initial-deployment/index.md)
 * [Kubernetes](../devops/deployment-options/kubernetes/initial-deployment.md)
-* [Вручную](../devops/deployment-options/manual/initial-deployment.md)
+* [Вручную](../devops/deployment-options/manual/initial-deployment/index.md)
 * [{#T}](./builtin-security.md)
 
 {% endnote %}

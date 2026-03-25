@@ -22,6 +22,8 @@ namespace NKikimr::NSchemeShard {
 using namespace NTabletFlatExecutor;
 
 class TCdcStreamScanFinalizer: public TActorBootstrapped<TCdcStreamScanFinalizer> {
+    static constexpr auto RetryInterval = TDuration::Seconds(1);
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SCHEMESHARD_CDC_STREAM_SCAN_FINALIZER;
@@ -29,7 +31,7 @@ public:
 
     explicit TCdcStreamScanFinalizer(const TActorId& ssActorId, THolder<TEvSchemeShard::TEvModifySchemeTransaction>&& req)
         : SSActorId(ssActorId)
-        , Request(std::move(req)) // template without txId
+        , Request(std::move(req->Record)) // template without txId
     {
     }
 
@@ -41,6 +43,8 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle)
+            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle)
+            sFunc(TEvents::TEvWakeup, SendRequest);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -51,14 +55,29 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        Request->Record.SetTxId(ev->Get()->TxId);
-        Send(SSActorId, Request.Release());
-        TActorBootstrapped::PassAway();
+        Request.SetTxId(ev->Get()->TxId);
+        SendRequest();
+    }
+
+    void SendRequest() {
+        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        ev->Record = Request;
+        Send(SSActorId, std::move(ev));
+    }
+
+    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+        switch (ev->Get()->Record.GetStatus()) {
+        case NKikimrScheme::StatusAccepted:
+        case NKikimrScheme::StatusPathDoesNotExist:
+            return PassAway();
+        default:
+            return Schedule(RetryInterval, new TEvents::TEvWakeup);
+        }
     }
 
 private:
     const TActorId SSActorId;
-    THolder<TEvSchemeShard::TEvModifySchemeTransaction> Request;
+    NKikimrScheme::TEvModifySchemeTransaction Request;
 
 }; // TCdcStreamScanFinalizer
 

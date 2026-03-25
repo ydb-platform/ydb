@@ -3,12 +3,17 @@ LIBRARY()
 SRCS(
     actor.cpp
     change_message_visibility.cpp
+    config.cpp
     consumer_attributes.cpp
     create_queue.cpp
     delete_message.cpp
+    delete_queue.cpp
     error.cpp
     get_queue_attributes.cpp
+    get_queue_url.cpp
+    limits.cpp
     list_queues.cpp
+    purge_queue.cpp
     receipt.cpp
     receive_message.cpp
     send_message.cpp

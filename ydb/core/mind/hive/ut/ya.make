@@ -3,6 +3,9 @@ UNITTEST_FOR(ydb/core/mind/hive)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 PEERDIR(
     library/cpp/getopt
@@ -24,6 +27,8 @@ SRCS(
     tenants_ut.cpp
     hive_ut.cpp
     hive_impl_ut.cpp
+    ut_common.cpp
+    ut_common.h
 )
 
 END()

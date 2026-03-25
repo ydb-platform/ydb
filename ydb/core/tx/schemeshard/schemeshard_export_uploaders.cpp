@@ -8,6 +8,7 @@
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -27,10 +28,9 @@
 
 namespace NKikimr::NSchemeShard {
 
-template <class TDerived>
+template <class TDerived, class TSettings>
 class TExportFilesUploader: public TActorBootstrapped<TDerived> {
 protected:
-    using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
     using TEvExternalStorage = NWrappers::TEvExternalStorage;
     using TPutObjectResult = Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>;
 
@@ -41,12 +41,10 @@ protected:
     };
 
 protected:
-    TExportFilesUploader(const Ydb::Export::ExportToS3Settings& settings, const TString& destinationPrefix)
+    TExportFilesUploader(const TSettings& settings, const TString& destinationPrefix)
         : Settings(settings)
         , DestinationPrefix(destinationPrefix)
-        , ExternalStorageConfig(new TS3ExternalStorageConfig(
-            AppData()->AwsClientConfig,
-            Settings))
+        , ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings))
     {
         if (Settings.has_encryption_settings()) {
             Key = NBackup::TEncryptionKey(Settings.encryption_settings().symmetric_key().key());
@@ -54,7 +52,7 @@ protected:
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::EXPORT_S3_UPLOADER_ACTOR;
+        return NKikimrServices::TActivity::EXPORT_UPLOADER_ACTOR;
     }
 
     // Adds a file to queue.
@@ -93,7 +91,7 @@ protected:
     void UploadFiles() {
         if (!StorageOperator) {
             StorageOperator = this->RegisterWithSameMailbox(
-                NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator())
+                NWrappers::CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator())
             );
         }
 
@@ -172,7 +170,7 @@ protected:
     }
 
 private:
-    Ydb::Export::ExportToS3Settings Settings;
+    TSettings Settings;
     TString DestinationPrefix;
     TMaybe<NBackup::TEncryptionKey> Key;
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
@@ -184,10 +182,13 @@ private:
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 };
 
-class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
+template <typename TSettings>
+class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, TSettings> {
+    using TThis = TSchemeUploader;
+
     void GetDescription() {
-        Send(SchemeShard, new TEvSchemeShard::TEvDescribeScheme(SourcePathId));
-        Become(&TThis::StateDescribe);
+        this->Send(SchemeShard, new TEvSchemeShard::TEvDescribeScheme(SourcePathId));
+        this->Become(&TThis::StateDescribe);
     }
 
     bool FillExportProperties(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
@@ -216,7 +217,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         const auto& describeResult = ev->Get()->GetRecord();
 
         LOG_D("HandleSchemeDescription"
-            << ", self: " << SelfId()
+            << ", self: " << this->SelfId()
             << ", status: " << describeResult.GetStatus()
         );
 
@@ -243,12 +244,12 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
             return Finish(false, "cannot infer scheme");
         }
 
-        if (!AddFile(FileName, Scheme, MakeIV(SchemeFileType))) {
+        if (!this->AddFile(FileName, Scheme, MakeIV(SchemeFileType))) {
             return;
         }
 
         if (EnableChecksums) {
-            if (!AddFile(NBackup::ChecksumKey(FileName), NBackup::ComputeChecksum(Scheme))) {
+            if (!this->AddFile(NBackup::ChecksumKey(FileName), NBackup::ComputeChecksum(Scheme))) {
                 return;
             }
         }
@@ -258,12 +259,12 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
                 return Finish(false, "cannot infer permissions");
             }
 
-            if (!AddFile("permissions.pb", Permissions, MakeIV(NBackup::EBackupFileType::Permissions))) {
+            if (!this->AddFile("permissions.pb", Permissions, MakeIV(NBackup::EBackupFileType::Permissions))) {
                 return;
             }
 
             if (EnableChecksums) {
-                if (!AddFile(NBackup::ChecksumKey("permissions.pb"), NBackup::ComputeChecksum(Permissions))) {
+                if (!this->AddFile(NBackup::ChecksumKey("permissions.pb"), NBackup::ComputeChecksum(Permissions))) {
                     return;
                 }
             }
@@ -272,18 +273,17 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         if (!Metadata) {
             return Finish(false, "empty metadata");
         }
-
-        if (!AddFile("metadata.json", Metadata, IV)) {
+        if (!this->AddFile("metadata.json", Metadata, IV)) {
             return;
         }
 
         if (EnableChecksums) {
-            if (!AddFile(NBackup::ChecksumKey("metadata.json"), NBackup::ComputeChecksum(Metadata))) {
+            if (!this->AddFile(NBackup::ChecksumKey("metadata.json"), NBackup::ComputeChecksum(Metadata))) {
                 return;
             }
         }
 
-        UploadFiles();
+        this->UploadFiles();
     }
 
     TMaybe<NBackup::TEncryptionIV> MakeIV(NBackup::EBackupFileType fileType) {
@@ -296,24 +296,24 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
 
     void Finish(bool success = true, const TString& error = TString()) {
         LOG_I("Finish"
-            << ", self: " << SelfId()
+            << ", self: " << this->SelfId()
             << ", success: " << success
             << ", error: " << error
         );
 
-        Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, success, error));
-        PassAway();
+        this->Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, success, error));
+        this->PassAway();
     }
 
     void OnFilesUploaded(bool success, const TString& error) override {
         Finish(success, error);
     }
 
-    static TString GetDestinationPrefix(const Ydb::Export::ExportToS3Settings& settings, ui32 itemIdx) {
+    static TString GetDestinationPrefix(const TSettings& settings, ui32 itemIdx) {
         if (itemIdx < ui32(settings.items_size())) {
-            return settings.items(itemIdx).destination_prefix();
+            return NBackup::NFieldsWrappers::GetItemDestination(settings.items(itemIdx));
         }
-        return settings.destination_prefix();
+        return NBackup::NFieldsWrappers::GetCommonDestination(settings);
     }
 
 public:
@@ -322,14 +322,14 @@ public:
         ui64 exportId,
         ui32 itemIdx,
         TPathId sourcePathId,
-        const Ydb::Export::ExportToS3Settings& settings,
+        const TSettings& settings,
         const TString& databaseRoot,
         const TString& metadata,
         bool enablePermissions,
         bool enableChecksums,
         const TMaybe<NBackup::TEncryptionIV>& iv
     )
-        : TExportFilesUploader<TSchemeUploader>(settings, GetDestinationPrefix(settings, itemIdx))
+        : TExportFilesUploader<TSchemeUploader, TSettings>(settings, GetDestinationPrefix(settings, itemIdx))
         , SchemeShard(schemeShard)
         , ExportId(exportId)
         , ItemIdx(itemIdx)
@@ -349,7 +349,7 @@ public:
     STATEFN(StateDescribe) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeDescription);
-            sFunc(TEvents::TEvPoisonPill, PassAway);
+            sFunc(TEvents::TEvPoisonPill, this->PassAway);
         }
     }
 
@@ -373,16 +373,17 @@ private:
     TString Metadata;
 }; // TSchemeUploader
 
-class TExportMetadataUploader: public TExportFilesUploader<TExportMetadataUploader> {
+template <typename TSettings>
+class TExportMetadataUploader: public TExportFilesUploader<TExportMetadataUploader<TSettings>, TSettings> {
 public:
     TExportMetadataUploader(
         TActorId schemeShard,
         ui64 exportId,
-        const Ydb::Export::ExportToS3Settings& settings,
+        const TSettings& settings,
         const NKikimrSchemeOp::TExportMetadata& exportMetadata,
         bool enableChecksums
     )
-        : TExportFilesUploader<TExportMetadataUploader>(settings, settings.destination_prefix())
+        : TExportFilesUploader<TExportMetadataUploader, TSettings>(settings, NBackup::NFieldsWrappers::GetCommonDestination(settings))
         , SchemeShard(schemeShard)
         , ExportId(exportId)
         , EnableChecksums(enableChecksums)
@@ -399,7 +400,7 @@ public:
             return;
         }
 
-        UploadFiles();
+        this->UploadFiles();
     }
 
 private:
@@ -424,8 +425,8 @@ private:
         writer.Flush();
         ss.Flush();
 
-        return AddFile("metadata.json", content)
-            && (!EnableChecksums || AddFile(NBackup::ChecksumKey("metadata.json"), NBackup::ComputeChecksum(content)));
+        return this->AddFile("metadata.json", content)
+            && (!EnableChecksums || this->AddFile(NBackup::ChecksumKey("metadata.json"), NBackup::ComputeChecksum(content)));
     }
 
     bool AddSchemaMappingMetadata() {
@@ -440,8 +441,8 @@ private:
         writer.Flush();
         ss.Flush();
 
-        return AddFile("SchemaMapping/metadata.json", content, IV)
-            && (!EnableChecksums || AddFile(NBackup::ChecksumKey("SchemaMapping/metadata.json"), NBackup::ComputeChecksum(content)));
+        return this->AddFile("SchemaMapping/metadata.json", content, IV)
+            && (!EnableChecksums || this->AddFile(NBackup::ChecksumKey("SchemaMapping/metadata.json"), NBackup::ComputeChecksum(content)));
     }
 
     bool AddSchemaMappingJson() {
@@ -460,8 +461,8 @@ private:
         }
 
         const TString content = schemaMapping.Serialize();
-        return AddFile("SchemaMapping/mapping.json", content, iv)
-            && (!EnableChecksums || AddFile(NBackup::ChecksumKey("SchemaMapping/mapping.json"), NBackup::ComputeChecksum(content)));
+        return this->AddFile("SchemaMapping/mapping.json", content, iv)
+            && (!EnableChecksums || this->AddFile(NBackup::ChecksumKey("SchemaMapping/mapping.json"), NBackup::ComputeChecksum(content)));
     }
 
     void OnFilesUploaded(bool success, const TString& error) override {
@@ -471,8 +472,8 @@ private:
             << ", error: " << error
         );
 
-        Send(SchemeShard, new TEvPrivate::TEvExportUploadMetadataResult(ExportId, success, error));
-        PassAway();
+        this->Send(SchemeShard, new TEvPrivate::TEvExportUploadMetadataResult(ExportId, success, error));
+        this->PassAway();
     }
 
 private:
@@ -485,19 +486,45 @@ private:
     TMaybe<NBackup::TEncryptionIV> IV;
 };
 
+template <typename TSettings>
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
+    const TSettings& settings, const TString& databaseRoot, const TString& metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
     return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot,
         metadata, enablePermissions, enableChecksums, iv);
 }
 
+template <typename TSettings>
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
-    const Ydb::Export::ExportToS3Settings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
+    const TSettings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
     bool enableChecksums
 ) {
     return new TExportMetadataUploader(schemeShard, exportId, settings, exportMetadata, enableChecksums);
 }
+
+template IActor* CreateSchemeUploader<Ydb::Export::ExportToS3Settings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
+    bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
+);
+
+template IActor* CreateSchemeUploader<Ydb::Export::ExportToFsSettings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
+    const Ydb::Export::ExportToFsSettings& settings, const TString& databaseRoot, const TString& metadata,
+    bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
+);
+
+template NActors::IActor* CreateExportMetadataUploader<Ydb::Export::ExportToS3Settings>(
+    NActors::TActorId schemeShard, ui64 exportId,
+    const Ydb::Export::ExportToS3Settings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
+    bool enableChecksums
+);
+
+template NActors::IActor* CreateExportMetadataUploader<Ydb::Export::ExportToFsSettings>(
+    NActors::TActorId schemeShard, ui64 exportId,
+    const Ydb::Export::ExportToFsSettings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
+    bool enableChecksums
+);
 
 } // NKikimr::NSchemeShard

@@ -31,8 +31,11 @@ def fix_path(p):
     return p
 
 
-def drop_stl(s):
+def drop_non_bpf_flags(s):
     if s.startswith('-I') and 'contrib/libs/cxxsupp/libcxx/include' in s:
+        return None
+
+    if s.startswith('-march='):
         return None
 
     return s
@@ -54,7 +57,7 @@ if __name__ == '__main__':
     for i in range(len(args) - 1):
         if args[i] == '-target' and args[i + 1] == 'bpf':
             # bpf should not be able to include stl headers
-            args = list(filter(None, [drop_stl(s) for s in args]))
+            args = list(filter(None, [drop_non_bpf_flags(s) for s in args]))
             break
 
     cmd = [path] + args

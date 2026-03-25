@@ -10,6 +10,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_backup.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
+#include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
@@ -41,6 +42,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return "[ForgetIncrementalBackup]";
         case TOperationId::RESTORE:
             return "[ForgetBackupCollectionRestore]";
+        case TOperationId::COMPACTION:
+            return "[ForgetForcedCompaction]";
         default:
             return "[Untagged]";
         }
@@ -58,6 +61,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return new TEvBackup::TEvForgetIncrementalBackupRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::RESTORE:
             return new TEvBackup::TEvForgetBackupCollectionRestoreRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::COMPACTION:
+            return new TEvForcedCompaction::TEvForgetRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
@@ -69,7 +74,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             || kind == TOperationId::IMPORT
             || kind == TOperationId::BUILD_INDEX
             || kind == TOperationId::INCREMENTAL_BACKUP
-            || kind == TOperationId::RESTORE;
+            || kind == TOperationId::RESTORE
+            || kind == TOperationId::COMPACTION;
     }
 
     void Handle(TEvExport::TEvForgetExportResponse::TPtr& ev) {
@@ -94,6 +100,15 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
         const auto& record = ev->Get()->Record;
 
         LOG_D("Handle TEvIndexBuilder::TEvForgetResponse"
+            << ": record# " << record.ShortDebugString());
+
+        Reply(record.GetStatus(), record.GetIssues());
+    }
+
+    void Handle(TEvForcedCompaction::TEvForgetResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvForcedCompaction::TEvForgetResponse"
             << ": record# " << record.ShortDebugString());
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -144,6 +159,7 @@ public:
             case TOperationId::BUILD_INDEX:
             case TOperationId::INCREMENTAL_BACKUP:
             case TOperationId::RESTORE:
+            case TOperationId::COMPACTION:
                 if (!TryGetId(OperationId, RawOperationId)) {
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }
@@ -170,6 +186,7 @@ public:
             hFunc(TEvExport::TEvForgetExportResponse, Handle);
             hFunc(TEvImport::TEvForgetImportResponse, Handle);
             hFunc(TEvIndexBuilder::TEvForgetResponse, Handle);
+            hFunc(TEvForcedCompaction::TEvForgetResponse, Handle);
             hFunc(NKqp::TEvForgetScriptExecutionOperationResponse, Handle);
             hFunc(TEvBackup::TEvForgetIncrementalBackupResponse, Handle);
             hFunc(TEvBackup::TEvForgetBackupCollectionRestoreResponse, Handle);

@@ -8,6 +8,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/storage/indexes/categories_bloom
     ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm
     ydb/core/tx/columnshard/engines/storage/indexes/max
+    ydb/core/tx/columnshard/engines/storage/indexes/minmax
     ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch
 )
 

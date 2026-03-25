@@ -236,6 +236,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
     auto& request = ev->Get()->Record;
 
     const ui64 id = request.GetId();
+    auto rowVersion = request.HasSnapshot()
+        ? TRowVersion::FromProto(request.GetSnapshot())
+        : GetMvccTxVersion(EMvccTxMode::ReadOnly);
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
@@ -244,6 +247,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
 
         LOG_N("Starting TValidateUniqueIndexScan TabletId: " << TabletID()
             << " " << request.ShortDebugString());
+
+        if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
+            VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
+            return;
+        }
 
         auto badRequest = [&](const TString& error) {
             response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
@@ -277,6 +285,15 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
             badRequest("Empty index columns list");
         }
 
+        if (request.HasSnapshot()) {
+            const auto& pathId = tableId.PathId;
+            const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
+            if (!SnapshotManager.FindAvailable(snapshotKey)) {
+                badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
+                    << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
+            }
+        }
+
         if (trySendBadRequest()) {
             return;
         }
@@ -302,7 +319,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
             ev->Sender);
 
         // We don't need a specific row version here, because KQP level forbids table modification during unique index building.
-        StartScan(this, std::move(scan), id, seqNo, std::nullopt, userTable.LocalTid);
+        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvValidateUniqueIndexResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TValidateUniqueIndexScan");
     }

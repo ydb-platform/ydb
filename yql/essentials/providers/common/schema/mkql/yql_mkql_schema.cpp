@@ -18,12 +18,11 @@
 
 #include <util/stream/str.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 template <template <typename> class TSaver>
 class TRuntimeTypeSaver: public TSaver<TRuntimeTypeSaver<TSaver>> {
-    typedef TSaver<TRuntimeTypeSaver> TBase;
+    using TBase = TSaver<TRuntimeTypeSaver>;
 
     struct TCallableAdaptor {
         const NKikimr::NMiniKQL::TCallableType* Type;
@@ -172,7 +171,7 @@ TString WriteTypeToYson(const NKikimr::NMiniKQL::TType* type, NYson::EYsonFormat
 }
 
 struct TRuntimeTypeLoader {
-    typedef NKikimr::NMiniKQL::TType* TType;
+    using TType = NKikimr::NMiniKQL::TType*;
 
     NKikimr::NMiniKQL::TProgramBuilder& Builder;
     IOutputStream& Err;
@@ -331,7 +330,7 @@ NKikimr::NMiniKQL::TType* ParseTypeFromYson(const NYT::TNode& node, NKikimr::NMi
 }
 
 struct TOrderAwareRuntimeTypeLoader: public TRuntimeTypeLoader {
-    typedef NKikimr::NMiniKQL::TType* TType;
+    using TType = NKikimr::NMiniKQL::TType*;
 
     NCommon::TCodecContext& Ctx;
 
@@ -371,5 +370,4 @@ NKikimr::NMiniKQL::TType* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TC
     return DoLoadTypeFromYson(loader, node, 0).GetOrElse(nullptr);
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

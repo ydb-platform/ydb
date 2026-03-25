@@ -4,10 +4,11 @@ PEERDIR(
     contrib/python/wcwidth
 )
 
-TEST_SRCS(
-    test_core.py
-    test_ucslevel.py
+DATA(
+    arcadia/contrib/python/wcwidth/py3/tests
 )
+
+ALL_PYTEST_SRCS()
 
 NO_LINT()
 

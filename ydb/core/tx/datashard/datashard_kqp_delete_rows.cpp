@@ -52,7 +52,7 @@ public:
 
             ui64 nEraseRow = engineCtx.ShardTableStats->NEraseRow;
 
-            engineCtx.Host->EraseRow(Owner.TableId, keyTuple);
+            engineCtx.Host->EraseRow(Owner.TableId, keyTuple, Owner.UserSID);
 
             if (i64 delta = engineCtx.ShardTableStats->NEraseRow - nEraseRow; delta > 0) {
                 engineCtx.TaskTableStats->NEraseRow += delta;
@@ -96,12 +96,13 @@ public:
 
 public:
     TKqpDeleteRowsWrapper(TComputationMutables& mutables, const TTableId& tableId, IComputationNode* rowsNode,
-            TVector<NScheme::TTypeInfo> rowTypes, TVector<ui32> keyIndices)
+            TVector<NScheme::TTypeInfo> rowTypes, TVector<ui32> keyIndices, const TString& userSID)
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
         , RowTypes(std::move(rowTypes))
         , KeyIndices(std::move(keyIndices))
+        , UserSID(userSID)
     {}
 
 private:
@@ -114,12 +115,13 @@ private:
     IComputationNode* RowsNode;
     const TVector<NScheme::TTypeInfo> RowTypes;
     const TVector<ui32> KeyIndices;
+    const TString UserSID;
 };
 
 } // namespace
 
 IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx)
+    TKqpDatashardComputeContext& computeCtx, const TString& userSID)
 {
     MKQL_ENSURE_S(callable.GetInputsCount() == 2);
 
@@ -160,7 +162,7 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
     }
 
     return new TKqpDeleteRowsWrapper(ctx.Mutables, tableId,
-        LocateNode(ctx.NodeLocator, *rowsNode.GetNode()), std::move(rowTypes), std::move(keyIndices));
+        LocateNode(ctx.NodeLocator, *rowsNode.GetNode()), std::move(rowTypes), std::move(keyIndices), userSID);
 }
 
 } // namespace NMiniKQL

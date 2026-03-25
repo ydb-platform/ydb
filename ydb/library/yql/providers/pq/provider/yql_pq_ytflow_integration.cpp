@@ -90,6 +90,19 @@ public:
         return maybeWriteTopic.Cast().Input().Ptr();
     }
 
+    TExprNode::TPtr UpdateWriteContent(
+        const TExprNode::TPtr& write,
+        const TExprNode::TPtr& content,
+        TExprContext& ctx
+    ) override {
+        auto maybeWriteTopic = TMaybeNode<TPqWriteTopic>(write);
+        YQL_ENSURE(maybeWriteTopic);
+        return Build<TPqWriteTopic>(ctx, write->Pos())
+            .InitFrom(maybeWriteTopic.Cast())
+            .Input(content)
+            .Done().Ptr();
+    }
+
     void FillSourceSettings(
         const TExprNode& source, ::google::protobuf::Any& settings, TExprContext& /*ctx*/
     ) override {

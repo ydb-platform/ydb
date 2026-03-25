@@ -449,6 +449,13 @@ bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool operator==(const TDeletedColumnSchema& lhs, const TDeletedColumnSchema& rhs)
+{
+    return lhs.StableName() == rhs.StableName();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool TTableSchema::Empty() const
 {
     return Columns_.empty();

@@ -4,9 +4,9 @@ ENABLE(PYBUILD_NO_PY)
 
 PY3_LIBRARY()
 
-VERSION(3.13.11)
+VERSION(3.13.12)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.13.11.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.13.12.tar.gz)
 
 LICENSE(Python-2.0)
 
@@ -41,13 +41,11 @@ PY_SRCS(
     _pylong.py
     _pyrepl/__init__.py
     _pyrepl/__main__.py
-    _pyrepl/_minimal_curses.py
     _pyrepl/_threading_handler.py
     _pyrepl/base_eventqueue.py
     _pyrepl/commands.py
     _pyrepl/completing_reader.py
     _pyrepl/console.py
-    _pyrepl/curses.py
     _pyrepl/fancy_termios.py
     _pyrepl/historical_reader.py
     _pyrepl/input.py
@@ -57,6 +55,7 @@ PY_SRCS(
     _pyrepl/reader.py
     _pyrepl/readline.py
     _pyrepl/simple_interact.py
+    _pyrepl/terminfo.py
     _pyrepl/trace.py
     _pyrepl/types.py
     _pyrepl/unix_console.py
@@ -428,6 +427,7 @@ PY_SRCS(
     pyclbr.py
     pydoc.py
     pydoc_data/__init__.py
+    pydoc_data/module_docs.py
     pydoc_data/topics.py
     queue.py
     quopri.py

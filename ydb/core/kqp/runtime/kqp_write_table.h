@@ -169,6 +169,11 @@ public:
     virtual void FlushBuffer(const TWriteToken token) = 0;
     virtual void FlushBuffers() = 0;
 
+    // Set the QuerySpanId for a write token (for TLI lock-break attribution).
+    virtual void SetTokenQuerySpanId(TWriteToken token, ui64 querySpanId) = 0;
+    // Get the QuerySpanId of the first pending batch for a shard (0 if none).
+    virtual ui64 GetFirstBatchQuerySpanId(ui64 shardId) const = 0;
+
     virtual void Close() = 0;
 
     virtual void AddCoveringMessages() = 0;
@@ -176,6 +181,8 @@ public:
     struct TPendingShardInfo {
         ui64 ShardId;
         bool HasRead;
+        // QuerySpanId of the batch that triggered this shard update (for TLI attribution).
+        ui64 QuerySpanId = 0;
     };
     virtual void ForEachPendingShard(std::function<void(const TPendingShardInfo&)>&& callback) const = 0;
     virtual std::vector<TPendingShardInfo> ExtractShardUpdates() = 0;

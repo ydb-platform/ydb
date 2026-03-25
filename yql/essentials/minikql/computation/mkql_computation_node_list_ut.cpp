@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 Y_UNIT_TEST_SUITE(TestListRepresentation) {
 Y_UNIT_TEST(Test) {
     TMemoryUsageInfo memInfo(TStringBuf("test"));
@@ -124,5 +123,4 @@ Y_UNIT_TEST(Test) {
     }
 }
 } // Y_UNIT_TEST_SUITE(TestListRepresentation)
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

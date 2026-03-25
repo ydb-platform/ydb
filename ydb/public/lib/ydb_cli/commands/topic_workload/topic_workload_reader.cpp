@@ -31,6 +31,7 @@ void TTopicWorkloadReader::ReaderLoop(const TTopicWorkloadReaderParams& params, 
     if (params.MaxMemoryUsageBytes.has_value()) {
         settings.MaxMemoryUsageBytes(params.MaxMemoryUsageBytes.value());
     }
+    settings.PartitionMaxInFlightBytes(params.PartitionMaxInflightBytes);
     //settings.MaxLag(TDuration::Seconds(30));
 
     if (!params.ReadWithoutConsumer) {

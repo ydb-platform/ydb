@@ -7,7 +7,9 @@ namespace NYql::NFmr {
 
 struct TIndexedBlock {
     TString Data;
-    TVector<TRowIndexMarkup> Rows;
+    std::vector<TRowIndexMarkup> Rows;
+
+    TStringBuf GetRowBytes(ui64 rowIndex);
 };
 
 class IBlockIterator: public TThrRefBase {
@@ -17,6 +19,8 @@ public:
     virtual ~IBlockIterator() = default;
 
     virtual bool NextBlock(TIndexedBlock& out) = 0;
+
+    virtual std::vector<ESortOrder> GetSortOrder() = 0;
 };
 
 } // namespace NYql::NFmr

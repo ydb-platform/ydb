@@ -1,8 +1,10 @@
 from collections import defaultdict
+import random
 import allure
 import logging
 import os
 import time as time_module
+from typing import Optional
 import yatest.common
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -34,7 +36,7 @@ class StressUtilDeployer:
     def prepare_stress_execution(
         self,
         workload_params: dict,
-        nodes_percentage: int = 100,
+        nodes_percentage: Optional[int] = None,
     ):
         """
         PHASE 1: Prepare for workload execution
@@ -122,7 +124,7 @@ class StressUtilDeployer:
                     processed_binaries[workload_info['local_path']].append(workload_name)
                     deploy_futures.append(
                         (
-                            tpe.submit(self._deploy_workload_binary, workload_name, workload_info['local_path'], nodes_percentage),
+                            tpe.submit(self._deploy_workload_binary, workload_name, workload_info['local_path'], nodes_percentage or workload_info.get('nodes_percentage', 1)),
                             workload_name,
                             workload_info['local_path'],
                         )
@@ -203,8 +205,7 @@ class StressUtilDeployer:
                 num_nodes = max(
                     1, int(
                         len(unique_nodes) * nodes_percentage / 100))
-
-                selected_nodes = unique_nodes[:num_nodes]
+                selected_nodes = random.sample(unique_nodes, num_nodes)
 
                 allure.attach(
                     f"Selected {

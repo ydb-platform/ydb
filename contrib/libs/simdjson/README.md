@@ -6,7 +6,8 @@
 simdjson : Parsing gigabytes of JSON per second
 ===============================================
 
-<img src="images/logo.png" width="10%" style="float: right">
+<img src="images/official_logo/logo_noir/SVG/logo_simdjson_noir.svg" width="40%" style="float: right">
+
 JSON is everywhere on the Internet. Servers spend a *lot* of time parsing it. We need a fresh
 approach. The simdjson library uses commonly available SIMD instructions and microparallel algorithms
 to parse JSON 4x  faster than RapidJSON and 25x faster than JSON for Modern C++.
@@ -63,6 +64,7 @@ Real-world usage
 - [RonDB](https://github.com/logicalclocks/rondb)
 - [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)
 - [mamba](https://github.com/mamba-org/mamba)
+- [Ladybird Browser](https://ladybird.org)
 
 
 If you are planning to use simdjson in a product, please work from one of our releases.
@@ -186,6 +188,7 @@ We distinguish between "bindings" (which just wrap the C++ code) and a port to a
 - [JSON::SIMD](https://metacpan.org/pod/JSON::SIMD): Perl bindings; fully-featured JSON module that uses simdjson for decoding.
 - [gemmaJSON](https://github.com/sainttttt/gemmaJSON): Nim JSON parser based on simdjson bindings.
 - [simdjson-java](https://github.com/simdjson/simdjson-java): Java port.
+- [mruby-fast-json](https://github.com/Asmod4n/mruby-fast-json): mruby binding with high API coverage.
 
 About simdjson
 --------------
@@ -211,6 +214,21 @@ We also have an informal [blog post providing some background and context](https
 For the video inclined, <br />
 [![simdjson at QCon San Francisco 2019](http://img.youtube.com/vi/wlvKAT7SZIQ/0.jpg)](http://www.youtube.com/watch?v=wlvKAT7SZIQ)<br />
 (It was the best voted talk, we're kinda proud of it.)
+
+Citing this work
+-----------------
+
+If you use simdjson in published research, please cite the software library. A suitable BibTeX entry is:
+
+```bibtex
+@misc{simdjson,
+  title={{The simdjson library: Parsing Gigabytes of JSON per Second}},
+  author={Daniel Lemire and Geoff Langdale and John Keiser and Paul Dreik and Francisco Thiesen and others},
+  year={2019},
+  howpublished={Software library},
+  note={https://github.com/simdjson/simdjson}
+}
+```
 
 Funding
 -------

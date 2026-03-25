@@ -128,7 +128,7 @@ private:
 
     void EnsureLevel(size_t lvl) {
         while (Levels_.size() <= lvl) {
-            Levels_.emplace_back(CurrentWeight_);
+            Levels_.emplace_back(CurrentWeight_, Cap_);
             CurrentWeight_ <<= 1;
         }
     }
@@ -176,7 +176,9 @@ private:
 
 private:
     struct TLevel {
-        TLevel(ui64 weight) : Weight(weight) {}
+        TLevel(ui64 weight, size_t levelSize) : Weight(weight) {
+            Items.reserve(levelSize);
+        }
 
         TVector<T> Items;
         ui64 Weight;

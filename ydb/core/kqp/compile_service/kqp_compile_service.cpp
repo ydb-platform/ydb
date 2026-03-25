@@ -506,7 +506,7 @@ private:
             std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr);
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
-            return CompileByAst(*request.QueryAst, compileRequest, ctx);
+            return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
         auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
@@ -589,7 +589,7 @@ private:
                 compileRequest.FindInCache = false;
 
             if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
-                return CompileByAst(*request.QueryAst, compileRequest, ctx);
+                return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
             }
 
             auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
@@ -748,7 +748,7 @@ private:
         }
     }
 
-    void CompileByAst(const TQueryAst& queryAst, TKqpCompileRequest& compileRequest, const TActorContext& ctx) {
+    void CompileByAst(const TQueryAst& queryAst, TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
         YQL_ENSURE(queryAst.Ast);
         YQL_ENSURE(queryAst.Ast->IsOk());
         YQL_ENSURE(queryAst.Ast->Root);
@@ -814,7 +814,7 @@ private:
         }
 
         compileRequest.CompileSettings.Action = ECompileActorAction::COMPILE;
-        CompileByAst(astStatements.front(), compileRequest, ctx);
+        CompileByAst(astStatements.front(), std::move(compileRequest), ctx);
     }
 
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev, const TActorContext& ctx) {

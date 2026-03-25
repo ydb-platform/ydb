@@ -2,11 +2,11 @@
 
 {% note warning %}
 
-   Данная инструкция предназначена только для развёртывания кластеров {{ ydb-short-name }} с [конфигурацией V1](../../../configuration-management\configuration-v1\index.md). Развёртывание кластеров {{ ydb-short-name }} с [конфигурацией V2](../../../configuration-management\configuration-v2\index.md) с помощью Ansible в настоящий момент находится в разработке.
+   Данная инструкция предназначена только для развёртывания кластеров {{ ydb-short-name }} с [конфигурацией V1](../../../configuration-management/configuration-v1/index.md). Развёртывание кластеров {{ ydb-short-name }} с [конфигурацией V2](../../../configuration-management/configuration-v2/index.md) с помощью Ansible в настоящий момент находится в разработке.
 
 {% endnote %}
 
-## Подготовьте окружение {# deployment-preparation}
+## Подготовьте окружение {#deployment-preparation}
 
 Перед развёртыванием системы обязательно выполните подготовительные действия. Ознакомьтесь с документом [{#T}](deployment-preparation.md).
 
@@ -19,104 +19,124 @@ mkdir inventory
 mkdir files
 ```
 
-## Создайте конфигурационный файл Ansible {# ansible-creat-config}
+## Создайте конфигурационный файл Ansible {#ansible-creat-config}
 
 Создайте `ansible.cfg` с конфигурацией Ansible, подходящей для целевой среды развёртывания. Подробности в [справочнике по конфигурации Ansible](https://docs.ansible.com/ansible/latest/reference_appendices/config.html). Дальнейшее руководство предполагает, что поддиректория `./inventory` рабочей директории настроена для использования файлов инвентаризации.
 
-{% cut "Пример стартового ansible.cfg" %}
+Пример содержимого — во вкладке ниже.
 
-{% note info %}
+{% list tabs %}
 
-Использование параметра `StrictHostKeyChecking=no` в `ssh_args` повышает удобство автоматизации, но снижает уровень безопасности SSH-соединения (отключает проверку подлинности хоста). Для production-окружений рекомендуется не указывать этот аргумент и настроить доверенные ключи вручную. Используйте этот параметр только для тестовых и временных установок.
+- ansible.cfg
 
-{% endnote %}
+  {% note info %}
 
-```ini
-[defaults]
-conditional_bare_variables = False
-force_handlers = True
-forks = 300
-gathering = explicit
-host_key_checking = False
-interpreter_python = /usr/bin/python3
-inventory = ./inventory
-module_name = shell
-pipelining = True
-private_role_vars = True
-retry_files_enabled = False
-timeout = 5
-vault_password_file = ./ansible_vault_password_file
-verbosity = 1
-log_path = ./ydb.log
+  Использование параметра `StrictHostKeyChecking=no` в `ssh_args` повышает удобство автоматизации, но снижает уровень безопасности SSH-соединения (отключает проверку подлинности хоста). Для production-окружений рекомендуется не указывать этот аргумент и настроить доверенные ключи вручную. Используйте этот параметр только для тестовых и временных установок.
 
-[ssh_connection]
-retries = 5
-ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=/tmp/ssh-%h-%p-%r -o ServerAliveCountMax=3 -o ServerAliveInterval=10 
-```
+  {% endnote %}
 
-{% endcut %}
+  ```ini
+  [defaults]
+  conditional_bare_variables = False
+  force_handlers = True
+  forks = 300
+  gathering = explicit
+  host_key_checking = False
+  interpreter_python = /usr/bin/python3
+  inventory = ./inventory
+  module_name = shell
+  pipelining = True
+  private_role_vars = True
+  retry_files_enabled = False
+  timeout = 5
+  vault_password_file = ./ansible_vault_password_file
+  verbosity = 1
+  log_path = ./ydb.log
+
+  [ssh_connection]
+  retries = 5
+  ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=/tmp/ssh-%h-%p-%r -o ServerAliveCountMax=3 -o ServerAliveInterval=10
+  ```
+
+{% endlist %}
 
 ## Создайте основной файл инвентаризации {#inventory-create}
 
-Создайте файл `inventory/50-inventory.yaml` и заполните его.
+Создайте файл `inventory/50-inventory.yaml` и заполните его. Пример для топологии `mirror-3-dc` на трёх узлах — во вкладке ниже (см. также [выбор топологии](deployment-preparation.md#topology-select)).
 
-```yaml
-all:
-  children:
-    ydb:
-      hosts:
-        static-node-1.ydb-cluster.com:
-        static-node-2.ydb-cluster.com:
-        static-node-3.ydb-cluster.com:
+{% list tabs %}
 
-      vars:
-        # Ansible
-        ansible_user: имя_пользователя
-        ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
+- inventory/50-inventory.yaml
 
-        # Система
-        system_timezone: UTC
-        system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
+  ```yaml
+  all:
+    children:
+      ydb:
+        # Серверы
+        hosts:
+          static-node-1.ydb-cluster.com:
+          static-node-2.ydb-cluster.com:
+          static-node-3.ydb-cluster.com:
 
-        # Узлы
-        ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
-        ydb_version: "версия_системы"
+        vars:
+          # Ansible
+          ansible_user: имя_пользователя
+          ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
 
-        # База данных
-        ydb_user: root
-        ydb_domain: Root
-        ydb_dbname: database
+          # Система
+          system_timezone: UTC
+          system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
 
-        # Настройки авторизации
-        ydb_enforce_user_token_requirement: false
-        ydb_request_client_certificate: false  
+          # Узлы
+          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_version: "версия_системы"
+          ydb_use_dynamic_config: true
+          ydb_custom_dynconfig: "{{ ansible_config_file | dirname }}/files/dynamic-config.yaml"
 
-        # Хранилище
-        ydb_cores_static: 8 
-        ydb_disks:
-          - name: /dev/vdb
-            label: ydb_disk_1
-          - name: /dev/vdc
-            label: ydb_disk_2
-          - name: /dev/vdd
-            label: ydb_disk_3
-        ydb_allow_format_drives: true
-        ydb_skip_data_loss_confirmation_prompt: false
-        ydb_pool_kind: ssd
-        ydb_database_groups: 8
-        ydb_cores_dynamic: 8
-        ydb_dynnodes:
-          - { instance: 'a', offset: 0 }
-          - { instance: 'b', offset: 1 }
-        ydb_brokers:
-          - static-node-1.ydb-cluster.com
-          - static-node-2.ydb-cluster.com
-          - static-node-3.ydb-cluster.com
-        ydbops_local: true
-        
-        ydb_use_dynamic_config: true
-        ydb_custom_dynconfig:  "{{ ansible_config_file | dirname }}/files/dynamic-config.yaml"
-```
+          # База данных
+          ydb_user: root
+          ydb_domain: Root
+          ydb_dbname: database
+
+          # Настройки авторизации
+          ydb_enforce_user_token_requirement: false
+          ydb_request_client_certificate: false
+
+          # Хранилище
+          ydb_cores_static: 8
+          ydb_disks:
+            - name: /dev/vdb
+              label: ydb_disk_1
+            - name: /dev/vdc
+              label: ydb_disk_2
+            - name: /dev/vdd
+              label: ydb_disk_3
+          ydb_allow_format_drives: true
+          ydb_skip_data_loss_confirmation_prompt: false
+          ydb_pool_kind: ssd
+          ydb_database_groups: 8
+          ydb_cores_dynamic: 8
+          ydb_dynnodes:
+            - { instance: 'a', offset: 0 }
+            - { instance: 'b', offset: 1 }
+          ydb_brokers:
+            - static-node-1.ydb-cluster.com
+            - static-node-2.ydb-cluster.com
+            - static-node-3.ydb-cluster.com
+          ydbops_local: true
+  ```
+
+{% endlist %}
+
+Обязательные и характерные для OLAP-развёртывания поля:
+
+1. **`ansible_user`**, **`ansible_ssh_private_key_file`** — учётная запись и ключ SSH для доступа Ansible к серверам.
+2. **`ydb_config`** — путь к статическому `config.yaml` относительно каталога с `ansible.cfg` (в шаблоне используется переменная Ansible `ansible_config_file`, чтобы путь оставался корректным при запуске из любой поддиректории).
+3. **`ydb_use_dynamic_config`** и **`ydb_custom_dynconfig`** — включение динамической конфигурации и путь к `files/dynamic-config.yaml`, где задаются параметры аналитической нагрузки и спиллинга.
+4. **`ydb_version`** — версия дистрибутива {{ ydb-short-name }} для установки.
+5. **`ydb_disks`** — блочные устройства под данные; метки дисков должны совпадать с путями в `config.yaml` (`by-partlabel/...`).
+6. **`ydb_dynnodes`**, **`ydb_brokers`**, **`ydb_cores_static`**, **`ydb_cores_dynamic`** — топология динамических узлов и брокеров, выделение CPU под статику и запросы.
+7. **`ydb_enforce_user_token_requirement`**, **`ydb_request_client_certificate`** — режим авторизации на старте; приведите в соответствие с секцией `security_config` / TLS в `config.yaml`.
 
 {% include notitle [_](./_includes/required-settings.md) %}
 
@@ -130,25 +150,39 @@ all:
 
 ## Измените пароль пользователя root {#change-password}
 
-Создайте файл `ansible_vault_password_file` с содержимым:
+Для конфигурации V1 пароль механизма Vault и пароль пользователя БД задаются так же, как в инструкции [{#T}](deployment-configuration-v1.md#change-password): отдельный файл с паролем Vault в корне рабочей директории и зашифрованный инвентарный файл с `ydb_password`.
 
-```bash
-password
-```
+{% list tabs %}
 
-Этот файл содержит пароль, который Ansible будет использовать для автоматического шифрования и расшифровки конфиденциальных данных, например, файлов с паролями пользователей. Благодаря этому пароли не хранятся в открытом виде в репозитории. Подробнее о работе механизма Ansible Vault можно прочитать в [официальной документации](https://docs.ansible.com/ansible/latest/vault_guide/index.html).
+- ansible_vault_password_file
 
-Далее необходимо установить пароль для начального пользователя, указанного в настройке `ydb_user` (по умолчанию `root`). Этот пользователь изначально будет иметь полные права доступа в кластере, но при необходимости это можно изменить позже. Создайте `inventory/99-inventory-vault.yaml` со следующим содержимым (замените `<password>` на фактический пароль):
+  В **корне рабочей директории** (там же, где лежит `ansible.cfg`, обычно каталог `deployment`, созданный на шаге [«Создайте директорию для работы»](#prepare-directory)) создайте файл `ansible_vault_password_file` со следующим содержимым:
 
-```yaml
-all:
-  children:
-    ydb:
-      vars:
-        ydb_password: <password>
-```
+  ```bash
+  password
+  ```
 
-Зашифруйте этот файл с помощью команды `ansible-vault encrypt inventory/99-inventory-vault.yaml`.
+  В `ansible.cfg` на него ссылается параметр `vault_password_file = ./ansible_vault_password_file`.
+
+  Этот файл содержит пароль, который Ansible использует для шифрования и расшифровки конфиденциальных данных. Подробнее — в [документации Ansible Vault](https://docs.ansible.com/ansible/latest/vault_guide/index.html).
+
+- inventory/99-inventory-vault.yaml
+
+  Установите пароль для начального пользователя из настройки `ydb_user` (по умолчанию `root`). Пользователь изначально имеет полные права в кластере; при необходимости это можно изменить позже.
+
+  Создайте в подкаталоге `inventory/` файл `99-inventory-vault.yaml` со следующим содержимым (замените `<password>` на фактический пароль):
+
+  ```yaml
+  all:
+    children:
+      ydb:
+        vars:
+          ydb_password: <password>
+  ```
+
+  Зашифруйте файл: `ansible-vault encrypt inventory/99-inventory-vault.yaml`.
+
+{% endlist %}
 
 ## Подготовьте конфигурационные файлы {{ ydb-short-name }} {#ydb-config-prepare}
 
@@ -309,6 +343,14 @@ client_certificate_authorization:
           values: ["YDB"]  
 ```
 
+Некоторые элементы примера `config.yaml`:
+
+- **`static_erasure`** и схема **`mirror-3-dc`** в `blob_storage_config` — избыточность «зеркало по трём зонам»; в примере три узла по три диска данных на узел.
+- **`host_configs`** и **`hosts`** — связь FQDN узла, `node_id` и путей к дискам (`/dev/disk/by-partlabel/...` должны совпадать с метками из инвентаря Ansible).
+- **`walle_location`** — условные идентификаторы дата-центра и стойки для политик отказа; замените на актуальные для вашей инфраструктуры.
+- **`interconnect_config`**, **`grpc_config`**, **`auth_config`** — пути к TLS-сертификату узла, ключу и корневому УЦ.
+- **`client_certificate_authorization`** и блок **`subject_terms`** — требования к полям клиентского сертификата при регистрации узлов; **`short_name: "O"`** (Organization) и **`values: ["YDB"]`** задают допустимое значение организации в сертификате. Значения должны соответствовать вашему PKI и настройкам `ydb_request_client_certificate` в инвентаре.
+
 Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN на актуальные в разделах `hosts` и `blob_storage_config`.
 
 - Раздел `hosts`:
@@ -451,12 +493,21 @@ selector_config:
             root: "/путь/к/диску/для/спиллинга"
 ```
 
-Замените следующие значения на актуальные в разделе `selector_config.config.table_service_config.spilling_service_config`:
+Смысл отдельных блоков в `dynamic-config.yaml` для OLAP:
 
-- `max_total_size` — максимальный суммарный размер всех файлов спиллинга на каждом узле. Оптимальное значение выбирается исходя из доступного пространства на выделенном для спиллинга диске. Подробнее см. [описание параметра max_total_size](../../../../reference/configuration/table_service_config.md#local_file_config-max_total_size).
-- `root` — путь к файловой директории, в которой будут храниться файлы спиллинга. Необходимо указать путь к выделенному под спиллинговые операции диску. Подробнее см. [описание параметра root](../../../../reference/configuration/table_service_config.md#local_file_config-root).
+- **`selector_config`** с условием `dynamic: true` — фрагмент применяется к [динамическим узлам](../../../../concepts/glossary.md#dynamic), на которых выполняются запросы.
+- **`actor_system_config`** — выделение CPU под вычислительный пул актёров на узле (в примере `cpu_count: 16`).
+- **`memory_controller_config`** — ограничения по RAM: доли на кэш, выполнение запросов и жёсткий потолок (`hard_limit_bytes`), чтобы аналитические запросы не вытесняли всю память узла.
+- **`table_service_config`** — `enable_olap_sink`, `enable_spilling_nodes`, `enable_query_service_spilling` включают колоночную выгрузку и [спиллинг](../../../../concepts/spilling.md) для тяжёлых запросов.
+- **`spilling_service_config.local_file_config`** — каталог и лимиты размера временных файлов на диске спиллинга.
 
-## Разверните кластер {{ ydb-short-name }} {# cluster-deployment}
+Замените следующие значения на актуальные в разделе `selector_config.config.table_service_config.spilling_service_config.local_file_config`:
+
+- `max_total_size` — максимальный суммарный размер всех файлов спиллинга на каждом узле. Оптимальное значение выбирается исходя из доступного места на диске, выделенном под спиллинг. Подробнее см. [описание параметра max_total_size](../../../../reference/configuration/table_service_config.md#local_file_config-max_total_size).
+- `max_file_size` — верхняя граница размера одного спиллингового файла; не должна превосходить разумные пределы ФС и политики кластера.
+- `root` — путь к каталогу на диске, **выделенном под операции спиллинга** (в нём создаются временные файлы при нехватке памяти для запроса). Подробнее см. [описание параметра root](../../../../reference/configuration/table_service_config.md#local_file_config-root).
+
+## Разверните кластер {{ ydb-short-name }} {#cluster-deployment}
 
 После завершения всех описанных выше подготовительных действий фактическое первоначальное развёртывание кластера сводится к выполнению следующей команды из рабочей директории:
 
@@ -492,7 +543,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 В результате выполнения плейбука `ydb_platform.ydb.initial_setup` будет создан кластер {{ ydb-short-name }}. Он будет содержать [домен](../../../../concepts/glossary.md#domain) с именем из настройки `ydb_domain` (по умолчанию `Root`), [базу данных](../../../../concepts/glossary.md#database) с именем из настройки `ydb_dbname` (по умолчанию `database`) и начального [пользователя](../../../../concepts/glossary.md#access-user) с именем из настройки `ydb_user` (по умолчанию `root`).
 
-## Дополнительные шаги {# additional-steps}
+## Дополнительные шаги {#additional-steps}
 
 Самый простой способ исследовать только что развёрнутый кластер — использовать [Embedded UI](../../../../reference/embedded-ui/index.md), работающий на порту 8765 каждого сервера. Если нет прямого доступа к порту из браузера, можно настроить SSH-туннелирование. Для этого выполните команду `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` на локальной машине (при необходимости добавьте дополнительные опции). После успешного установления соединения можно перейти по URL [localhost:8765](http://localhost:8765) через браузер. Браузер может попросить принять исключение безопасности. Пример того, как это может выглядеть:
 
@@ -518,6 +569,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 ### Тестирование кластера {#testing}
 
 #### Установка CLI
+
 Протестировать кластер можно с помощью встроенных нагрузочных тестов в {{ ydb-short-name }} CLI. Для этого [установите {{ ydb-short-name }} CLI](../../../../reference/ydb-cli/install.md) и создайте профиль с параметрами подключения, заменив заполнители:
 
 ```shell
@@ -547,16 +599,23 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 Для запуска TPC-H выполните следующие шаги:
 
 1. Инициализируйте тестовые данные TPC-H с требуемым объёмом с помощью команды:
+
    ```shell
    {{ ydb-cli }} workload tpch init --scale-factor <размер>
    ```
+
    где `<размер>` — целое положительное значение, отражающее объём тестовых данных (например, 1 для ~1 ГБ).
+
 2. Запустите тестовые запросы TPC-H для проверки аналитической производительности:
+
    ```shell
    {{ ydb-cli }} workload tpch run
    ```
+
    По умолчанию будут выполняться все 22 стандартных запроса TPC-H. В консоли будет отображаться статистика выполнения для каждого запроса.
+
 3. После завершения теста при необходимости удалите тестовые таблицы командой:
+
    ```shell
    {{ ydb-cli }} workload tpch clean
    ```

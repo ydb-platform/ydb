@@ -23,7 +23,7 @@
     * Бинарные файлы {{ ydb-short-name }} установлены в директорию `/opt/ydb`.
     * Кластер {{ ydb-short-name }} настроен с [динамической конфигурацией](../../configuration-management/configuration-v2/index.md).
 
-1. На машине, с которой выполняется установка, доступен [Ansible](https://www.ansible.com/) версии 2.14 или выше.
+1. На машине, с которой выполняется установка, доступен [Ansible](https://www.ansible.com/) поддерживаемой версии (рекомендуется ansible-core 2.14–2.18, подробнее см. [{#T}](../ansible/initial-deployment/index.md)).
 
 1. Настроен SSH-доступ ко всем серверам, на которые будут установлены компоненты YDB EM.
 
@@ -39,16 +39,16 @@
 
 ## Загрузка пакета {#download}
 
-Скачайте последнюю версию пакета YDB EM:
+Скачайте нужную версию пакета YDB EM. Актуальный номер версии и ссылку на архив уточняйте в информации о последнем релизе:
 
 Версия | Ссылка
 --- | ---
-1.0.11 | `http://binaries.ydbem.website.yandexcloud.net/builds/1.0.11/ydb-em-1.0.11-stable-linux-amd64.tar.xz`
+`<VERSION>` | `http://binaries.ydbem.website.yandexcloud.net/builds/<VERSION>/ydb-em-<VERSION>-stable-linux-amd64.tar.xz`
 
-Распакуйте скачанный архив:
+Распакуйте скачанный архив (замените `<VERSION>` на актуальную версию):
 
 ```bash
-tar -xf ydb-em-1.0.11-stable-linux-amd64.tar.xz
+tar -xf ydb-em-<VERSION>-stable-linux-amd64.tar.xz
 ```
 
 Содержимое пакета:
@@ -205,7 +205,11 @@ ydb_user: root
 Пароль пользователя {{ ydb-short-name }} задаётся в файле `examples/inventory/99-inventory-vault.yaml`:
 
 ```yaml
-ydb_password: <пароль>
+all:
+  children:
+    ydb:
+      vars:
+        ydb_password: <пароль>
 ```
 
 {% note tip %}
@@ -272,13 +276,13 @@ ansible-playbook ydb_platform.ydb_em.initial_setup --ask-vault-pass
 
 После успешного завершения установки откройте веб-интерфейс YDB EM в браузере:
 
-```
+```text
 https://<FQDN хоста из группы ydb_em>:8789/ui/clusters
 ```
 
 Например:
 
-```
+```text
 https://ydb-node01.ru-central1.internal:8789/ui/clusters
 ```
 

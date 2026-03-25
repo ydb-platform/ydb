@@ -41,7 +41,6 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             settings.PQConfig.MutableCompactionConfig()->SetBlobsSize(8_MB);
             auto setup = TTopicSdkTestSetup("TopicReadTimestamp", settings, false);
 
-            //setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
             setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, NActors::NLog::PRI_TRACE);
             setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_TRACE);
@@ -132,9 +131,17 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             }
 
             size_t early = 0;
-            for (auto&& m : messages) {
-                if (startTimestamp.has_value() && m.GetWriteTime() < *startTimestamp) {
-                    early++;
+            size_t outOfOrder = 0;
+            {
+                TInstant prev = TInstant::Zero();
+                for (auto&& m : messages) {
+                    if (startTimestamp.has_value() && m.GetWriteTime() < *startTimestamp) {
+                        early++;
+                    }
+                    if (m.GetWriteTime() < prev) {
+                        outOfOrder++;
+                    }
+                    prev = m.GetWriteTime();
                 }
             }
             ssLog << ": " << messages.size() << " messages;";
@@ -150,14 +157,19 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
                 if (writeDiff) {
                     ssLog << ", write_ms-start_ms:" << *writeDiff;
                 }
+                if (i > 0) {
+                    const auto& prevM = messages[i - 1];
+                    i64 diff = (i64)m.GetWriteTime().MilliSeconds() - (i64)prevM.GetWriteTime().MilliSeconds();
+                    ssLog << ", write_ms-prev_write_ms:" << diff;
+                }
                 ssLog << "},\n";
             }
             ssLog << "]\n";
             Cerr << ssLog.Str() << Endl;
-            return std::make_tuple(messages, early);
+            return std::make_tuple(messages, early, outOfOrder);
         };
 
-        const auto [messages, _] = readFromTimestamp(std::nullopt, "all");
+        const auto [messages, _, outOfOrder] = readFromTimestamp(std::nullopt, "all");
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), createTimestamps.size());
 
         auto getOffsetTimestampFor = [&](TDuration offset ,size_t sessionId) {
@@ -188,6 +200,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         struct TStatistics {
             size_t Size;
             size_t Early;
+            size_t OutOfOrder;
         };
         struct TCase {
             TString TimestampFn;
@@ -204,8 +217,14 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             }
             for (size_t sessionId = 0; sessionId < messages.size(); ++sessionId) {
                 TInstant startTimestamp = tsFn(sessionId);
-                const auto [tail, early] = readFromTimestamp(startTimestamp, TStringBuilder() << LabeledOutput(tsName, sessionId));
-                result[TCase{.TimestampFn = tsName, .SessionId = sessionId,}] = TStatistics{.Size = tail.size(), .Early = early,};
+                TInstant messageWriteTimestamp = messages.at(sessionId).GetWriteTime();
+                if (startTimestamp > messageWriteTimestamp) {
+                    Cerr << (TStringBuilder()
+                    << "Skip SESSION " << sessionId << ": messages have same timestamp; " << LabeledOutput(messageWriteTimestamp, startTimestamp) << "\n") << Flush;
+                    continue;
+                }
+                const auto [tail, early, outOfOrder] = readFromTimestamp(startTimestamp, TStringBuilder() << LabeledOutput(tsName, sessionId));
+                result[TCase{.TimestampFn = tsName, .SessionId = sessionId,}] = TStatistics{.Size = tail.size(), .Early = early, .OutOfOrder = outOfOrder};
             }
         }
         for (const auto& [testCase, stats] : result) {
@@ -227,6 +246,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             const size_t expected = messages.size() - sessionId;
             UNIT_ASSERT_VALUES_EQUAL_C(stats.Early, 0, LabeledOutput(timestampFn, sessionId, stats.Size, expected));
             UNIT_ASSERT_LE_C(stats.Size, expected, LabeledOutput(timestampFn, sessionId, stats.Size, expected));
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.OutOfOrder, 0, LabeledOutput(timestampFn, sessionId, stats.Size, expected));
         }
     }
 

@@ -302,7 +302,7 @@ private:
                 ctx.SelfID, TxId, txBody,
                 TxFlags | (immediate ? NTxDataShard::TTxFlags::Immediate : 0));
             if (UserCtx != nullptr) {
-                UserCtx->Serialize(event->Record);
+                UserCtx->SerializeToEvent(event->Record);
             }
             Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(event, shardId, true));
 

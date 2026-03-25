@@ -920,14 +920,6 @@ namespace TEvDataShard {
                                                         TEvDataShard::EvUploadRowsRequest,
                                                         16*1024, 32*1024> {
         TEvUploadRowsRequest() = default;
-
-        TString GetUserSID() const {
-            return Record.GetUserSID();
-        }
-
-        TString GetUserTraceId() const {
-            return Record.GetUserTraceId();
-        }
     };
 
     struct TEvUploadRowsResponse : public TEventPB<TEvUploadRowsResponse,

@@ -332,8 +332,8 @@ protected:
             if (Opts.UserSIDs && !userCtx->GetUserSID().empty() ) {
                 json["user"] = userCtx->GetUserSID();
             }
-            if (Opts.TraceIds && !userCtx->GetUserTraceId().empty()) {
-                json["traceId"] = userCtx->GetUserTraceId();
+            if (Opts.TraceIds && userCtx->GetUserTraceId()) {
+                json["traceId"] = userCtx->GetUserTraceId().GetHexTraceId();
             }
         }
 
@@ -621,8 +621,8 @@ protected:
             if (Opts.UserSIDs && !userCtx->GetUserSID().empty()) {
                 sourceJson["user"] = userCtx->GetUserSID();
             }
-            if (Opts.TraceIds && !userCtx->GetUserTraceId().empty()) {
-                sourceJson["traceId"] = userCtx->GetUserTraceId();
+            if (Opts.TraceIds && userCtx->GetUserTraceId()) {
+                sourceJson["traceId"] = userCtx->GetUserTraceId().GetHexTraceId();
             }
         }
     }

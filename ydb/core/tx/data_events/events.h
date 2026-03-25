@@ -68,16 +68,6 @@ struct TDataEvents {
             return *this;
         }
 
-        TEvWrite& SetUserSID(const TString& userSID) {
-            Record.SetUserSID(userSID);
-            return *this;
-        }
-
-        TEvWrite& SetUserTraceId(const TString& userTraceId) {
-            Record.SetUserTraceId(userTraceId);
-            return *this;
-        }
-
         NKikimrDataEvents::TEvWrite::TOperation& AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType,
             const TTableId& tableId, const std::vector<ui32>& columnIds,
             ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat,

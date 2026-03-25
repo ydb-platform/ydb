@@ -907,7 +907,12 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         auto userCtx = record.GetUserCtx();
         if (userCtx != nullptr) {
             userSID = userCtx->GetUserSID();
-            userTraceId = userCtx->GetUserTraceId();
+            if (userCtx->GetUserTraceId()) {
+                NWilson::TTraceId::TSerializedTraceId serializedUserTraceId;
+                userCtx->GetUserTraceId().Serialize(&serializedUserTraceId);
+
+                userTraceId = TString(reinterpret_cast<const char*>(&serializedUserTraceId), sizeof(NWilson::TTraceId::TSerializedTraceId));
+            }
         } else {
             userSID = BUILTIN_ACL_CDC_WITHOUT_USER_SID;
         }
@@ -997,12 +1002,21 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::LockChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::LockChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
+
+        TString userTraceId;
+        if (userCtx != nullptr && userCtx->GetUserTraceId()) {
+            NWilson::TTraceId::TSerializedTraceId serializedUserTraceId;
+            userCtx->GetUserTraceId().Serialize(&serializedUserTraceId);
+
+            userTraceId = TString(reinterpret_cast<const char*>(&serializedUserTraceId), sizeof(NWilson::TTraceId::TSerializedTraceId));
+        }
+
         db.Table<Schema::LockChangeRecordDetails>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(userCtx != nullptr ? userCtx->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserTraceId>(userCtx != nullptr? userCtx->GetUserTraceId() : ""));
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserTraceId>(userTraceId));
     }
 }
 
@@ -3385,7 +3399,7 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
         }
 
         auto userCtx = NACLib::TUserContextBuilder()
-            .Deserialize(ev->Get()->Record)
+            .DeserializeFromEventHandle(*ev.Get())
             .Build();
         Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), userCtx),
             ctx );
@@ -3482,7 +3496,7 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                     }
 
                     auto userCtx = NACLib::TUserContextBuilder()
-                        .Deserialize(event->Get()->Record)
+                        .DeserializeFromEventHandle(*event.Get())
                         .Build();
                     Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), userCtx), ctx);
                     return;

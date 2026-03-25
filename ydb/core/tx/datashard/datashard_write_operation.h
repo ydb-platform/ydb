@@ -17,7 +17,7 @@ namespace NDataShard {
 
 class TValidatedWriteTxOperation: TMoveOnly {
 public:
-    std::tuple<NKikimrTxDataShard::TError::EKind, TString> ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator);
+    std::tuple<NKikimrTxDataShard::TError::EKind, TString> ParseOperation(const NEvents::TDataEvents::TEvWrite& ev, const NKikimrDataEvents::TEvWrite::TOperation& recordOperation, const TUserTable::TTableInfos& tableInfos, ui64 tabletId, TKeyValidator& keyValidator, const NWilson::TTraceId& traceId);
     TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites() const;
     void SetTxKeys(const TUserTable& tableInfo, ui64 tabletId, TKeyValidator& keyValidator);
 
@@ -36,7 +36,7 @@ public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
     TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite& ev,
-            bool mvccSnapshotRead);
+            const NWilson::TTraceId& traceId, bool mvccSnapshotRead);
     ~TValidatedWriteTx();
 
     EType GetType() const override {
@@ -220,7 +220,7 @@ public:
     }
 
     void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& provider);
-    ERestoreDataStatus RestoreTxData(TDataShard* self, NTable::TDatabase& db);
+    ERestoreDataStatus RestoreTxData(TDataShard* self, NTable::TDatabase& db, const NWilson::TTraceId& traceId);
 
     // TOperation iface.
     void BuildExecutionPlan(bool loaded) override;

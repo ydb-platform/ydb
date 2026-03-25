@@ -119,7 +119,11 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
             userCtxBuilder.WithUserSID(details.template GetValue<typename TDetailsTable::UserSID>());
         }
         if (details.template HaveValue<typename TDetailsTable::UserTraceId>()) {
-            userCtxBuilder.WithUserTraceId(details.template GetValue<typename TDetailsTable::UserTraceId>());
+            auto value = details.template GetValue<typename TDetailsTable::UserTraceId>();
+            if (value.size() == sizeof(NWilson::TTraceId::TSerializedTraceId)) {
+                auto data = reinterpret_cast<const NWilson::TTraceId::TSerializedTraceId*>(value.data());
+                userCtxBuilder.WithUserTraceId(NWilson::TTraceId(*data));
+            }
         }
         builder.WithUserCtx(userCtxBuilder.Build());
 

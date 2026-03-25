@@ -51,7 +51,9 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     if (token != nullptr) {
         builder.WithUserSID(token->GetUserSID());
     }
-    builder.WithUserTraceId(ctx->GetTraceId().GetOrEmplace(""));
+    if (ctx->GetWilsonTraceId()) {
+        builder.WithUserTraceId(ctx->GetWilsonTraceId().Clone());
+    }
 
     UserCtx = builder.Build();
 }

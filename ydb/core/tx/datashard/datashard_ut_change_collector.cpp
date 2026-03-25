@@ -93,6 +93,12 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
             it = result.emplace(pathId, TVector<TChangeRecord>()).first;
         }
 
+        NWilson::TTraceId traceId;
+        if (std::get<4>(detail).size() == sizeof(NWilson::TTraceId::TSerializedTraceId)) {
+            auto data = reinterpret_cast<const NWilson::TTraceId::TSerializedTraceId*>(std::get<4>(detail).data());
+            traceId = NWilson::TTraceId(*data);
+        }
+
         it->second.push_back(
             *TChangeRecordBuilder(std::get<1>(detail))
                 .WithOrder(std::get<0>(record))
@@ -104,7 +110,7 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
                 .WithBody(std::get<2>(detail))
                 .WithUserCtx(NACLib::TUserContextBuilder()
                     .WithUserSID(std::get<3>(detail))
-                    .WithUserTraceId(std::get<4>(detail))
+                    .WithUserTraceId(traceId)
                     .Build())
                 .Build()
         );
@@ -208,8 +214,8 @@ struct TStructRecordBase {
         return UserCtx != nullptr ? UserCtx->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
     }
 
-    TString GetUserTraceId() const {
-        return UserCtx != nullptr ? UserCtx->GetUserTraceId() : "";
+    NWilson::TTraceId GetUserTraceId() const {
+        return UserCtx != nullptr ? UserCtx->GetUserTraceId().Clone() : NWilson::TTraceId();
     }
 
     bool operator==(const TStructRecordBase<SK>& rhs) const {
@@ -234,8 +240,8 @@ struct TStructRecordBase {
             if (!UserCtx->GetUserSID().empty()) {
                 out << " UserSID: " << UserCtx->GetUserSID();
             }
-            if (!UserCtx->GetUserTraceId().empty()) {
-                out << " UserTraceId: " << UserCtx->GetUserTraceId();
+            if (UserCtx->GetUserTraceId()) {
+                out << " UserTraceId: " << UserCtx->GetUserTraceId().GetHexTraceId();
             }
         }
         out << " }";
@@ -1061,15 +1067,19 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         CheckPassUserContext(userCtx);
     }
 
+    namespace {
+        constexpr static NWilson::TTraceId TestTraceId(0xF1F2F3F4F5F6F7);
+    }
+
     Y_UNIT_TEST(PassUserTraceId) {
-        auto userCtx = NACLib::TUserContextBuilder().WithUserTraceId("user-trace-id-value").Build();
+        auto userCtx = NACLib::TUserContextBuilder().WithUserTraceId(TestTraceId).Build();
         CheckPassUserContext(userCtx);
     }
 
     Y_UNIT_TEST(PassUserSIDAndTraceId) {
         auto userCtx = NACLib::TUserContextBuilder()
             .WithUserSID("cdcuser@test")
-            .WithUserTraceId("user-trace-id-value")
+            .WithUserTraceId(TestTraceId)
             .Build();
         CheckPassUserContext(userCtx);
     }

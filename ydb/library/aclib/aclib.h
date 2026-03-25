@@ -3,6 +3,7 @@
 #include <util/generic/hash_set.h>
 #include <util/datetime/base.h>
 #include <ydb/library/aclib/protos/aclib.pb.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 namespace NACLib {
 
@@ -193,28 +194,27 @@ class TUserContext : public TThrRefBase
 public:
     using TPtr = TIntrusivePtr<TUserContext>;
 
-    TUserContext(const TString& userSID, const TString& userTraceId):
+    TUserContext(const TString& userSID, const NWilson::TTraceId& userTraceId):
         UserSID(userSID),
-        UserTraceId(userTraceId)
+        UserTraceId(userTraceId.Clone())
     {}
 
     const TString& GetUserSID() const {
         return UserSID;
     }
 
-    const TString& GetUserTraceId() const {
+    const NWilson::TTraceId& GetUserTraceId() const {
         return UserTraceId;
     }
 
-    template <typename T>
-    void Serialize(T& to) {
-        to.SetUserSID(GetUserSID());
-        to.SetUserTraceId(GetUserTraceId());
+    template <typename TEvent>
+    void SerializeToEvent(TEvent& event) const {
+        event.SetUserSID(GetUserSID());
     }
 
 protected:
     TString UserSID;
-    TString UserTraceId;
+    NWilson::TTraceId UserTraceId;
 };
 
 class TUserContextBuilder
@@ -223,7 +223,7 @@ public:
     using TPtr = TIntrusivePtr<TUserContext>;
 
     TString UserSID{BUILTIN_ACL_NO_USER_SID};
-    TString UserTraceId;
+    NWilson::TTraceId UserTraceId;
 
     TUserContextBuilder() {}
 
@@ -232,15 +232,20 @@ public:
         return *this;
     }
 
-    TUserContextBuilder WithUserTraceId(const TString& userTraceId) {
-        UserTraceId = userTraceId;
+    TUserContextBuilder WithUserTraceId(const NWilson::TTraceId& userTraceId) {
+        UserTraceId = userTraceId.Clone();
         return *this;
     }
 
-    template <typename T>
-    TUserContextBuilder Deserialize(const T& from) {
-        return WithUserSID(from.GetUserSID())
-            .WithUserTraceId(from.GetUserTraceId());
+    template <typename TEvent>
+    TUserContextBuilder DeserializeFromEvent(TEvent& event, const NWilson::TTraceId& traceId) {
+        return WithUserSID(event.Record.GetUserSID())
+            .WithUserTraceId(traceId);
+    }
+
+    template <typename TEventHandle>
+    TUserContextBuilder DeserializeFromEventHandle(TEventHandle& eventHandle) {
+        return DeserializeFromEvent(*eventHandle.Get(), eventHandle.TraceId);
     }
 
     TUserContext::TPtr Build() {

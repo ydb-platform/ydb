@@ -1874,13 +1874,16 @@ private:
         const auto& pqGatewayFactory = FederatedQuerySetup->PqGatewayFactory;
         Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");
 
+        auto counters = Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher");
+        counters = counters->GetSubgroup("host", "");
+
         auto rowDispatcher = NFq::NewRowDispatcherService(
             streamingQueries.GetExternalStorage(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,
             AppData()->TenantName,
-            Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
+            counters,
             pqGatewayFactory->CreatePqGateway(),
             *FederatedQuerySetup->Driver,
             AppData()->Mon,

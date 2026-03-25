@@ -1,5 +1,33 @@
 OpenLDAP 2.6 Change Log
 
+OpenLDAP 2.6.13 Release (2026/03/09)
+	Fixed liblber ber_bvreplace_x potential NULL dereference (ITS#10438)
+	Fixed libldap heap buffer overflow in parse_whsp (ITS#10430)
+	Fixed slap(add|modify) to not recreate config frontend (ITS#10414)
+	Fixed slapd authzPrettyNormal function memory leak (ITS#10446)
+	Fixed slapd memory leak in get_mra function (ITS#10445)
+	Fixed slapd memory leak in parseAssert and parseReturnFilter functions (ITS#10450)
+	Fixed slapd memory leak in parseReadAttrs function (ITS#10449)
+	Fixed slapd slapd_sasl_mechs race condition (ITS#10443)
+	Fixed slapd syncrepl to be more efficient with refresh task (ITS#10413)
+	Fixed slapd unbind/close race condition (ITS#10258)
+	Fixed slapd-ldap memory leak in ldap_chain_parse_ctrl function (ITS#10447)
+	Fixed slapd-mdb always initialize pausepoll (ITS#10191)
+	Fixed slapo-constraint to not propagate request controls to internal ops (ITS#10440)
+	Fixed slapo-dds minttl incorrectly set in certain scenarios (ITS#10442)
+	Fixed slapo-memberof to not propagate request controls to internal ops (ITS#10440)
+	Fixed slapo-nestgroup to not propagate request controls to internal ops (ITS#10440)
+	Fixed slapo-retcode to not propagate request controls to internal ops (ITS#10440)
+	Fixed slapo-syncprov to not propagate request controls to internal ops (ITS#10440)
+	Fixed slapo-syncprov memory leak in syncprov_parseCtrl (ITS#10448)
+	Fixed slapo-translucent to not propagate request controls to internal ops (ITS#10440)
+	Contrib
+		Fixed slapo-autogroup to not propagate request controls to internal ops (ITS#10440)
+	Minor Cleanup
+		ITS#10427
+		ITS#10425
+		ITS#10451
+
 OpenLDAP 2.6.12 Release (2026/01/29)
 	Fixed libldap to reject empty types in LDIF (ITS#10429)
 	Fixed libldap to not scroll past nul bytes (ITS#10430)

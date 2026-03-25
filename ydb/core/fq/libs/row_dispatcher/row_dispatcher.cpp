@@ -571,7 +571,7 @@ void TRowDispatcher::Bootstrap() {
     auto leaderElection = !config.GetCoordinationNodePath().empty()
         ? NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters)
         : NewLocalLeaderElection(SelfId(), coordinatorId, Counters);
-    Register(leaderElection.release(), TMailboxType::HTSwap, AppData()->SystemPoolId);
+    Register(leaderElection.release(), TMailboxType::HTSwap, NKikimr::AppData()->SystemPoolId);
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
 

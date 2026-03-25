@@ -2,7 +2,7 @@
 -- Bug = issue with max_branch != '-' (assigned to a release branch).
 -- Area normalized to first two path segments (area/cs/analytics → area/cs).
 -- Owner_team via prefix match from area_to_owner_mapping (longest wins).
--- Grid includes all areas from timeline + mapping + 'area/-', so areas without bugs show total=0.
+-- Grid: date spine from timeline in the window (+ today) × (area, owner); zeros via LEFT JOIN.
 -- SLA: low >= 30d, med/high/noprio >= 7d.
 --
 $sla_low_days = 30;
@@ -11,13 +11,18 @@ $sla_high_days = 7;
 $sla_noprio_days = 7;
 $window_days = 365;
 
--- 1) Bugs from timeline with area normalized to 2 segments
 $normalize = ($raw_area) -> {
     $parts = String::SplitToList(Cast($raw_area AS String), '/');
     RETURN Cast(
         IF(ListLength($parts) >= 2, $parts[0] || '/' || $parts[1], Cast($raw_area AS String))
     AS Utf8);
 };
+
+-- Single read of mapping table, normalized once and reused everywhere
+$mapping = (
+    SELECT $normalize(area) AS area, owner_team AS owner_team
+    FROM `test_results/analytics/area_to_owner_mapping`
+);
 
 $bugs_raw = (
     SELECT
@@ -32,16 +37,14 @@ $bugs_raw = (
       AND t.max_branch IS NOT NULL AND t.max_branch != '-'
 );
 
--- 2) Full area list: bugs + mapping + fallback, all normalized
 $area_list = (
     SELECT DISTINCT area AS area FROM $bugs_raw
     UNION
-    SELECT DISTINCT $normalize(area) AS area FROM `test_results/analytics/area_to_owner_mapping`
+    SELECT DISTINCT area AS area FROM $mapping
     UNION
     SELECT Cast('area/-' AS Utf8) AS area
 );
 
--- 3) Owner resolution on normalized areas
 $owner = (
     SELECT
         al.area AS area,
@@ -52,17 +55,13 @@ $owner = (
         END AS Utf8) AS owner_team
     FROM $area_list AS al
     LEFT JOIN (
-        SELECT area AS area, owner_team AS owner_team
-        FROM (
-            SELECT
-                a.area AS area,
-                om.owner_team AS owner_team,
-                ROW_NUMBER() OVER (PARTITION BY a.area ORDER BY LENGTH(om.area) DESC) AS rn
+        SELECT area AS area, owner_team AS owner_team FROM (
+            SELECT a.area AS area, om.owner_team AS owner_team,
+                   ROW_NUMBER() OVER (PARTITION BY a.area ORDER BY LENGTH(om.area) DESC) AS rn
             FROM $area_list AS a
-            CROSS JOIN `test_results/analytics/area_to_owner_mapping` AS om
+            CROSS JOIN $mapping AS om
             WHERE a.area = om.area OR StartsWith(a.area, om.area || '/')
-        )
-        WHERE rn = 1
+        ) WHERE rn = 1
     ) AS o ON al.area = o.area
 );
 
@@ -98,8 +97,14 @@ $agg = (
     GROUP BY date, owner_team, area
 );
 
--- Grid: all dates × all (area, owner) combinations
-$dates = (SELECT DISTINCT date AS date FROM $bugs UNION SELECT CurrentUtcDate() AS date);
+-- Grid: date spine = all days present in timeline for the window (not only days with bugs)
+$dates = (
+    SELECT DISTINCT t.date AS date
+    FROM `test_results/analytics/github_issues_timeline` AS t
+    WHERE t.date >= CurrentUtcDate() - $window_days * Interval("P1D")
+    UNION
+    SELECT CurrentUtcDate() AS date
+);
 $grid = (SELECT d.date AS date_window, o.owner_team AS owner_team, o.area AS area FROM $dates AS d CROSS JOIN $owner AS o);
 
 SELECT

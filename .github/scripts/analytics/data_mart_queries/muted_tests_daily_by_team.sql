@@ -1,7 +1,8 @@
 -- Pre-aggregation: muted tests by team and by day, per build_type.
 -- Filters: is_test_chunk = 0, is_muted = 1 (as required for BI).
 -- One row per (date_window, owner_team, branch, build_type).
--- Grid includes all areas from timeline + mapping + 'area/-', so areas without muted tests show 0.
+-- Grid: date spine from github_issues_timeline in the window (+ today), same calendar as bugs mart.
+-- Areas from timeline + mapping + 'area/-'; muted=0 where no rows.
 $window_days = 365;
 $muted_sla_days = 30;
 
@@ -111,7 +112,13 @@ $all_area_owner = (
     SELECT DISTINCT owner_team AS owner_team, area AS area FROM $owner
 );
 
-$dates = (SELECT DISTINCT date_window AS date_window FROM $tm);
+$dates = (
+    SELECT DISTINCT t.date AS date_window
+    FROM `test_results/analytics/github_issues_timeline` AS t
+    WHERE t.date >= CurrentUtcDate() - $window_days * Interval("P1D")
+    UNION
+    SELECT CurrentUtcDate() AS date_window
+);
 $branches_builds = (SELECT DISTINCT branch AS branch, build_type AS build_type FROM $base);
 
 $grid = (

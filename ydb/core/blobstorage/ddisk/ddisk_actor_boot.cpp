@@ -30,19 +30,22 @@ namespace NKikimr::NDDisk {
 
         InitPersistentBuffer();
 
-        if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); !IsPersistentBufferActor() && it != msg.StartingPoints.end()) {
+        if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;
             ChunkMapSnapshotLsn = record.Lsn;
-            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord chunkMap;
-            const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
-            Y_ABORT_UNLESS(success);
-            Y_ABORT_UNLESS(chunkMap.HasSnapshot());
-            const auto& snapshot = chunkMap.GetSnapshot();
-            for (const auto& tabletRecord : snapshot.GetTabletRecords()) {
-                auto& tabletChunkMap = ChunkRefs[tabletRecord.GetTabletId()];
-                for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
-                    tabletChunkMap[chunkRef.GetVChunkIndex()].ChunkIdx = chunkRef.GetChunkIdx();
-                    ++*Counters.Chunks.ChunksOwned;
+
+            if (!IsPersistentBufferActor()) {
+                NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord chunkMap;
+                const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
+                Y_ABORT_UNLESS(success);
+                Y_ABORT_UNLESS(chunkMap.HasSnapshot());
+                const auto& snapshot = chunkMap.GetSnapshot();
+                for (const auto& tabletRecord : snapshot.GetTabletRecords()) {
+                    auto& tabletChunkMap = ChunkRefs[tabletRecord.GetTabletId()];
+                    for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
+                        tabletChunkMap[chunkRef.GetVChunkIndex()].ChunkIdx = chunkRef.GetChunkIdx();
+                        ++*Counters.Chunks.ChunksOwned;
+                    }
                 }
             }
         }

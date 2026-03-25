@@ -60,6 +60,14 @@ public:
     }
 
     TDiskHandle CreateDDisk(ui32 pdiskId, ui32 slotId) {
+        return CreateDisk(pdiskId, slotId, false);
+    }
+
+    TDiskHandle CreatePersistentBuffer(ui32 pdiskId, ui32 slotId) {
+        return CreateDisk(pdiskId, slotId, true);
+    }
+
+    TDiskHandle CreateDisk(ui32 pdiskId, ui32 slotId, bool isPersistentBuffer) {
         const TActorId pdiskEdge = Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         const TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
         Runtime.RegisterService(pdiskServiceId, pdiskEdge);
@@ -81,16 +89,29 @@ public:
             1,
             "ddisk_pool");
         NDDisk::TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8};
-        const TActorId ddiskActor = Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
-            std::move(pbFormat), NDDisk::TDDiskConfig{}, Counters),
-            NodeId);
-        const TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, slotId);
-        Runtime.RegisterService(ddiskServiceId, ddiskActor);
+        if (isPersistentBuffer) {
+            const TActorId ddiskActor = Runtime.Register(NDDisk::CreatePersistentBufferActor(std::move(baseInfo), groupInfo,
+                std::move(pbFormat), NDDisk::TDDiskConfig{}, Counters),
+                NodeId);
+            const TActorId pbServiceId = MakeBlobStoragePersistentBufferId(NodeId, pdiskId, slotId);
+            Runtime.RegisterService(pbServiceId, ddiskActor);
 
-        TDiskHandle disk{ddiskServiceId, pdiskEdge, pdiskId, slotId};
-        BootstrapDDisk(disk);
+            TDiskHandle handle{pbServiceId, pdiskEdge, pdiskId, slotId};
+            BootstrapDDisk(handle, isPersistentBuffer);
 
-        return disk;
+            return handle;
+        } else {
+            const TActorId ddiskActor = Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
+                std::move(pbFormat), NDDisk::TDDiskConfig{}, Counters),
+                NodeId);
+            const TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, slotId);
+            Runtime.RegisterService(ddiskServiceId, ddiskActor);
+
+            TDiskHandle disk{ddiskServiceId, pdiskEdge, pdiskId, slotId};
+            BootstrapDDisk(disk, isPersistentBuffer);
+
+            return disk;
+        }
     }
 
     template<typename TEvent>
@@ -112,7 +133,7 @@ public:
         SendFromPDisk(Runtime, disk.PDiskEdge, request.Sender, response, request.Cookie);
     }
 
-    void BootstrapDDisk(const TDiskHandle& disk) {
+    void BootstrapDDisk(const TDiskHandle& disk, bool isPersistentBuffer) {
         constexpr ui32 ChunkSize = 128u << 20;
         const NPDisk::TOwner Owner = 1;
         const NPDisk::TOwnerRound OwnerRound = 1;
@@ -143,12 +164,13 @@ public:
             delete ptr;
         });
         SendPDiskResponse(disk, *init, initReply.release());
-
-        auto checkSpace = WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
-        auto res = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
-        SendPDiskResponse(disk, *checkSpace, res);
-
+        if (isPersistentBuffer) {
+            auto checkSpace = WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
+            auto res = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
+            SendPDiskResponse(disk, *checkSpace, res);
+        }
         auto readLog = WaitPDiskRequest<NPDisk::TEvReadLog>(disk);
+
         auto readLogReply = std::make_unique<NPDisk::TEvReadLogResult>(
             NKikimrProto::OK,
             readLog->Get()->Position,
@@ -161,20 +183,22 @@ public:
 
         // DDisk bootstrap starts persistent buffer initialization in background.
         // Burn these PDisk requests here, so later client-only phases don't see unsolicited PDisk traffic.
-        auto reserve = WaitPDiskRequest<NPDisk::TEvChunkReserve>(disk);
-        UNIT_ASSERT_VALUES_EQUAL(reserve->Get()->SizeChunks, MinChunksReserved);
-        auto reserveReply = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
-        const ui32 startupReserveChunks = PersistentBufferInitChunks + MinChunksReserved;
-        for (ui32 i = 0; i < startupReserveChunks; ++i) {
-            reserveReply->ChunkIds.push_back(100000 + disk.PDiskId * 1000 + i);
-        }
-        SendPDiskResponse(disk, *reserve, reserveReply.release());
+        if (isPersistentBuffer) {
+            auto reserve = WaitPDiskRequest<NPDisk::TEvChunkReserve>(disk);
+            UNIT_ASSERT_VALUES_EQUAL(reserve->Get()->SizeChunks, MinChunksReserved);
+            auto reserveReply = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
+            const ui32 startupReserveChunks = PersistentBufferInitChunks + MinChunksReserved;
+            for (ui32 i = 0; i < startupReserveChunks; ++i) {
+                reserveReply->ChunkIds.push_back(100000 + disk.PDiskId * 1000 + i);
+            }
+            SendPDiskResponse(disk, *reserve, reserveReply.release());
 
-        for (ui32 i = 0; i < PersistentBufferInitChunks; ++i) {
-            auto log = WaitPDiskRequest<NPDisk::TEvLog>(disk);
-            auto logReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
-            logReply->Results.emplace_back(log->Get()->Lsn, log->Get()->Cookie);
-            SendPDiskResponse(disk, *log, logReply.release());
+            for (ui32 i = 0; i < PersistentBufferInitChunks; ++i) {
+                auto log = WaitPDiskRequest<NPDisk::TEvLog>(disk);
+                auto logReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
+                logReply->Results.emplace_back(log->Get()->Lsn, log->Get()->Cookie);
+                SendPDiskResponse(disk, *log, logReply.release());
+            }
         }
     }
 };
@@ -269,7 +293,6 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             ctx, disk.ServiceId, new NDDisk::TEvConnect(gen2));
         AssertStatus(gen2Connect, TReplyStatus::OK);
         gen2.DDiskInstanceGuid = gen2Connect->Get()->Record.GetDDiskInstanceGuid();
-
         NDDisk::TQueryCredentials gen1 = gen2;
         gen1.Generation = 1;
         auto obsoleteConnect = SendToDDiskAndWait<NDDisk::TEvConnectResult>(
@@ -463,7 +486,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PersistentBufferLifecycle) {
         TTestContext ctx;
-        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        const TDiskHandle disk = ctx.CreatePersistentBuffer(6, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 40, 1);
 
         const ui64 lsn = 10;
@@ -512,9 +535,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PersistentBufferWriteTunnel) {
         TTestContext ctx;
-        const TDiskHandle disk1 = ctx.CreateDDisk(6, 1);
-        const TDiskHandle disk2 = ctx.CreateDDisk(7, 1);
-        const TDiskHandle disk3 = ctx.CreateDDisk(8, 1);
+        const TDiskHandle disk1 = ctx.CreatePersistentBuffer(6, 1);
+        const TDiskHandle disk2 = ctx.CreatePersistentBuffer(7, 1);
+        const TDiskHandle disk3 = ctx.CreatePersistentBuffer(8, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk1.ServiceId, 40, 1);
         const ui64 lsn = 10;
         const TString payload = MakeData('P', BlockSize);
@@ -560,9 +583,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PersistentBufferWriteTunnel_DelayedResponse) {
         TTestContext ctx;
-        const TDiskHandle disk1 = ctx.CreateDDisk(6, 1);
-        const TDiskHandle disk2 = ctx.CreateDDisk(7, 1);
-        const TDiskHandle disk3 = ctx.CreateDDisk(8, 1);
+        const TDiskHandle disk1 = ctx.CreatePersistentBuffer(6, 1);
+        const TDiskHandle disk2 = ctx.CreatePersistentBuffer(7, 1);
+        const TDiskHandle disk3 = ctx.CreatePersistentBuffer(8, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk1.ServiceId, 40, 1);
         const ui64 lsn = 10;
         const TString payload = MakeData('P', BlockSize);
@@ -601,9 +624,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     void DoTest(const std::vector<TReplyStatus::E> expected) {
         TTestContext ctx;
-        const TDiskHandle disk1 = ctx.CreateDDisk(6, 1);
-        const TDiskHandle disk2 = ctx.CreateDDisk(7, 1);
-        const TDiskHandle disk3 = ctx.CreateDDisk(8, 1);
+        const TDiskHandle disk1 = ctx.CreatePersistentBuffer(6, 1);
+        const TDiskHandle disk2 = ctx.CreatePersistentBuffer(7, 1);
+        const TDiskHandle disk3 = ctx.CreatePersistentBuffer(8, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk1.ServiceId, 40, 1);
         const ui64 lsn = 10;
         const TString payload = MakeData('P', BlockSize);
@@ -668,7 +691,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PersistentBufferPDiskOccupancy) {
         TTestContext ctx;
-        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        const TDiskHandle disk = ctx.CreatePersistentBuffer(6, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 40, 1);
 
         const ui64 lsn = 10;
@@ -705,7 +728,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PersistentBufferTabletGeneration) {
         TTestContext ctx;
-        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        const TDiskHandle disk = ctx.CreatePersistentBuffer(6, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 40, 1);
 
         const ui64 lsn = 10;
@@ -772,7 +795,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PersistentBufferReadPart) {
         TTestContext ctx;
-        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        const TDiskHandle disk = ctx.CreatePersistentBuffer(6, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 40, 1);
 
         const ui64 lsn = 10;
@@ -800,9 +823,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(PersistentBufferReadThenWriteTunnel) {
         TTestContext ctx;
-        const TDiskHandle disk1 = ctx.CreateDDisk(6, 1);
-        const TDiskHandle disk2 = ctx.CreateDDisk(7, 1);
-        const TDiskHandle disk3 = ctx.CreateDDisk(8, 1);
+        const TDiskHandle disk1 = ctx.CreatePersistentBuffer(6, 1);
+        const TDiskHandle disk2 = ctx.CreatePersistentBuffer(7, 1);
+        const TDiskHandle disk3 = ctx.CreatePersistentBuffer(8, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk1.ServiceId, 40, 1);
         const ui64 lsn = 10;
         const TString payload = MakeData('P', BlockSize);

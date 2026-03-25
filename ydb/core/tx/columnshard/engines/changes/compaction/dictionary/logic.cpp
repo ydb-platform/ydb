@@ -1,5 +1,7 @@
 #include "logic.h"
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
+
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
@@ -9,6 +11,31 @@
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap::NCompaction::NDictionary {
+
+void TMerger::EnsureDictionaryNullMarked(std::vector<bool>& mask, ui32& maskSize) {
+    if (NullIndex.has_value()) {
+        if (!mask[*NullIndex]) {
+            mask[*NullIndex] = true;
+            ++maskSize;
+        }
+        return;
+    }
+
+    const ui32 nullIdx = static_cast<ui32>(ArrayVariantsFull->length());
+    auto nullOne = NArrow::TThreadSimpleArraysCache::GetNull(ArrayVariantsFull->type(), 1);
+    arrow::ArrayVector parts;
+    parts.reserve(2);
+    parts.push_back(ArrayVariantsFull);
+    parts.push_back(nullOne);
+    ArrayVariantsFull = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
+
+    NullIndex = nullIdx;
+    mask.resize(ArrayVariantsFull->length(), false);
+    if (!mask[nullIdx]) {
+        mask[nullIdx] = true;
+        ++maskSize;
+    }
+}
 
 void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& /*mergingContext*/) {
     bool hasEmptyInput = false;
@@ -106,12 +133,8 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
         const ui32 inputIdx = chunkContext.GetRemapper().GetIdxArray().Value(resultRecordIdx);
         const ui32 inputRecordIdx = chunkContext.GetRemapper().GetRecordIdxArray().Value(resultRecordIdx);
         if (Iterators[inputIdx].IsEmpty()) {
+            EnsureDictionaryNullMarked(mask, maskSize);
             records.emplace_back(-1);
-            AFL_VERIFY(NullIndex.has_value());
-            if (!mask[*NullIndex]) {
-                mask[*NullIndex] = true;
-                ++maskSize;
-            }
             continue;
         }
 
@@ -120,12 +143,8 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
             const auto* arr = type.CastArray(Iterators[inputIdx].GetCurrentDataChunk().GetPositions().get());
             if constexpr (type.IsIndexType()) {
                 if (arr->IsNull(Iterators[inputIdx].GetLocalPosition())) {
+                    EnsureDictionaryNullMarked(mask, maskSize);
                     records.emplace_back(-1);
-                    AFL_VERIFY(NullIndex.has_value());
-                    if (!mask[*NullIndex]) {
-                        mask[*NullIndex] = true;
-                        ++maskSize;
-                    }
                 } else {
                     const ui32 dictIdx = type.GetValue(*arr, Iterators[inputIdx].GetLocalPosition());
                     AFL_VERIFY(inputIdx < RemapIndexes.size());

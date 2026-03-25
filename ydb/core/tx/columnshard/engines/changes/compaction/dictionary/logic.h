@@ -36,6 +36,8 @@ private:
     std::shared_ptr<arrow::Array> ArrayVariantsFull;
     std::optional<ui32> NullIndex;
 
+    void EnsureDictionaryNullMarked(std::vector<bool>& mask, ui32& maskSize);
+
     virtual void DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext) override;
     virtual TColumnPortionResult DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) override;
 

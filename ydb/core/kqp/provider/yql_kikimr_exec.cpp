@@ -3817,7 +3817,7 @@ private:
     {
         auto encodingList = alterColumnList.Item(1).Cast<TExprList>();
         if (tableKind != EKikimrTableKind::Olap && tableKind != EKikimrTableKind::Unspecified) {
-            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Column Encoding is supported only in column tables"));
+            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Column encoding is supported only for column tables"));
             return false;
         }
 

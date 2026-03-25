@@ -480,7 +480,7 @@ bool FillAccessor(
             to.MutableDataAccessorConstructor()->SetClassName("__UNDEFINED");
             break;
         case TColumnEncoding::EEncodingType::DICTIONARY:
-            to.MutableDataAccessorConstructor()->MutablePlain();
+            to.MutableDataAccessorConstructor()->MutableDictionary();
             to.MutableDataAccessorConstructor()->SetClassName("DICTIONARY");
             break;
         case TColumnEncoding::EEncodingType::PLAIN:

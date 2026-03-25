@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
                 for (const auto& m : messages) {
                     stat.Early += (startTimestamp.has_value() && m.GetWriteTime() < *startTimestamp);
                     stat.OutOfOrder += (m.GetWriteTime() < prev);
-                    stat.DuplicateTimestamps = (m.GetWriteTime() == prev);
+                    stat.DuplicateTimestamps += (m.GetWriteTime() == prev);
                     prev = m.GetWriteTime();
                 }
             }

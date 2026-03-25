@@ -129,13 +129,18 @@ public:
     }
 
     void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override  {
+        TString decodedSourceId;
+        if (sourceId.size() > 0) {
+            decodedSourceId = NPQ::NSourceIdEncoding::Decode(sourceId);
+        }
+
         auto key128 = NKikimr::NPQ::AsInt<TUint128>(key);
         auto now = TInstant::Now();
 
         SumWrittenBytes->Update(size, now);
 
-        auto sourceIdHash = Hash(sourceId);
-        TString sourceIdHashStr = sourceId // Kinesis protocol use empty sourceId
+        auto sourceIdHash = Hash(decodedSourceId);
+        TString sourceIdHashStr = decodedSourceId.size() > 0 // Kinesis protocol use empty sourceId
             ? AsKeyBound(sourceIdHash)
             : "";
 
@@ -155,7 +160,7 @@ public:
 
         if (key && IsInKeyRange(key, keyRange)) {
             KeysManager.Add(key128, size);
-        } else if (sourceId) {
+        } else if (decodedSourceId.size() > 0 && IsInKeyRange(sourceIdHashStr, keyRange)) {
             KeysManager.Add(sourceIdHash, size);
         }
     }

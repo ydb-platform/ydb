@@ -7,27 +7,46 @@
 namespace NKikimr::NPQ {
 
 TPartitioningKeysManager::TPartitioningKeysManager(size_t numSketches, TDuration windowSize)
-    : WindowSize(windowSize)
-    , SketchWindowSize(windowSize / numSketches)
+    : WindowSize(windowSize),
+      Rng(std::random_device{}())
 {
+    Y_ENSURE(numSketches > 0, "numSketches must be greater than 0");
+    SketchWindowSize = Max(Min(TDuration::Seconds(1), windowSize), windowSize / numSketches);
 }
 
-void TPartitioningKeysManager::Add(const TString& key, ui64 msgSize) {
+void TPartitioningKeysManager::Add(TUint128 key, ui64 msgSize) {
     auto now = Now();
     KeysCounter.Use(key, now);
-    RemoveOldSketches();
+    RemoveOldSketches(now);
     if (Sketches.empty() || Sketches.back().StartTime + SketchWindowSize <= now) {
-        Sketches.emplace_back(
-            NKll::TDynamicKllSketch<TString>(DEFAULT_SKETCH_K, std::random_device{}(), DEFAULT_MIN_WEIGHT),
-            now);
+        Sketches.push_back(
+            KllSketchWrapper{
+                NKll::TDynamicKllSketch<TUint128>(DEFAULT_SKETCH_LEVEL_SIZE, Rng(), DEFAULT_MIN_WEIGHT),
+                now
+            }
+        );
     }
     Sketches.back().Sketch.Add(key, msgSize);
 }
 
-TString TPartitioningKeysManager::GetMedianKey() {
-    RemoveOldSketches();
+void TPartitioningKeysManager::Add(TUint128 key, ui64 msgSize, TInstant now) {
+    KeysCounter.Use(key, now);
+    RemoveOldSketches(now);
+    if (Sketches.empty() || Sketches.back().StartTime + SketchWindowSize <= now) {
+        Sketches.push_back(
+            KllSketchWrapper{
+                NKll::TDynamicKllSketch<TUint128>(DEFAULT_SKETCH_LEVEL_SIZE, Rng(), DEFAULT_MIN_WEIGHT),
+                now
+            }
+        );
+    }
+    Sketches.back().Sketch.Add(key, msgSize);
+}
 
-    TVector<std::pair<TString, ui64>> keysWithWeights;
+TUint128 TPartitioningKeysManager::GetMedianKey() {
+    RemoveOldSketches(Now());
+
+    TVector<std::pair<TUint128, ui64>> keysWithWeights;
     for (const auto& sketch : Sketches) {
         const auto& levels = sketch.Sketch.GetLevels();
         for (const auto& level : levels) {
@@ -44,8 +63,8 @@ TString TPartitioningKeysManager::GetMedianKey() {
     return NKll::GetQuantile(keysWithWeights, 0.5);
 }
 
-void TPartitioningKeysManager::RemoveOldSketches() {
-    while (!Sketches.empty() && Sketches.front().StartTime + WindowSize < Now()) {
+void TPartitioningKeysManager::RemoveOldSketches(TInstant now) {
+    while (!Sketches.empty() && Sketches.front().StartTime + WindowSize < now) {
         Sketches.pop_front();
     }
 }

@@ -6,7 +6,7 @@ namespace NKikimr::NPQ {
 
 Y_UNIT_TEST_SUITE(TPQUtilsTest) {
     Y_UNIT_TEST(TLastCounter) {
-        TLastCounter counter;
+        TLastCounter<TString> counter;
 
         TInstant now = TInstant::Now();
 

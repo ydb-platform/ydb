@@ -9,27 +9,32 @@
 
 namespace NKikimr::NPQ {
 
+using TUint128 = unsigned __int128;
+
 struct TPartitioningKeysManager {
     TPartitioningKeysManager(size_t numSketches, TDuration windowSize);
-    void Add(const TString& key, ui64 msgSize);
-    TString GetMedianKey();
+    void Add(TUint128 key, ui64 msgSize);
+    void Add(TUint128 key, ui64 msgSize, TInstant now);
+    TUint128 GetMedianKey();
     bool MoreThanOneKey(TInstant since);
 
 private:
-    void RemoveOldSketches();
+    void RemoveOldSketches(TInstant now);
 
-    static constexpr auto DEFAULT_SKETCH_K = 1000;
+    static constexpr auto DEFAULT_SKETCH_LEVEL_SIZE = 100;
     static constexpr auto DEFAULT_MIN_WEIGHT = 512; // 512 bytes
 
     struct KllSketchWrapper {
-        NKll::TDynamicKllSketch<TString> Sketch;
+        NKll::TDynamicKllSketch<TUint128> Sketch;
         TInstant StartTime;
     };
 
     std::deque<KllSketchWrapper> Sketches;
     const TDuration WindowSize;
-    const TDuration SketchWindowSize;
-    TLastCounter KeysCounter;
+    TDuration SketchWindowSize;
+    TLastCounter<TUint128> KeysCounter;
+
+    std::mt19937_64 Rng;
 };
 
 } // namespace NKikimr::NPQ

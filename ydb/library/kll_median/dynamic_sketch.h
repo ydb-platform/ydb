@@ -14,12 +14,9 @@ namespace {
 inline bool TryAcceptSmallWeight(ui64 weight, ui64 w0, std::mt19937_64& rng) {
     Y_ASSERT(w0 > 0);
     Y_ASSERT(weight > 0 && weight < w0);
+    Y_ASSERT((w0 & (w0 - 1)) == 0);
 
-    if ((w0 & (w0 - 1)) == 0) { // w0 is power of two
-        return (static_cast<ui64>(rng()) & (w0 - 1)) < weight;
-    }
-    std::uniform_int_distribution<ui64> dist(0, w0 - 1);
-    return dist(rng) < weight;
+    return (static_cast<ui64>(rng()) & (w0 - 1)) < weight;
 }
 
 } // namespace
@@ -36,50 +33,44 @@ public:
     }
 
     void Add(const T& x, ui64 weight) {
-        if (weight == 0) {
-            return;
-        }
-
-        ui64 placementWeight = weight;
-        ui64 minWeight = Sketch_.CurrentWeight_;
-        if (!Sketch_.Levels_.empty()) {
-            minWeight = Sketch_.Levels_[0].Weight;
-        }
-        
-        if (minWeight > weight) {
-            if (!TryAcceptSmallWeight(weight, minWeight, Sketch_.Rng_)) {
-                return;
+        if (!weight) return;
+    
+        for (ui32 p = 0; p < 64; ++p) {
+            ui64 bit = 1ULL << p;
+            if (bit > weight) break;
+            if (weight & bit) {
+                AddPow2(x, bit);  // bit is power-of-two
             }
-            placementWeight = minWeight;
-        }
-
-        if ((weight & (weight - 1)) != 0) { // weight is not a power of two
-            for (ui32 power = 0; (1ULL << power) <= weight; ++power) {
-                if ((weight & (1ULL << power)) != 0) {
-                    Add(x, 1ULL << power);
-                }
-            }
-            return;
-        }
-
-        Sketch_.N_ += weight;
-        EnsureMaxWeightAtLeast(placementWeight);
-
-        size_t level = FindSuitableLevel(placementWeight);
-        Sketch_.AddToLevel(level, x);
-
-        while (Sketch_.Levels_.size() >= MAX_LEVELS) {
-            Sketch_.CompactLevel(0, true);
-            Sketch_.Levels_.pop_front();
         }
     }
-
+    
     const TDeque<typename TKllSketch<T>::TLevel>& GetLevels() const {
         return Sketch_.Levels_;
     }
 
 private:
     static constexpr size_t MAX_LEVELS = 30;
+
+    void AddPow2(const T& x, ui64 w) {
+        ui64 minWeight = Sketch_.Levels_.empty() ? Sketch_.CurrentWeight_
+                                                 : Sketch_.Levels_[0].Weight;
+    
+        ui64 placementWeight = w;
+        if (w < minWeight) {
+            if (!TryAcceptSmallWeight(w, minWeight, Sketch_.Rng_)) return;
+            placementWeight = minWeight;
+        }
+    
+        Sketch_.N_ += w;
+        EnsureMaxWeightAtLeast(placementWeight);
+        size_t level = FindSuitableLevel(placementWeight);
+        Sketch_.AddToLevel(level, x);
+    
+        while (Sketch_.Levels_.size() > MAX_LEVELS) {
+            Sketch_.CompactLevel(0, true);
+            Sketch_.Levels_.pop_front();
+        }
+    }
 
     size_t FindSuitableLevel(ui64 w) {
         Y_ENSURE((w & (w - 1)) == 0, "w must be a power of two");

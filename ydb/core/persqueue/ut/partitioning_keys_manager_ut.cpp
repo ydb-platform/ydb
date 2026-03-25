@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <public/partition_key_range/partition_key_range.h>
 #include <random>
 #include <vector>
 
@@ -9,12 +10,27 @@
 #include <util/generic/guid.h>
 #include <util/generic/string.h>
 #include <ydb/core/persqueue/public/partitioning_keys_manager.h>
+#include <ydb/services/lib/sharding/sharding.h>
+
+
+#include <library/cpp/digest/md5/md5.h>
 
 namespace NKikimr::NPQ {
 
 namespace {
 
     constexpr ui64 kMsgSize = 1024;
+
+    /** yutil has no ToString / IOutputStream for native unsigned __int128 — avoid << TUint128 in asserts. */
+    TString Uint128ToDiagString(TUint128 v) {
+        const ui64 hi = static_cast<ui64>(v >> 64);
+        const ui64 lo = static_cast<ui64>(v);
+        return TStringBuilder() << hi << ':' << lo;
+    }
+
+    TUint128 RandomUint128() {
+        return NYql::NDecimal::TUint128(std::random_device{}());
+    }
 
     /** Large windows avoid time-based sketch rotation / expiry during the test. */
     TDuration HugeWindow() {
@@ -28,11 +44,13 @@ namespace {
     template <typename T>
     void AddRandomKeys(TPartitioningKeysManager& m, size_t N, T& keys) {
         for (size_t i = 0; i < N; ++i) {
-            keys.emplace_back(CreateGuidAsString());
+            auto decimal = NDataStreams::V1::HexBytesToDecimal(MD5::Calc(CreateGuidAsString()));
+            keys.emplace_back(decimal);
         }
-        std::mt19937 rng(20260324u);
-        std::shuffle(keys.begin(), keys.end(), rng);
-        for (const auto& key : keys) {m.Add(key, kMsgSize);}
+        auto start = Now();
+        for (const auto& key : keys) {m.Add(key, kMsgSize, start);}
+        auto duration = Now() - start;
+        UNIT_ASSERT_C(duration.MilliSeconds() < 1000, "duration " << duration.MilliSeconds() << " milliseconds");
     }
 
 } // namespace
@@ -41,53 +59,56 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
 
     Y_UNIT_TEST(GetMedianKey_Empty) {
         TPartitioningKeysManager m(1, HugeWindow());
-        UNIT_ASSERT(m.GetMedianKey().empty());
+        UNIT_ASSERT(m.GetMedianKey() == 0);
     }
 
     Y_UNIT_TEST(GetMedianKey_SingleKey) {
         TPartitioningKeysManager m(1, HugeWindow());
-        m.Add(TString{"partition-alpha"}, kMsgSize);
-        UNIT_ASSERT_VALUES_EQUAL(m.GetMedianKey(), TString{"partition-alpha"});
+        auto key = RandomUint128();
+        m.Add(key, kMsgSize);
+        const TUint128 got = m.GetMedianKey();
+        UNIT_ASSERT_C(got == key, "median " << Uint128ToDiagString(got) << " expected " << Uint128ToDiagString(key));
     }
 
     Y_UNIT_TEST(GetMedianKey_SameKeyManyTimes) {
         TPartitioningKeysManager m(1, HugeWindow());
+        auto key = RandomUint128();
         for (int i = 0; i < 500; ++i) {
-            m.Add(TString{"stable-key"}, kMsgSize);
+            m.Add(key, kMsgSize);
         }
-        UNIT_ASSERT_VALUES_EQUAL(m.GetMedianKey(), TString{"stable-key"});
-    }
-
-    Y_UNIT_TEST(GetMedianKey_HeavyKeyBiasesMedian) {
-        TPartitioningKeysManager m(1, HugeWindow());
-        m.Add(TString{"a"}, kMsgSize);
-        m.Add(TString{"c"}, kMsgSize);
-        for (int i = 0; i < 4000; ++i) {
-            m.Add(TString{"b"}, kMsgSize);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(m.GetMedianKey(), TString{"b"});
+        const TUint128 got = m.GetMedianKey();
+        UNIT_ASSERT_C(got == key, "median " << Uint128ToDiagString(got) << " expected " << Uint128ToDiagString(key));
     }
 
     Y_UNIT_TEST(GetMedianKey_StreamingPaddedKeys) {
         TPartitioningKeysManager m(1, HugeWindow());
+        std::vector<TUint128> keys;
         for (int i = 0; i < 3000; ++i) {
-            char buf[24];
-            std::snprintf(buf, sizeof(buf), "k%07d", i);
-            m.Add(TString{buf}, kMsgSize);
+            auto key = RandomUint128();
+            keys.emplace_back(key);
+            m.Add(key, kMsgSize);
         }
-        TString med = m.GetMedianKey();
-        UNIT_ASSERT(med.StartsWith("k"));
-        UNIT_ASSERT(med >= TString{"k0000000"} && med <= TString{"k0002999"});
+        TUint128 med = m.GetMedianKey();
+        
+        std::sort(keys.begin(), keys.end());
+        const size_t mid = keys.size() / 2;
+        // Allow ~10% rank slack around the empirical median (KLL is approximate).
+        const size_t tol = keys.size() / 10;
+        const size_t loIdx = mid > tol ? mid - tol : 0;
+        const size_t hiIdx = std::min(keys.size() - 1, mid + tol);
+        UNIT_ASSERT_C(keys[loIdx] <= med && med <= keys[hiIdx],
+            "median " << Uint128ToDiagString(med) << " outside [" << Uint128ToDiagString(keys[loIdx]) << ", "
+                      << Uint128ToDiagString(keys[hiIdx]) << "]");
     }
 
     Y_UNIT_TEST(GetMedianKey_RandomKeys) {
         constexpr size_t N = 1'000'000;
         TPartitioningKeysManager m(1, HugeWindow());
-        std::vector<TString> keys;
+        std::vector<TUint128> keys;
         keys.reserve(N);
         AddRandomKeys(m, N, keys);
-        TString med = m.GetMedianKey();
-        UNIT_ASSERT(!med.empty());
+        TUint128 med = m.GetMedianKey();
+        UNIT_ASSERT(med != 0);
 
         std::sort(keys.begin(), keys.end());
         const size_t mid = N / 2;
@@ -96,13 +117,14 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
         const size_t loIdx = mid > tol ? mid - tol : 0;
         const size_t hiIdx = std::min(N - 1, mid + tol);
         UNIT_ASSERT_C(keys[loIdx] <= med && med <= keys[hiIdx],
-            "median " << med << " outside [" << keys[loIdx] << ", " << keys[hiIdx] << "]");
+            "median " << Uint128ToDiagString(med) << " outside [" << Uint128ToDiagString(keys[loIdx]) << ", "
+                      << Uint128ToDiagString(keys[hiIdx]) << "]");
     }
 
     Y_UNIT_TEST(GetMedianKey_MultipleSketches) {
         constexpr size_t N = 1'000'000;
         TPartitioningKeysManager m(5, SmallWindow());
-        std::deque<TString> keys;
+        std::deque<TUint128> keys;
 
         for (int i = 0; i < 10; ++i) {
             AddRandomKeys(m, N / 10, keys);
@@ -110,8 +132,11 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
         }
 
         keys.erase(keys.begin(), keys.begin() + N / 2);
-        TString med = m.GetMedianKey();
-        UNIT_ASSERT(!med.empty());
+        auto start = Now();
+        TUint128 med = m.GetMedianKey();
+        auto duration = Now() - start;
+        UNIT_ASSERT_C(duration.MilliSeconds() < 100, "duration " << duration.MilliSeconds() << " milliseconds");
+        UNIT_ASSERT(med != 0);
 
         std::sort(keys.begin(), keys.end());
         const size_t mid = keys.size() / 2;
@@ -120,7 +145,8 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
         const size_t loIdx = mid > tol ? mid - tol : 0;
         const size_t hiIdx = std::min(keys.size() - 1, mid + tol);
         UNIT_ASSERT_C(keys[loIdx] <= med && med <= keys[hiIdx],
-            "median " << med << " outside [" << keys[loIdx] << ", " << keys[hiIdx] << "]");
+            "median " << Uint128ToDiagString(med) << " outside [" << Uint128ToDiagString(keys[loIdx]) << ", "
+                      << Uint128ToDiagString(keys[hiIdx]) << "]");
     }
 
 } // Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest)

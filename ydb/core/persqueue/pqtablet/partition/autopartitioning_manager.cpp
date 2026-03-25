@@ -35,7 +35,7 @@ public:
         Y_UNUSED(config);
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override {
+    void OnWrite(const TString& sourceId, ui64 size, TUint128 key = 0) override {
         Y_UNUSED(sourceId);
         Y_UNUSED(size);
         Y_UNUSED(key);
@@ -67,7 +67,7 @@ public:
         Y_UNUSED(config);
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] const TString& key = "") override {
+    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] TUint128 key = 0) override {
         auto now = TInstant::Now();
 
         auto it = WrittenBytes.find(sourceId);
@@ -128,25 +128,26 @@ public:
         RecreateSumWrittenBytes();
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] const TString& key = "") override  {
+    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] TUint128 key = 0) override  {
         auto now = TInstant::Now();
 
         SumWrittenBytes->Update(size, now);
 
-        TString sourceIdHash = sourceId // Kinesis protocol use empty sourceId
-            ? AsKeyBound(Hash(NSourceIdEncoding::Decode(sourceId)))
+        auto sourceIdHash = Hash(sourceId);
+        TString sourceIdHashStr = sourceId // Kinesis protocol use empty sourceId
+            ? AsKeyBound(sourceIdHash)
             : "";
 
-        auto it = WrittenBytes.find(sourceIdHash);
+        auto it = WrittenBytes.find(sourceIdHashStr);
         if (it == WrittenBytes.end()) {
-            auto [i,_] = WrittenBytes.emplace(sourceIdHash, TSlidingWindow(TDuration::Minutes(1), 6));
+            auto [i, _] = WrittenBytes.emplace(sourceIdHashStr, TSlidingWindow(TDuration::Minutes(1), 6));
             it = i;
         }
 
         auto& counter = it->second;
         counter.Update(size, now);
 
-        SourceIdCounter.Use(sourceIdHash, now);
+        SourceIdCounter.Use(sourceIdHashStr, now);
 
         if (key) {
             KeysManager.Add(key, size);
@@ -169,7 +170,7 @@ public:
         if (AppData()->FeatureFlags.GetEnableTopicPartitionSplitBasedOnKllSketch()) {
             auto medianKey = KeysManager.GetMedianKey();
             if (medianKey) {
-                return medianKey;
+                return AsKeyBound(medianKey);
             }
 
             auto* partition = GetPartition();
@@ -311,7 +312,7 @@ private:
     // SourceIdHash -> SlidingWindow
     std::unordered_map<TString, TSlidingWindow> WrittenBytes;
     NPQ::TPartitioningKeysManager KeysManager;
-    TLastCounter SourceIdCounter;
+    TLastCounter<TString> SourceIdCounter;
     TInstant LastCleanUp;
 };
 

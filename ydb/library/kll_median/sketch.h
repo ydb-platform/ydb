@@ -139,35 +139,31 @@ private:
         if (buf.size() <= Cap_ && !force) {
             return;
         }
-
+    
         std::sort(buf.begin(), buf.end());
-
+    
         bool keepOne = (buf.size() % 2 == 1) && !force;
         T kept{};
         if (keepOne) {
             std::uniform_int_distribution<size_t> pick(0, buf.size() - 1);
             size_t idx = pick(Rng_);
             kept = buf[idx];
-            buf.erase(buf.begin() + static_cast<std::ptrdiff_t>(idx));
+            buf.erase(buf.begin() + static_cast<std::ptrdiff_t>(idx)); // теперь размер чётный
         }
-
+    
         int r = Bit_(Rng_);
-        TVector<T> promoted;
-        promoted.reserve(buf.size() / 2);
-
-        for (size_t i = static_cast<size_t>(r); i < buf.size(); i += 2) {
-            promoted.push_back(buf[i]);
-        }
-
-        buf.clear();
-        if (keepOne) {
-            buf.push_back(kept);
-        }
-
+    
         EnsureLevel(lvl + 1);
         auto& up = Levels_[lvl + 1].Items;
-        up.insert(up.end(), promoted.begin(), promoted.end());
-
+        for (size_t i = static_cast<size_t>(r); i < buf.size(); i += 2) {
+            up.push_back(buf[i]);
+        }
+    
+        buf.clear();
+        if (keepOne) {
+            buf.push_back(kept); // kept реально остаётся на этом уровне
+        }
+    
         if (up.size() > Cap_) {
             CompactLevel(lvl + 1);
         }
@@ -176,37 +172,6 @@ private:
     void Clear() {
         N_ = 0;
         Levels_.clear();
-    }
-
-    void Merge(const TKllSketch& other) {
-        if (this == &other) {
-            return;
-        }
-        if (other.TotalStored() == 0) {
-            return;
-        }
-
-        Y_ENSURE(Cap_ == other.Cap_, "Cannot merge KLL sketches with different cap");
-
-        N_ += other.N_;
-
-        for (size_t lvl = 0; lvl < other.Levels_.size(); ++lvl) {
-            EnsureLevel(lvl);
-            Y_ENSURE(Levels_[lvl].Weight == other.Levels_[lvl].Weight, "Cannot merge: level weight mismatch");
-            auto& dst = Levels_[lvl].Items;
-            const auto& src = other.Levels_[lvl].Items;
-            dst.insert(dst.end(), src.begin(), src.end());
-        }
-
-        for (size_t lvl = 0; lvl < Levels_.size(); ++lvl) {
-            if (Levels_[lvl].Items.size() > Cap_) {
-                CompactLevel(lvl);
-            }
-        }
-    }
-
-    bool IsLevelFull(size_t lvl) const {
-        return Levels_[lvl].Items.size() >= Cap_;
     }
 
 private:

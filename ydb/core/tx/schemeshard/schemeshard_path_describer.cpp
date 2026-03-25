@@ -1414,6 +1414,10 @@ void TSchemeShard::DescribeTable(
         entry->MutableTTLSettings()->CopyFrom(tableInfo.TTLSettings());
     }
 
+    if (tableInfo.HasMetricsSettings()) {
+        entry->MutableMetricsSettings()->MutableConfigured()->CopyFrom(tableInfo.GetMetricsSettings());
+    }
+
     if (tableInfo.HasReplicationConfig()) {
         entry->MutableReplicationConfig()->CopyFrom(tableInfo.ReplicationConfig());
     }

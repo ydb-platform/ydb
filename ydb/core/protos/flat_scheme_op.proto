@@ -277,6 +277,76 @@ message TTTLSettings {
     reserved 3;
 }
 
+/**
+ * The parameters for the detailed metrics for the given table.
+ */
+message TMetricsSettings {
+    /**
+     * The level at which metrics are aggregated and reported.
+     */
+    enum EMetricsLevel {
+        /**
+         * The metrics level is not specified.
+         */
+        MetricsLevelUnspecified = 0;
+
+        /**
+         * All metrics are disabled.
+         */
+        MetricsLevelDisabled = 1;
+
+        /**
+         * Metrics are aggregated and reported for the entire database.
+         */
+        MetricsLevelDatabase = 2;
+
+        /**
+         * Metrics are aggregated and reported for individual tables.
+         */
+        MetricsLevelTable = 3;
+
+        /**
+         * Metrics are aggregated and reported for individual partitions.
+         */
+        MetricsLevelPartition = 4;
+    }
+
+    /**
+     * The container for the metrics settings, which are explicitly configured.
+     */
+    message TConfigured {
+        /**
+         * The level at which metrics are aggregated and reported.
+         *
+         * @note If this value is not set, METRICS_LEVEL_DATABASE is assumed.
+         */
+        optional EMetricsLevel MetricsLevel = 1;
+    }
+
+    /**
+     * The container for the metrics settings, which are explicitly removed.
+     */
+    message TNotConfigured {
+    }
+
+    oneof Status {
+        /**
+         * Set, if the metrics settings are explicitly configured.
+         */
+        TConfigured Configured = 1;
+
+        /**
+         * Set, if the metrics settings are explicitly removed.
+         *
+         * @note This is used in ALTER TABLE requests to remove the metrics settings,
+         *       which are currently configured for the given table. If the metrics
+         *       settings are not configured, the corresponding TMetricsSettings field
+         *       in the table description will not be set.
+         */
+        TNotConfigured NotConfigured = 2;
+    }
+}
+
 message TTableReplicationConfig {
     enum EReplicationMode {
         REPLICATION_MODE_NONE = 0;
@@ -369,6 +439,23 @@ message TTableDescription {
 
     // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
     optional uint32 UniqueIndexKeySize = 50;
+
+    /**
+     * The metrics settings for the given table.
+     *
+     * @note When returning the description for an existing table, this field
+     *       will be populated, if the metrics settings are explicitly configured
+     *       for the given table. If the metrics settings are not configured,
+     *       this field will not be populated in the table description.
+     *
+     * @note When used for ALTER TABLE requests, this field should be left unset
+     *       to keep the current metrics settings for the given table.
+     *       To configure/change the metrics settings, this field should be populated
+     *       with the TMetricsSettings.Configured field set to the desired
+     *       settings. To remove the current metrics settings, this field should
+     *       be populated with the TMetricsSettings.NotConfigured field set.
+     */
+    optional TMetricsSettings MetricsSettings = 51;
 }
 
 message TCompressionOptions {

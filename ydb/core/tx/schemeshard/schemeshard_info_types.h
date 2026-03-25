@@ -714,6 +714,38 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         return *TableDescription.MutableTTLSettings();
     }
 
+    /**
+     * Determine if the metrics settings are configured for the given table.
+     *
+     * @return True, if the metrics settings are configured for the given table
+     */
+    bool HasMetricsSettings() const {
+        return TableDescription.HasMetricsSettings()
+            && (TableDescription.GetMetricsSettings().GetStatusCase()
+                    == NKikimrSchemeOp::TMetricsSettings::kConfigured)
+            && (TableDescription.GetMetricsSettings().HasConfigured());
+    };
+
+    /**
+     * Return the metrics settings for the given table.
+     *
+     * @warning This function should be called only if HasMetricsSettings() returns true.
+     *
+     * @return The metrics settings for the given table
+     */
+    const NKikimrSchemeOp::TMetricsSettings::TConfigured& GetMetricsSettings() const {
+        return TableDescription.GetMetricsSettings().GetConfigured();
+    }
+
+    /**
+     * Return the modifiable version of the metrics settings for the given table.
+     *
+     * @return The modifiable version of the metrics settings for the given table
+     */
+    NKikimrSchemeOp::TMetricsSettings::TConfigured& MutableMetricsSettings() {
+        return *TableDescription.MutableMetricsSettings()->MutableConfigured();
+    }
+
     ui32 GetTTLColumnId() const {
         if (!IsTTLEnabled()) {
             return Max<ui32>();
@@ -3862,6 +3894,21 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const TMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
+
+/**
+ * Check if the given metrics settings are valid.
+ *
+ * @param[in] forCreate Indicates if this is for CREATE TABLE (ALTER TABLE otherwise)
+ * @param[in] metricsSettings The metrics settings to validate
+ * @param[out] errorString Receives the error message, if the metrics settings are not valid
+ *
+ * @return Indicates if the metrics settings are valid
+ */
+bool ValidateMetricsSettings(
+    bool forCreate,
+    const NKikimrSchemeOp::TMetricsSettings& metricsSettings,
+    TString& errorString
+);
 
 TConclusion<TDuration> GetExpireAfter(const NKikimrSchemeOp::TTTLSettings::TEnabled& settings, const bool allowNonDeleteTiers);
 

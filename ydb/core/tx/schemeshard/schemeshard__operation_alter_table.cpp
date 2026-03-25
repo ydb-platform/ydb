@@ -97,7 +97,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         && !copyAlter.HasPartitionConfig()
         && !copyAlter.HasTTLSettings()
         && !copyAlter.HasReplicationConfig()
-        && !copyAlter.HasIncrementalBackupConfig())
+        && !copyAlter.HasIncrementalBackupConfig()
+        && !copyAlter.HasMetricsSettings())
     {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
@@ -107,6 +108,19 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     if (copyAlter.HasPartitionConfig() && copyAlter.GetPartitionConfig().HasFreezeState()) {
         if (hasSchemaChanges) {
             errStr = Sprintf("Mix freeze cmd with other options is forbidden");
+            status = NKikimrScheme::StatusInvalidParameter;
+            return nullptr;
+        }
+    }
+
+    if (copyAlter.HasMetricsSettings()) {
+        // New metrics settings are specified in the request,
+        // make sure the metrics settings are valid (correct metrics level etc)
+        if (!ValidateMetricsSettings(
+            false /* forCreate */,
+            copyAlter.GetMetricsSettings(),
+            errStr
+        )) {
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }

@@ -546,6 +546,20 @@ public:
             return result;
         }
 
+        if (schema.HasMetricsSettings()) {
+            TString errorString;
+
+            // Make sure the metrics settings are valid (correct metrics level etc)
+            if (!ValidateMetricsSettings(
+                true /* forCreate */,
+                schema.GetMetricsSettings(),
+                errorString
+            )) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errorString);
+                return result;
+            }
+        }
+
         if (parentPath.Base()->IsTableIndex()) {
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "Creating private table for table index"

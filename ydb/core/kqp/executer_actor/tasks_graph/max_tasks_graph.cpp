@@ -62,6 +62,8 @@ void TMaxTasksGraph::AddStage(const TStageId& stage, EStageType type, const std:
 }
 
 void TMaxTasksGraph::AddTasks(const TStageId& stage, TNodeId node, size_t tasksCount) {
+    YQL_ENSURE(tasksCount);
+
     auto stageIdx = StageIds.at(stage);
     auto nodeIdx = NodeIds.find(node);
     if (nodeIdx == NodeIds.end()) {
@@ -74,6 +76,8 @@ void TMaxTasksGraph::AddTasks(const TStageId& stage, TNodeId node, size_t tasksC
 }
 
 void TMaxTasksGraph::AddTasks(const TStageId& stage, size_t tasksCount) {
+    YQL_ENSURE(tasksCount);
+
     auto stageIdx = StageIds.at(stage);
     TasksPerStage.at(stageIdx) += tasksCount;
     while (tasksCount--) {
@@ -131,6 +135,95 @@ size_t TMaxTasksGraph::GetStageTasksCount(const TStageId& stage, TNodeId node) c
 
 size_t TMaxTasksGraph::GetStageTasksCount(const TStageId& stage) const {
     return TasksPerStage.at(StageIds.at(stage));
+}
+
+void TMaxTasksGraph::Print() const {
+    auto& out = Cerr;
+
+    out << "=== TMaxTasksGraph ===" << Endl;
+    out << "MaxChannelsCount: " << MaxChannelsCount << Endl;
+    out << Endl;
+
+    // Nodes
+    out << "--- Nodes (" << Nodes.size() << ") ---" << Endl;
+    for (const auto& [nodeId, nodeIdx] : NodeIds) {
+        const auto& node = Nodes[nodeIdx];
+        out << "  Node[" << nodeIdx << "] (id=" << nodeId << ")"
+            << " MaxChannels=" << node.MaxChannelsCount
+            << " TasksCount=" << node.TasksCount
+            << Endl;
+    }
+    out << Endl;
+
+    // Stages
+    out << "--- Stages (" << Stages.size() << ") ---" << Endl;
+    for (const auto& [stageId, stageIdx] : StageIds) {
+        const auto& stage = Stages[stageIdx];
+        const char* typeName = "UNKNOWN";
+        switch (stage.Type) {
+            case EStageType::FIXED: typeName = "FIXED"; break;
+            case EStageType::COPY:  typeName = "COPY";  break;
+            case EStageType::ANY:   typeName = "ANY";   break;
+        }
+
+        out << "  Stage[" << stageIdx << "] (txId=" << stageId.TxId << ", stageId=" << stageId.StageId << ")"
+            << " Type=" << typeName
+            << " Source=" << (stage.Source.has_value() ? ToString(*stage.Source) : "none")
+            << " RoundRobin=" << stage.RoundRobin
+            << " TotalTasks=" << TasksPerStage[stageIdx]
+            << Endl;
+
+        // Inputs
+        out << "    Inputs: [";
+        bool first = true;
+        for (auto inputIdx : Inputs[stageIdx]) {
+            if (!first) out << ", ";
+            out << inputIdx;
+            first = false;
+        }
+        out << "]" << Endl;
+
+        // Outputs
+        out << "    Outputs: [";
+        first = true;
+        for (auto outputIdx : Outputs[stageIdx]) {
+            if (!first) out << ", ";
+            out << outputIdx;
+            first = false;
+        }
+        out << "]" << Endl;
+
+        // Tasks per node
+        out << "    Tasks per node:";
+        if (stageIdx < Tasks.size() && !Tasks[stageIdx].empty()) {
+            for (size_t nodeIdx = 0; nodeIdx < Tasks[stageIdx].size(); ++nodeIdx) {
+                if (Tasks[stageIdx][nodeIdx] > 0) {
+                    out << " [node " << nodeIdx << "]=" << Tasks[stageIdx][nodeIdx];
+                }
+            }
+        } else {
+            out << " (empty)";
+        }
+        out << Endl;
+    }
+    out << Endl;
+
+    // LastFeasible distribution (if available)
+    if (!LastFeasible.empty()) {
+        out << "--- Last Feasible Distribution ---" << Endl;
+        for (size_t stageIdx = 0; stageIdx < LastFeasible.size(); ++stageIdx) {
+            out << "  Stage[" << stageIdx << "]:";
+            for (size_t nodeIdx = 0; nodeIdx < LastFeasible[stageIdx].size(); ++nodeIdx) {
+                if (LastFeasible[stageIdx][nodeIdx] > 0) {
+                    out << " [node " << nodeIdx << "]=" << LastFeasible[stageIdx][nodeIdx];
+                }
+            }
+            out << Endl;
+        }
+        out << Endl;
+    }
+
+    out << "=== End TMaxTasksGraph ===" << Endl;
 }
 
 bool TMaxTasksGraph::IsFeasible(double alpha) const {

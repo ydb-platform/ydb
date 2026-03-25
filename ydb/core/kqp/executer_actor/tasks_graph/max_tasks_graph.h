@@ -42,6 +42,8 @@ public:
     size_t GetStageTasksCount(const TStageId& stage, TNodeId node) const;
     size_t GetStageTasksCount(const TStageId& stage) const;
 
+    void Print() const;
+
 private:
     struct TNode {
         size_t MaxChannelsCount;

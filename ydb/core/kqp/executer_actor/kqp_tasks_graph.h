@@ -401,7 +401,6 @@ public:
         const NKikimrConfig::TTableServiceConfig::TResourceManager& channelSettings,
         const TKqpRequestCounters::TPtr& counters,
         TActorId bufferActorId,
-        TActorId executerId,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken
     );
 

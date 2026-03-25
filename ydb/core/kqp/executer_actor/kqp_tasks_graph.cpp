@@ -1963,14 +1963,12 @@ void TKqpTasksGraph::CountComputeTasks(const TStageInfo& stageInfo, const ui32 n
                 stageType = TMaxTasksGraph::COPY;
                 copyInput = inputStageId;
                 partitionsCount = MaxTasksGraph.GetStageTasksCount(inputStageId); // TODO: what if `partitionsCount` is already set?
-                Cerr << "partitionsCount: " << partitionsCount << Endl;
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kMap: {
                 stageType = TMaxTasksGraph::COPY;
                 copyInput = inputStageId;
                 partitionsCount = MaxTasksGraph.GetStageTasksCount(inputStageId); // TODO: what if `partitionsCount` is already set?
-                Cerr << "partitionsCount: " << partitionsCount << Endl;
                 forceMapTasks = true;
                 ++mapConnectionCount;
                 break;
@@ -1983,14 +1981,12 @@ void TKqpTasksGraph::CountComputeTasks(const TStageInfo& stageInfo, const ui32 n
                 stageType = TMaxTasksGraph::COPY;
                 copyInput = inputStageId;
                 partitionsCount = MaxTasksGraph.GetStageTasksCount(inputStageId); // TODO: what if `partitionsCount` is already set?
-                Cerr << "partitionsCount: " << partitionsCount << Endl;
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kSequencer: {
                 stageType = TMaxTasksGraph::COPY;
                 copyInput = inputStageId;
                 partitionsCount = MaxTasksGraph.GetStageTasksCount(inputStageId); // TODO: what if `partitionsCount` is already set?
-                Cerr << "partitionsCount: " << partitionsCount << Endl;
                 break;
             }
             default:
@@ -3247,6 +3243,8 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
 
     MaxTasksGraph.Shrink();
 
+    MaxTasksGraph.Print();
+
     size_t sourceScanPartitionsCount = 0;
     const auto internalSinksOrder = BuildInternalSinksPriorityOrder();
 
@@ -3359,7 +3357,6 @@ TKqpTasksGraph::TKqpTasksGraph(
     const NKikimrConfig::TTableServiceConfig::TResourceManager&, // TODO: should be used to calculate max channels count per node
     const TKqpRequestCounters::TPtr& counters,
     TActorId bufferActorId,
-    TActorId executerId,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
     : Transactions(transactions)
     , TxAlloc(txAlloc)
@@ -3369,7 +3366,6 @@ TKqpTasksGraph::TKqpTasksGraph(
     , UserToken(std::move(userToken))
     , MaxTasksGraph(10000)
 {
-    GetMeta().ExecuterId = executerId;
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;
     GetMeta().RequestIsolationLevel = NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SERIALIZABLE;

@@ -2123,6 +2123,28 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         }
     }
 
+    Y_UNIT_TEST(CheckGetOperationShardsCounting) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 10, ++txId);
+
+        {
+            TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", 10);
+            ui64 compactionId = txId;
+            env.SimulateSleep(runtime, TDuration::Seconds(1));
+            auto response = TestGetCompaction(runtime, compactionId, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetId(), compactionId);
+            UNIT_ASSERT_DOUBLES_EQUAL(response.GetForcedCompaction().GetProgress(), 100.0, 1e-7);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 10);
+        }
+    }
+
     Y_UNIT_TEST(CheckOperationFailures) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

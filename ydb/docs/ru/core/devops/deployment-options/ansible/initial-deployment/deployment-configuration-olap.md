@@ -496,7 +496,7 @@ selector_config:
 Смысл отдельных блоков в `dynamic-config.yaml` для OLAP:
 
 - **`selector_config`** с условием `dynamic: true` — фрагмент применяется к [динамическим узлам](../../../../concepts/glossary.md#dynamic), на которых выполняются запросы.
-- **`actor_system_config`** — выделение CPU под вычислительный пул актёров на узле (в примере `cpu_count: 16`).
+- **`actor_system_config`** — выделение CPU под вычислительный пул акторов на узле (в примере `cpu_count: 16`).
 - **`memory_controller_config`** — ограничения по RAM: доли на кэш, выполнение запросов и жёсткий потолок (`hard_limit_bytes`), чтобы аналитические запросы не вытесняли всю память узла.
 - **`table_service_config`** — `enable_olap_sink`, `enable_spilling_nodes`, `enable_query_service_spilling` включают колоночную выгрузку и [спиллинг](../../../../concepts/query_execution/spilling.md) для тяжёлых запросов.
 - **`spilling_service_config.local_file_config`** — каталог и лимиты размера временных файлов на диске спиллинга.
@@ -504,7 +504,7 @@ selector_config:
 Замените следующие значения на актуальные в разделе `selector_config.config.table_service_config.spilling_service_config.local_file_config`:
 
 - `max_total_size` — максимальный суммарный размер всех файлов спиллинга на каждом узле. Оптимальное значение выбирается исходя из доступного места на диске, выделенном под спиллинг. Подробнее см. [описание параметра max_total_size](../../../../reference/configuration/table_service_config.md#local_file_config-max_total_size).
-- `max_file_size` — верхняя граница размера одного спиллингового файла; не должна превосходить разумные пределы ФС и политики кластера.
+- `max_file_size` — максимальный размер одного файла спиллинга. Задается с учётом ограничений файловой системы на диске спиллинга (в том числе предельного размера файла).
 - `root` — путь к каталогу на диске, **выделенном под операции спиллинга** (в нём создаются временные файлы при нехватке памяти для запроса). Подробнее см. [описание параметра root](../../../../reference/configuration/table_service_config.md#local_file_config-root).
 
 ## Разверните кластер {{ ydb-short-name }} {#cluster-deployment}

@@ -141,7 +141,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         BuildSecondaryUniqueIndex = 13,
         BuildColumns = 20,
         BuildFulltext = 30,
-        SetColumnConstraint = 40,
     };
 
     TActorId CreateSender;
@@ -726,7 +725,7 @@ public:
     }
 
     virtual bool IsSetColumnConstraint() const {
-        return BuildKind == EBuildKind::SetColumnConstraint;
+        return false;
     }
 
     virtual bool IsPreparing() const {
@@ -868,8 +867,25 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     NKikimrScheme::EStatus UnlockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
     bool UnlockNullWritesTxDone = false;
 
+    THashMap<TShardIdx, TIndexBuildShardStatus> ValidationShards;
+    
+    TDeque<TShardIdx> ToValidateShards;
+    THashSet<TShardIdx> InProgressValidationShards;
+    TVector<TShardIdx> DoneValidationShards;
+    
+    TTxId ValidationSnapshotTxId = TTxId();
+    TStepId ValidationSnapshotStep = TStepId();
+    
+    ui32 MaxInProgressValidationShards = 10;
+    
+    bool ValidationFailed = false;  // true if any shard found NULL values
+
     bool IsDone() const override {
         return OperationState == EOperationState::Done;
+    }
+    
+    bool IsSetColumnConstraint() const override {
+        return true;
     }
 };
 

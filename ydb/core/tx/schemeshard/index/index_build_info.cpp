@@ -360,8 +360,6 @@ bool TIndexBuildInfo::IsValidBuildKind(EBuildKind value)
         case EBuildKind::BuildColumns:
         case EBuildKind::BuildFulltext:
             return true;
-        case EBuildKind::SetColumnConstraint:
-            return false;
     }
     return false;
 }

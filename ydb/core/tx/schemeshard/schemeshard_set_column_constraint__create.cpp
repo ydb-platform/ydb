@@ -115,8 +115,6 @@ public:
             operationInfo->UserSID = request.GetUserSID();
         }
 
-        operationInfo->BuildKind = TIndexBuildInfo::EBuildKind::SetColumnConstraint;
-
         Self->PersistCreateSetColumnConstraint(db, *operationInfo);
 
         operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps;

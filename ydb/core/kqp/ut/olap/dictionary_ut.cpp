@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             )", "[[%true]]");
     }
 
-    Y_UNIT_TEST(AlterDropEncodingDictionary) {
+    Y_UNIT_TEST(AlterSetEncodingOffAfterDictionary) {
         auto settings = TKikimrSettings()
             .SetEnableCsDictionaryEncoding(true)
             .SetWithSampleTables(false);
@@ -265,6 +265,37 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             )", "[[[%true]]]");
     }
 
+    Y_UNIT_TEST(AlterDropEncodingDictionary) {
+        auto settings = TKikimrSettings()
+            .SetEnableCsDictionaryEncoding(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema()
+            .SetName("key")
+            .SetType(NScheme::NTypeIds::Uint64)
+            .SetNullable(false)
+            .SetDictionaryEncoding(true)
+        };
+
+        TTestHelper::TColumnTable standaloneTable;
+        standaloneTable.SetName("/Root/EncodingDictionaryTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        testHelper.CreateTableQuery(standaloneTable);
+        testHelper.ExecuteQuery("ALTER TABLE `/Root/EncodingDictionaryTable` ALTER COLUMN `key` SET ENCODING();");
+
+        testHelper.ReadDataExecQuery(R"(
+            $V1 = SELECT max(SchemaVersion) FROM `/Root/EncodingDictionaryTable/.sys/primary_index_schema_stats`
+                WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
+                        ILIKE "%key:serializer={class_name=ARROW_SERIALIZER;details={}};loader=accessor_constructor:DICTIONARY%";
+
+            $V2 = SELECT max(SchemaVersion) FROM `/Root/EncodingDictionaryTable/.sys/primary_index_schema_stats`
+                WHERE JSON_VALUE(CAST(SchemaDetails as JsonDocument), "$.index_info")
+                        ILIKE "%key:serializer={class_name=ARROW_SERIALIZER;details={}};loader=accessor_constructor:PLAIN%";
+
+            SELECT $V1 < $V2;
+            )", "[[[%true]]]");
+    }
+
     TString scriptGroupBySomeDictionary = R"(
         STOP_COMPACTION
         ------
@@ -272,7 +303,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
             otherPk Uint64 NOT NULL,
-            message Utf8,
+            message Utf8 ENCODING(DICT),
             other Uint64,
             PRIMARY KEY (pk, otherPk)
         )
@@ -281,9 +312,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
@@ -380,7 +408,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
             otherPk Uint64 NOT NULL,
-            message Utf8,
+            message Utf8 ENCODING(DICT),
             other Uint64,
             PRIMARY KEY (pk, otherPk)
         )
@@ -389,9 +417,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
@@ -506,7 +531,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
             otherPk Uint64 NOT NULL,
-            message Utf8,
+            message Utf8 ENCODING(DICT),
             other Uint64,
             PRIMARY KEY (pk, otherPk)
         )
@@ -515,9 +540,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
@@ -616,7 +638,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
-            message Utf8,
+            message Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
@@ -624,9 +646,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
@@ -688,10 +707,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         REPLACE INTO `/Root/ColumnTable` (pk) VALUES (100u);
         ------
         SCHEMA:
-        ALTER TABLE `/Root/ColumnTable` ADD COLUMN extra Utf8
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=extra, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN extra Utf8 ENCODING(DICT)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, extra) VALUES (100u, 'post_add');
@@ -723,10 +739,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         REPLACE INTO `/Root/ColumnTable` (pk) VALUES (200u);
         ------
         SCHEMA:
-        ALTER TABLE `/Root/ColumnTable` ADD COLUMN extra Utf8
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=extra, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ADD COLUMN extra Utf8 ENCODING(DICT)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, extra) VALUES (201u, 'only_new_pk');
@@ -746,7 +759,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
-            message Utf8,
+            message Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
@@ -754,9 +767,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
@@ -804,7 +814,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
-            message Utf8,
+            message Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
@@ -812,9 +822,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
@@ -862,7 +869,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
-            message Utf8,
+            message Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
@@ -870,9 +877,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
@@ -916,7 +920,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
-            message Utf8,
+            message Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
@@ -924,9 +928,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
@@ -1003,9 +1004,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             cycleBlocks += dataBlock;
             cycleBlocks += readCheck;
             if (i % 2 == 0) {
-                cycleBlocks += "SCHEMA:\nALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)\n------\n";
+                cycleBlocks += "SCHEMA:\nALTER TABLE `/Root/ColumnTable` ALTER COLUMN `field` SET ENCODING(DICT);\n------\n";
             } else {
-                cycleBlocks += "SCHEMA:\nALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`)\n------\n";
+                cycleBlocks += "SCHEMA:\nALTER TABLE `/Root/ColumnTable` ALTER COLUMN `field` SET ENCODING(OFF);\n------\n";
             }
             cycleBlocks += readCheck;
             cycleBlocks += dataBlock;
@@ -1028,7 +1029,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
-            field Utf8,
+            field Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
@@ -1039,9 +1040,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         )";
         const std::vector<std::pair<ui32, ui32>> steps = {
@@ -1097,7 +1095,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
-            field Utf8,
+            field Utf8 ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
@@ -1108,9 +1106,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         )";
         NArrow::NConstruction::TStringPoolFiller sPool(260, 52);
@@ -1170,14 +1165,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
-            field Utf8 COMPRESSION(algorithm=off),
+            field Utf8 ENCODING(DICT) COMPRESSION(algorithm=off),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`)
@@ -1202,22 +1194,22 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             pk Uint64 NOT NULL,
-            c_bool Bool,
-            c_int8 Int8,
-            c_int16 Int16,
-            c_int32 Int32,
-            c_int64 Int64,
-            c_uint8 Uint8,
-            c_uint16 Uint16,
-            c_uint32 Uint32,
-            c_uint64 Uint64,
-            c_float Float,
-            c_double Double,
-            c_utf8 Utf8,
-            c_string String,
-            c_date Date,
-            c_datetime Datetime,
-            c_timestamp Timestamp,
+            c_bool Bool ENCODING(DICT),
+            c_int8 Int8 ENCODING(DICT),
+            c_int16 Int16 ENCODING(DICT),
+            c_int32 Int32 ENCODING(DICT),
+            c_int64 Int64 ENCODING(DICT),
+            c_uint8 Uint8 ENCODING(DICT),
+            c_uint16 Uint16 ENCODING(DICT),
+            c_uint32 Uint32 ENCODING(DICT),
+            c_uint64 Uint64 ENCODING(DICT),
+            c_float Float ENCODING(DICT),
+            c_double Double ENCODING(DICT),
+            c_utf8 Utf8 ENCODING(DICT),
+            c_string String ENCODING(DICT),
+            c_date Date ENCODING(DICT),
+            c_datetime Datetime ENCODING(DICT),
+            c_timestamp Timestamp ENCODING(DICT),
             PRIMARY KEY (pk)
         )
         PARTITION BY HASH(pk)
@@ -1227,52 +1219,52 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_bool, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_bool` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int8, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_int8` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int16, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_int16` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int32, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_int32` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_int64, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_int64` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint8, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_uint8` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint16, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_uint16` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint32, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_uint32` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_uint64, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_uint64` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_float, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_float` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_double, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_double` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_utf8, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_utf8` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_string, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_string` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_date, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_date` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_datetime, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_datetime` SET ENCODING(DICT)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=c_timestamp, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_timestamp` SET ENCODING(DICT)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, c_bool, c_int8, c_int16, c_int32, c_int64, c_uint8, c_uint16, c_uint32, c_uint64, c_float, c_double, c_utf8, c_string, c_date, c_datetime, c_timestamp) VALUES
@@ -1308,7 +1300,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         auto createResult = session.ExecuteSchemeQuery(createTable).GetValueSync();
         UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
         for (const TString& col : {"jcol", "jdcol", "ycol"}) {
-            TString alterQuery = "ALTER OBJECT `/Root/UnsupportedTypesTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=" + col + ", `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)";
+            TString alterQuery = "ALTER TABLE `/Root/UnsupportedTypesTable` ALTER COLUMN `" + col + "` SET ENCODING(DICT)";
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_C(!alterResult.IsSuccess(), TString("ALTER COLUMN DICTIONARY on ") + col + " must fail");
         }

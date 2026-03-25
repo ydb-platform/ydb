@@ -1582,15 +1582,6 @@ private:
         }
     }
 
-    ///
-    /// Note: This implementation follows the legacy classification logic:
-    /// 1. Find the first matching classifier based on the highest priority (Rank).
-    /// 2. Once a candidate is found, perform a final check for user permissions
-    ///    and resource pool availability.
-    ///
-    /// If the user lacks access to the first matched pool, the request is rejected
-    /// immediately (fail-fast) rather than falling back to the next available rank.
-    ///
     void Classify(const TEvKqp::TEvQueryRequest::TPtr& ev, TWmQueryClassifier& cl) {
         const auto& databaseId = ev->Get()->GetDatabaseId();
 
@@ -1602,47 +1593,10 @@ private:
         }
 
         cl.PreCompileClassify();
-        auto status = cl.GetPreClassifyResult();
-        const auto* resolved = std::get_if<IWmQueryClassifier::TResolvedPoolId>(&status);
 
-        if (!resolved) {
-            return;
-        }
-
-        // If pool config exists in a cache, check user's access permissions.
-        // Fail-fast optimization if the user lacks required rights.
-        auto poolId = resolved->PoolId;
-        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(databaseId, poolId, ActorContext());
-
-        if (!poolInfo) {
-            return;
-        }
-
-        const auto& securityObject = poolInfo->SecurityObject;
-        const auto& userToken = ev->Get()->GetUserToken();
-
-        if (securityObject && userToken && !userToken->GetSerializedToken().empty()) {
-            if (!securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *userToken)) {
-                cl.Reject(
-                    Ydb::StatusIds::NOT_FOUND,
-                    TStringBuilder() << "Resource pool " << poolId << " not found or access denied"
-                );
-                return;
-            }
-            if (!securityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
-                cl.Reject(
-                    Ydb::StatusIds::UNAUTHORIZED,
-                    TStringBuilder() << "No access permissions for resource pool " << poolId
-                );
-                return;
-            }
-        }
-
-        // If the pool has no limits, bypass the workload manager logic.
-        const auto& poolConfig = poolInfo->Config;
-
-        if (!NWorkload::IsWorkloadServiceRequired(poolConfig)) {
-            cl.Bypass();
+        // Trigger updates for missing pools
+        for (const auto& missedPoolId : cl.GetMissedPoolIds()) {
+            ResourcePoolsCache.GetPoolInfo(databaseId, missedPoolId, ActorContext());
         }
     }
 
@@ -1657,7 +1611,8 @@ private:
             .UserToken = ev->Get()->GetUserToken()
         };
 
-        auto classifier = std::make_shared<TWmQueryClassifier>(ResourcePoolsCache.LastSnapshot, context);
+        auto classifier = std::make_shared<TWmQueryClassifier>(
+            ResourcePoolsCache.LastPoolInfoSnapshot, ResourcePoolsCache.LastClassifierSnapshot, context);
 
         Classify(ev, *classifier);
         const auto status = classifier->GetPreClassifyResult();

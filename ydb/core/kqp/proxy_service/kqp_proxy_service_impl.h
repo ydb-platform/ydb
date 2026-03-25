@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_session_state.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -611,10 +612,12 @@ public:
         if (clearClassifierCache) {
             GetOrCreateDatabaseInfo(databaseId)->UserToResourcePool.clear();
         }
+
+        BuildPoolInfoSnapshot();
     }
 
     void UpdateResourcePoolClassifiersInfo(std::shared_ptr<TResourcePoolClassifierSnapshot> snapshot, TActorContext actorContext) {
-        LastSnapshot = snapshot;
+        LastClassifierSnapshot = snapshot;
 
         auto resourcePoolClassifierConfigs = snapshot->GetResourcePoolClassifierConfigs();
 
@@ -642,6 +645,18 @@ public:
     }
 
 private:
+    void BuildPoolInfoSnapshot() {
+        TPoolInfoSnapshot::TPoolsMap pools;
+
+        for (const auto& [key, info] : PoolsCache) {
+            if (!info.Expired) {
+                pools[key] = {info.Config, info.SecurityObject};
+            }
+        }
+        
+        LastPoolInfoSnapshot = std::make_shared<const TPoolInfoSnapshot>(std::move(pools));
+    }
+
     void UpdateResourcePoolClassifiersSubscription(TActorContext actorContext) {
         if (EnableResourcePools) {
             SubscribeOnResourcePoolClassifiers(actorContext);
@@ -717,7 +732,8 @@ private:
     }
 
 public:
-    std::shared_ptr<const TResourcePoolClassifierSnapshot> LastSnapshot;
+    std::shared_ptr<const TResourcePoolClassifierSnapshot> LastClassifierSnapshot;
+    std::shared_ptr<const TPoolInfoSnapshot> LastPoolInfoSnapshot;
 
 private:
     std::unordered_map<TString, TPoolInfo> PoolsCache;

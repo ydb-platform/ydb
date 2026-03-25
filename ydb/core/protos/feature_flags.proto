@@ -285,4 +285,6 @@ message TFeatureFlags {
     optional bool EnableOnlineAddUniqueIndex = 247 [default = false];
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
     optional bool EnableCsDictionaryEncoding = 249 [default = true];
+    // Enable transition to version 2 interface for Access Service requests
+    optional bool EnableAccessServiceV2Interface = 250 [default = false];
 }

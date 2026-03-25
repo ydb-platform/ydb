@@ -125,7 +125,8 @@ bool TBaseCloudAuthRequestProxy::InitAndValidate() {
 
 STATEFN(TBaseCloudAuthRequestProxy::ProcessAuthentication) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, HandleAuthenticationResult);
+        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV1, HandleAuthenticationResult);
+        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, HandleAuthenticationResult);
         hFunc(TEvWakeup, HandleWakeup);
     }
 }
@@ -193,7 +194,43 @@ void TBaseCloudAuthRequestProxy::ScheduleFolderServiceRequestRetry() {
     ScheduleRetry(FolderServiceRequestRetryPeriod_, FOLDER_SERVICE_REQUEST_WAKEUP_TAG);
 }
 
-void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
+void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV1::TPtr& ev) {
+    ChangeCounters([this, &ev](){
+        Counters_.IncCounter(
+            NCloudAuth::EActionType::Authenticate,
+            NCloudAuth::ECredentialType::Signature,
+            ev->Get()->Status.GRpcStatusCode
+        );
+        auto now = TActivationContext::Now();
+        Counters_.AuthenticateDuration->Collect((now - AuthenticateRequestStartTimestamp_).MilliSeconds());
+    });
+
+    if (!ev->Get()->Status.Ok()) {
+        RLOG_SQS_INFO("Authentication failed. GRpcStatusCode: "
+                        << ev->Get()->Status.GRpcStatusCode
+                        << ". InternalError: " << ev->Get()->Status.InternalError
+                        << ". Message: \"" << ev->Get()->Status.Msg
+                        << "\". Proto response: " << ev->Get()->Response);
+        if (CanRetry(ev->Get()->Status)) {
+            ScheduleAuthenticateRetry();
+        } else {
+            SetError(GetErrorClass(ev->Get()->Status), "IAM authentication error.");
+            SendReplyAndDie();
+        }
+        return;
+    } else if (!ev->Get()->Response.Getsubject().Hasservice_account()) {
+        SetError(NErrors::ACCESS_DENIED, "(this error should be unreachable).");
+        SendReplyAndDie();
+        return;
+    }
+
+    FolderId_ = ev->Get()->Response.Getsubject().Getservice_account().Getfolder_id();
+
+    GetCloudIdAndAuthorize();
+}
+
+// TODO(vlad-serikov): Deduplicate
+void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
     ChangeCounters([this, &ev](){
         Counters_.IncCounter(
             NCloudAuth::EActionType::Authenticate,
@@ -376,12 +413,21 @@ void TBaseCloudAuthRequestProxy::FillSignatureProto(TSignatureProto& signature) 
 }
 
 void TBaseCloudAuthRequestProxy::Authenticate() {
-    THolder<NCloud::TEvAccessService::TEvAuthenticateRequest> request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
-    request->RequestId = RequestId_;
-    FillSignatureProto(*request->Request.mutable_signature());
+    if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
+        request->RequestId = RequestId_;
+        FillSignatureProto(*request->Request.mutable_signature());
 
-    AuthenticateRequestStartTimestamp_ = TActivationContext::Now();
-    Send(MakeSqsAccessServiceID(), std::move(request));
+        AuthenticateRequestStartTimestamp_ = TActivationContext::Now();
+        Send(MakeSqsAccessServiceID(), std::move(request));
+    } else {
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV1>();
+        request->RequestId = RequestId_;
+        FillSignatureProto(*request->Request.mutable_signature());
+
+        AuthenticateRequestStartTimestamp_ = TActivationContext::Now();
+        Send(MakeSqsAccessServiceID(), std::move(request));
+    }
 }
 
 

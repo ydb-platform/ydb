@@ -6,34 +6,94 @@
 #include "events.h"
 
 namespace NCloud {
-    using namespace NKikimr;
 
-    struct TEvAccessService {
-        enum EEv {
-            // requests
-            EvAuthenticateRequest = EventSpaceBegin(TKikimrEvents::ES_ACCESS_SERVICE),
-            EvAuthorizeRequest,
-            EvBulkAuthorizeRequest,
+using namespace NKikimr;
 
-            // replies
-            EvAuthenticateResponse = EventSpaceBegin(TKikimrEvents::ES_ACCESS_SERVICE) + 512,
-            EvAuthorizeResponse,
-            EvBulkAuthorizeResponse,
+struct TEvAccessService {
+    enum EEv {
+        // requests
+        // V1
+        EvAuthenticateRequestV1 = EventSpaceBegin(TKikimrEvents::ES_ACCESS_SERVICE),
+        EvAuthorizeRequestV1,
+        // V2
+        EvBulkAuthorizeRequestV2,
+        EvAuthenticateRequestV2,
+        EvAuthorizeRequestV2,
 
-            EvEnd
-        };
+        // replies
+        // V1
+        EvAuthenticateResponseV1 = EventSpaceBegin(TKikimrEvents::ES_ACCESS_SERVICE) + 512,
+        EvAuthorizeResponseV1,
+        // V2
+        EvBulkAuthorizeResponseV2,
+        EvAuthenticateResponseV2,
+        EvAuthorizeResponseV2,
 
-        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_ACCESS_SERVICE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_ACCESS_SERVICE)");
+        EvEnd
+    };
 
-        // https://a.yandex-team.ru/arc/trunk/arcadia/cloud/servicecontrol/proto/servicecontrol/v1/access_service.proto
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_ACCESS_SERVICE),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_ACCESS_SERVICE)");
 
-        struct TEvAuthenticateRequest : TEvGrpcProtoRequest<TEvAuthenticateRequest, EvAuthenticateRequest, yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest> {};
-        struct TEvAuthenticateResponse : TEvGrpcProtoResponse<TEvAuthenticateResponse, EvAuthenticateResponse, yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse> {};
+    // https://a.yandex-team.ru/arcadia/cloud/bitbucket/private-api/yandex/cloud/priv/servicecontrol/v1/access_service.proto
 
-        struct TEvAuthorizeRequest : TEvGrpcProtoRequest<TEvAuthorizeRequest, EvAuthorizeRequest, yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest> {};
-        struct TEvAuthorizeResponse : TEvGrpcProtoResponse<TEvAuthorizeResponse, EvAuthorizeResponse, yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse> {};
+    // V1
+    struct TEvAuthenticateRequestV1
+        : TEvGrpcProtoRequest<
+              TEvAuthenticateRequestV1,
+              EvAuthenticateRequestV1,
+              yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest> {};
+    struct TEvAuthenticateResponseV1
+        : TEvGrpcProtoResponse<
+              TEvAuthenticateResponseV1,
+              EvAuthenticateResponseV1,
+              yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse> {};
 
-        struct TEvBulkAuthorizeRequest : TEvGrpcProtoRequest<TEvBulkAuthorizeRequest, EvBulkAuthorizeRequest, yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest> {};
-        struct TEvBulkAuthorizeResponse : TEvGrpcProtoResponse<TEvBulkAuthorizeResponse, EvBulkAuthorizeResponse, yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse> {};
-   };
-}
+    struct TEvAuthorizeRequestV1
+        : TEvGrpcProtoRequest<
+              TEvAuthorizeRequestV1,
+              EvAuthorizeRequestV1,
+              yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest> {};
+    struct TEvAuthorizeResponseV1
+        : TEvGrpcProtoResponse<
+              TEvAuthorizeResponseV1,
+              EvAuthorizeResponseV1,
+              yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse> {};
+
+    // V2
+    struct TEvBulkAuthorizeRequestV2
+        : TEvGrpcProtoRequest<
+              TEvBulkAuthorizeRequestV2,
+              EvBulkAuthorizeRequestV2,
+              yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest> {};
+    struct TEvBulkAuthorizeResponseV2
+        : TEvGrpcProtoResponse<
+              TEvBulkAuthorizeResponseV2,
+              EvBulkAuthorizeResponseV2,
+              yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse> {};
+
+    struct TEvAuthenticateRequestV2
+        : TEvGrpcProtoRequest<
+              TEvAuthenticateRequestV2,
+              EvAuthenticateRequestV2,
+              yandex::cloud::priv::accessservice::v2::AuthenticateRequest> {};
+    struct TEvAuthenticateResponseV2
+        : TEvGrpcProtoResponse<
+              TEvAuthenticateResponseV2,
+              EvAuthenticateResponseV2,
+              yandex::cloud::priv::accessservice::v2::AuthenticateResponse> {};
+
+    struct TEvAuthorizeRequestV2
+        : TEvGrpcProtoRequest<
+              TEvAuthorizeRequestV2,
+              EvAuthorizeRequestV2,
+              yandex::cloud::priv::accessservice::v2::AuthorizeRequest> {};
+    struct TEvAuthorizeResponseV2
+        : TEvGrpcProtoResponse<
+              TEvAuthorizeResponseV2,
+              EvAuthorizeResponseV2,
+              yandex::cloud::priv::accessservice::v2::AuthorizeResponse> {};
+};
+
+}  // namespace NCloud

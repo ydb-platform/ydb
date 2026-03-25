@@ -19,22 +19,43 @@ public:
         : TBase(&TThis::StateWork) {
     }
 
-    void Handle(TEvAccessService::TEvAuthenticateRequest::TPtr& ev) {
-        auto result = std::make_unique<TEvAccessService::TEvAuthenticateResponse>();
+    void Handle(TEvAccessService::TEvAuthenticateRequestV1::TPtr& ev) {
+        auto result = std::make_unique<TEvAccessService::TEvAuthenticateResponseV1>();
         result->Response.mutable_subject()->mutable_user_account()->set_federation_id("mock");
         Send(ev->Sender, result.release());
     }
 
-    void Handle(TEvAccessService::TEvAuthorizeRequest::TPtr& ev) {
-        auto result = std::make_unique<TEvAccessService::TEvAuthorizeResponse>();
-        result->Status = NYdbGrpc::TGrpcStatus("Unimplemented", 1, true);
+    void Handle(TEvAccessService::TEvAuthorizeRequestV1::TPtr& ev) {
+        auto result = std::make_unique<TEvAccessService::TEvAuthorizeResponseV1>();
+        result->Status = NYdbGrpc::TGrpcStatus("Unimplemented", grpc::StatusCode::UNIMPLEMENTED, true);
+        Send(ev->Sender, result.release());
+    }
+
+    void Handle(TEvAccessService::TEvAuthenticateRequestV2::TPtr& ev) {
+        auto result = std::make_unique<TEvAccessService::TEvAuthenticateResponseV2>();
+        result->Response.mutable_subject()->mutable_user_account()->set_federation_id("mock");
+        Send(ev->Sender, result.release());
+    }
+
+    void Handle(TEvAccessService::TEvAuthorizeRequestV2::TPtr& ev) {
+        auto result = std::make_unique<TEvAccessService::TEvAuthorizeResponseV2>();
+        result->Status = NYdbGrpc::TGrpcStatus("Unimplemented", grpc::StatusCode::UNIMPLEMENTED, true);
+        Send(ev->Sender, result.release());
+    }
+
+    void Handle(TEvAccessService::TEvBulkAuthorizeRequestV2::TPtr& ev) {
+        auto result = std::make_unique<TEvAccessService::TEvBulkAuthorizeResponseV2>();
+        result->Status = NYdbGrpc::TGrpcStatus("Unimplemented", grpc::StatusCode::UNIMPLEMENTED, true);
         Send(ev->Sender, result.release());
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvAccessService::TEvAuthenticateRequest, Handle)
-            hFunc(TEvAccessService::TEvAuthorizeRequest, Handle)
+            hFunc(TEvAccessService::TEvAuthenticateRequestV1, Handle)
+            hFunc(TEvAccessService::TEvAuthorizeRequestV1, Handle)
+            hFunc(TEvAccessService::TEvAuthenticateRequestV2, Handle)
+            hFunc(TEvAccessService::TEvAuthorizeRequestV2, Handle)
+            hFunc(TEvAccessService::TEvBulkAuthorizeRequestV2, Handle)
             cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway)
         }
     }

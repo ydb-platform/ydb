@@ -93,9 +93,13 @@ private:
         {}
     };
 
-    using TEvAccessServiceAuthenticateRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthenticateRequest>;
-    using TEvAccessServiceAuthorizeRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthorizeRequest>;
-    using TEvAccessServiceBulkAuthorizeRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvBulkAuthorizeRequest>;
+    using TEvAccessServiceAuthenticateRequestV1 = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthenticateRequestV1>;
+    using TEvAccessServiceAuthorizeRequestV1 = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthorizeRequestV1>;
+
+    using TEvAccessServiceAuthenticateRequestV2 = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthenticateRequestV2>;
+    using TEvAccessServiceAuthorizeRequestV2 = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthorizeRequestV2>;
+    using TEvAccessServiceBulkAuthorizeRequestV2 = TEvRequestWithKey<NCloud::TEvAccessService::TEvBulkAuthorizeRequestV2>;
+
     using TEvAccessServiceGetUserAccountRequest = TEvRequestWithKey<NCloud::TEvUserAccountService::TEvGetUserAccountRequest>;
     using TEvAccessServiceGetServiceAccountRequest = TEvRequestWithKey<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>;
     using TEvNebiusAccessServiceAuthorizeRequest = TEvRequestWithKey<NNebiusCloud::TEvAccessService::TEvAuthorizeRequest>;
@@ -491,20 +495,30 @@ private:
 
     template <typename TTokenRecord>
     void AccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
+        const auto setupAccessServiceRequest = [&](auto& request, const TString& permissionName) -> void {
+            request.Request.set_permission(permissionName);
+            AddResourcePaths(record, permissionName, &request.Request);
+        };
+
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
             BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization(" << permissionName << ")");
-
-            auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequest>(key, record);
-            request->Request.set_permission(permissionName);
-            AddResourcePaths(record, permissionName, &request->Request);
             record.ResponsesLeft++;
-            Send(AccessServiceValidatorV1, request.Release());
+
+            if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
+                auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequestV2>(key, record);
+                setupAccessServiceRequest(*request, permissionName);
+                Send(AccessServiceValidatorV2, request.Release());
+            } else {
+                auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequestV1>(key, record);
+                setupAccessServiceRequest(*request, permissionName);
+                Send(AccessServiceValidatorV1, request.Release());
+            }
         }
     }
 
     template <typename TTokenRecord>
     void AccessServiceBulkAuthorize(const TString& key, TTokenRecord& record) const {
-        auto request = CreateAccessServiceRequest<TEvAccessServiceBulkAuthorizeRequest>(key, record);
+        auto request = CreateAccessServiceRequest<TEvAccessServiceBulkAuthorizeRequestV2>(key, record);
         if (Config.HasAccessServiceTokenName() && Config.GetTokenManager().GetEnable()) {
             auto it = ServiceTokens.find(Config.GetAccessServiceTokenName());
             if (it != ServiceTokens.end()) {
@@ -559,8 +573,13 @@ private:
 
     template <typename TTokenRecord>
     void AccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
-        auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequest>(key, record);
-        Send(AccessServiceValidatorV1, request.Release());
+        if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
+            auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequestV2>(key, record);
+            Send(AccessServiceValidatorV2, request.Release());
+        } else {
+            auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequestV1>(key, record);
+            Send(AccessServiceValidatorV1, request.Release());
+        }
     }
 
     template <typename TTokenRecord>
@@ -638,6 +657,10 @@ private:
         return ApplySubjectName(response.subject(), subject, error);
     }
 
+    bool ApplySubjectName(const yandex::cloud::priv::accessservice::v2::AuthenticateResponse& response, TString& subject, TString& error) {
+        return ApplySubjectName(response.subject(), subject, error);
+    }
+
     bool ApplySubjectName(const yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse& response, TString& subject, TString& error) {
         return ApplySubjectName(response.subject(), subject, error);
     }
@@ -666,6 +689,11 @@ private:
 
     template <>
     typename TPermissionRecord::TTypeCase ConvertSubjectType<yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse>(const yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse& response) {
+        return ConvertSubjectType(response.subject().type_case());
+    }
+
+    template <>
+    typename TPermissionRecord::TTypeCase ConvertSubjectType<yandex::cloud::priv::accessservice::v2::AuthenticateResponse>(const yandex::cloud::priv::accessservice::v2::AuthenticateResponse& response) {
         return ConvertSubjectType(response.subject().type_case());
     }
 
@@ -1053,11 +1081,20 @@ private:
         record.AuthorizeRequests.emplace_back(ev.Release());
     }
 
-    static auto GetTokenType(TEvAccessServiceAuthenticateRequest* request) {
+    // TODO(vlad-serikov): Deduplicate later
+    static auto GetTokenType(TEvAccessServiceAuthenticateRequestV1* request) {
         return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
     }
 
-    static auto GetTokenType(TEvAccessServiceAuthorizeRequest* request) {
+    static auto GetTokenType(TEvAccessServiceAuthorizeRequestV1* request) {
+        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+    }
+
+    static auto GetTokenType(TEvAccessServiceAuthenticateRequestV2* request) {
+        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+    }
+
+    static auto GetTokenType(TEvAccessServiceAuthorizeRequestV2* request) {
         return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
     }
 
@@ -1147,8 +1184,16 @@ private:
         HandleIamAuthenticateResponse<TEvNebiusAccessServiceAuthenticateRequest, NNebiusCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
     }
 
-    void Handle(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
-        HandleIamAuthenticateResponse<TEvAccessServiceAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
+    void Handle(NCloud::TEvAccessService::TEvAuthenticateResponseV1::TPtr& ev) {
+        HandleIamAuthenticateResponse<
+            TEvAccessServiceAuthenticateRequestV1,
+            NCloud::TEvAccessService::TEvAuthenticateResponseV1>(ev);
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
+        HandleIamAuthenticateResponse<
+            TEvAccessServiceAuthenticateRequestV2,
+            NCloud::TEvAccessService::TEvAuthenticateResponseV2>(ev);
     }
 
     void Handle(NCloud::TEvUserAccountService::TEvGetUserAccountResponse::TPtr& ev) {
@@ -1363,9 +1408,9 @@ private:
         }
     }
 
-    void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeResponse::TPtr& ev) {
-        NCloud::TEvAccessService::TEvBulkAuthorizeResponse* response = ev->Get();
-        TEvAccessServiceBulkAuthorizeRequest* request = response->Request->Get<TEvAccessServiceBulkAuthorizeRequest>();
+    void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2::TPtr& ev) {
+        NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2* response = ev->Get();
+        TEvAccessServiceBulkAuthorizeRequestV2* request = response->Request->Get<TEvAccessServiceBulkAuthorizeRequestV2>();
         const TString& key(request->Key);
         auto& userTokens = GetDerived()->GetUserTokens();
         auto itToken = userTokens.find(key);
@@ -1442,9 +1487,115 @@ private:
         }
     }
 
-    void Handle(NCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
-        NCloud::TEvAccessService::TEvAuthorizeResponse* response = ev->Get();
-        TEvAccessServiceAuthorizeRequest* request = response->Request->Get<TEvAccessServiceAuthorizeRequest>();
+    void Handle(NCloud::TEvAccessService::TEvAuthorizeResponseV1::TPtr& ev) {
+        NCloud::TEvAccessService::TEvAuthorizeResponseV1* response = ev->Get();
+        TEvAccessServiceAuthorizeRequestV1* request = response->Request->Get<TEvAccessServiceAuthorizeRequestV1>();
+        const TString& key(request->Key);
+        auto& userTokens = GetDerived()->GetUserTokens();
+        auto itToken = userTokens.find(key);
+        if (itToken == userTokens.end()) {
+            BLOG_ERROR("Ticket(key) "
+                        << MaskTicket(key)
+                        << " has expired during permission check");
+        } else {
+            auto& record = itToken->second;
+            TString permission = request->Request.permission();
+            auto itPermission = record.Permissions.find(permission);
+            if (itPermission != record.Permissions.end()) {
+                if (response->Status.Ok()) {
+                    TString errorMessage;
+                    if (ApplySubjectName(response->Response.subject(), itPermission->second.Subject, errorMessage)) {
+                        itPermission->second.SubjectType = ConvertSubjectType(response->Response.subject().type_case());
+                        itPermission->second.Error.clear();
+                        if (record.Subject.empty()) {
+                            record.Subject = itPermission->second.Subject;
+                            record.SubjectType = itPermission->second.SubjectType;
+                        }
+                        BLOG_TRACE("Ticket "
+                                    << record.GetMaskedTicket()
+                                    << " permission "
+                                    << permission
+                                    << " now has a valid subject \""
+                                    << record.Subject
+                                    << "\"");
+                    }
+                } else {
+                    bool retryable = IsRetryableGrpcError(response->Status);
+                    itPermission->second.Error = {.Message = TString{response->Status.Msg}, .Retryable = retryable};
+                    if (itPermission->second.Subject.empty() || !retryable) {
+                        itPermission->second.Subject.clear();
+                        BLOG_TRACE("Ticket "
+                                    << record.GetMaskedTicket()
+                                    << " permission "
+                                    << permission
+                                    << " now has a permanent error \""
+                                    << itPermission->second.Error
+                                    << "\" "
+                                    << " retryable:"
+                                    << retryable);
+                    } else if (retryable) {
+                        BLOG_TRACE("Ticket "
+                                    << record.GetMaskedTicket()
+                                    << " permission "
+                                    << permission
+                                    << " now has a retryable error \""
+                                    << response->Status.Msg
+                                    << "\"");
+                    }
+                }
+            } else {
+                BLOG_W("Received response for unknown permission " << permission << " for ticket " << record.GetMaskedTicket());
+            }
+            if (--record.ResponsesLeft == 0) {
+                ui32 permissionsOk = 0;
+                ui32 retryableErrors = 0;
+                bool requiredPermissionFailed = false;
+                TEvTicketParser::TError error;
+                for (const auto& [permission, rec] : record.Permissions) {
+                    if (rec.IsPermissionOk()) {
+                        ++permissionsOk;
+                    } else if (rec.IsRequired()) {
+                        TString id;
+                        if (TString folderId = record.GetAttributeValue(permission, "folder_id")) {
+                            id += "folder_id " + folderId;
+                        } else if (TString cloudId = record.GetAttributeValue(permission, "cloud_id")) {
+                            id += "cloud_id " + cloudId;
+                        } else if (TString serviceAccountId = record.GetAttributeValue(permission, "service_account_id")) {
+                            id += "service_account_id " + serviceAccountId;
+                        }
+                        error = rec.Error;
+                        error.Message = permission + " for " + id + " - " + error.Message;
+                        requiredPermissionFailed = true;
+                        break;
+                    } else {
+                        if (rec.Error.Retryable) {
+                            ++retryableErrors;
+                            error = rec.Error;
+                            break;
+                        } else if (!error) {
+                            error = rec.Error;
+                        }
+                    }
+                }
+                if (permissionsOk > 0 && retryableErrors == 0 && !requiredPermissionFailed) {
+                    record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+                    if (ResolveAccountName(record, key)) {
+                        return;
+                    }
+                    SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, record.Subject, {}));
+                } else if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
+                    SetError(request->Key, record, error);
+                }
+            }
+            if (record.ResponsesLeft == 0) {
+                Respond(record);
+            }
+        }
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvAuthorizeResponseV2::TPtr& ev) {
+        NCloud::TEvAccessService::TEvAuthorizeResponseV2* response = ev->Get();
+        TEvAccessServiceAuthorizeRequestV2* request = response->Request->Get<TEvAccessServiceAuthorizeRequestV2>();
         const TString& key(request->Key);
         auto& userTokens = GetDerived()->GetUserTokens();
         auto itToken = userTokens.find(key);
@@ -2187,23 +2338,36 @@ protected:
                 NCloud::TAccessServiceSettings settings;
                 FillAccessServiceSettings(settings);
 
+                // V1
                 AccessServiceValidatorV1 = Register(NCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
                 if (Config.GetCacheAccessServiceAuthentication()) {
-                    AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(
-                                                            AccessServiceValidatorV1,
-                                                            Config.GetGrpcCacheSize(),
-                                                            TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                            TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
+                    AccessServiceValidatorV1 = Register(
+                        NGrpcActorClient::CreateGrpcServiceCache<
+                            NCloud::TEvAccessService::TEvAuthenticateRequestV1,
+                            NCloud::TEvAccessService::TEvAuthenticateResponseV1>(
+                                AccessServiceValidatorV1,
+                                Config.GetGrpcCacheSize(),
+                                TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())),
+                        TMailboxType::HTSwap,
+                        AppData()->UserPoolId);
                 }
                 if (Config.GetCacheAccessServiceAuthorization()) {
-                    AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequest, NCloud::TEvAccessService::TEvAuthorizeResponse>(
-                                                            AccessServiceValidatorV1,
-                                                            Config.GetGrpcCacheSize(),
-                                                            TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                            TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
+                    AccessServiceValidatorV1 = Register(
+                        NGrpcActorClient::CreateGrpcServiceCache<
+                            NCloud::TEvAccessService::TEvAuthorizeRequestV1,
+                            NCloud::TEvAccessService::TEvAuthorizeResponseV1>(
+                                AccessServiceValidatorV1,
+                                Config.GetGrpcCacheSize(),
+                                TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())),
+                        TMailboxType::HTSwap,
+                        AppData()->UserPoolId);
                 }
 
+                // V2
                 AccessServiceValidatorV2 = Register(NCloud::CreateAccessServiceV2(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
+                // TODO(vlad-serikov): Think about cache
             } else if (Config.GetAccessServiceType() == "Nebius_v1") {
                 NNebiusCloud::TAccessServiceSettings settings;
                 FillAccessServiceSettings(settings);
@@ -2319,9 +2483,11 @@ public:
             hFunc(TEvTicketParser::TEvUpdateLoginSecurityState, Handle);
             hFunc(TEvTokenManager::TEvUpdateToken, Handle);
             hFunc(TEvLdapAuthProvider::TEvEnrichGroupsResponse, Handle);
-            hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
-            hFunc(NCloud::TEvAccessService::TEvAuthorizeResponse, Handle);
-            hFunc(NCloud::TEvAccessService::TEvBulkAuthorizeResponse, Handle);
+            hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV1, Handle);
+            hFunc(NCloud::TEvAccessService::TEvAuthorizeResponseV1, Handle);
+            hFunc(NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2, Handle);
+            hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, Handle);
+            hFunc(NCloud::TEvAccessService::TEvAuthorizeResponseV2, Handle);
             hFunc(NCloud::TEvUserAccountService::TEvGetUserAccountResponse, Handle);
             hFunc(NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse, Handle);
             hFunc(NNebiusCloud::TEvAccessService::TEvAuthenticateResponse, Handle);

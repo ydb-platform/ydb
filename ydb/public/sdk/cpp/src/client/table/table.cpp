@@ -2523,8 +2523,7 @@ std::optional<TMetricsSettings> TMetricsSettings::FromProto(
         return TMetricsSettings(TMetricsSettings::EMetricsLevel::Partition);
 
     default:
-        // Unknown metrics level, ignore the metrics settings completely
-        return {};
+        return TMetricsSettings(TMetricsSettings::EMetricsLevel::Unspecified);
     }
 }
 

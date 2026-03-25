@@ -1,8 +1,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+
+#include <util/string/builder.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
@@ -148,10 +149,10 @@ namespace {
         tableClient = std::make_unique<NTable::TTableClient>(*driver);
 
         auto sessionFuture = tableClient->CreateSession();
-        UNIT_ASSERT(sessionFuture.Wait(TDuration::Seconds(10)));
+        ASSERT_TRUE(sessionFuture.Wait(TDuration::Seconds(10)));
 
         auto sessionResult = sessionFuture.ExtractValueSync();
-        UNIT_ASSERT(sessionResult.IsSuccess());
+        ASSERT_TRUE(sessionResult.IsSuccess());
 
         tableSession = std::make_unique<NTable::TSession>(sessionResult.GetSession());
     }

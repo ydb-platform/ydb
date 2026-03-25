@@ -418,9 +418,11 @@ void PrintTtlSettings(const NTable::TTableDescription& tableDescription, IOutput
     }
     default:
         NColorizer::TColors colors = NConsoleClient::AutoColors(out);
-        out << "(unknown):" << Endl
-            << colors.RedColor() << "Unknown ttl settings mode. Please update your version of YDB cli"
-            << colors.OldColor() << Endl;
+
+        out << colors.RedColor()
+            << "Unknown TTL settings mode: " << static_cast<int>(settings->GetMode())
+            << colors.OldColor()
+            << Endl;
     }
 
     if (settings->GetRunInterval()) {
@@ -467,8 +469,11 @@ void PrintReadReplicasSettings(const NTable::TTableDescription& tableDescription
         break;
     default:
         NColorizer::TColors colors = NConsoleClient::AutoColors(out);
-        out << colors.RedColor() << "Unknown read replicas settings mode. Please update your version of YDB cli"
-            << colors.OldColor() << Endl;
+
+        out << colors.RedColor()
+            << "Unknown read replicas settings mode: " << static_cast<int>(settings->GetMode())
+            << colors.OldColor()
+            << Endl;
     }
 }
 
@@ -511,7 +516,7 @@ void PrintMetricsSettings(const NTable::TTableDescription& tableDescription, IOu
         NColorizer::TColors colors = NConsoleClient::AutoColors(out);
 
         out << colors.RedColor()
-            << "Unknown metrics level. Please update your version of YDB cli"
+            << "Unknown metrics level: " << static_cast<int>(settings->GetMetricsLevel())
             << colors.OldColor()
             << Endl;
 

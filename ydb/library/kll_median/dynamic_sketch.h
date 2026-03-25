@@ -54,14 +54,14 @@ public:
         size_t level = FindSuitableLevel(placementWeight);
         Sketch_.AddToLevel(level, x);
 
-        if (Sketch_.IsLevelFull(level)) {
-            Sketch_.CompactLevel(level);
-
-            while (Sketch_.Levels_.size() >= MAX_LEVELS) {
-                Sketch_.CompactLevel(0, true);
-                Sketch_.Levels_.pop_front();
-            }
+        while (Sketch_.Levels_.size() >= MAX_LEVELS) {
+            Sketch_.CompactLevel(0, true);
+            Sketch_.Levels_.pop_front();
         }
+    }
+
+    const TDeque<typename TKllSketch<T>::TLevel>& GetLevels() const {
+        return Sketch_.Levels_;
     }
 
 private:

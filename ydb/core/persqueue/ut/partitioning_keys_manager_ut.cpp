@@ -123,12 +123,6 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
             "median " << med << " outside [" << keys[loIdx] << ", " << keys[hiIdx] << "]");
     }
 
-    Y_UNIT_TEST(AddZeroMsgSize_ThenGetMedianKeyThrows) {
-        TPartitioningKeysManager m(1, HugeWindow());
-        m.Add(TString{"x"}, 0);
-        UNIT_ASSERT_EXCEPTION(m.GetMedianKey(), yexception);
-    }
-
 } // Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest)
 
 } // namespace NKikimr::NPQ

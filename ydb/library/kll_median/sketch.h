@@ -11,6 +11,40 @@
 
 namespace NKikimr::NKll {
 
+template <class T>
+T GetQuantile(TVector<std::pair<T, ui64>>& items, long double phi) {
+    Y_ENSURE(items.size() > 0, "GetQuantile() on empty items");
+    if (phi < 0) {
+        phi = 0;
+    }
+    if (phi > 1) {
+        phi = 1;
+    }
+
+    std::sort(items.begin(), items.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    ui64 totalWeight = 0;
+    for (const auto& [v, w] : items) {
+        totalWeight += w;
+    }
+
+    long double target = phi * static_cast<long double>(totalWeight);
+    if (target <= 0) {
+        return items.front().first;
+    }
+
+    ui64 accWeight = 0;
+    for (const auto& [v, w] : items) {
+        accWeight += w;
+        if (static_cast<long double>(accWeight) >= target) {
+            return v;
+        }
+    }
+
+    return items.back().first;
+}
+
 /**
  * KLL sketch for approximate streaming quantiles.
  * k: accuracy parameter (typically hundreds/thousands). cap = 2*k.
@@ -68,28 +102,7 @@ public:
             }
         }
 
-        std::sort(items.begin(), items.end(),
-            [](const auto& a, const auto& b) { return a.first < b.first; });
-
-        ui64 totalWeight = 0;
-        for (const auto& [v, w] : items) {
-            totalWeight += w;
-        }
-
-        long double target = phi * static_cast<long double>(totalWeight);
-        if (target <= 0) {
-            return items.front().first;
-        }
-
-        ui64 accWeight = 0;
-        for (const auto& [v, w] : items) {
-            accWeight += w;
-            if (static_cast<long double>(accWeight) >= target) {
-                return v;
-            }
-        }
-
-        return items.back().first;
+        return GetQuantile(items, phi);
     }
 
     ui64 Count() const {

@@ -2,7 +2,6 @@
 
 #include <util/generic/vector.h>
 
-#include <algorithm>
 #include <random>
 
 namespace NKikimr::NPQ {
@@ -26,21 +25,21 @@ void TPartitioningKeysManager::Add(const TString& key, ui64 msgSize) {
 TString TPartitioningKeysManager::GetMedianKey() {
     RemoveOldSketches();
 
-    TVector<TString> medians;
+    TVector<std::pair<TString, ui64>> keysWithWeights;
     for (const auto& sketch : Sketches) {
-        TString median = sketch.Sketch.Median();
-        if (median == "") {
-            continue;
+        const auto& levels = sketch.Sketch.GetLevels();
+        for (const auto& level : levels) {
+            for (const auto& item : level.Items) {
+                keysWithWeights.emplace_back(item, level.Weight);
+            }
         }
-        medians.push_back(std::move(median));
     }
 
-    if (medians.empty()) {
+    if (keysWithWeights.empty()) {
         return {};
     }
 
-    std::sort(medians.begin(), medians.end());
-    return medians[medians.size() / 2];
+    return NKll::GetQuantile(keysWithWeights, 0.5);
 }
 
 void TPartitioningKeysManager::RemoveOldSketches() {

@@ -2658,7 +2658,7 @@ Y_UNIT_TEST(NextFromLockedStorage) {
         TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 3);
     }
 }
 
@@ -2715,7 +2715,7 @@ Y_UNIT_TEST(LockedStorageGeneration) {
         TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 3);
     }
 }
 

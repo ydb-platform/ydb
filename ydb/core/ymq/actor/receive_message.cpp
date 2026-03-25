@@ -279,14 +279,14 @@ private:
                 if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_ATTRIBUTES)) {
                     NKikimr::NSQS::TMessageAttributes messageAttributes;
                     if (messageAttributes.ParseFromString(*value)) {
-                        for (const auto& attribute : messageAttributes.attributes()) {
+                        for (auto& attribute : *messageAttributes.mutable_attributes()) {
                             auto* value = item->AddMessageAttributes();
-                            value->SetName(attribute.name());
-                            value->SetDataType(attribute.datatype());
+                            value->SetName(std::move(attribute.name()));
+                            value->SetDataType(std::move(attribute.datatype()));
                             if (attribute.has_binaryvalue()) {
-                                value->SetBinaryValue(attribute.binaryvalue());
+                                value->SetBinaryValue(std::move(attribute.binaryvalue()));
                             } else if (attribute.has_stringvalue()) {
-                                value->SetStringValue(attribute.stringvalue());
+                                value->SetStringValue(std::move(attribute.stringvalue()));
                             } else {
                                 continue;
                             }

@@ -15,6 +15,19 @@ namespace NKikimr::NPQ {
 
 Y_UNIT_TEST_SUITE(EventsTest) {
 
+void AddReadOperation(NKikimrPQ::TDataTransaction& tx)
+{
+    auto* op = tx.AddOperations();
+    op->SetCommitOffsetsBegin(0);
+    op->SetCommitOffsetsEnd(0);
+}
+
+void AddWriteOperation(NKikimrPQ::TDataTransaction& tx, bool skipConflictCheck)
+{
+    auto* op = tx.AddOperations();
+    op->SetSkipConflictCheck(skipConflictCheck);
+}
+
 Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_NonDataTx)
 {
     TEvPersQueue::TEvProposeTransactionBuilder event;
@@ -38,8 +51,8 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataOnlyReads)
     TEvPersQueue::TEvProposeTransactionBuilder event;
 
     auto* tx = event.Record.MutableData();
-    tx->AddOperations();
-    tx->AddOperations();
+    AddReadOperation(*tx);
+    AddReadOperation(*tx);
 
     UNIT_ASSERT_FALSE(event.GetSkipSrcIdInfo());
 }
@@ -49,10 +62,8 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataAllWritesTrue)
     TEvPersQueue::TEvProposeTransactionBuilder event;
 
     auto* tx = event.Record.MutableData();
-    auto* op = tx->AddOperations();
-    op->SetSkipConflictCheck(true);
-    op = tx->AddOperations();
-    op->SetSkipConflictCheck(true);
+    AddWriteOperation(*tx, true);
+    AddWriteOperation(*tx, true);
 
     UNIT_ASSERT_TRUE(event.GetSkipSrcIdInfo());
 }
@@ -62,10 +73,8 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataAllWritesFalse)
     TEvPersQueue::TEvProposeTransactionBuilder event;
 
     auto* tx = event.Record.MutableData();
-    auto* op = tx->AddOperations();
-    op->SetSkipConflictCheck(false);
-    op = tx->AddOperations();
-    op->SetSkipConflictCheck(false);
+    AddWriteOperation(*tx, false);
+    AddWriteOperation(*tx, false);
 
     UNIT_ASSERT_FALSE(event.GetSkipSrcIdInfo());
 }
@@ -75,10 +84,8 @@ Y_UNIT_TEST(TEvProposeTransaction_GetSkipSrcIdInfo_DataMixedFlags)
     TEvPersQueue::TEvProposeTransactionBuilder event;
 
     auto* tx = event.Record.MutableData();
-    auto* op = tx->AddOperations();
-    op->SetSkipConflictCheck(false);
-    op = tx->AddOperations();
-    op->SetSkipConflictCheck(true);
+    AddWriteOperation(*tx, false);
+    AddWriteOperation(*tx, true);
 
     UNIT_ASSERT_FALSE(event.GetSkipSrcIdInfo());
 }

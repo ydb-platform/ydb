@@ -123,6 +123,13 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             Sleep(TDuration::Seconds(5));
         }
 
+        struct TStatistics {
+            size_t Size = 0;
+            size_t Early = 0;
+            size_t OutOfOrder = 0;
+            size_t DuplicateTimestamps = 0;
+        };
+
         auto readFromTimestamp = [&setup, &lastMessage, &topicName](std::optional<TInstant> startTimestamp, TStringBuf sessionId) {
             TTopicClient client(setup.MakeDriver());
             TReadSessionSettings settings;
@@ -158,22 +165,20 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
                 ssLog << " " << FormatMilliSeconds(*startTimestamp) << " ms (" << *startTimestamp << ")";
             }
 
-            size_t early = 0;
-            size_t outOfOrder = 0;
+            TStatistics stat{
+                .Size = messages.size(),
+            };
             {
                 TInstant prev = TInstant::Zero();
-                for (auto&& m : messages) {
-                    if (startTimestamp.has_value() && m.GetWriteTime() < *startTimestamp) {
-                        early++;
-                    }
-                    if (m.GetWriteTime() < prev) {
-                        outOfOrder++;
-                    }
+                for (const auto& m : messages) {
+                    stat.Early += (startTimestamp.has_value() && m.GetWriteTime() < *startTimestamp);
+                    stat.OutOfOrder += (m.GetWriteTime() < prev);
+                    stat.DuplicateTimestamps = (m.GetWriteTime() == prev);
                     prev = m.GetWriteTime();
                 }
             }
             ssLog << ": " << messages.size() << " messages;";
-            ssLog << " " << early << " early messages";
+            ssLog << " " << stat.Early << " early messages";
             ssLog << ": [\n";
             for (size_t i = 0; i < messages.size(); ++i) {
                 const auto& m = messages[i];
@@ -194,10 +199,10 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             }
             ssLog << "]\n";
             Cerr << ssLog.Str() << Endl;
-            return std::make_tuple(messages, early, outOfOrder);
+            return std::make_tuple(messages, stat);
         };
 
-        const auto [messages, _, outOfOrder] = readFromTimestamp(std::nullopt, "all");
+        const auto [messages, _] = readFromTimestamp(std::nullopt, "all");
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), createTimestamps.size());
 
         auto getOffsetTimestampFor = [&](TDuration offset ,size_t sessionId) {
@@ -228,11 +233,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             {std::bind_front(getOffsetTimestampFor, TDuration::MilliSeconds(6)), "offset 6ms", ETimestampFnKind::Offset},
             {getMiddleTimestampFor, "middle", ETimestampFnKind::Middle},
         };
-        struct TStatistics {
-            size_t Size;
-            size_t Early;
-            size_t OutOfOrder;
-        };
+
         struct TCase {
             TString TimestampFn;
             size_t SessionId;
@@ -268,10 +269,9 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
                     }
                 }
 
-                const auto [tail, early, outOfOrder] = readFromTimestamp(startTimestamp, TStringBuilder() << LabeledOutput(tsName, sessionId));
+                const auto [_, stat] = readFromTimestamp(startTimestamp, TStringBuilder() << LabeledOutput(tsName, sessionId));
                 TCase c{.TimestampFn = tsName, .SessionId = sessionId, .StartTimestamp = startTimestamp, .ExpectedMessagesCount = countExpectedMessages(startTimestamp)};
-                TStatistics s{.Size = tail.size(), .Early = early, .OutOfOrder = outOfOrder};
-                result[c] = s;
+                result[c] = stat;
             }
         }
         for (const auto& [testCase, stats] : result) {
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             const std::tuple<bool, TString, bool, bool> flags[]{
             //    {xfail, "Imprecise", true, false},
                 {true, "Topic", true, true},
-            //    {xfail, "LB", false, true},
+                {true, "LB", false, true},
             };
 
             const std::tuple<bool, ui32, TString, std::vector<ETimestampFnKind>> readTimestampKinds[]{

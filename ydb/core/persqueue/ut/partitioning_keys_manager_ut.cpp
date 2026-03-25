@@ -47,8 +47,7 @@ namespace {
             auto decimal = NDataStreams::V1::HexBytesToDecimal(MD5::Calc(CreateGuidAsString()));
             keys.emplace_back(decimal);
         }
-        auto now = Now();
-        for (const auto& key : keys) {m.Add(key, kMsgSize, now);}
+        for (const auto& key : keys) {m.Add(key, kMsgSize, Now());}
     }
 
 } // namespace
@@ -143,8 +142,8 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
         const size_t loIdx = mid > tol ? mid - tol : 0;
         const size_t hiIdx = std::min(keys.size() - 1, mid + tol);
         UNIT_ASSERT_C(keys[loIdx] <= med && med <= keys[hiIdx],
-            "median " << Uint128ToDiagString(med) << " outside [" << Uint128ToDiagString(keys[loIdx]) << ", "
-                      << Uint128ToDiagString(keys[hiIdx]) << "]");
+            TStringBuilder() << "median " << Uint128ToDiagString(med) << " outside ["
+                             << Uint128ToDiagString(keys[loIdx]) << ", " << Uint128ToDiagString(keys[hiIdx]) << "]");
     }
 
 } // Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest)

@@ -94,7 +94,6 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             settings.PartitionId(0);
             settings.DeduplicationEnabled(false);
             settings.Codec(NYdb::NTopic::ECodec::RAW);
-            auto session = client.CreateSimpleBlockingWriteSession(settings);
             for (size_t i = 0; i < count; ++i) {
                 const TInstant cur = TInstant::Now();
                 auto session = client.CreateSimpleBlockingWriteSession(settings);
@@ -201,6 +200,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
 
         const auto [messages, _] = readFromTimestamp(std::nullopt, "all");
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), createTimestamps.size());
+        UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), options.MessageCount + options.TailMessageCount, LabeledOutput(options.MessageCount, options.TailMessageCount));
 
         auto getOffsetTimestampFor = [&](TDuration offset ,size_t sessionId) {
             TInstant writeTimestamp = messages.at(sessionId).GetWriteTime();

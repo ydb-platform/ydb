@@ -585,23 +585,14 @@ private:
                 return false;
             }
 
-            arrow::Status validationStatus;
-            switch (column->type_id()) {
-                case arrow::Type::STRING: {
-                    const auto& typedColumn = static_cast<const arrow::StringArray&>(*column);
-                    validationStatus = typedColumn.ValidateUTF8();
-                    break;
-                }
-                case arrow::Type::LARGE_STRING: {
-                    const auto& typedColumn = static_cast<const arrow::LargeStringArray&>(*column);
-                    validationStatus = typedColumn.ValidateUTF8();
-                    break;
-                }
-                default:
-                    errorMessage = Sprintf("Unexpected Arrow type %s for Utf8 column '%s'",
-                        column->type()->ToString().c_str(), columnName.c_str());
-                    return false;
+            if (column->type_id() != arrow::Type::STRING) {
+                errorMessage = Sprintf("Unexpected Arrow type %s for Utf8 column '%s'",
+                    column->type()->ToString().c_str(), columnName.c_str());
+                return false;
             }
+
+            const auto& typedColumn = static_cast<const arrow::StringArray&>(*column);
+            arrow::Status validationStatus = typedColumn.ValidateUTF8();
             if (!validationStatus.ok()) {
                 errorMessage = TStringBuilder() << "Invalid UTF-8 data in column " << columnName << ": " << validationStatus.message();
                 return false;

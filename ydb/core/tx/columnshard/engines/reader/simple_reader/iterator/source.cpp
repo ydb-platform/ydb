@@ -167,7 +167,7 @@ void IDataSource::ClearMemoryGuards() {
 }
 
 void IDataSource::DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
-    Finalize(NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
+    Finalize(AppDataVerified().ColumnShardConfig.GetMemoryLimitScanPortion());
 }
 
 void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {

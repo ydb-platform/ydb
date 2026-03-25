@@ -91,7 +91,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(
     }
     if (Columns.GetColumnsCount()) {
         source->SetSourceInMemory(
-            source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
+            source->GetColumnRawBytes(Columns.GetColumnIds()) < AppDataVerified().ColumnShardConfig.GetMemoryLimitScanPortion());
     } else {
         source->SetSourceInMemory(true);
     }

@@ -293,7 +293,7 @@ TConclusion<bool> TDecideStreamingModeStep::DoExecuteInplace(
         return true;
     }
 
-    const ui64 memoryLimit = NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion();
+    const ui64 memoryLimit = AppDataVerified().ColumnShardConfig.GetMemoryLimitScanPortion();
     if (memoryLimit == 0) {
         // No memory limit configured — streaming mode is not applicable.
         return true;

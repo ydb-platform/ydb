@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             const std::tuple<bool, TString, bool, bool> flags[]{
             //    {xfail, "Imprecise", true, false},
                 {true, "Topic", true, true},
-            //    {true, "LB", false, true},
+                {true, "LB", false, true},
             };
 
             const std::tuple<bool, ui32, TString, std::vector<ETimestampFnKind>> readTimestampKinds[]{

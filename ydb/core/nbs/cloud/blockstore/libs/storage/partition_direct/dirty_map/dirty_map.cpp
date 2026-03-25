@@ -338,19 +338,27 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         return result;
     }
 
-    TReadRangeHint readHint = makeDefaultHint(range);
+    ui64 maxLsn = 0;
     Inflight.EnumerateOverlapping(
         range,
         [&](TInflightMap::TFindItem& item)
         {
             const ui64 lsn = item.Key;
-            if (readHint.Lsn < lsn) {
-                readHint = makeHint(item.Value.ReadMask(), lsn, item.Range);
-            }
+            maxLsn = std::max(maxLsn, lsn);
 
             return TInflightMap::EEnumerateContinuation::Continue;
         });
 
+    const auto item = Inflight.GetValue(maxLsn);
+
+    // Read from DDisk if the range is not covered by the inflight range.
+    if (!item->Range.Contains(range)) {
+        result.RangeHints.push_back(makeDefaultHint(range));
+        return result;
+    }
+
+    TReadRangeHint readHint =
+        makeHint(item->Value.ReadMask(), item->Key, item->Range);
     if (readHint.LocationMask.Empty()) {
         // Reading from range with blocked lsn is forbidden.
         // Caller should wait until PBuffers quorum will be made.

@@ -313,7 +313,7 @@ public:
             return -1;
         }
         int ret = SSL_do_handshake(Ssl.get());
-        return ret;
+        return SSL_get_error(Ssl.get(), ret);
     }
 
     TSslHolder<X509> GetSslClientCert() {

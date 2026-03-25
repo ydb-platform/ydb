@@ -9,7 +9,6 @@ ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexO
 ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
 ydb/core/cms/ut_sentinel TSentinelTests.InitialDeploymentGracePeriod
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
-ydb/core/fq/libs/row_dispatcher/ut sole chunk chunk
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
@@ -76,13 +75,8 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_restart_idempotency
 ydb/tests/fq/s3 test_s3_1.py.TestS3.test_write_result[v1-kikimr_params0-client0]
 ydb/tests/functional/compatibility [test_compatibility.py */*] chunk chunk
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_current]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_24_4]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_25_1]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_24_4_to_current]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_24_4_to_current_mixed]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_25_1_to_current]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_25_1_to_current_mixed]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[current_to_stable_24_4-column]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[current_to_stable_24_4-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_24_4_to_current-column]

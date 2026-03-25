@@ -28,8 +28,6 @@
 
 namespace NMVP {
 
-using namespace NKikimr;
-
 inline constexpr TStringBuf SOURCE_META = "meta";
 
 class TMetaSupportLinksGetHandlerActor : private THandlerActorYdb, public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor> {
@@ -75,7 +73,7 @@ public:
     }
 
     bool ValidateAndInitEntityType() {
-        const TString cluster = GetClusterName();
+        const TString cluster = Request.Parameters["cluster"];
         const TString database = Request.Parameters["database"];
 
         if (cluster.empty()) {
@@ -89,7 +87,7 @@ public:
     virtual void RequestClusterInfo() {
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         NActors::TActorId actorId = SelfId();
-        Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location, "metadb"))
+        Location.GetTableClient(TMVP::GetStrictMetaDatabaseClientSettings(Request, Location))
             .CreateSession()
             .Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
                 SendCreateSessionResult(actorId, actorSystem, result);
@@ -109,7 +107,7 @@ public:
 
     void RequestClusterInfoRows() {
         TString query = BuildClusterInfoQuery(Location.RootDomain);
-        NYdb::TParams params = BuildClusterInfoQueryParams(GetClusterName());
+        NYdb::TParams params = BuildClusterInfoQueryParams(Request.Parameters["cluster"]);
 
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         NActors::TActorId actorId = SelfId();
@@ -133,10 +131,6 @@ public:
         actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));
     }
 
-    TString GetClusterName() const {
-        return Request.Parameters["cluster"];
-    }
-
     static void SendDataQueryResult(
         const NActors::TActorId& actorId,
         NActors::TActorSystem* actorSystem,
@@ -154,7 +148,7 @@ public:
         }
 
         if (!TryExtractClusterInfo(result.GetResultSet(0), ClusterInfo)) {
-            AddCommonError(TStringBuilder() << "Cluster '" << GetClusterName() << "' is not found in MasterClusterExt.db");
+            AddCommonError(TStringBuilder() << "Cluster '" << Request.Parameters["cluster"] << "' is not found in MasterClusterExt.db");
         }
         ResolveSupportLinks();
     }

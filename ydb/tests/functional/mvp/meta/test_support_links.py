@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from urllib.parse import parse_qsl, urlsplit
 
 import pytest
 from library.python.port_manager import PortManager
@@ -31,10 +32,11 @@ class SupportLinksConfigCase:
 
 
 def assert_support_links_response(payload, expected_url):
-    assert payload["links"] == [{
-        "title": "Overview",
-        "url": expected_url,
-    }]
+    assert len(payload["links"]) == 1
+    assert payload["links"][0]["title"] == "Overview"
+
+    actual_url = payload["links"][0]["url"]
+    assert_urls_match(actual_url, expected_url)
     assert "errors" not in payload
 
 
@@ -46,10 +48,11 @@ def assert_support_links_error(payload, message_substring):
 
 
 def assert_support_links_response_with_error(payload, expected_url, message_substring):
-    assert payload["links"] == [{
-        "title": "Overview",
-        "url": expected_url,
-    }]
+    assert len(payload["links"]) == 1
+    assert payload["links"][0]["title"] == "Overview"
+
+    actual_url = payload["links"][0]["url"]
+    assert_urls_match(actual_url, expected_url)
     assert len(payload["errors"]) == 1
     assert payload["errors"][0]["source"] == "meta"
     assert message_substring in payload["errors"][0]["message"]
@@ -60,6 +63,18 @@ def assert_bad_request_response(payload, message_substring):
     assert len(payload["errors"]) == 1
     assert payload["errors"][0]["source"] == "meta"
     assert message_substring in payload["errors"][0]["message"]
+
+
+def assert_urls_match(actual_url, expected_url):
+    actual_split = urlsplit(actual_url)
+    expected_split = urlsplit(expected_url)
+
+    assert actual_split.scheme == expected_split.scheme
+    assert actual_split.netloc == expected_split.netloc
+    assert actual_split.path == expected_split.path
+    assert sorted(parse_qsl(actual_split.query, keep_blank_values=True)) == sorted(
+        parse_qsl(expected_split.query, keep_blank_values=True)
+    )
 
 
 def grafana_url_with_cluster(cluster_name=CLUSTER_NAME, extra_query=""):

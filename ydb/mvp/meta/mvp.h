@@ -47,10 +47,8 @@ public:
     void InitMeta();
 
     TString static GetMetaDatabaseAuthToken(const TRequest& request);
-    NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(
-        const TRequest& request,
-        const TYdbLocation& location,
-        TStringBuf databaseParameterName = {});
+    NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
+    NYdb::NTable::TClientSettings static GetStrictMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
 
     void TryGetMetaOptionsFromConfig();
     void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appConfig);

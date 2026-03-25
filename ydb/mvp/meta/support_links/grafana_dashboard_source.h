@@ -48,8 +48,7 @@ inline void ValidateGrafanaDashboardSourceConfig(const TSupportLinkEntryConfig& 
     }
 }
 
-inline std::shared_ptr<ILinkSource> MakeGrafanaDashboardSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings)
-{
+inline std::shared_ptr<ILinkSource> MakeGrafanaDashboardSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings) {
     ValidateGrafanaDashboardSourceConfig(config, metaSettings);
     return std::make_shared<TGrafanaDashboardSource>(
         config.GetSource(),

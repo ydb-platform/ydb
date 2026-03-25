@@ -58,7 +58,7 @@ NYdb::NScheme::TSchemeClient TYdbLocation::GetSchemeClient(const TRequest& reque
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    if (TString database = TYdbLocation::BuildMetaDatabasePath(request)) {
+    if (TString database = TYdbLocation::GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
     return NYdb::NScheme::TSchemeClient(GetDriver(), clientSettings);
@@ -117,7 +117,7 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const TRequest& request,
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    if (TString database = TYdbLocation::BuildMetaDatabasePath(request)) {
+    if (TString database = TYdbLocation::GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
     return GetTableClient(clientSettings);
@@ -127,21 +127,15 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const NYdb::NTable::TCli
     return NYdb::NTable::TTableClient(GetDriver(), clientSettings);
 }
 
-TString TYdbLocation::BuildMetaDatabasePath(const TRequest& request, TStringBuf databaseParameterName) const {
-    if (databaseParameterName.empty()) {
-        return {};
+TString TYdbLocation::GetDatabaseName(const TRequest& request) const {
+    TString database = request.Parameters["database"];
+    if (database) {
+        if (!database.StartsWith('/')) {
+            database.insert(database.begin(), '/');
+        }
+        database.insert(0, RootDomain);
     }
-
-    TString database = request.Parameters[databaseParameterName];
-    if (database.empty()) {
-        return {};
-    }
-
-    if (!database.StartsWith('/')) {
-        database = "/" + database;
-    }
-
-    return RootDomain + database;
+    return database;
 }
 
 NYdb::NScripting::TScriptingClient TYdbLocation::GetScriptingClient(const TRequest& request) const {
@@ -150,7 +144,7 @@ NYdb::NScripting::TScriptingClient TYdbLocation::GetScriptingClient(const TReque
     if (authToken) {
         clientSettings.AuthToken(authToken);
     }
-    TString database = BuildMetaDatabasePath(request);
+    TString database = GetDatabaseName(request);
     if (database) {
         clientSettings.Database(database);
     }

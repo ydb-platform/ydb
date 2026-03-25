@@ -1,4 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/cgiparam/cgiparam.h>
 
 #include <ydb/library/actors/http/http.h>
 #include <ydb/mvp/meta/support_links/grafana_dashboard_source.h>
@@ -33,7 +34,15 @@ NHttp::TUrlParametersBuilder MakeUrlParameters(TStringBuf query) {
 
 void AssertSingleResolvedLink(const NMVP::TResolveOutput& result, TStringBuf expectedUrl) {
     UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(result.Links[0].Url, expectedUrl);
+    const TStringBuf actualUrl = result.Links[0].Url;
+    UNIT_ASSERT_VALUES_EQUAL(actualUrl.Before('?'), expectedUrl.Before('?'));
+
+    TCgiParameters actualQuery;
+    TCgiParameters expectedQuery;
+    actualQuery.Scan(actualUrl.After('?'));
+    expectedQuery.Scan(expectedUrl.After('?'));
+
+    UNIT_ASSERT_VALUES_EQUAL(actualQuery.Print(), expectedQuery.Print());
     UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 0);
 }
 

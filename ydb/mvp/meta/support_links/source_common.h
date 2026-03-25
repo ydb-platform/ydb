@@ -1,13 +1,7 @@
 #pragma once
 
-#include <ydb/mvp/meta/meta_settings.h>
-
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/http/http.h>
-
 #include <library/cpp/string_utils/quote/quote.h>
 
-#include <util/generic/hash.h>
 #include <util/string/builder.h>
 
 namespace NMVP::NSupportLinks {

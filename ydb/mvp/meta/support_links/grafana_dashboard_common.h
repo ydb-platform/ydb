@@ -3,7 +3,32 @@
 #include "source_common.h"
 #include "types.h"
 
+#include <library/cpp/cgiparam/cgiparam.h>
+
 namespace NMVP::NSupportLinks {
+
+inline void ApplyGrafanaDashboardBindingPolicy(
+    TCgiParameters& queryParameters,
+    const THashMap<TString, TString>& clusterInfo,
+    const NHttp::TUrlParameters& requestUrlParameters)
+{
+    static constexpr TStringBuf WorkspaceKey = "k8s_namespace";
+    static constexpr TStringBuf DatasourceKey = "datasource";
+
+    const auto workspaceIt = clusterInfo.find(WorkspaceKey);
+    if (workspaceIt != clusterInfo.end() && !workspaceIt->second.empty()) {
+        queryParameters.InsertUnescaped("var-workspace", workspaceIt->second);
+    }
+
+    const auto datasourceIt = clusterInfo.find(DatasourceKey);
+    if (datasourceIt != clusterInfo.end() && !datasourceIt->second.empty()) {
+        queryParameters.InsertUnescaped("var-ds", datasourceIt->second);
+    }
+
+    for (const auto& parameter : requestUrlParameters.Parameters) {
+        queryParameters.InsertUnescaped(TStringBuilder() << "var-" << parameter.first, requestUrlParameters[parameter.first]);
+    }
+}
 
 inline TString BuildGrafanaDashboardUrl(
     TStringBuf grafanaEndpoint,
@@ -11,26 +36,21 @@ inline TString BuildGrafanaDashboardUrl(
     const THashMap<TString, TString>& clusterInfo,
     const NHttp::TUrlParameters& requestUrlParameters)
 {
-    static constexpr TStringBuf WorkspaceKey = "k8s_namespace";
-    static constexpr TStringBuf DatasourceKey = "datasource";
-
     TString resolvedUrl = IsAbsoluteUrl(url)
         ? TString(url)
         : JoinUrl(grafanaEndpoint, url);
-    const auto workspaceIt = clusterInfo.find(WorkspaceKey);
-    if (workspaceIt != clusterInfo.end() && !workspaceIt->second.empty()) {
-        resolvedUrl = AppendQueryParam(resolvedUrl, "var-workspace", workspaceIt->second);
-    }
+    const TStringBuf path = TStringBuf(resolvedUrl).Before('?');
+    const TStringBuf queryString = TStringBuf(resolvedUrl).After('?');
 
-    const auto datasourceIt = clusterInfo.find(DatasourceKey);
-    if (datasourceIt != clusterInfo.end() && !datasourceIt->second.empty()) {
-        resolvedUrl = AppendQueryParam(resolvedUrl, "var-ds", datasourceIt->second);
+    TCgiParameters queryParameters;
+    if (!queryString.empty()) {
+        queryParameters.Scan(queryString);
     }
+    ApplyGrafanaDashboardBindingPolicy(queryParameters, clusterInfo, requestUrlParameters);
 
-    for (const auto& [name, _] : requestUrlParameters.Parameters) {
-        resolvedUrl = AppendQueryParam(resolvedUrl, TStringBuilder() << "var-" << name, requestUrlParameters[name]);
-    }
-    return resolvedUrl;
+    return queryParameters.empty()
+        ? TString(path)
+        : TStringBuilder() << path << '?' << queryParameters.Print();
 }
 
 } // namespace NMVP::NSupportLinks

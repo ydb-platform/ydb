@@ -1,6 +1,10 @@
 #include <ydb/mvp/meta/mvp.h>
+#include <ydb/mvp/core/core_ydb.h>
+#include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/mvp/meta/support_links/source.h>
 #include <ydb/mvp/core/utils.h>
+
+#include <ydb/library/actors/http/http.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -143,4 +147,5 @@ meta:
             "unsupported support_links source: unknown/source"
         );
     }
+
 }

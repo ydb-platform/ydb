@@ -22,6 +22,8 @@ struct TReadBlocksLocalRequest
 {
     TRequestHeaders Headers;
     TBlockRange64 Range;
+    TBlockRange64 RegionRange;
+    TBlockRange64 VChunkRange;
     TGuardedSgList Sglist;
 
     TReadBlocksLocalRequest(TRequestHeaders headers, TBlockRange64 range)
@@ -39,6 +41,8 @@ struct TWriteBlocksLocalRequest
 {
     TRequestHeaders Headers;
     TBlockRange64 Range;
+    TBlockRange64 RegionRange;
+    TBlockRange64 VChunkRange;
     TGuardedSgList Sglist;
 
     TWriteBlocksLocalRequest(TRequestHeaders headers, TBlockRange64 range)

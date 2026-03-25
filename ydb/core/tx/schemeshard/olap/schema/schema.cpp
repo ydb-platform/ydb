@@ -86,7 +86,13 @@ bool TOlapSchema::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& op
 
 bool TOlapSchema::AddDefaultMinMaxIndexes(IErrorCollector& errors) {
     NKikimrSchemeOp::TAlterColumnTableSchema alterSchema;
+    // Skip minmax index for the first primary key column
+    const ui32 firstPkColumnId = Columns.GetKeyColumnIds()[0];
+
     for (auto& [id, col] : Columns.GetColumns()) {
+        if (id == firstPkColumnId) {
+            continue;
+        }
         if (!NOlap::NIndexes::NMinMax::TIndexMeta::IsAvailableType(col.GetType())) {
             continue;
         }

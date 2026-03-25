@@ -13,6 +13,7 @@ class TOlapOptionsUpdate {
 private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
     YDB_ACCESSOR(bool, SchemeNeedActualizationSpecified, false);
+    YDB_ACCESSOR(bool, ScanReaderPolicyNameSpecified, false);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
@@ -26,7 +27,13 @@ public:
             SetSchemeNeedActualization(alterRequest.GetOptions().GetSchemeNeedActualization());
         }
         if (alterRequest.GetOptions().HasScanReaderPolicyName()) {
-            ScanReaderPolicyName = alterRequest.GetOptions().GetScanReaderPolicyName();
+            SetScanReaderPolicyNameSpecified(true);
+            const TString& name = alterRequest.GetOptions().GetScanReaderPolicyName();
+            if (name.empty()) {
+                ScanReaderPolicyName = std::nullopt;
+            } else {
+                ScanReaderPolicyName = name;
+            }
         }
         if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
             auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
@@ -50,8 +57,12 @@ public:
         if (GetSchemeNeedActualizationSpecified()) {
             alterRequest.MutableOptions()->SetSchemeNeedActualization(GetSchemeNeedActualization());
         }
-        if (ScanReaderPolicyName) {
-            alterRequest.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
+        if (GetScanReaderPolicyNameSpecified()) {
+            if (ScanReaderPolicyName) {
+                alterRequest.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
+            } else {
+                alterRequest.MutableOptions()->SetScanReaderPolicyName(TString{});
+            }
         }
         if (CompactionPlannerConstructor.HasObject()) {
             CompactionPlannerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableCompactionPlannerConstructor());

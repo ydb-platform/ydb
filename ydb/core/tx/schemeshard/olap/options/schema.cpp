@@ -6,8 +6,8 @@ bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate
     if (schemaUpdate.GetSchemeNeedActualizationSpecified()) {
         SchemeNeedActualization = schemaUpdate.GetSchemeNeedActualization();
     }
-    if (!!schemaUpdate.GetScanReaderPolicyName()) {
-        ScanReaderPolicyName = *schemaUpdate.GetScanReaderPolicyName();
+    if (schemaUpdate.GetScanReaderPolicyNameSpecified()) {
+        ScanReaderPolicyName = schemaUpdate.GetScanReaderPolicyName();
     }
     if (schemaUpdate.GetCompactionPlannerConstructor().HasObject()) {
         CompactionPlannerConstructor = schemaUpdate.GetCompactionPlannerConstructor();

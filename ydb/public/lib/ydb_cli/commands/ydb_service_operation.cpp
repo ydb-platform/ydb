@@ -145,9 +145,9 @@ int TCommandForgetOperation::Run(TConfig& config) {
 void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
     KindToHandler = {
         {"export/s3", &ListOperations<NExport::TExportToS3Response>},
-        {"export/fs", &ListOperations<NExport::TExportToFsResponse>},
+        {"export/nfs", &ListOperations<NExport::TExportToFsResponse>},
         {"import/s3", &ListOperations<NImport::TImportFromS3Response>},
-        {"import/fs", &ListOperations<NImport::TImportFromFsResponse>},
+        {"import/nfs", &ListOperations<NImport::TImportFromFsResponse>},
         {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
         {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
         {"incbackup", &ListOperations<NBackup::TIncrementalBackupResponse>},

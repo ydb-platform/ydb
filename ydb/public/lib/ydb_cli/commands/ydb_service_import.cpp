@@ -34,7 +34,7 @@ TCommandImport::TCommandImport()
 {
     AddCommand(std::make_unique<TCommandImportFromS3>());
     AddCommand(std::make_unique<TCommandImportFromFile>());
-    AddCommand(std::make_unique<TCommandImportFromFs>());
+    AddCommand(std::make_unique<TCommandImportFromNfs>());
 }
 
 TCommandImportBase::TCommandImportBase(const TString& name, const TString& description)
@@ -463,44 +463,45 @@ int TCommandImportFromS3::Run(TConfig& config) {
     return returnCode;
 }
 
-/// FS
-TCommandImportFromFs::TCommandImportFromFs()
-    : TCommandImportBase("fs", "Create import from file system.")
+/// NFS
+TCommandImportFromNfs::TCommandImportFromNfs()
+    : TCommandImportBase("nfs", "Create a massively parallel import from a network file system shared across YDB hosts.\n"
+        "As a server-side operation, the system performs massively parallel reads of object schema\n"
+        "and table data files from an identical path on every YDB host.\n"
+        "Files are sourced from a directory mounted across all YDB hosts.")
 {
     TItemFs::DefineFields({
-        {"Source", {{"source", "src", "s"}, "Path to the exported object in file system (relative to base_path)", true}},
+        {"Source", {{"source", "src", "s"}, "Path to the exported object in file system (relative to fs-path)", true}},
         {"Destination", {{"destination", "dst", "d"}, "Database path to a table to import to", true}},
     });
 }
 
-void TCommandImportFromFs::Config(TConfig& config) {
+void TCommandImportFromNfs::Config(TConfig& config) {
     TCommandImportBase::Config(config);
 
-    config.Opts->AddLongOption("item", TItemFs::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
-        .RequiredArgument("PROPERTY=VALUE,...");
+    config.Opts->AddLongOption("fs-path",
+            "The absolute path in the file system on every YDB host relative to which the paths to YDB "
+            "object data files are specified. Use the full path to the mounted directory. Example: /mnt/import/path.")
+        .Required().RequiredArgument("PATH").StoreResult(&CommonSourcePrefix);
 
-    config.Opts->AddLongOption("base-path", "Base path for import in file system")
-        .RequiredArgument("PATH").StoreResult(&CommonSourcePrefix);
+    config.Opts->AddLongOption("item", TItemNfs::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+        .RequiredArgument("PROPERTY=VALUE,...");
 }
 
-void TCommandImportFromFs::Parse(TConfig& config) {
+void TCommandImportFromNfs::Parse(TConfig& config) {
     TCommandImportBase::Parse(config);
 }
 
-void TCommandImportFromFs::ExtractParams(TConfig& config) {
+void TCommandImportFromNfs::ExtractParams(TConfig& config) {
     TCommandImportBase::ExtractParams(config);
 }
 
-NImport::TImportFromFsSettings TCommandImportFromFs::MakeImportSettings() {
+NImport::TImportFromFsSettings TCommandImportFromNfs::MakeImportSettings() {
     using namespace NImport;
 
     TImportFromFsSettings settings = FillSettings<TImportFromFsSettings>(TImportFromFsSettings());
 
-    if (CommonSourcePrefix) {
-        settings.BasePath(CommonSourcePrefix);
-    } else {
-        throw TMisuseException() << "No base path was provided";
-    }
+    settings.BasePath(CommonSourcePrefix);
 
     FillCommonImportSettings(settings);
     FillItems(settings);
@@ -508,7 +509,7 @@ NImport::TImportFromFsSettings TCommandImportFromFs::MakeImportSettings() {
     return settings;
 }
 
-int TCommandImportFromFs::Run(TConfig& config) {
+int TCommandImportFromNfs::Run(TConfig& config) {
     if (EncryptionKey && !EncryptionKeyFile) { // We read key from env YDB_ENCRYPTION_KEY, treat as hex encoded
         try {
             EncryptionKey = HexDecode(EncryptionKey);

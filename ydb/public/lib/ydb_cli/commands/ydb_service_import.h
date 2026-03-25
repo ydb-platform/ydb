@@ -91,9 +91,9 @@ private:
     bool UseVirtualAddressing = true;
 };
 
-class TCommandImportFromFs : public TCommandImportBase {
+class TCommandImportFromNfs : public TCommandImportBase {
 public:
-    TCommandImportFromFs();
+    TCommandImportFromNfs();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual void ExtractParams(TConfig& config) override;
@@ -102,7 +102,7 @@ public:
     NImport::TImportFromFsSettings MakeImportSettings();
 
 private:
-    DEFINE_PARSEABLE_STRUCT(TItemFs, TItemFields, Source, Destination);
+    DEFINE_PARSEABLE_STRUCT(TItemNfs, TItemFields, Source, Destination);
 };
 
 class TCommandImportFromFile : public TClientCommandTree {

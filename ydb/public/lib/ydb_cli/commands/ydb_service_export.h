@@ -101,16 +101,16 @@ private:
     bool UseVirtualAddressing = true;
 };
 
-class TCommandExportToFs : public TCommandExportBase {
+class TCommandExportToNfs : public TCommandExportBase {
 public:
-    TCommandExportToFs();
+    TCommandExportToNfs();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
-    DEFINE_PARSEABLE_STRUCT(TItemFs, TItemFields, Source, Destination);
+    DEFINE_PARSEABLE_STRUCT(TItemNfs, TItemFields, Source, Destination);
 };
 
 }

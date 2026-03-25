@@ -26,7 +26,7 @@ void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToS3R
 void PrintOperation(const NImport::TImportFromS3Response& operation, EDataFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromS3Response>& operations, EDataFormat format);
 
-/// FS
+/// NFS
 // export
 void PrintOperation(const NExport::TExportToFsResponse& operation, EDataFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToFsResponse>& operations, EDataFormat format);

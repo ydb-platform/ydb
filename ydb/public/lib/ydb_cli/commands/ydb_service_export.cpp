@@ -118,7 +118,7 @@ TCommandExport::TCommandExport(bool useExportToYt)
         AddCommand(std::make_unique<TCommandExportToYt>());
     }
     AddCommand(std::make_unique<TCommandExportToS3>());
-    AddCommand(std::make_unique<TCommandExportToFs>());
+    AddCommand(std::make_unique<TCommandExportToNfs>());
 }
 
 /// YT
@@ -584,46 +584,44 @@ int TCommandExportToS3::Run(TConfig& config) {
     return TCommandExportBase::Run<TExportToS3Settings, TExportToS3Response>(config, settings);
 }
 
-TCommandExportToFs::TCommandExportToFs()
-    : TCommandExportBase("fs", "Create export in file system.")
+TCommandExportToNfs::TCommandExportToNfs()
+    : TCommandExportBase("nfs", "Create a massively parallel export to a network file system shared across YDB hosts.\n"
+        "As a server-side operation, export files are written in massively parallel to an identical NFS-mounted directory path accessed by all YDB hosts.\n"
+        "Ensure this directory is mounted on every YDB host.")
 {
-    TItemFs::DefineFields({
+    TItemNfs::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
-        {"Destination", {{"destination", "dst", "d"}, "Path in file system (relative to base_path)", true}},
+        {"Destination", {{"destination", "dst", "d"}, "Path in file system (relative to fs-path)", true}},
     });
 }
 
-void TCommandExportToFs::Config(TConfig& config) {
+void TCommandExportToNfs::Config(TConfig& config) {
     TCommandExportBase::Config(config);
 
+    config.Opts->AddLongOption("fs-path",
+            "The absolute path in the file system on every YDB host where the export files will be located. "
+            "Use the full path to the mounted directory. Example: /mnt/export/path.")
+        .Required().RequiredArgument("PATH").StoreResult(&CommonDestinationPrefix);
 
-    config.Opts->AddLongOption("item", TItemFs::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+    config.Opts->AddLongOption("item", TItemNfs::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
-
-    config.Opts->AddLongOption("base-path", "Base path for export in file system")
-        .RequiredArgument("PATH").StoreResult(&CommonDestinationPrefix);
 }
 
-void TCommandExportToFs::Parse(TConfig& config) {
+void TCommandExportToNfs::Parse(TConfig& config) {
     TCommandExportBase::Parse(config);
-    ParseItems(config, "base-path");
+    ParseItems(config, "fs-path");
 }
 
-void TCommandExportToFs::ExtractParams(TConfig& config) {
+void TCommandExportToNfs::ExtractParams(TConfig& config) {
     TCommandExportBase::ExtractParams(config);
 }
 
-int TCommandExportToFs::Run(TConfig& config) {
+int TCommandExportToNfs::Run(TConfig& config) {
     using namespace NExport;
 
     TExportToFsSettings settings = FillSettings(TExportToFsSettings());
 
-    if (CommonDestinationPrefix) {
-        settings.BasePath(CommonDestinationPrefix);
-    } else {
-        Cerr << "No base path was provided" << Endl;
-        return EXIT_FAILURE;
-    }
+    settings.BasePath(CommonDestinationPrefix);
 
     return TCommandExportBase::Run<TExportToFsSettings, TExportToFsResponse>(config, settings);
 }

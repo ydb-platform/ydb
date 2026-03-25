@@ -152,7 +152,7 @@ namespace {
         row.FreeText(freeText);
     }
 
-    /// S3 & FS
+    /// S3 & NFS
 
     template <typename T>
     constexpr bool IsExportResponse = std::is_same_v<NExport::TExportToS3Response, T>
@@ -265,14 +265,14 @@ namespace {
         PrettyPrintExportImport(operation, table);
     }
 
-    /// FS
-    TPrettyTable MakeTableFs() {
-        return TPrettyTable({"id", "ready", "status", "progress", "base_path"});
+    /// NFS
+    TPrettyTable MakeTableNfs() {
+        return TPrettyTable({"id", "ready", "status", "progress", "fs_path"});
     }
 
     // export
     TPrettyTable MakeTable(const NExport::TExportToFsResponse&) {
-        return MakeTableFs();
+        return MakeTableNfs();
     }
 
     void PrettyPrint(const NExport::TExportToFsResponse& operation, TPrettyTable& table) {
@@ -281,7 +281,7 @@ namespace {
 
     // import
     TPrettyTable MakeTable(const NImport::TImportFromFsResponse&) {
-        return MakeTableFs();
+        return MakeTableNfs();
     }
 
     void PrettyPrint(const NImport::TImportFromFsResponse& operation, TPrettyTable& table) {
@@ -523,7 +523,7 @@ void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromS
     PrintOperationsListImpl(operations, format);
 }
 
-/// FS
+/// NFS
 // export
 void PrintOperation(const NExport::TExportToFsResponse& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);

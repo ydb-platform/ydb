@@ -57,6 +57,7 @@ public:
                 if ((weight & (1ULL << power)) != 0) {
                     Add(x, 1ULL << power);
                 }
+                ++power;
             }
             return;
         }

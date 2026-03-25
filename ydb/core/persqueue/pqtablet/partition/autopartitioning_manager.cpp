@@ -128,7 +128,7 @@ public:
         RecreateSumWrittenBytes();
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override  {
+    void OnWrite(const TString& sourceId, ui64 size, [[maybe_unused]] const TString& key = "") override  {
         auto now = TInstant::Now();
 
         SumWrittenBytes->Update(size, now);

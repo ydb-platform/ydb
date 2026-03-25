@@ -37,14 +37,23 @@
 
 ## Гарантии {#guarantees}
 
-В штатном режиме работы потоковые запросы обеспечивают гарантию доставки данных [at-least-once](https://en.wikipedia.org/wiki/Reliable_messaging#At-least-once_delivery) — при сбоях запрос автоматически восстанавливается из [чекпоинта](../dev/streaming-query/checkpoints.md) и возобновляет чтение с сохранённых смещений.
+В штатном режиме работы потоковые запросы обеспечивают гарантию доставки данных [at-least-once](https://en.wikipedia.org/wiki/Reliable_messaging#At-least-once_delivery): при сбоях запрос автоматически восстанавливается из [чекпоинта](../dev/streaming-query/checkpoints.md) и возобновляет чтение с сохранённых смещений. Каждое событие будет обработано как минимум один раз.
 
-При этом важно учитывать ограничения текущей реализации:
+При этом важно учитывать аномалии текущей реализации:
 
-- **Сброс смещений при пересоздании запроса:** изменение текста запроса через [DROP](../yql/reference/syntax/drop-streaming-query.md) + [CREATE](../yql/reference/syntax/create-streaming-query.md) приводит к удалению чекпоинта. Новый запрос начинает чтение с конца топика, пропуская события, поступившие в интервале между удалением старой версии и стартом новой.
-- **Неполнота агрегатов из-за отсутствия watermarks:** из-за отсутствия механизма [watermarks](https://en.wikipedia.org/wiki/Watermark_(data_synchronization)) временные окна закрываются по системному времени (wall-clock). События, поступившие с задержкой (например, из-за медленных партиций или сетевых лагов), не попадают в агрегаты уже закрытых окон.
+{% if alter_streaming_query == true %}
+- **[Потеря событий при пересоздании запроса](../dev/streaming-query/guarantees.md#incomplete-windows-restart):** изменение текста запроса через [ALTER](../yql/reference/syntax/alter-streaming-query.md) приводит к удалению чекпоинта. Новый запрос начинает чтение с конца топика, пропуская события, поступившие в интервале между удалением старой версии и стартом новой.
+{% else %}
+- **[Потеря событий при пересоздании запроса](../dev/streaming-query/guarantees.md#incomplete-windows-restart):** изменение текста запроса через [DROP](../yql/reference/syntax/drop-streaming-query.md) + [CREATE](../yql/reference/syntax/create-streaming-query.md) приводит к удалению чекпоинта. Новый запрос начинает чтение с конца топика, пропуская события, поступившие в интервале между удалением старой версии и стартом новой.
+{% endif %}
+- **[Частичное первое окно агрегаций](../dev/streaming-query/guarantees.md#partial-first-window):** при старте или пересоздании запроса первое временное окно [GROUP BY HOP](../yql/reference/syntax/select/group-by.md#group-by-hop) содержит неполные данные, так как запрос попадает в уже идущий интервал.
+- **[Неполные агрегаты из-за отсутствия watermarks](../dev/streaming-query/guarantees.md#no-watermarks):** из-за отсутствия механизма [watermarks](https://en.wikipedia.org/wiki/Watermark_(data_synchronization)) временные окна закрываются по системному времени (wall-clock). События, поступившие с задержкой (например, из-за медленных партиций или сетевых задержек), не попадают в агрегаты уже закрытых окон.
 
-Подробное описание гарантий, аномалий и способов их минимизации — в разделе [{#T}](../dev/streaming-query/guarantees.md).
+Для обновления текста запроса без потери событий можно использовать [стратегию с двумя базами](../dev/streaming-query/guarantees.md#update-at-least-once) {{ ydb-short-name }}, обеспечивающую гарантию at-least-once при модификации.
+
+Подробнее о гарантиях, аномалиях и способах их минимизации:
+
+- [{#T}](../dev/streaming-query/guarantees.md).
 
 {% note info %}
 
@@ -71,15 +80,15 @@
 
 - Признак [важного читателя](datamodel/topic.md#important-consumer) для потребителей, используемых потоковыми запросами.
 - [Автопартиционирование](datamodel/topic.md#autopartitioning) (split/merge партиций) топиков, используемых потоковыми запросами. При увеличении числа партиций в топике, из которого читает работающий потоковый запрос, новые партиции не будут обрабатываться.
-- Изменение текста работающего запроса. Чтобы изменить запрос, его нужно пересоздать — удалить с помощью [DROP STREAMING QUERY](../yql/reference/syntax/drop-streaming-query.md) и создать заново с помощью [CREATE STREAMING QUERY](../yql/reference/syntax/create-streaming-query.md).
+- Изменение текста работающего запроса. Чтобы изменить запрос, его нужно пересоздать: удалить с помощью [DROP STREAMING QUERY](../yql/reference/syntax/drop-streaming-query.md) и создать заново с помощью [CREATE STREAMING QUERY](../yql/reference/syntax/create-streaming-query.md).
 
 ## Управление {#control}
 
 Потоковые запросы создаются, изменяются и удаляются с помощью YQL-команд:
 
-- [CREATE STREAMING QUERY](../yql/reference/syntax/create-streaming-query.md) — создание;
-- [ALTER STREAMING QUERY](../yql/reference/syntax/alter-streaming-query.md) — изменение и управление состоянием;
-- [DROP STREAMING QUERY](../yql/reference/syntax/drop-streaming-query.md) — удаление.
+- [CREATE STREAMING QUERY](../yql/reference/syntax/create-streaming-query.md) - создание;
+- [ALTER STREAMING QUERY](../yql/reference/syntax/alter-streaming-query.md) - изменение и управление состоянием;
+- [DROP STREAMING QUERY](../yql/reference/syntax/drop-streaming-query.md) - удаление.
 
 Состояние запросов доступно в системной таблице [`.sys/streaming_queries`](../dev/system-views.md#streaming).
 
@@ -89,6 +98,6 @@
 
 ## См. также
 
-- [{#T}](../dev/streaming-query/guarantees.md) — гарантии, аномалии при оконной агрегации и рекомендации;
-- [{#T}](../recipes/streaming_queries/topics.md) — пошаговое руководство;
-- [{#T}](../dev/streaming-query/streaming-query-formats.md) — форматы данных.
+- [{#T}](../dev/streaming-query/guarantees.md) - гарантии, аномалии при оконной агрегации и рекомендации;
+- [{#T}](../recipes/streaming_queries/topics.md) - пошаговое руководство;
+- [{#T}](../dev/streaming-query/streaming-query-formats.md) - форматы данных.

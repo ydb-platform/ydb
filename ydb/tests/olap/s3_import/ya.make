@@ -20,10 +20,8 @@ PY_SRCS(
 SIZE(LARGE)
 
 REQUIREMENTS(cpu:2)
-TAG(ya:fat)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-
 TIMEOUT(900)
 
 PEERDIR(

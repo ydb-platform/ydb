@@ -72,9 +72,12 @@ void TestStreamingReadWithLargePortion() {
 
     // Enable SimpleReader with streaming
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+    runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig()->SetEnabled(true);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    // Force non-in-memory reading so BuildReadPages() is used deterministically.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -90,8 +93,7 @@ void TestStreamingReadWithLargePortion() {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write a large portion that should trigger streaming
-    // MinRecordsForPaging default is 50000, so write more than that
+    // Write a large portion that should be read in streaming mode
     const ui32 numRecords = 100000;
     std::pair<ui64, ui64> portion = {0, numRecords};
 
@@ -175,9 +177,12 @@ void TestStreamingReadMultiplePortions() {
 
     // Enable SimpleReader with streaming
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+    runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig()->SetEnabled(true);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    // Force non-in-memory reading so paging/streaming does not depend on tiny test blobs.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -193,7 +198,7 @@ void TestStreamingReadMultiplePortions() {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write multiple large portions
+    // Write multiple large portions for streaming mode
     const ui32 numPortions = 3;
     const ui32 recordsPerPortion = 60000;
 
@@ -230,8 +235,8 @@ void TestStreamingReadMultiplePortions() {
 // "Consumer is slower than producer" is guaranteed structurally: the client
 // sends Ack only after receiving a batch (ReadAll protocol), so the server can
 // pre-produce up to MaxPagesInFlight pages before the client consumes the first
-// one.  With MinRecordsForPaging=500 and 5 000 records the server produces
-// ~10 pages, so the limit will be hit for small limits (1, 2, 4).
+// one. With streaming explicitly enabled and 5 000 records, the server produces
+// enough pages for the limit to be hit for small limits (1, 2, 4).
 //
 // No wall-clock Sleep() is needed: TTestBasicRuntime drives the actor system
 // from the test thread.  GrabEdgeEvents() pumps the event loop until the
@@ -249,10 +254,8 @@ void TestBackpressureSlowConsumerWithLimit(const ui32 maxPagesInFlight) {
     const ui32 effectiveLimit = maxPagesInFlight == 0 ? 8 : maxPagesInFlight;
 
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetEnabled(true);
     streamingConfig->SetMaxPagesInFlight(effectiveLimit);
-    // Small page size → many pages → limit is easy to hit
-    streamingConfig->SetMinRecordsForPaging(500);
-    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -272,9 +275,8 @@ void TestBackpressureSlowConsumerWithLimit(const ui32 maxPagesInFlight) {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write enough data to produce several streaming pages (~10 pages with
-    // MinRecordsForPaging=500).  5 000 records is sufficient to hit even a
-    // limit of 1 while keeping the test fast (no wall-clock sleeps needed).
+    // Write enough data to produce several streaming pages.  5 000 records is
+    // sufficient to hit even a limit of 1 while keeping the test fast.
     const ui32 numRecords = 5000;
     std::pair<ui64, ui64> portion = {0, numRecords};
 
@@ -343,9 +345,12 @@ void TestPartialResultEmission() {
 
     // Enable SimpleReader with streaming
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+    runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig()->SetEnabled(true);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    // Force non-in-memory reading so the large test dataset is split into pages deterministically.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -405,23 +410,22 @@ void TestPartialResultEmission() {
     UNIT_ASSERT_GT(reader.GetIterationsCount(), 10);
 }
 
-void TestStrategyAlways() {
+void TestStreamingEnabled() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
     // Enable SimpleReader
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
 
-    // STRATEGY_ALWAYS: streaming must be used regardless of portion size.
-    // Use a small MinRecordsForPaging so that even a tiny portion gets split
-    // into multiple pages.
+    // Explicitly enable streaming.
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
-    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_ALWAYS);
-    streamingConfig->SetMinRecordsForPaging(500);
+    streamingConfig->SetEnabled(true);
     streamingConfig->SetMaxPagesInFlight(8);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    // Explicit streaming still needs a non-in-memory source for BuildReadPages().
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -437,8 +441,7 @@ void TestStrategyAlways() {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write a SMALL portion – well below the default 50 000-record AUTO threshold.
-    // With STRATEGY_ALWAYS the reader must still activate streaming.
+    // Write a small portion. With explicit enable, the reader must still use streaming.
     const ui32 numRecords = 2000;
     std::pair<ui64, ui64> portion = {0, numRecords};
 
@@ -460,29 +463,25 @@ void TestStrategyAlways() {
     const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();
     const ui32 iterationsCount = reader.GetIterationsCount();
 
-    Cerr << "StrategyAlways: total pages created=" << totalCreated
+    Cerr << "StreamingEnabled: total pages created=" << totalCreated
          << ", iterations=" << iterationsCount << Endl;
 
-    // With STRATEGY_ALWAYS and MinRecordsForPaging=500 over 2000 records we
-    // expect at least 2 pages to have been created, proving streaming was used.
+    // With explicit enable over 2000 records we expect multiple pages, proving streaming was used.
     UNIT_ASSERT_GT(totalCreated, 1u);
     // Multiple iterations confirm the Ack/page protocol ran more than once.
     UNIT_ASSERT_GT(iterationsCount, 1u);
 }
 
-void TestStrategyNever() {
+void TestStreamingDisabled() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
     // Enable SimpleReader
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
 
-    // STRATEGY_NEVER: streaming must be suppressed regardless of portion size.
-    // We write a large portion that would normally trigger streaming under AUTO,
-    // but with STRATEGY_NEVER no pages should be created via the streaming path.
+    // Explicitly disable streaming.
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
-    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_NEVER);
-    streamingConfig->SetMinRecordsForPaging(500);   // irrelevant for NEVER, but set explicitly
+    streamingConfig->SetEnabled(false);
     streamingConfig->SetMaxPagesInFlight(8);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
@@ -502,8 +501,7 @@ void TestStrategyNever() {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write a LARGE portion – well above the default 50 000-record AUTO threshold.
-    // With STRATEGY_NEVER the reader must NOT activate streaming.
+    // Write a large portion. With explicit disable, the reader must not activate streaming.
     const ui32 numRecords = 100000;
     std::pair<ui64, ui64> portion = {0, numRecords};
 
@@ -525,10 +523,10 @@ void TestStrategyNever() {
     const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();
     const ui32 iterationsCount = reader.GetIterationsCount();
 
-    Cerr << "StrategyNever: total pages created=" << totalCreated
+    Cerr << "StreamingDisabled: total pages created=" << totalCreated
          << ", iterations=" << iterationsCount << Endl;
 
-    // With STRATEGY_NEVER the streaming path must never fire, so the
+    // With explicit disable the streaming path must never fire, so the
     // OnPageCreated hook (which is only called in streaming mode) must
     // report zero pages created.
     UNIT_ASSERT_VALUES_EQUAL(totalCreated, 0u);
@@ -541,9 +539,12 @@ void TestReverseStreamingScan() {
 
     // Enable SimpleReader with streaming
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+    runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig()->SetEnabled(true);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    // Force non-in-memory reading to ensure streaming is activated
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -559,7 +560,7 @@ void TestReverseStreamingScan() {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write a large portion that should trigger streaming
+    // Write a large portion that should be read in streaming mode
     const ui32 numRecords = 100000;
     std::pair<ui64, ui64> portion = {0, numRecords};
 
@@ -621,8 +622,7 @@ void TestMemoryLimitSingleRecordPages() {
 
     // Configure extremely low memory limit to force single-record pages
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
-    streamingConfig->SetMinRecordsForPaging(1);  // Trigger streaming for any data
-    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
+    streamingConfig->SetEnabled(true);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -697,9 +697,8 @@ void TestMemoryLimitChunkBoundaries() {
 
     // Configure memory limit to match typical chunk size
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
-    streamingConfig->SetMinRecordsForPaging(1000);  // Trigger streaming
+    streamingConfig->SetEnabled(true);
     streamingConfig->SetMaxPagesInFlight(4);
-    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -752,7 +751,7 @@ void TestMemoryLimitChunkBoundaries() {
 
 // Test for zero MaxPagesInFlight – the scan must be rejected with an error
 // because MaxPagesInFlight=0 is an invalid configuration when streaming is
-// enabled (strategy != Never).
+// explicitly enabled.
 void TestMemoryLimitZero() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -760,11 +759,10 @@ void TestMemoryLimitZero() {
     // Enable SimpleReader
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
 
-    // MaxPagesInFlight=0 with STRATEGY_AUTO is invalid and must cause an error.
+    // MaxPagesInFlight=0 with streaming enabled is invalid and must cause an error.
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
-    streamingConfig->SetMinRecordsForPaging(1000000);
+    streamingConfig->SetEnabled(true);
     streamingConfig->SetMaxPagesInFlight(0);  // Invalid: must be > 0 when streaming is active
-    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -824,11 +822,10 @@ void TestAbortDuringStreaming() {
     // Enable SimpleReader with streaming
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
 
-    // Use small pages so many are in-flight when we abort
+    // Enable streaming so many pages are in-flight when we abort
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
-    streamingConfig->SetMinRecordsForPaging(500);
+    streamingConfig->SetEnabled(true);
     streamingConfig->SetMaxPagesInFlight(4);
-    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -926,6 +923,7 @@ void TestStreamingWithFilterSkip() {
 
     // Enable SimpleReader with streaming
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+    runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig()->SetEnabled(true);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -999,11 +997,10 @@ void TestBlobReadErrorDuringStreaming() {
     // Enable SimpleReader with streaming
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
 
-    // Use small pages so many are in-flight when the error fires
+    // Enable streaming so many pages are in-flight when the error fires
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
-    streamingConfig->SetMinRecordsForPaging(500);
+    streamingConfig->SetEnabled(true);
     streamingConfig->SetMaxPagesInFlight(4);
-    streamingConfig->SetStrategy(NKikimrConfig::TColumnShardConfig::TStreamingConfig::STRATEGY_AUTO);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -1022,7 +1019,7 @@ void TestBlobReadErrorDuringStreaming() {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write enough data to produce many streaming pages (~200 pages with 500-record pages)
+    // Write enough data to produce many streaming pages.
     const ui32 numRecords = 100000;
     std::pair<ui64, ui64> portion = {0, numRecords};
 
@@ -1154,12 +1151,12 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
         TestStreamingWithFilterSkip();
     }
 
-    Y_UNIT_TEST(StrategyAlways) {
-        TestStrategyAlways();
+    Y_UNIT_TEST(StreamingEnabled) {
+        TestStreamingEnabled();
     }
 
-    Y_UNIT_TEST(StrategyNever) {
-        TestStrategyNever();
+    Y_UNIT_TEST(StreamingDisabled) {
+        TestStreamingDisabled();
     }
 
     Y_UNIT_TEST(MemoryLimitSingleRecordPages) {

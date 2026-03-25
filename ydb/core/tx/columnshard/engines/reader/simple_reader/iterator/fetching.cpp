@@ -302,7 +302,7 @@ TConclusion<bool> TDecideStreamingModeStep::DoExecuteInplace(
     auto pages = source->GetPortionAccessor().BuildReadPages(
         memoryLimit, source->GetContext()->GetProgramInputColumns()->GetColumnIds());
 
-    const bool streamingMode = TStreamingConfigHelper::ShouldUseStreamingMode(source->GetRecordsCount());
+    const bool streamingMode = TStreamingConfigHelper::ShouldUseStreamingMode();
 
     simpleSource->SetEarlyPages(std::move(pages), streamingMode);
 

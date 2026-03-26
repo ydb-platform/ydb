@@ -273,7 +273,7 @@ class TestCompactionConfig(object):
 
         self.ydb_client.query(
             f"""
-            ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+            ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
                   {{"levels" : [{{"class_name" : "Zero", "portions_live_duration" : "5s", "expected_blobs_size" : 1572864, "portions_count_available" : 2}},
                                 {{"class_name" : "Zero"}}]}}`);
             """
@@ -281,6 +281,8 @@ class TestCompactionConfig(object):
 
         self.wait_compaction_predicate(mon_url, table_path, self._is_lc_buckets_visual)
 
-        self.ydb_client.query(f"ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=RESET_UPSERT_OPTIONS);")
+        self.ydb_client.query(
+            f"ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=RESET_UPSERT_OPTIONS, RESET_TARGET=COMPACTION_PLANNER);"
+        )
 
         self.wait_compaction_predicate(mon_url, table_path, self._is_tiling_visual)

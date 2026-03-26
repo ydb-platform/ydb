@@ -38,19 +38,19 @@ void ParquetBlockOutputFormat::consume(Chunk chunk)
     {
         auto sink = std::make_shared<ArrowBufferedOutputStream>(out);
 
-        parquet::WriterProperties::Builder builder;
+        parquet20::WriterProperties::Builder builder;
 #if USE_SNAPPY
-        builder.compression(parquet::Compression::SNAPPY);
+        builder.compression(parquet20::Compression::SNAPPY);
 #endif
         auto props = builder.build();
-        auto status = parquet::arrow20::FileWriter::Open(
+        auto open_result = parquet20::arrow20::FileWriter::Open(
             *arrow_table->schema(),
             arrow20::default_memory_pool(),
             sink,
-            props, /*parquet::default_writer_properties(),*/
-            &file_writer);
-        if (!status.ok())
-            throw Exception{"Error while opening a table: " + status.ToString(), ErrorCodes::UNKNOWN_EXCEPTION};
+            props);
+        if (!open_result.ok())
+            throw Exception{"Error while opening a table: " + open_result.status().ToString(), ErrorCodes::UNKNOWN_EXCEPTION};
+        file_writer = std::move(open_result).ValueOrDie();
     }
 
     // TODO: calculate row_group_size depending on a number of rows and table size

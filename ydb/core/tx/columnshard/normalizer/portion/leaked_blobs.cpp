@@ -206,7 +206,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
 
 TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
     const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashSet<TLogoBlobID>& result) {
-    TDbWrapper wrapper(db.GetDatabase(), nullptr);
+    TDbWrapper wrapper(db.GetDatabase(), &DsGroupSelector);
     if (Portions.empty()) {
         THashMap<ui64, std::unique_ptr<TPortionInfoConstructor>> portionsLocal;
         if (!wrapper.LoadPortions(

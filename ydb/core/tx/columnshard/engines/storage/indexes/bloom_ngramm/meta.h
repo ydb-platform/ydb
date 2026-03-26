@@ -183,4 +183,6 @@ public:
     }
 };
 
+ui32 ComputeEffectiveFilterSizeBits(const ui32 filterSizeBytesBase, const ui32 recordsCountBase, const ui32 recordsCount);
+
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

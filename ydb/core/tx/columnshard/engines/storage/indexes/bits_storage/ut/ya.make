@@ -4,4 +4,9 @@ SRCS(
     ut_bits_storage.cpp
 )
 
+PEERDIR(
+    yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
+)
+
 END()

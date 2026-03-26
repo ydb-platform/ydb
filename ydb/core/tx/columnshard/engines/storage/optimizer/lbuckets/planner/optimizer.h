@@ -29,6 +29,7 @@ private:
     YDB_READONLY(i64, RecordsCount, 0);
 
 public:
+
     NJson::TJsonValue SerializeToJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("bytes", Bytes);
@@ -41,7 +42,7 @@ public:
         return TStringBuilder() << "{bytes=" << Bytes << ";count=" << Count << ";records=" << RecordsCount << "}";
     }
 
-    void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
+   void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
         Bytes += p->GetTotalBlobBytes();
         Count += 1;
         RecordsCount += p->GetRecordsCount();
@@ -68,12 +69,12 @@ public:
     {
     }
 
-    void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
+   void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
         TBase::AddPortion(p);
         Signals->AddPortion(p);
     }
 
-    void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
+   void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
         TBase::RemovePortion(p);
         Signals->RemovePortion(p);
     }

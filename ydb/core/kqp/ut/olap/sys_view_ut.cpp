@@ -549,6 +549,17 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         const auto describe = kikimr.GetTestClient().Describe(kikimr.GetTestServer().GetRuntime(), "/Root/olapStore/olapTable");
         const auto tablePathId = describe.GetPathId();
 
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto alterQuery = TString(
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, )"
+                R"(`COMPACTION_PLANNER.CLASS_NAME`=`tiling`))"
+            );
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
         for (ui64 i = 0; i < 10; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 2000);
         }

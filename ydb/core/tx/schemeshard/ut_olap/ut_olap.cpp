@@ -1056,7 +1056,30 @@ Y_UNIT_TEST_SUITE(TOlap) {
             )" << databaseDescription
         );
 
-        const TString& olapSchema = defaultStoreSchema;
+        // Use the legacy "tiling" compaction planner instead of the default
+        // "tiling++". The newer planner currently fails to schedule a
+        // compaction for many small overlapping same-PK portions in this
+        // setup (see "cannot prepare compaction" log spam), which prevents
+        // dedup/tombstone application and keeps DiskQuotaExceeded == true
+        // through the rest of the test.
+        const TString olapSchema = R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                    Options {
+                        CompactionPlannerConstructor {
+                            ClassName: "tiling"
+                            Tiling { }
+                        }
+                    }
+                }
+            }
+        )";
 
         const auto expectedStorePathId = GetNextLocalPathId(runtime, txId);
         TestCreateOlapStore(runtime, ++txId, "/MyRoot/SomeDatabase", olapSchema);

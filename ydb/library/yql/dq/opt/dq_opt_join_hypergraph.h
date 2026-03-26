@@ -357,28 +357,70 @@ private:
             TVector<TString> lhsLabels = ApplyHintsToSubgraph(join->Lhs);
             TVector<TString> rhsLabels = ApplyHintsToSubgraph(join->Rhs);
 
+            // Construct hint name for error name, e.g. ({A B C} {D E}), i.e.
+            // this particular "level" of this particular hint implies that
+            // subtree containing {A B C} and subtree containing {D E} should
+            // be joined together, which is not satisfiable.
+
+            // Possible reasons include:
+            // 1. The edge that represents this join is absent, creating
+            //    it requires inserting a cross join, which is usually not desirable
+            // 2. There exits an edge that is the reverse of what is hinted
+            //    and it's not commutative -> hint contradicts semantics
+            auto describeHintedPart = [&]() {
+                return Sprintf(
+                    "({{%s}} {{%s}})",
+                    JoinSeq(", ", lhsLabels).c_str(),
+                    JoinSeq(", ", rhsLabels).c_str()
+                );
+            };
+
             auto lhs = Graph_.GetNodesByRelNames(lhsLabels);
             auto rhs = Graph_.GetNodesByRelNames(rhsLabels);
 
-            auto* maybeEdge = Graph_.FindEdgeBetween(lhs, rhs);
-            if (maybeEdge == nullptr) {
-                const char* errStr = "There is no edge between {%s}, {%s}. The graf: %s";
-                Y_ENSURE(false, Sprintf(errStr, JoinSeq(", ", lhsLabels).c_str(), JoinSeq(", ", rhsLabels).c_str(), Graph_.String().c_str()));
+            TVector<size_t> bridgingEdgeIdxs;
+            const auto& edges = Graph_.GetEdges();
+            for (size_t i = 0; i < edges.size(); ++i) {
+                if (!edges[i].Bridges(lhs, rhs)) {
+                    continue;
+                }
+
+                // A non-commutative reversed edge bridges (lhs, rhs) but its canonical
+                // direction is (rhs, lhs) — the hint contradicts a mandatory edge.
+                if (!edges[i].IsCommutative && edges[i].IsReversed) {
+                    Y_ENSURE(false,
+                        Sprintf("Hinted join %s breaks semantics by contradicting"
+                                " non-commutative join of the opposite direction"
+                                " - hint will be ignored", describeHintedPart().c_str())
+                    );
+                    continue;
+                }
+
+                bridgingEdgeIdxs.push_back(i);
             }
 
-            size_t revEdgeIdx = maybeEdge->ReversedEdgeId;
-            auto& revEdge = Graph_.GetEdge(revEdgeIdx);
-            size_t edgeIdx = revEdge.ReversedEdgeId;
-            auto& edge = Graph_.GetEdge(edgeIdx);
+            if (bridgingEdgeIdxs.empty()) {
+                Y_ENSURE(false,
+                    Sprintf("Hinted join %s does not exist - hint will be ignored",
+                            describeHintedPart().c_str())
+                );
+            }
 
-            edge.IsReversed = false;
-            revEdge.IsReversed = true;
+            for (size_t edgeIdx : bridgingEdgeIdxs) {
+                auto& edge = Graph_.GetEdge(edgeIdx);
+                size_t revEdgeIdx = edge.ReversedEdgeId;
+                auto& revEdge = Graph_.GetEdge(revEdgeIdx);
 
-            edge.IsCommutative = false;
-            revEdge.IsCommutative = false;
+                edge.IsReversed = false;
+                revEdge.IsReversed = true;
 
-            Graph_.UpdateEdgeSides(edgeIdx, lhs, rhs);
-            Graph_.UpdateEdgeSides(revEdgeIdx, rhs, lhs);
+                // Hint selects a certain direction, therefore
+                // now edge is no longer commutative
+                edge.IsCommutative = revEdge.IsCommutative = false;
+
+                Graph_.UpdateEdgeSides(edgeIdx, lhs, rhs);
+                Graph_.UpdateEdgeSides(revEdgeIdx, rhs, lhs);
+            }
 
             TVector<TString> joinLabels = std::move(lhsLabels);
             joinLabels.insert(

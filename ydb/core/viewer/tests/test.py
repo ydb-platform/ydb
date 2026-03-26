@@ -772,10 +772,6 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_tenantinfo(cls):
-        return cls.get_viewer_normalized("/viewer/tenantinfo")
-
-    @classmethod
-    def test_viewer_tenantinfo_db(cls):
         return cls.get_viewer_db_normalized("/viewer/tenantinfo")
 
     @classmethod

@@ -5698,6 +5698,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 info->TotalShardCount = compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::TotalShardCount>();
                 info->DoneShardCount = compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::DoneShardCount>();
 
+                if (compactionsRowset.HaveValue<Schema::ForcedCompactions::SerializedData>()) {
+                    NKikimrForcedCompaction::TForcedCompactionData data;
+                    if (data.ParseFromString(compactionsRowset.GetValue<Schema::ForcedCompactions::SerializedData>())) {
+                        for (const auto& tablePathId : data.GetTablesToCompact()) {
+                            info->TablesToCompact.insert(TPathId::FromProto(tablePathId));
+                        }
+                    }
+                } else {
+                    info->TablesToCompact.insert(info->TablePathId); // Backward compatibility
+                }
+
                 Self->AddForcedCompaction(info);
 
                 if (!compactionsRowset.Next()) {
@@ -5719,12 +5730,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto compactionId = shardsRowset.GetValue<Schema::WaitingForcedCompactionShards::ForcedCompactionId>();
 
                 if (auto* info = Self->ForcedCompactions.FindPtr(compactionId)) {
-                    Self->AddForcedCompactionShard(shardIdx, *info);
+                    if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx); shardInfo && (*info)->TablesToCompact.contains(shardInfo->PathId)) {
+                        Self->AddForcedCompactionShard(shardIdx, shardInfo->PathId, *info);
+                    } else {
+                        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "unknown shardIdx " << shardIdx
+                            << " for compaction: " << compactionId
+                            << ", at schemeshard: " << Self->TabletID());
+                        Self->ForgetForcedCompactionShard(shardIdx, *info);
+                    }
                 } else {
                     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "unknown forced compaction id " << compactionId
                             << " for shardIdx: " << shardIdx
                             << ", at schemeshard: " << Self->TabletID());
+                    Self->ForgetForcedCompactionShard(shardIdx, nullptr);
                 }
 
                 if (!shardsRowset.Next()) {
@@ -5799,6 +5819,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         });
 
         Self->ProcessForcedCompactionQueues();
+        if (Self->ForcedCompactionsDoneShardsToPersist) {
+            // for cleanup
+            Self->Execute(Self->CreateTxProgressForcedCompaction(), ctx);
+        }
     }
 };
 

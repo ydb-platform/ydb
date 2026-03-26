@@ -3,9 +3,10 @@ import socket
 
 from flask import Blueprint, request, jsonify
 
+from ydb.tests.stability.nemesis.internal.models import ProcessInfo
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import PROCESS_TYPES
-from ydb.tests.stability.nemesis.internal.nemesis.runner import NemesisManager
-from ydb.tests.stability.nemesis.internal.agent_warden_checker import AgentWardenChecker
+from ydb.tests.stability.nemesis.internal.agent.agent_warden_checker import AgentWardenChecker
+from ydb.tests.stability.nemesis.internal.agent.nemesis.runner import NemesisManager
 
 
 logger = logging.getLogger(__name__)
@@ -19,10 +20,14 @@ warden_checker: AgentWardenChecker = None  # initialized in app.py
 # Helper functions that can be called directly (without Flask request context)
 def get_all_processes_helper():
     """Helper function to get all processes (can be called directly)"""
-    return manager.get_all()
+    return [ProcessInfo(**row).to_json() for row in manager.get_all()]
 
 
-def create_process_helper(process_type: str, action: str = 'inject'):
+def create_process_helper(
+    process_type: str,
+    action: str = 'inject',
+    payload=None,
+):
     """Helper function to create a process (can be called directly)"""
     if process_type not in PROCESS_TYPES:
         return {"status": "error", "message": "Invalid process type"}
@@ -30,7 +35,12 @@ def create_process_helper(process_type: str, action: str = 'inject'):
     process_def = PROCESS_TYPES[process_type]
     runner = process_def['runner']
 
-    manager.start_process(process_type, runner, action)
+    manager.start_process(
+        process_type,
+        runner,
+        action,
+        payload=payload,
+    )
     return {"status": "started"}
 
 
@@ -66,20 +76,6 @@ def get_all_processes():
     return jsonify(get_all_processes_helper())
 
 
-@blueprint.route("/api/process_types", methods=["GET"])
-def get_process_types():
-    """Return process types with their descriptions"""
-    result = []
-    for name, definition in PROCESS_TYPES.items():
-        runner = definition.get('runner')
-        description = runner.nemesis_description if runner and hasattr(runner, 'nemesis_description') else ""
-        result.append({
-            "name": name,
-            "description": description
-        })
-    return jsonify(result)
-
-
 @blueprint.route("/api/processes", methods=["POST"])
 def create_process():
     data = request.get_json()
@@ -91,8 +87,13 @@ def create_process():
         return jsonify({"status": "error", "message": "Missing type field"}), 400
 
     action = data.get("action", "inject")
+    payload = data.get("payload")
 
-    result = create_process_helper(process_type, action)
+    result = create_process_helper(
+        process_type,
+        action,
+        payload=payload,
+    )
     if result.get("status") == "error":
         return jsonify(result), 400
     return jsonify(result)

@@ -6,14 +6,15 @@ import yaml
 from ydb.tests.stability.nemesis.internal.config import Settings, AgentSettings
 
 
-def upload_binary(host, is_orchestrator=False, yaml_config_location=None):
+def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_location=None):
     print(f'Uploading binary to {host}')
     ssh_base = ['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-A']
     ssh_rsh = " ".join(ssh_base)
+    root = settings.install_root.rstrip("/")
 
     subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g",
                            "--rsh={}".format(ssh_rsh),
-                           "--rsync-path=sudo rsync", "--progress", './nemesis', f'{host}:/Berkanavt/nemesis/bin/agent'],
+                           "--rsync-path=sudo rsync", "--progress", './nemesis', f'{host}:{root}/bin/agent'],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Upload static files and config for orchestrator
@@ -21,14 +22,14 @@ def upload_binary(host, is_orchestrator=False, yaml_config_location=None):
         print(f'Uploading static files to {host}')
         subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g",
                                "--rsh={}".format(ssh_rsh),
-                               "--rsync-path=sudo rsync", "--progress", './static/', f'{host}:/Berkanavt/nemesis/static/'],
+                               "--rsync-path=sudo rsync", "--progress", './static/', f'{host}:{root}/static/'],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         if yaml_config_location:
             print(f'Uploading cluster config to {host}')
             subprocess.check_call(["rsync", "-avqLW", "--no-o", "--no-g",
                                    "--rsh={}".format(ssh_rsh),
-                                   "--rsync-path=sudo rsync", "--progress", yaml_config_location, f'{host}:/Berkanavt/nemesis/cluster.yaml'],
+                                   "--rsync-path=sudo rsync", "--progress", yaml_config_location, f'{host}:{root}/cluster.yaml'],
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     print(f'Uploading service to {host}')
@@ -81,10 +82,12 @@ def install_on_hosts(hosts, settings: Settings):
     orchestrator_host = hosts[0]
     agent_hosts = hosts[1:] if len(hosts) > 1 else []
 
+    root = settings.install_root.rstrip("/")
+
     # Create service file for orchestrator (first host)
     with open(f"nemesis-agent.service.{orchestrator_host}", "w") as f:
         # Use the copied config location on the orchestrator host
-        config_location = "/Berkanavt/nemesis/cluster.yaml" if settings.yaml_config_location else ""
+        config_location = f"{root}/cluster.yaml" if settings.yaml_config_location else ""
         yaml_config_env = f"Environment=YAML_CONFIG_LOCATION={config_location}\n" if config_location else ""
 
         f.write(f"""[Unit]
@@ -99,12 +102,14 @@ Restart=always
 RestartSec=10
 Environment=NEMESIS_USER=robot-nemesis
 Environment=NEMESIS_TYPE=master
-Environment=STATIC_LOCATION=/Berkanavt/nemesis/static
+Environment=STATIC_LOCATION={root}/static
 Environment=APP_HOST=::
 Environment=APP_PORT={settings.app_port}
-Environment=MON_HOST={settings.mon_port}
+Environment=MON_PORT={settings.mon_port}
+Environment=NEMESIS_INSTALL_ROOT={root}
+Environment=KIKIMR_LOGS_DIRECTORY={settings.kikimr_logs_directory}
 {yaml_config_env}Type=simple
-ExecStart=/Berkanavt/nemesis/bin/agent run
+ExecStart={root}/bin/agent run
 StandardOutput=syslog
 StandardError=syslog
 SyslogIdentifier=nemesis-orchestrator
@@ -138,9 +143,11 @@ Environment=NEMESIS_USER=robot-nemesis
 Environment=NEMESIS_TYPE=agent
 Environment=APP_HOST=::
 Environment=APP_PORT={agent_settings.app_port}
-Environment=MON_HOST={agent_settings.mon_port}
+Environment=MON_PORT={agent_settings.mon_port}
+Environment=NEMESIS_INSTALL_ROOT={root}
+Environment=KIKIMR_LOGS_DIRECTORY={agent_settings.kikimr_logs_directory}
 Type=simple
-ExecStart=/Berkanavt/nemesis/bin/agent run
+ExecStart={root}/bin/agent run
 StandardOutput=syslog
 StandardError=syslog
 SyslogIdentifier=nemesis-agent
@@ -157,11 +164,11 @@ WantedBy=multi-user.target
     # Upload binaries to all hosts
     with ThreadPoolExecutor(max_workers=len(hosts)) as executor:
         # Upload to orchestrator with static files and config
-        executor.submit(upload_binary, orchestrator_host, True, settings.yaml_config_location)
+        executor.submit(upload_binary, orchestrator_host, settings, True, settings.yaml_config_location)
 
         # Upload to agents (without static files and config)
         for host in agent_hosts:
-            executor.submit(upload_binary, host, False, None)
+            executor.submit(upload_binary, host, settings, False, None)
 
     for host in agent_hosts + [orchestrator_host]:
         os.remove(f"nemesis-agent.service.{host}")

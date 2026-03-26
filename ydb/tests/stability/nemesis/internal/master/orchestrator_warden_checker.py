@@ -1,5 +1,6 @@
 """Orchestrator-side liveness and safety checks collector."""
 
+import asyncio
 import json
 import logging
 import subprocess
@@ -7,15 +8,16 @@ import threading
 import time
 from collections import defaultdict
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
+import requests
+
+import ydb.tests.stability.nemesis.routers.agent_router as agent_router
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
+from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
 from ydb.tests.stability.nemesis.internal.config import get_master_settings
-from ydb.tests.stability.nemesis.internal.agent_warden_checker import (
-    WardenCheckResult,
-    WardenCheckReport,
-)
 from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
+from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
 
 
 logger = logging.getLogger(__name__)
@@ -311,16 +313,14 @@ class OrchestratorWardenChecker:
             self._cluster = ExternalKiKiMRCluster(get_master_settings().yaml_config_location, None, None)
         return self._cluster
 
-    NEMESIS_BINARY_PATH = '/Berkanavt/nemesis/bin/agent'
+    def _nemesis_agent_binary(self) -> str:
+        root = get_master_settings().install_root.rstrip("/")
+        return f"{root}/bin/agent"
 
     def _run_liveness_checks_sync(self, timeout_seconds: int = 60) -> List[WardenCheckResult]:
         """Run liveness checks via subprocess with timeout."""
-        from ydb.tests.stability.nemesis.internal.config import Settings
-
-        # Get config path from settings
         try:
-            settings = Settings()
-            yaml_config = settings.yaml_config_location
+            yaml_config = get_master_settings().yaml_config_location
         except Exception as e:
             logger.error(f"Failed to get settings: {e}")
             return [WardenCheckResult(
@@ -336,7 +336,7 @@ class OrchestratorWardenChecker:
         # Build command to run liveness checks
         # Use the compiled nemesis binary directly
         cmd = [
-            self.NEMESIS_BINARY_PATH,
+            self._nemesis_agent_binary(),
             'liveness',
             '--yaml-config-location', yaml_config
         ]
@@ -439,8 +439,6 @@ class OrchestratorWardenChecker:
         results = []
 
         try:
-            from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
-
             pdisk_warden = AllPDisksAreInValidStateSafetyWarden(
                 cluster,
                 timeout_seconds=30
@@ -470,8 +468,6 @@ class OrchestratorWardenChecker:
 
     async def _run_aggregated_verify_failed_check_async(self, max_wait_seconds: int = 120, poll_interval_seconds: float = 2.0) -> WardenCheckResult:
         """Aggregate VERIFY failed errors from all agents."""
-        import asyncio
-        import requests
         from ydb.tests.stability.nemesis.routers.orchestrator_router import hosts, get_app_port, is_local_host
 
         port = get_app_port()
@@ -480,8 +476,10 @@ class OrchestratorWardenChecker:
             """Get the warden check status from an agent."""
             try:
                 if is_local_host(host):
-                    from ydb.tests.stability.nemesis.routers.agent_router import warden_checker
-                    return warden_checker.get_last_result()
+                    wc = agent_router.warden_checker
+                    if wc is None:
+                        return {"status": "error", "error_message": "warden_checker not initialized"}
+                    return wc.get_last_result()
                 else:
                     resp = requests.get(f"http://{host}:{port}/api/warden/result", timeout=10)
                     return resp.json()

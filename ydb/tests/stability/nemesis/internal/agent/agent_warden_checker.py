@@ -11,70 +11,18 @@ import logging
 import socket
 import threading
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Callable
-from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List
 
+from ydb.tests.library.nemesis.safety_warden import UnifiedAgentVerifyFailedSafetyWarden
+from ydb.tests.library.wardens.logs import (
+    kikimr_grep_dmesg_safety_warden_factory,
+    kikimr_start_logs_safety_warden_factory,
+)
 from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
+from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
 
 
 logger = logging.getLogger(__name__)
-
-# =============================================================================
-# Data Classes
-# =============================================================================
-
-
-@dataclass
-class WardenCheckResult:
-    """Result of a single warden check."""
-    name: str
-    category: str  # 'liveness' or 'safety'
-    violations: List[str]
-    status: str  # 'ok', 'violation', 'error'
-    error_message: Optional[str] = None
-    affected_hosts: List[str] = field(default_factory=list)  # For aggregated checks
-
-
-@dataclass
-class WardenCheckReport:
-    """Complete report of all warden checks."""
-    status: str  # 'idle', 'running', 'completed', 'error'
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
-    liveness_checks: List[WardenCheckResult] = field(default_factory=list)
-    safety_checks: List[WardenCheckResult] = field(default_factory=list)
-    error_message: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'status': self.status,
-            'started_at': self.started_at,
-            'completed_at': self.completed_at,
-            'liveness_checks': [
-                {
-                    'name': c.name,
-                    'category': c.category,
-                    'violations': c.violations,
-                    'status': c.status,
-                    'error_message': c.error_message,
-                    'affected_hosts': c.affected_hosts
-                }
-                for c in self.liveness_checks
-            ],
-            'safety_checks': [
-                {
-                    'name': c.name,
-                    'category': c.category,
-                    'violations': c.violations,
-                    'status': c.status,
-                    'error_message': c.error_message,
-                    'affected_hosts': c.affected_hosts
-                }
-                for c in self.safety_checks
-            ],
-            'error_message': self.error_message
-        }
-
 
 # =============================================================================
 # Agent Warden Checker
@@ -92,16 +40,14 @@ class AgentWardenChecker:
     - get_last_result(): Return the last check result
 
     Args:
-        log_directory: Path to kikimr logs directory
-        ssh_username: SSH username for remote commands (usually None for local)
+        log_directory: Path to kikimr logs directory (see AgentSettings.kikimr_logs_directory).
     """
 
-    def __init__(self, log_directory: str = "/Berkanavt/kikimr/logs/", ssh_username: str = None):
+    def __init__(self, log_directory: str = "/Berkanavt/kikimr/logs/"):
         self._last_report: WardenCheckReport = WardenCheckReport(status='idle')
         self._is_running: bool = False
         self._lock = threading.Lock()
         self._log_directory = log_directory
-        self._ssh_username = ssh_username
         self._hostname = socket.gethostname()
         self._event_loop = BackgroundEventLoop()
 
@@ -196,14 +142,7 @@ class AgentWardenChecker:
 
     def _run_safety_checks_with_progress(self) -> List[WardenCheckResult]:
         """Run safety checks synchronously and yield results as they complete."""
-        # Import existing wardens
-        from ydb.tests.library.wardens.logs import (
-            kikimr_start_logs_safety_warden_factory,
-            kikimr_grep_dmesg_safety_warden_factory
-        )
-        from ydb.tests.library.nemesis.safety_warden import UnifiedAgentVerifyFailedSafetyWarden
-
-        # Create wardens for local host
+        # Agent runs checks only on localhost; warden factories use ssh_username=None.
         local_hosts = [self._hostname]
 
         # 1. Check kikimr.start logs for errors (GrepLogFileForMarkersSafetyWarden)
@@ -212,7 +151,7 @@ class AgentWardenChecker:
             'GrepLogFileForMarkersSafetyWarden',
             lambda: kikimr_start_logs_safety_warden_factory(
                 local_hosts,
-                ssh_username=self._ssh_username,
+                ssh_username=None,
                 deploy_path=self._log_directory,
                 lines_after=5,
                 cut=True,
@@ -228,7 +167,7 @@ class AgentWardenChecker:
             'GrepDMesgForPatternsSafetyWarden',
             lambda: kikimr_grep_dmesg_safety_warden_factory(
                 local_hosts,
-                ssh_username=self._ssh_username,
+                ssh_username=None,
                 lines_after=5
             )
         ):

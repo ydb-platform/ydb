@@ -2,9 +2,13 @@ import argparse
 import json
 import logging
 import sys
+
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
+from ydb.tests.library.wardens.datashard import TxCompleteLagLivenessWarden
+from ydb.tests.library.wardens.hive import AllTabletsAliveLivenessWarden, BootQueueSizeWarden
+from ydb.tests.library.wardens.schemeshard import SchemeShardHasNoInFlightTransactions
 from ydb.tests.stability.nemesis.internal.config import get_master_settings
-from ydb.tests.stability.nemesis.internal.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
+from ydb.tests.stability.nemesis.internal.master.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
 
 
 def parse_args():
@@ -30,6 +34,14 @@ def parse_args():
     parser.add_argument('--yaml-config-location', help='Path to cluster.yaml config file')
     parser.add_argument('--static-location', help='Path to static files directory')
     parser.add_argument('--mon-port', type=int, default=8765, help='Monitoring port for liveness checks')
+    parser.add_argument(
+        '--install-root',
+        help='Remote install root on cluster hosts (default from NEMESIS_INSTALL_ROOT / Settings.install_root)',
+    )
+    parser.add_argument(
+        '--kikimr-logs-directory',
+        help='Kikimr logs path for agent safety wardens (default from KIKIMR_LOGS_DIRECTORY)',
+    )
 
     return parser.parse_args()
 
@@ -71,11 +83,6 @@ def run_liveness_checks(settings):
         }
         print(json.dumps(result))
         return
-
-    # Import wardens
-    from ydb.tests.library.wardens.hive import AllTabletsAliveLivenessWarden, BootQueueSizeWarden
-    from ydb.tests.library.wardens.schemeshard import SchemeShardHasNoInFlightTransactions
-    from ydb.tests.library.wardens.datashard import TxCompleteLagLivenessWarden
 
     # Create cluster object
     cluster = ExternalKiKiMRCluster(get_master_settings().yaml_config_location, None, None)
@@ -140,6 +147,10 @@ def main():
         argv_kwargs['yaml_config_location'] = args.yaml_config_location
     if args.static_location is not None:
         argv_kwargs['static_location'] = args.static_location
+    if getattr(args, 'install_root', None) is not None:
+        argv_kwargs['install_root'] = args.install_root
+    if getattr(args, 'kikimr_logs_directory', None) is not None:
+        argv_kwargs['kikimr_logs_directory'] = args.kikimr_logs_directory
 
     settings = get_master_settings(**argv_kwargs)
 

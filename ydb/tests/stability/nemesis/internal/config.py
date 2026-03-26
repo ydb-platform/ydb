@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     app_port: int = 31434
     mon_port: int = 8765
     yaml_config_location: str = ''
+    # Remote install layout (rsync targets, systemd ExecStart); override via NEMESIS_INSTALL_ROOT.
+    install_root: str = '/Berkanavt/nemesis'
+    # Log directory on agents for safety wardens (grep kikimr.start, etc.); override via KIKIMR_LOGS_DIRECTORY.
+    kikimr_logs_directory: str = '/Berkanavt/kikimr/logs/'
 
 
 class AgentSettings(BaseSettings):
@@ -79,6 +83,8 @@ class AgentSettings(BaseSettings):
     app_host: str = '::'
     app_port: int = 31434
     mon_port: int = 8765
+    install_root: str = '/Berkanavt/nemesis'
+    kikimr_logs_directory: str = '/Berkanavt/kikimr/logs/'
 
     @classmethod
     def from_master_args(cls: Type['AgentSettings'], settings: Settings) -> 'AgentSettings':
@@ -86,7 +92,9 @@ class AgentSettings(BaseSettings):
         return cls(
             app_host=settings.app_host,
             app_port=settings.app_port,
-            mon_port=settings.mon_port
+            mon_port=settings.mon_port,
+            install_root=settings.install_root,
+            kikimr_logs_directory=settings.kikimr_logs_directory,
         )
 
 

@@ -1,0 +1,58 @@
+"""
+Orchestrator store: delegation to planners from catalog.build_all_planners().
+"""
+
+from __future__ import annotations
+
+import threading
+from typing import Any
+
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import build_all_planners
+from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
+from ydb.tests.stability.nemesis.internal.master.nemesis.nemesis_planner_base import NemesisPlannerBase
+
+
+class ChaosMasterStore:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._planners: dict[str, NemesisPlannerBase] = build_all_planners()
+
+    def plan_scheduled_tick(self, nemesis_type: str, hosts: list[str]) -> list[DispatchCommand]:
+        planner = self._planners.get(nemesis_type)
+        if planner is None:
+            return []
+        return planner.scheduled_tick(hosts)
+
+    def plan_disable_schedule(self, nemesis_type: str) -> list[DispatchCommand]:
+        planner = self._planners.get(nemesis_type)
+        if planner is None:
+            return []
+        return planner.extract_all_on_disable()
+
+    def plan_manual(
+        self, nemesis_type: str, host: str, action: str
+    ) -> list[DispatchCommand] | None:
+        action = (action or "inject").lower()
+        if action not in ("inject", "extract"):
+            return None
+        planner = self._planners.get(nemesis_type)
+        if planner is None:
+            return None
+        return planner.manual(host, action)
+
+
+_chaos_store: ChaosMasterStore | None = None
+
+
+def get_chaos_store() -> ChaosMasterStore:
+    global _chaos_store
+    if _chaos_store is None:
+        _chaos_store = ChaosMasterStore()
+    return _chaos_store
+
+
+__all__ = [
+    "ChaosMasterStore",
+    "DispatchCommand",
+    "get_chaos_store",
+]

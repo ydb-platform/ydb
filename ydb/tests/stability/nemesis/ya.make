@@ -2,16 +2,24 @@ PY3_PROGRAM()
 
 PY_SRCS(
     __main__.py
-    internal/install.py
     internal/config.py
     internal/models.py
-    internal/nemesis/catalog.py
-    internal/nemesis/runner.py
     internal/event_loop.py
+    internal/nemesis/catalog.py
+    internal/nemesis/chaos_dispatch.py
+    internal/agent/agent_warden_checker.py
+    internal/agent/nemesis/runner.py
+    internal/master/runtime_state.py
+    internal/master/install.py
+    internal/master/orchestrator_warden_checker.py
+    internal/master/nemesis/schedule_loop.py
+    internal/master/nemesis/chaos_state.py
+    internal/master/nemesis/default_planner.py
+    internal/master/nemesis/kill_node_planner.py
+    internal/master/nemesis/network_planner.py
+    internal/master/nemesis/nemesis_planner_base.py
     routers/agent_router.py
     routers/orchestrator_router.py
-    internal/agent_warden_checker.py
-    internal/orchestrator_warden_checker.py
     app.py
 )
 
@@ -29,4 +37,3 @@ PEERDIR(
 )
 
 END()
-

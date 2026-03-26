@@ -1,12 +1,20 @@
+import atexit
 from functools import lru_cache
 
 from flask import Flask, jsonify
 
 from ydb.tests.library.stability.healthcheck.healthcheck_reporter import HealthCheckReporter
 from ydb.tests.stability.nemesis.internal import config
-from ydb.tests.stability.nemesis.internal.install import get_hosts_from_yaml
-from ydb.tests.stability.nemesis.internal.agent_warden_checker import AgentWardenChecker
-from ydb.tests.stability.nemesis.internal.orchestrator_warden_checker import OrchestratorWardenChecker
+from ydb.tests.stability.nemesis.internal.agent.agent_warden_checker import AgentWardenChecker
+from ydb.tests.stability.nemesis.internal.config import AgentSettings
+from ydb.tests.stability.nemesis.internal.master.install import get_hosts_from_yaml
+from ydb.tests.stability.nemesis.internal.master.nemesis.schedule_loop import OrchestratorNemesisSchedule
+from ydb.tests.stability.nemesis.internal.master.orchestrator_warden_checker import OrchestratorWardenChecker
+from ydb.tests.stability.nemesis.internal.master import runtime_state
+import ydb.tests.stability.nemesis.routers.agent_router as agent_router
+import ydb.tests.stability.nemesis.routers.orchestrator_router as orchestrator_router
+from ydb.tests.stability.nemesis.routers.agent_router import blueprint as agent_blueprint
+from ydb.tests.stability.nemesis.routers.orchestrator_router import blueprint as orchestrator_blueprint
 
 
 @lru_cache
@@ -18,33 +26,38 @@ def get_settings():
 
 # Global state for orchestrator mode
 hosts = []
-healthcheck_reporter = None
 app_initialized = False
 
 
 def initialize_app():
     """Initialize application components (called on first request)"""
-    global hosts, healthcheck_reporter, app_initialized
+    global hosts, app_initialized
     if app_initialized:
         return
 
     settings = get_settings()
 
-    from ydb.tests.stability.nemesis.routers import agent_router
-    agent_router.warden_checker = AgentWardenChecker()
+    agent_router.warden_checker = AgentWardenChecker(
+        log_directory=AgentSettings().kikimr_logs_directory,
+    )
 
     if settings.nemesis_type != 'agent':
         hosts = get_hosts_from_yaml(settings.yaml_config_location)
         print(f"Loaded hosts: {hosts}")
 
-        # Start healthcheck reporter
-        healthcheck_reporter = HealthCheckReporter(hosts, store_results=True)
-        healthcheck_reporter.start_healthchecks()
+        runtime_state.healthcheck_reporter = HealthCheckReporter(hosts, store_results=True)
+        runtime_state.healthcheck_reporter.start_healthchecks()
 
-        # Share state with orchestrator router
-        from ydb.tests.stability.nemesis.routers import orchestrator_router
         orchestrator_router.hosts = hosts
-        orchestrator_router.orchestrator_warden_checker = OrchestratorWardenChecker(hosts=hosts, mon_port=orchestrator_router.mon_port)
+        orchestrator_router.orchestrator_warden_checker = OrchestratorWardenChecker(
+            hosts=hosts,
+            mon_port=orchestrator_router.mon_port,
+        )
+        orchestrator_router.nemesis_schedule = OrchestratorNemesisSchedule(
+            get_hosts=lambda: orchestrator_router.hosts,
+            is_local_host=orchestrator_router.is_local_host,
+            get_app_port=orchestrator_router.get_app_port,
+        )
 
     app_initialized = True
 
@@ -54,14 +67,11 @@ def cleanup_app(exception=None):
     settings = get_settings()
 
     if settings.nemesis_type != 'agent':
-        healthcheck_reporter.stop_healthchecks()
+        if runtime_state.healthcheck_reporter:
+            runtime_state.healthcheck_reporter.stop_healthchecks()
 
-        from ydb.tests.stability.nemesis.routers import orchestrator_router
-        for task_info in orchestrator_router.scheduled_tasks.values():
-            task_info['enabled'] = False
-            if 'thread' in task_info and task_info['thread'].is_alive():
-                # Thread will exit on next iteration due to enabled=False
-                pass
+        if orchestrator_router.nemesis_schedule:
+            orchestrator_router.nemesis_schedule.shutdown_disable_all()
 
 
 def create_app():
@@ -78,30 +88,20 @@ def create_app():
 
     app = Flask(__name__, static_folder=static_folder, static_url_path='/static')
 
-    # Register cleanup for application shutdown (not per-request teardown)
-    import atexit
     atexit.register(cleanup_app)
 
-    # Common health endpoint
     @app.route("/health", methods=["GET"])
     def get_health():
         return jsonify({"status": "ok"})
 
-    # Always include agent router (available in both modes)
-    from ydb.tests.stability.nemesis.routers.agent_router import blueprint as agent_blueprint
     app.register_blueprint(agent_blueprint)
 
-    # Include routers based on configuration
     if settings.nemesis_type == 'agent':
-        # Agent mode: only agent endpoints
         print("Running in AGENT mode")
     else:
-        # Orchestrator mode: include orchestrator router
-        from ydb.tests.stability.nemesis.routers.orchestrator_router import blueprint as orchestrator_blueprint
         app.register_blueprint(orchestrator_blueprint)
         print("Running in ORCHESTRATOR mode (with agent endpoints)")
 
-    # Initialize on first request
     @app.before_request
     def ensure_initialized():
         initialize_app()

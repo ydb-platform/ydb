@@ -344,104 +344,53 @@ def test_with_require_healthcheck_authentication(ydb_cluster_with_require_health
     _test_endpoints(ydb_cluster_with_require_healthcheck_auth, EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH)
 
 
-PUBLIC_ENDPOINTS_LIST = {
-    '/actors/tablet_counters_aggregator': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    },
-    '/counters': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    },
-    '/counters/hosts': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    },
-    '/followercounters': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    },
-    '/labeledcounters': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    },
-    '/ping': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    },
-    '/status': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    },
-    '/viewer/capabilities': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    },
-    '/healthcheck?format=prometheus': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    },
-    '/monitoring/': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    },
-}
-
-PUBLIC_ENDPOINTS_WITH_PARAMS = {
-    '/healthcheck?database=%2FRoot': {
-        None: 200,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    },
-}
+PUBLIC_ENDPOINTS_LIST = [
+    '/actors/tablet_counters_aggregator',
+    '/counters',
+    '/counters/hosts',
+    '/followercounters',
+    '/labeledcounters',
+    '/ping',
+    '/status',
+    '/viewer/capabilities',
+    '/monitoring/',
+]
 
 
 def test_public_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
-    _test_endpoints(ydb_cluster_with_enforce_user_token, PUBLIC_ENDPOINTS_LIST)
+    expected_results = {
+        endpoint_path: {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        }
+        for endpoint_path in PUBLIC_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
 
 
 def test_public_endpoints_with_params_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
-    _test_endpoints(ydb_cluster_with_enforce_user_token, PUBLIC_ENDPOINTS_WITH_PARAMS)
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token,
+        {
+            '/healthcheck?format=prometheus': {
+                None: 200,
+                'user@builtin': 200,
+                'database@builtin': 200,
+                'viewer@builtin': 200,
+                'monitoring@builtin': 200,
+                'root@builtin': 200,
+            },
+            '/healthcheck?database=%2FRoot': {
+                None: 200,
+                'user@builtin': 403,
+                'database@builtin': 403,
+                'viewer@builtin': 403,
+                'monitoring@builtin': 200,
+                'root@builtin': 200,
+            },
+        },
+    )

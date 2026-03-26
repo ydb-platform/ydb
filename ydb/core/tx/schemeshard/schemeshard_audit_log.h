@@ -1,7 +1,6 @@
 #pragma once
 
 #include <util/generic/string.h>
-#include <ydb/core/tx/schemeshard/schemeshard_path.h>
 
 namespace NKikimrScheme {
 enum EStatus : int;

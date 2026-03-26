@@ -377,7 +377,7 @@ def test_public_endpoints_with_params_with_enforce_user_token(ydb_cluster_with_e
     _test_endpoints(
         ydb_cluster_with_enforce_user_token,
         {
-            # Changed by `require_healthcheck_authentication`.
+            # Enabled feature flag `require_healthcheck_authentication` forbids public access.
             '/healthcheck?format=prometheus': {
                 None: 200,
                 'user@builtin': 200,
@@ -386,7 +386,7 @@ def test_public_endpoints_with_params_with_enforce_user_token(ydb_cluster_with_e
                 'monitoring@builtin': 200,
                 'root@builtin': 200,
             },
-            # Changed by `require_healthcheck_authentication`.
+            # Enabled feature flag `require_healthcheck_authentication` forbids public access.
             '/healthcheck?database=%2FRoot': {
                 None: 200,
                 'user@builtin': 403,

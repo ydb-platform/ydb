@@ -22,6 +22,7 @@ private:
     TPositiveControlInteger PagesInFlightCount;
     YDB_READONLY(ui64, MaxInFlight, 1024);
     YDB_ACCESSOR(ui64, MaxPagesInFlight, 8);
+    YDB_READONLY(bool, UsePagesInFlightLimit, false);
 
     virtual TString DoDebugString() const {
         return "";

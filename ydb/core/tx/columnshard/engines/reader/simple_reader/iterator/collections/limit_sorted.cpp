@@ -2,6 +2,17 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
+bool TScanWithLimitCollection::DoCheckInFlightLimits() const {
+    // Check both sources and pages limits
+    if (GetSourcesInFlightCount() >= InFlightLimit) {
+        return false;
+    }
+    if (GetUsePagesInFlightLimit() && GetPagesInFlightCount() >= GetMaxPagesInFlight()) {
+        return false;
+    }
+    return true;
+}
+
 std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoTryExtractNext() {
     if (!NextSource) {
         if (!SourcesConstructor->IsFinished()) {

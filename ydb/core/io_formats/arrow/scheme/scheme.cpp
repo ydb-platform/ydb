@@ -24,6 +24,8 @@ arrow::Result<TArrowCSV> TArrowCSVScheme::Create(const TVector<std::pair<TString
         if (type.GetTypeId() == NScheme::NTypeIds::Decimal) {
             columnInfo.Precision = type.GetDecimalType().GetPrecision();
             columnInfo.Scale = type.GetDecimalType().GetScale();
+        } else if (type.GetTypeId() == NScheme::NTypeIds::Uuid) {
+            columnInfo.IsUuid = true;
         }
 
         convertedColumns.emplace_back(columnInfo);

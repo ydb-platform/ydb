@@ -10,7 +10,8 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
-    library/cpp/testing/unittest
+    library/cpp/testing/common
+    library/cpp/testing/gtest
     ydb/public/api/grpc
     ydb/public/sdk/cpp/src/client/table
 )

@@ -17,46 +17,6 @@ struct TClassifyContext {
     mutable std::unordered_map<TString, bool> MemberNameCache;
 };
 
-///
-/// Per-query classifier object. Created in the proxy,
-/// passed to the session actor with the query request.
-///
-struct IWmQueryClassifier {
-    /// Assignment to a specific resource pool
-    struct TResolvedPoolId {
-        TString PoolId;
-    };
-
-    /// Execution without workload management (bypass)
-    struct TBypass {};
-
-    /// Request rejected due to policy or access violation
-    struct TReject {
-        Ydb::StatusIds::StatusCode Code;
-        TString Message;
-    };
-
-    ///
-    /// Wait for query compilation to evaluate plan-based rules
-    ///
-    struct TPendingCompilation {};
-
-    using TPreClassifyResult = std::variant<TBypass, TResolvedPoolId, TReject, TPendingCompilation>;
-    using TPostClassifyResult = std::variant<TResolvedPoolId, TBypass, TReject>;
-
-    virtual ~IWmQueryClassifier() = default;
-
-    ///
-    /// Returns the current classification state
-    ///
-    virtual TPreClassifyResult GetPreClassifyResult() const = 0;
-
-    ///
-    /// Resume classification using the compiled query plan (e.g., FullScan check)
-    ///
-    [[nodiscard]] virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const = 0;
-};
-
 class TPoolInfoSnapshot {
 public:
     struct TPoolEntry {
@@ -92,6 +52,48 @@ public:
 private:
     TPoolsMap Pools;
 };
+
+///
+/// Per-query classifier object. Created in the proxy,
+/// passed to the session actor with the query request.
+///
+struct IWmQueryClassifier {
+    /// Assignment to a specific resource pool
+    struct TResolvedPoolId {
+        TString PoolId;
+        const NResourcePool::TPoolSettings* Config = nullptr;
+    };
+
+    /// Execution without workload management (bypass)
+    struct TBypass {};
+
+    /// Request rejected due to policy or access violation
+    struct TReject {
+        Ydb::StatusIds::StatusCode Code;
+        TString Message;
+    };
+
+    ///
+    /// Wait for query compilation to evaluate plan-based rules
+    ///
+    struct TPendingCompilation {};
+
+    using TPreClassifyResult = std::variant<TBypass, TResolvedPoolId, TReject, TPendingCompilation>;
+    using TPostClassifyResult = std::variant<TResolvedPoolId, TBypass, TReject>;
+
+    virtual ~IWmQueryClassifier() = default;
+
+    ///
+    /// Returns the current classification state
+    ///
+    virtual TPreClassifyResult GetPreClassifyResult() const = 0;
+
+    ///
+    /// Resume classification using the compiled query plan (e.g., FullScan check)
+    ///
+    [[nodiscard]] virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const = 0;
+};
+
 
 class TWmQueryClassifier : public IWmQueryClassifier {
 public:
@@ -145,7 +147,7 @@ private:
         if (!NWorkload::IsWorkloadServiceRequired(poolInfo->Config)) {
             store = TBypass{};
         } else {
-            store = TResolvedPoolId{.PoolId = poolId};
+            store = TResolvedPoolId{.PoolId = poolId, .Config = &poolInfo->Config};
         }
 
         return true;

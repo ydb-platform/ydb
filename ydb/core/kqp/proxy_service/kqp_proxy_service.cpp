@@ -1624,6 +1624,10 @@ private:
 
         if (const auto* resolved = std::get_if<IWmQueryClassifier::TResolvedPoolId>(&status)) {
             ev->Get()->SetPoolId(resolved->PoolId);
+            // It is safe as pool info leaves in a classifier
+            if (resolved->Config) {
+                ev->Get()->SetPoolConfig(*resolved->Config);
+            }
         } else {
             ev->Get()->SetPoolId("");
         }

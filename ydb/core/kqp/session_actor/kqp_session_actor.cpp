@@ -3681,13 +3681,15 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleExecute);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);
 
+                // Query splitted compilation/execution
+                hFunc(TEvKqp::TEvCompileResponse, Handle);
+                hFunc(TEvKqp::TEvParseResponse, Handle);
+                hFunc(TEvKqp::TEvSplitResponse, Handle);
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+
                 // forgotten messages from previous aborted request
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
-                hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
-                hFunc(TEvKqp::TEvParseResponse, HandleNoop);
-                hFunc(TEvKqp::TEvSplitResponse, HandleNoop);
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);

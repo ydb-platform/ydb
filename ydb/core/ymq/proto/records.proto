@@ -18,4 +18,11 @@ message TReceipt {
     optional uint64 LockTimestamp = 4;
     /// The number of queue shard for table implementation or partition id for topic implementation.
     optional uint64 Shard = 5;
+
+    enum ESource {
+        Table = 1;
+        Topic = 2;
+    }
+    optional ESource Source = 6 [default = Table];
+
 }

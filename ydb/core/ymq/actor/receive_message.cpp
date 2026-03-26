@@ -267,6 +267,7 @@ private:
                 item->SetData(std::move(message.Data));
 
                 TReceipt receipt;
+                receipt.SetSource(NSQS::TReceipt::Topic);
                 receipt.SetOffset(message.MessageId.Offset);
                 receipt.SetShard(message.MessageId.PartitionId);
                 item->SetReceiptHandle(EncodeReceiptHandle(receipt));

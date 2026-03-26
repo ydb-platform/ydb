@@ -531,6 +531,8 @@ class TestViewer(object):
                                     'ResponseTime',
                                     'ResponseDuration',
                                     'ProcessDuration',
+                                    'GrpcRequestBytes',
+                                    'GrpcResponseBytes',
                                     })
 
         # schema

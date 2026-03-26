@@ -65,6 +65,14 @@ public:
             case arrow20::Type::FIXED_SIZE_LIST:
             case arrow20::Type::INTERVAL_DAY_TIME:
             case arrow20::Type::INTERVAL_MONTHS:
+            case arrow20::Type::INTERVAL_MONTH_DAY_NANO:
+            case arrow20::Type::RUN_END_ENCODED:
+            case arrow20::Type::STRING_VIEW:
+            case arrow20::Type::BINARY_VIEW:
+            case arrow20::Type::LIST_VIEW:
+            case arrow20::Type::LARGE_LIST_VIEW:
+            case arrow20::Type::DECIMAL32:
+            case arrow20::Type::DECIMAL64:
             case arrow20::Type::LARGE_BINARY:
             case arrow20::Type::LARGE_LIST:
             case arrow20::Type::LARGE_STRING:

@@ -334,12 +334,12 @@ public:
 
             for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
                 TNodeSet newLeft = Graph_.GetEdge(i).Left;
-                if (Overlaps(Graph_.GetEdge(i).Left, nodes) && !IsSubset(Graph_.GetEdge(i).Right, nodes)) {
+                if (IsSubset(Graph_.GetEdge(i).Left, nodes) && !Overlaps(Graph_.GetEdge(i).Right, nodes)) {
                     newLeft |= nodes;
                 }
 
                 TNodeSet newRight = Graph_.GetEdge(i).Right;
-                if (Overlaps(Graph_.GetEdge(i).Right, nodes) && !IsSubset(Graph_.GetEdge(i).Left, nodes)) {
+                if (IsSubset(Graph_.GetEdge(i).Right, nodes) && !Overlaps(Graph_.GetEdge(i).Left, nodes)) {
                     newRight |= nodes;
                 }
 

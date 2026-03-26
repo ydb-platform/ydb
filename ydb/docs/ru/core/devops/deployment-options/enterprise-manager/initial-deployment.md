@@ -109,14 +109,15 @@ tar -xf examples.tar.gz
 
 ### Настройка инвентаря Ansible {#configure-inventory}
 
-Конфигурация инвентаря выполняется в двух файлах:
+Конфигурация инвентаря выполняется в нескольких файлах:
 
-* `examples/inventory/50-inventory.yaml` — основные параметры подключения и список хостов.
+* `examples/inventory/50-inventory.yaml` — инвентарь кластера {{ ydb-short-name }} (параметры SSH-подключения, подключения к YDB, настройки Control Plane).
+* `examples/inventory/90-inventory.yaml` — инвентарь YDB EM (группы хостов для компонентов YDB EM).
 * `examples/inventory/99-inventory-vault.yaml` — конфиденциальные данные (пароли).
 
 #### Настройка списка хостов {#configure-hosts}
 
-Откройте файл `examples/inventory/50-inventory.yaml` и настройте группы хостов.
+Откройте файл `examples/inventory/90-inventory.yaml` и настройте группы хостов.
 
 В группу `ydb_em` включите хосты, на которых будут установлены компоненты **Gateway** и **Control Plane**:
 
@@ -165,7 +166,7 @@ ydb:
 
 #### Настройка SSH-подключения {#configure-ssh}
 
-В файле `examples/inventory/50-inventory.yaml` проверьте параметры SSH-подключения:
+В файле `examples/inventory/50-inventory.yaml` (инвентарь кластера {{ ydb-short-name }}) проверьте параметры SSH-подключения:
 
 ```yaml
 # Удалённый пользователь с правами sudo

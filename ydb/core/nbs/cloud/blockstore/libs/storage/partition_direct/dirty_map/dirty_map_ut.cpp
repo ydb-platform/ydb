@@ -419,6 +419,42 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "0{[D+++..P.....][0..99][0..99]};",
             readHint.DebugPrint());
     }
+
+    Y_UNIT_TEST(ReadShouldWaitPBufferRestore)
+    {
+        TBlocksDirtyMap dirtyMap;
+
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::PBuffer0);
+        auto readHint1 =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL("WaitReady:NotReady", readHint1.DebugPrint());
+        UNIT_ASSERT_VALUES_EQUAL(false, readHint1.WaitReady.IsReady());
+
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::PBuffer1);
+        auto readHint2 =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL("WaitReady:NotReady", readHint2.DebugPrint());
+        UNIT_ASSERT_VALUES_EQUAL(false, readHint2.WaitReady.IsReady());
+
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::PBuffer2);
+        auto readHint3 =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "123{[D.....P+++..][10..19][0..9]};",
+            readHint3.DebugPrint());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, readHint1.WaitReady.IsReady());
+        UNIT_ASSERT_VALUES_EQUAL(true, readHint2.WaitReady.IsReady());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

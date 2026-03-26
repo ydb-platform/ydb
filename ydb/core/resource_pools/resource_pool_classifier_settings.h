@@ -12,16 +12,18 @@ inline constexpr i64 CLASSIFIER_COUNT_LIMIT = 1000;
 
 struct TClassifierSettings : public TSettingsBase {
     using TBase = TSettingsBase;
-    using TProperty = std::variant<i64*, TString*, std::optional<TString>*>;
+    using TProperty = std::variant<i64*, TString*, std::optional<TString>*, std::optional<bool>*>;
 
     struct TParser : public TBase::TParser {
         void operator()(i64* setting) const;
+        void operator()(std::optional<bool>* setting) const;
         void operator()(TString* setting) const;
         void operator()(std::optional<TString>* setting) const;
     };
 
     struct TExtractor : public TBase::TExtractor {
         TString operator()(i64* setting) const;
+        TString operator()(std::optional<bool>* setting) const;
         TString operator()(TString* setting) const;
         TString operator()(std::optional<TString>* setting) const;
     };

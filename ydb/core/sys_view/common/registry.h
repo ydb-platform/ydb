@@ -785,13 +785,17 @@ struct Schema : NIceDb::Schema {
         struct Rank         : Column<2, NScheme::NTypeIds::Int64> {};
         struct MemberName   : Column<4, NScheme::NTypeIds::Utf8> {};
         struct ResourcePool : Column<5, NScheme::NTypeIds::Utf8> {};
+        struct AppName      : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct FullScan     : Column<7, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
             Name,
             Rank,
             MemberName,
-            ResourcePool>;
+            ResourcePool,
+            AppName,
+            FullScan>;
     };
 
     struct ShowCreate : Table<21> {

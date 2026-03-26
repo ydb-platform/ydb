@@ -601,7 +601,7 @@ public:
             (trace_id, TraceId()));
 
         if (CurrentStateFunc() == &TThis::PostCompileState) {
-            OnSuccessCompileRequest();
+            OnSuccessCompileRequest(true);
         } else if (CurrentStateFunc() == &TThis::PreCompileState){
             CompileQuery();
         } else {
@@ -645,7 +645,7 @@ public:
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
 
         if (CurrentStateFunc() == &TThis::PostCompileState) {
-            OnSuccessCompileRequest();
+            OnSuccessCompileRequest(true);
         } else if (CurrentStateFunc() == &TThis::PreCompileState) {
             CompileQuery();
         } else {
@@ -917,7 +917,7 @@ public:
         return false;
     }
 
-    void OnSuccessCompileRequest() {
+    void OnSuccessCompileRequest(bool skipClassifier = false) {
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             TVector<IKqpGateway::TPhysicalTxData> txs;
             std::map<TString, TString> secureParams;
@@ -1022,10 +1022,10 @@ public:
             co_return;
         }
 
-        if (QueryState->QueryClassifier) {
+        if (QueryState->QueryClassifier && !skipClassifier) {
             auto status = QueryState->QueryClassifier->GetPreClassifyResult();
             if (std::holds_alternative<IWmQueryClassifier::TPendingCompilation>(status)) {
-                auto result = QueryState->QueryClassifier->PostCompileClassify(*QueryState->PreparedQuery);
+                auto result = QueryState->QueryClassifier->PostCompileClassify(*QueryState->PreparedQuery, QueryState->MaxReadType);
 
                 std::visit(TOverloaded {
                     [this](const IWmQueryClassifier::TResolvedPoolId& r) {
@@ -3715,6 +3715,7 @@ public:
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvStreamData, HandleNoop);
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
+                hFunc(TEvents::TEvUndelivered, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);

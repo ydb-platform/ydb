@@ -4,8 +4,6 @@
 namespace NKikimr::NKqp {
 namespace {
 
-constexpr char DEFAULT_POOL_ID[] = "default"; 
-
 bool MatchesMemberName(const TString& target, const TClassifyContext& ctx) {
     // Check anonymous user
     if (!ctx.UserToken) {
@@ -52,13 +50,14 @@ bool NeedsPreparedQuery(const NResourcePool::TClassifierSettings& s) {
     return s.FullScan.has_value();
 }
 
-bool MatchesDynamic(const NResourcePool::TClassifierSettings& s, const TPreparedQueryHolder&) {
+bool MatchesDynamic(const NResourcePool::TClassifierSettings& s, const TPreparedQueryHolder&, const ETableReadType& maxReadType) {
     if (!s.FullScan) {
         return true;
     }
 
-    // TODO: the implementation
-    return true;
+    // dummy check, do not use it in a prod
+    const bool isFullScanQuery = (maxReadType == ETableReadType::FullScan);
+    return *s.FullScan == isFullScanQuery;
 }
 
 } // namespace anonymous
@@ -124,7 +123,8 @@ void TWmQueryClassifier::PreCompileClassify() {
     ResolveToDefault();
 }
 
-IWmQueryClassifier::TPostClassifyResult TWmQueryClassifier::PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const {
+IWmQueryClassifier::TPostClassifyResult TWmQueryClassifier::PostCompileClassify(const TPreparedQueryHolder& preparedQuery,
+                                                                                const ETableReadType& maxReadType) const {
     Y_ENSURE(Configs, "Post compile classify without configuration");
     Y_ENSURE(ResumeRank, "Post compile classify without next rank");
 
@@ -135,7 +135,7 @@ IWmQueryClassifier::TPostClassifyResult TWmQueryClassifier::PostCompileClassify(
             continue;
         }
 
-        if (!MatchesDynamic(settings, preparedQuery)){
+        if (!MatchesDynamic(settings, preparedQuery, maxReadType)){
             continue;
         }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/common/simple/helpers.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/snapshot.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
@@ -7,6 +8,9 @@
 #include <ydb/library/aclib/aclib.h>
 
 namespace NKikimr::NKqp {
+
+constexpr char DEFAULT_POOL_ID[] = "default";
+constexpr char REJECT_POOL_ID[] = "reject";
 
 struct TClassifyContext {
     const TString PoolId;
@@ -83,7 +87,9 @@ struct IWmQueryClassifier {
     virtual TPreClassifyResult GetPreClassifyResult() const = 0;
 
     /// Refines classification once the query plan is available
-    [[nodiscard]] virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const = 0;
+    [[nodiscard]]
+    virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery,
+                                                    const ETableReadType& maxReadType) const = 0;
 };
 
 
@@ -115,7 +121,9 @@ public:
     TPreClassifyResult GetPreClassifyResult() const override;
 
     void PreCompileClassify();
-    [[nodiscard]] TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const override;
+    [[nodiscard]]
+    TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery,
+                                            const ETableReadType& maxReadType) const override;
 
 private:
     void PendingCompile(i64 rank);
@@ -124,6 +132,14 @@ private:
     template<typename TStore>
     bool TryResolve(const TString& poolId, TStore& store, std::unordered_set<TString>* missedPoolIds = nullptr) const {
         auto poolInfo = FindPool(poolId);
+
+        if (poolId == REJECT_POOL_ID) {
+            store = TReject{
+                .Code = Ydb::StatusIds::ABORTED,
+                .Message = TStringBuilder() << "Query reject by classifier"
+            };
+            return true;
+        }
 
         if (!poolInfo) {
             store = TResolvedPoolId{.PoolId = poolId};

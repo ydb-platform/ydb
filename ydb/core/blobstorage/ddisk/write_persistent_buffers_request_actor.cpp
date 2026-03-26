@@ -251,6 +251,7 @@ namespace NKikimr::NDDisk {
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle)
 
             cFunc(TEvents::TSystem::Poison, PassAway)
+            IgnoreFunc(TEvInterconnect::TEvNodeConnected)
         )
     }
 

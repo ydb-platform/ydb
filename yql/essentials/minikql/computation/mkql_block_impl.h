@@ -4,6 +4,7 @@
 #include "mkql_computation_node_holders.h"
 
 #include <yql/essentials/minikql/arrow/arrow_util.h>
+#include <arrow/type.h>
 #include <yql/essentials/public/udf/arrow/block_item.h>
 
 #include <arrow/array.h>
@@ -21,8 +22,8 @@ arrow20::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, a
 arrow20::Datum ConvertScalar(TType* type, const NUdf::TBlockItem& value, arrow20::MemoryPool& pool);
 arrow20::Datum MakeArrayFromScalar(const arrow20::Scalar& scalar, size_t len, TType* type, arrow20::MemoryPool& pool);
 
-arrow20::ValueDescr ToValueDescr(TType* type);
-std::vector<arrow20::ValueDescr> ToValueDescr(const TVector<TType*>& types);
+arrow20::TypeHolder ToTypeHolder(TType* type);
+std::vector<arrow20::TypeHolder> ToTypeHolders(const TVector<TType*>& types);
 
 std::vector<arrow20::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes);
 arrow20::compute::OutputType ConvertToOutputType(TType* output);
@@ -49,7 +50,7 @@ private:
         explicit TArrowNode(const TBlockFuncNode* parent);
         TStringBuf GetKernelName() const final;
         const arrow20::compute::ScalarKernel& GetArrowKernel() const final;
-        const std::vector<arrow20::ValueDescr>& GetArgsDesc() const final;
+        const std::vector<arrow20::TypeHolder>& GetArgsDesc() const final;
         const IComputationNode* GetArgument(ui32 index) const final;
 
     private:
@@ -63,14 +64,14 @@ private:
         TState(TMemoryUsageInfo* memInfo,
                const arrow20::compute::FunctionOptions* options,
                const arrow20::compute::ScalarKernel& kernel,
-               const std::vector<arrow20::ValueDescr>& argsValuesDescr,
+               const std::vector<arrow20::TypeHolder>& argsTypeHolders,
                TComputationContext& ctx)
             : TComputationValue(memInfo)
             , ExecContext(&ctx.ArrowMemoryPool, nullptr, nullptr)
             , KernelContext(&ExecContext)
         {
             if (kernel.init) {
-                State = ARROW_RESULT(kernel.init(&KernelContext, {&kernel, argsValuesDescr, options}));
+                State = ARROW_RESULT(kernel.init(&KernelContext, {&kernel, argsTypeHolders, options}));
                 KernelContext.SetState(State.get());
             }
         }
@@ -89,9 +90,9 @@ private:
     NYql::NUdf::EValidateDatumMode ValidateDatumMode_ = NYql::NUdf::EValidateDatumMode::None;
     const ui32 StateIndex_;
     const TComputationNodePtrVector ArgsNodes_;
-    const std::vector<arrow20::ValueDescr> ArgsValuesDescr_;
+    const std::vector<arrow20::TypeHolder> ArgsTypeHolders_;
     const TVector<TType*> ArgTypes_;
-    arrow20::ValueDescr OutValueDescr_;
+    arrow20::TypeHolder OutTypeHolder_;
     const TType* const OutputType_ = nullptr;
     const arrow20::compute::ScalarKernel& Kernel_;
     const std::shared_ptr<arrow20::compute::ScalarKernel> KernelHolder_;

@@ -46,7 +46,7 @@ public:
         TArrowNode(const TApplyWrapper* parent, const NUdf::TUnboxedValue& callable, TType* returnType, const TVector<TType*>& argsTypes)
             : Parent_(parent)
             , Callable_(callable)
-            , ArgsValuesDescr_(ToValueDescr(argsTypes))
+            , ArgsTypeHolders_(ToTypeHolders(argsTypes))
             , Kernel_(ConvertToInputTypes(argsTypes), ConvertToOutputType(returnType), [this](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                 auto& state = dynamic_cast<TKernelState&>(*ctx->state());
                 auto guard = Guard(state.Alloc);
@@ -76,8 +76,8 @@ public:
             return Kernel_;
         }
 
-        const std::vector<arrow20::ValueDescr>& GetArgsDesc() const {
-            return ArgsValuesDescr_;
+        const std::vector<arrow20::TypeHolder>& GetArgsDesc() const {
+            return ArgsTypeHolders_;
         }
 
         const IComputationNode* GetArgument(ui32 index) const {
@@ -87,7 +87,7 @@ public:
     private:
         const TApplyWrapper* Parent_;
         const NUdf::TUnboxedValue Callable_;
-        const std::vector<arrow20::ValueDescr> ArgsValuesDescr_;
+        const std::vector<arrow20::TypeHolder> ArgsTypeHolders_;
         arrow20::compute::ScalarKernel Kernel_;
     };
     friend class TArrowNode;

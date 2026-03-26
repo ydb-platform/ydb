@@ -217,18 +217,18 @@ arrow20::Datum MakeArrayFromScalar(const arrow20::Scalar& scalar, size_t len, TT
     return builder->Build(true);
 }
 
-arrow20::ValueDescr ToValueDescr(TType* type) {
-    arrow20::ValueDescr ret;
+arrow20::TypeHolder ToTypeHolder(TType* type) {
+    arrow20::TypeHolder ret;
     MKQL_ENSURE(ConvertInputArrowType(type, ret), "can't get arrow type");
     return ret;
 }
 
-std::vector<arrow20::ValueDescr> ToValueDescr(const TVector<TType*>& types) {
-    std::vector<arrow20::ValueDescr> res;
+std::vector<arrow20::TypeHolder> ToTypeHolders(const TVector<TType*>& types) {
+    std::vector<arrow20::TypeHolder> res;
     res.reserve(types.size());
     for (const auto& type : types) {
         if (type) {
-            res.emplace_back(ToValueDescr(type));
+            res.emplace_back(ToTypeHolder(type));
         } else {
             res.emplace_back();
         }
@@ -237,17 +237,30 @@ std::vector<arrow20::ValueDescr> ToValueDescr(const TVector<TType*>& types) {
     return res;
 }
 
+namespace {
+
+arrow20::compute::InputType InputTypeFromTypeHolder(const arrow20::TypeHolder& holder) {
+    if (!holder) {
+        return arrow20::compute::InputType::Any();
+    }
+    return arrow20::compute::InputType(holder.GetSharedPtr());
+}
+
+}  // namespace
+
 std::vector<arrow20::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes) {
     std::vector<arrow20::compute::InputType> result;
     result.reserve(argTypes.size());
     for (auto& type : argTypes) {
-        result.emplace_back(ToValueDescr(type));
+        result.emplace_back(InputTypeFromTypeHolder(ToTypeHolder(type)));
     }
     return result;
 }
 
 arrow20::compute::OutputType ConvertToOutputType(TType* output) {
-    return arrow20::compute::OutputType(ToValueDescr(output));
+    auto holder = ToTypeHolder(output);
+    MKQL_ENSURE(holder, "ConvertToOutputType: missing arrow data type");
+    return arrow20::compute::OutputType(holder.GetSharedPtr());
 }
 
 NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count) {
@@ -266,9 +279,9 @@ TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables,
     , ValidateDatumMode_(validateDatumMode)
     , StateIndex_(mutables.CurValueIndex++)
     , ArgsNodes_(std::move(argsNodes))
-    , ArgsValuesDescr_(ToValueDescr(argsTypes))
+    , ArgsTypeHolders_(ToTypeHolders(argsTypes))
     , ArgTypes_(argsTypes)
-    , OutValueDescr_(ToValueDescr(outputType))
+    , OutTypeHolder_(ToTypeHolder(outputType))
     , OutputType_(outputType)
     , Kernel_(kernel)
     , KernelHolder_(std::move(kernelHolder))
@@ -285,12 +298,12 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
     for (ui32 i = 0; i < ArgsNodes_.size(); ++i) {
         const auto& value = ArgsNodes_[i]->GetValue(ctx);
         argDatums.emplace_back(TArrowBlock::From(value).GetDatum());
-        ValidateDatum(argDatums.back(), ArgsValuesDescr_[i], ArgTypes_[i], ValidateDatumMode_);
+        ValidateDatum(argDatums.back(), ArgsTypeHolders_[i], ArgTypes_[i], ValidateDatumMode_);
     }
 
     if (ScalarOutput_) {
         auto executor = arrow20::compute::detail::KernelExecutor::MakeScalar();
-        ARROW_OK(executor->Init(&state.KernelContext, {&Kernel_, ArgsValuesDescr_, Options_}));
+        ARROW_OK(executor->Init(&state.KernelContext, {&Kernel_, ArgsTypeHolders_, Options_}));
 
         auto listener = std::make_shared<arrow20::compute::detail::DatumAccumulator>();
         ARROW_OK(executor->Execute(argDatums, listener.get()));
@@ -304,7 +317,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
 
     while (dechunker.Next(chunk)) {
         auto executor = arrow20::compute::detail::KernelExecutor::MakeScalar();
-        ARROW_OK(executor->Init(&state.KernelContext, {&Kernel_, ArgsValuesDescr_, Options_}));
+        ARROW_OK(executor->Init(&state.KernelContext, {&Kernel_, ArgsTypeHolders_, Options_}));
 
         arrow20::compute::detail::DatumAccumulator listener;
         ARROW_OK(executor->Execute(chunk, &listener));
@@ -313,7 +326,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
         ForEachArrayData(output, [&](const auto& arr) { arrays.push_back(arr); });
     }
     auto resultArray = MakeArray(arrays);
-    ValidateDatum(resultArray, OutValueDescr_, OutputType_, ValidateDatumMode_);
+    ValidateDatum(resultArray, OutTypeHolder_, OutputType_, ValidateDatumMode_);
     return ctx.HolderFactory.CreateArrowBlock(std::move(resultArray));
 }
 
@@ -326,7 +339,7 @@ void TBlockFuncNode::RegisterDependencies() const {
 TBlockFuncNode::TState& TBlockFuncNode::GetState(TComputationContext& ctx) const {
     auto& result = ctx.MutableValues[StateIndex_];
     if (!result.HasValue()) {
-        result = ctx.HolderFactory.Create<TState>(Options_, Kernel_, ArgsValuesDescr_, ctx);
+        result = ctx.HolderFactory.Create<TState>(Options_, Kernel_, ArgsTypeHolders_, ctx);
     }
 
     return *static_cast<TState*>(result.AsBoxed().Get());
@@ -349,8 +362,8 @@ const arrow20::compute::ScalarKernel& TBlockFuncNode::TArrowNode::GetArrowKernel
     return Parent_->Kernel_;
 }
 
-const std::vector<arrow20::ValueDescr>& TBlockFuncNode::TArrowNode::GetArgsDesc() const {
-    return Parent_->ArgsValuesDescr_;
+const std::vector<arrow20::TypeHolder>& TBlockFuncNode::TArrowNode::GetArgsDesc() const {
+    return Parent_->ArgsTypeHolders_;
 }
 
 const IComputationNode* TBlockFuncNode::TArrowNode::GetArgument(ui32 index) const {

@@ -295,15 +295,24 @@ arrow20::Status ValidateDatum(arrow20::Datum datum, const TType* type, NYql::NUd
 
 } // namespace
 
-void ValidateDatum(arrow20::Datum datum, TMaybe<arrow20::ValueDescr> expectedDescription, const TType* type, NYql::NUdf::EValidateDatumMode validateMode) {
+void ValidateDatum(arrow20::Datum datum, TMaybe<arrow20::TypeHolder> expectedType, const TType* type, NYql::NUdf::EValidateDatumMode validateMode) {
     if (validateMode == NYql::NUdf::EValidateDatumMode::None) {
         return;
     }
-    if (expectedDescription) {
-        ARROW_CHECK_DATUM_TYPES(*expectedDescription, datum.descr());
+    if (expectedType) {
+        ARROW_CHECK_DATUM_TYPES(*expectedType, arrow20::TypeHolder(datum.type()));
+    }
+    if (type) {
+        if (const auto* blockType = dynamic_cast<const TBlockType*>(type)) {
+            const bool wantScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
+            MKQL_ENSURE(wantScalar == datum.is_scalar(), "Block shape does not match datum kind");
+        }
     }
     auto status = ValidateDatum(datum, type, validateMode);
-    Y_ABORT_UNLESS(status.ok(), "%s", (TStringBuilder() << "Type: " << datum.descr().ToString() << ". Original error is: " << status.message()).c_str());
+    Y_ABORT_UNLESS(status.ok(), "%s",
+                   (TStringBuilder() << "Type: " << (datum.type() ? datum.type()->ToString() : TString("<null>"))
+                                      << ". Original error is: " << status.message())
+                       .c_str());
 }
 
 } // namespace NKikimr::NMiniKQL

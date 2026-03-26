@@ -358,8 +358,8 @@ public:
         while (auto args = argumentsReader.ReadNext()) {
             try {
                 for (auto& arg : *args) {
-                    if (arg.kind() == arrow20::Datum::ARRAY && arg.descr().type->id() == arrow20::Type::TIMESTAMP) {
-                        auto timestamp_type = std::static_pointer_cast<arrow20::TimestampType>(arg.descr().type);
+                    if (arg.kind() == arrow20::Datum::ARRAY && arg.type()->id() == arrow20::Type::TIMESTAMP) {
+                        auto timestamp_type = std::static_pointer_cast<arrow20::TimestampType>(arg.type());
                         arrow20::TimeUnit::type unit = timestamp_type->unit();
                         if (unit == arrow20::TimeUnit::MICRO) {
                             arrow20::util::get<std::shared_ptr<arrow20::ArrayData>>(arg.value)->type = arrow20::uint64();

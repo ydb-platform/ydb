@@ -81,8 +81,8 @@ TSignedInt SafeSignedNegate(TSignedInt u) {
 struct TArithmeticFunction : cp::ScalarFunction {
     using ScalarFunction::ScalarFunction;
 
-    arrow20::Result<const arrow20::compute::Kernel*> DispatchBest(std::vector<arrow20::ValueDescr>* values) const override {
-        RETURN_NOT_OK(CheckArity(*values));
+    arrow20::Result<const arrow20::compute::Kernel*> DispatchBest(std::vector<arrow20::TypeHolder>* values) const override {
+        RETURN_NOT_OK(CheckArity(values->size()));
 
         using arrow20::compute::detail::DispatchExactImpl;
         if (auto* kernel = DispatchExactImpl(this, *values)) {

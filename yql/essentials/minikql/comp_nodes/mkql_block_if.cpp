@@ -20,7 +20,7 @@ public:
     public:
         TArrowNode(const TBlockIfScalarWrapper* parent)
             : Parent_(parent)
-            , ArgsValuesDescr_(ToValueDescr(parent->ArgsTypes))
+            , ArgsTypeHolders_(ToTypeHolders(parent->ArgsTypes))
             , Kernel_(ConvertToInputTypes(parent->ArgsTypes), ConvertToOutputType(parent->ResultType), [parent](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                 *res = parent->CalculateImpl(MakeDatumProvider(batch.values[0]), MakeDatumProvider(batch.values[1]), MakeDatumProvider(batch.values[2]), *ctx->memory_pool());
                 return arrow20::Status::OK();
@@ -38,8 +38,8 @@ public:
             return Kernel_;
         }
 
-        const std::vector<arrow20::ValueDescr>& GetArgsDesc() const {
-            return ArgsValuesDescr_;
+        const std::vector<arrow20::TypeHolder>& GetArgsDesc() const {
+            return ArgsTypeHolders_;
         }
 
         const IComputationNode* GetArgument(ui32 index) const {
@@ -57,7 +57,7 @@ public:
 
     private:
         const TBlockIfScalarWrapper* Parent_;
-        const std::vector<arrow20::ValueDescr> ArgsValuesDescr_;
+        const std::vector<arrow20::TypeHolder> ArgsTypeHolders_;
         arrow20::compute::ScalarKernel Kernel_;
     };
     friend class TArrowNode;

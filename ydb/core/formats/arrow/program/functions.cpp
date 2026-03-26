@@ -102,7 +102,8 @@ void AddScalarAggKernels(arrow20::compute::KernelInit init,
                          arrow20::compute::ScalarAggregateFunction* func) {
   for (const auto& ty : types) {
     // scalar[InT] -> scalar[OutT]
-    auto sig = arrow20::compute::KernelSignature::Make({arrow20::compute::InputType::Scalar(ty)}, arrow20::ValueDescr::Scalar(out_ty));
+    auto sig = arrow20::compute::KernelSignature::Make({arrow20::compute::InputType(ty)},
+                                                         arrow20::compute::OutputType(out_ty));
     AddAggKernel(std::move(sig), init, func, arrow20::compute::SimdLevel::NONE);
   }
 }

@@ -84,7 +84,7 @@ public:
         TArrowNode(const TScalarApplyWrapper* parent, TComputationContext& originalContext)
             : Parent_(parent)
             , OriginalContext_(originalContext)
-            , ArgsValuesDescr_(ToValueDescr(parent->ArgsTypes_))
+            , ArgsTypeHolders_(ToTypeHolders(parent->ArgsTypes_))
             , Kernel_(ConvertToInputTypes(parent->ArgsTypes_), ConvertToOutputType(parent->ReturnType_), [parent](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                 auto& state = dynamic_cast<TKernelState&>(*ctx->state());
                 auto guard = Guard(state.Alloc);
@@ -114,8 +114,8 @@ public:
             return Kernel_;
         }
 
-        const std::vector<arrow20::ValueDescr>& GetArgsDesc() const {
-            return ArgsValuesDescr_;
+        const std::vector<arrow20::TypeHolder>& GetArgsDesc() const {
+            return ArgsTypeHolders_;
         }
 
         const IComputationNode* GetArgument(ui32 index) const {
@@ -125,7 +125,7 @@ public:
     private:
         const TScalarApplyWrapper* Parent_;
         const TComputationContext& OriginalContext_;
-        const std::vector<arrow20::ValueDescr> ArgsValuesDescr_;
+        const std::vector<arrow20::TypeHolder> ArgsTypeHolders_;
         arrow20::compute::ScalarKernel Kernel_;
     };
     friend class TArrowNode;

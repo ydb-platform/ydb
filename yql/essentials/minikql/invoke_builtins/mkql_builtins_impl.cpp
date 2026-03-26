@@ -14,7 +14,7 @@ std::unique_ptr<arrow20::ResizableBuffer> AllocateResizableBufferAndResize(size_
 } // namespace
 template <typename T>
 arrow20::compute::InputType GetPrimitiveInputArrowType(bool tz) {
-    return arrow20::compute::InputType(AddTzType(tz, GetPrimitiveDataType<T>()), arrow20::ValueDescr::ANY);
+    return arrow20::compute::InputType(AddTzType(tz, GetPrimitiveDataType<T>()));
 }
 
 template <typename T>

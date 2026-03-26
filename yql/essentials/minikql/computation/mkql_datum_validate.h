@@ -6,10 +6,11 @@
 #include <util/generic/fwd.h>
 
 #include <arrow/datum.h>
+#include <arrow/type.h>
 
 namespace NKikimr::NMiniKQL {
 
-void ValidateDatum(arrow20::Datum datum, TMaybe<arrow20::ValueDescr> expectedDescription, const TType* type, NYql::NUdf::EValidateDatumMode validateMode);
+void ValidateDatum(arrow20::Datum datum, TMaybe<arrow20::TypeHolder> expectedType, const TType* type, NYql::NUdf::EValidateDatumMode validateMode);
 
 } // namespace NKikimr::NMiniKQL
 

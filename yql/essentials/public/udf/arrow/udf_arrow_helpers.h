@@ -18,6 +18,7 @@
 #include <arrow/chunked_array.h>
 #include <arrow/compute/kernel.h>
 #include <arrow/compute/exec_internal.h>
+#include <arrow/type.h>
 #include <arrow/util/bitmap_ops.h>
 
 #include <utility>
@@ -108,10 +109,8 @@ public:
             auto type = ARROW_RESULT(arrow20::ImportType(&s));
             ArgArrowTypes_.emplace_back(type);
 
-            auto shape = blockInspector.IsScalar() ? arrow20::ValueDescr::SCALAR : arrow20::ValueDescr::ARRAY;
-
-            inTypes.emplace_back(arrow20::compute::InputType(type, shape));
-            ArgsValuesDescr_.emplace_back(arrow20::ValueDescr(type, shape));
+            inTypes.emplace_back(arrow20::compute::InputType(type));
+            ArgsValuesDescr_.emplace_back(arrow20::TypeHolder(type));
         }
 
         ReturnArrowTypeHandle_ = TypeInfoHelper_->MakeArrowType(outputType);
@@ -119,8 +118,7 @@ public:
 
         ArrowSchema s;
         ReturnArrowTypeHandle_->Export(&s);
-        auto outputShape = onlyScalars ? arrow20::ValueDescr::SCALAR : arrow20::ValueDescr::ARRAY;
-        arrow20::compute::OutputType outType(arrow20::ValueDescr(ARROW_RESULT(arrow20::ImportType(&s)), outputShape));
+        arrow20::compute::OutputType outType(ARROW_RESULT(arrow20::ImportType(&s)));
 
         Kernel_.signature = arrow20::compute::KernelSignature::Make(std::move(inTypes), std::move(outType));
     }
@@ -235,7 +233,7 @@ private:
     IArrowType::TPtr ReturnArrowTypeHandle_;
 
     arrow20::compute::ScalarKernel Kernel_;
-    std::vector<arrow20::ValueDescr> ArgsValuesDescr_;
+    std::vector<arrow20::TypeHolder> ArgsValuesDescr_;
     TVector<const TType*> ArgTypes_;
     const arrow20::Datum NullDatum_;
 };

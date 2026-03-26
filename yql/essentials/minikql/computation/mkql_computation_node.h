@@ -16,6 +16,8 @@
 #include <yql/essentials/public/udf/udf_validate.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
+#include <arrow/type.h>
+
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -303,7 +305,7 @@ public:
 
     virtual TStringBuf GetKernelName() const = 0;
     virtual const arrow20::compute::ScalarKernel& GetArrowKernel() const = 0;
-    virtual const std::vector<arrow20::ValueDescr>& GetArgsDesc() const = 0;
+    virtual const std::vector<arrow20::TypeHolder>& GetArgsDesc() const = 0;
     virtual const IComputationNode* GetArgument(ui32 index) const = 0;
 };
 

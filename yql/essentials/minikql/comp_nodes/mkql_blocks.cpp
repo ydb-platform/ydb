@@ -557,12 +557,12 @@ struct TWideFromBlocksState: public TComputationValue<TWideFromBlocksState> {
     TUnboxedValueVector Values_;
     std::vector<std::unique_ptr<IBlockReader>> Readers_;
     std::vector<std::unique_ptr<IBlockItemConverter>> Converters_;
-    const std::vector<arrow20::ValueDescr> ValuesDescr_;
+    const std::vector<arrow20::TypeHolder> ValuesDescr_;
 
     TWideFromBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types)
         : TComputationValue(memInfo)
         , Values_(types.size() + 1)
-        , ValuesDescr_(ToValueDescr(types))
+        , ValuesDescr_(ToTypeHolders(types))
     {
         Pointer_ = Values_.data();
 
@@ -581,7 +581,7 @@ struct TWideFromBlocksState: public TComputationValue<TWideFromBlocksState> {
     NUdf::TUnboxedValuePod Get(const THolderFactory& holderFactory, size_t idx) const {
         TBlockItem item;
         const auto& datum = TArrowBlock::From(Values_[idx]).GetDatum();
-        ARROW_DEBUG_CHECK_DATUM_TYPES(ValuesDescr_[idx], datum.descr());
+        ARROW_DEBUG_CHECK_DATUM_TYPES(ValuesDescr_[idx], arrow20::TypeHolder(datum.type()));
         if (datum.is_scalar()) {
             item = Readers_[idx]->GetScalarItem(*datum.scalar());
         } else {
@@ -673,7 +673,7 @@ public:
         , BlockLengthIndex_(blockLengthIndex)
         , Readers_(types.size())
         , Converters_(types.size())
-        , ValuesDescr_(ToValueDescr(types))
+        , ValuesDescr_(ToTypeHolders(types))
     {
         const auto& pgBuilder = ctx.Builder->GetPgBuilder();
         for (size_t i = 0; i < types.size(); ++i) {
@@ -699,7 +699,7 @@ public:
             }
 
             const auto& datum = TArrowBlock::From(BlockItems_[i]).GetDatum();
-            ARROW_DEBUG_CHECK_DATUM_TYPES(ValuesDescr_[i], datum.descr());
+            ARROW_DEBUG_CHECK_DATUM_TYPES(ValuesDescr_[i], arrow20::TypeHolder(datum.type()));
 
             TBlockItem item;
             if (datum.is_scalar()) {
@@ -741,7 +741,7 @@ private:
 
     std::vector<std::unique_ptr<IBlockReader>> Readers_;
     std::vector<std::unique_ptr<IBlockItemConverter>> Converters_;
-    const std::vector<arrow20::ValueDescr> ValuesDescr_;
+    const std::vector<arrow20::TypeHolder> ValuesDescr_;
 };
 
 class TListFromBlocksWrapper: public TMutableComputationNode<TListFromBlocksWrapper> {
@@ -885,7 +885,7 @@ public:
         return Kernel_;
     }
 
-    const std::vector<arrow20::ValueDescr>& GetArgsDesc() const {
+    const std::vector<arrow20::TypeHolder>& GetArgsDesc() const {
         return EmptyDesc_;
     }
 
@@ -897,7 +897,7 @@ public:
 private:
     arrow20::compute::ScalarKernel Kernel_;
     const TStringBuf KernelName_;
-    const std::vector<arrow20::ValueDescr> EmptyDesc_;
+    const std::vector<arrow20::TypeHolder> EmptyDesc_;
 };
 
 class TAsScalarWrapper: public TMutableCodegeneratorNode<TAsScalarWrapper> {

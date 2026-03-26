@@ -12,10 +12,14 @@
 
 namespace NKikimr::NMiniKQL {
 
-bool ConvertInputArrowType(TType* blockType, arrow20::ValueDescr& descr) {
+bool ConvertInputArrowType(TType* blockType, arrow20::TypeHolder& out) {
     auto asBlockType = AS_TYPE(TBlockType, blockType);
-    descr.shape = asBlockType->GetShape() == TBlockType::EShape::Scalar ? arrow20::ValueDescr::SCALAR : arrow20::ValueDescr::ARRAY;
-    return ConvertArrowType(asBlockType->GetItemType(), descr.type);
+    std::shared_ptr<arrow20::DataType> dt;
+    if (!ConvertArrowType(asBlockType->GetItemType(), dt)) {
+        return false;
+    }
+    out = arrow20::TypeHolder(std::move(dt));
+    return true;
 }
 
 class TOutputTypeVisitor: public arrow20::TypeVisitor {
@@ -84,21 +88,19 @@ private:
     TType* Type_ = nullptr;
 };
 
-bool ConvertOutputArrowType(const arrow20::compute::OutputType& outType, const std::vector<arrow20::ValueDescr>& values,
-                            bool optional, TType*& outputType, TTypeEnvironment& env) {
-    arrow20::ValueDescr::Shape shape;
-    std::shared_ptr<arrow20::DataType> dataType;
-
+bool ConvertOutputArrowType(const arrow20::compute::OutputType& outType, const std::vector<arrow20::TypeHolder>& values,
+                            TBlockType::EShape outputShape, bool optional, TType*& outputType, TTypeEnvironment& env) {
     auto execContext = arrow20::compute::ExecContext();
     auto kernelContext = arrow20::compute::KernelContext(&execContext);
-    auto descrRes = outType.Resolve(&kernelContext, values);
-    if (!descrRes.ok()) {
+    auto holderRes = outType.Resolve(&kernelContext, values);
+    if (!holderRes.ok()) {
         return false;
     }
 
-    const auto& descr = *descrRes;
-    dataType = descr.type;
-    shape = descr.shape;
+    std::shared_ptr<arrow20::DataType> dataType = holderRes->GetSharedPtr();
+    if (!dataType) {
+        return false;
+    }
 
     TOutputTypeVisitor visitor(env);
     if (!dataType->Accept(&visitor).ok()) {
@@ -110,16 +112,15 @@ bool ConvertOutputArrowType(const arrow20::compute::OutputType& outType, const s
         itemType = TOptionalType::Create(itemType, env);
     }
 
-    switch (shape) {
-        case arrow20::ValueDescr::SCALAR:
+    switch (outputShape) {
+        case TBlockType::EShape::Scalar:
             outputType = TBlockType::Create(itemType, TBlockType::EShape::Scalar, env);
             return true;
-        case arrow20::ValueDescr::ARRAY:
+        case TBlockType::EShape::Many:
             outputType = TBlockType::Create(itemType, TBlockType::EShape::Many, env);
             return true;
-        default:
-            return false;
     }
+    return false;
 }
 
 bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TType* outputType, const IBuiltinFunctionRegistry& registry) {

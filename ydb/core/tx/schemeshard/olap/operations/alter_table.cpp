@@ -67,6 +67,7 @@ void ApplyLocalIndexChanges(
     }
     const auto& targetSchema = tableInfo->AlterData->Description.GetSchema();
     NOlap::CreateLocalIndexSchemeObjects(txId, targetSchema, existingIndexNames, path, context, db);
+    NOlap::UpdateLocalIndexSchemeObjects(targetSchema, existingIndexNames, path.Base(), context, db);
 
     THashSet<TString> targetIndexNames;
     for (const auto& idx : targetSchema.GetIndexes()) {
@@ -447,7 +448,7 @@ public:
             }
 
             ApplyLocalIndexChanges(TTxId(OperationId.GetTxId()), existingIndexNames, path, context, db);
-            NOlap::FinalizeNewLocalIndexPaths(TStepId(0), path.Base(), context, db);
+            NOlap::FinalizeNewLocalIndexPaths(TStepId(1), path.Base(), context, db);
 
             {
                 TUpdateFinishContext fContext(&path, &context, &db, {});

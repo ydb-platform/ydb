@@ -89,6 +89,68 @@ inline void CreateLocalIndexSchemeObjects(
     context.SS->PersistUpdateNextPathId(db);
 }
 
+inline void UpdateLocalIndexSchemeObjects(
+    const NKikimrSchemeOp::TColumnTableSchema& schema,
+    const THashSet<TString>& existingIndexNames,
+    TPathElement::TPtr tablePath,
+    TOperationContext& context,
+    NIceDb::TNiceDb& db)
+{
+    if (!schema.IndexesSize() || existingIndexNames.empty()) {
+        return;
+    }
+
+    auto columnIdToName = BuildColumnIdToNameMap(schema);
+
+    for (const auto& indexProto : schema.GetIndexes()) {
+        const TString& indexName = indexProto.GetName();
+        if (!existingIndexNames.contains(indexName)) {
+            continue;
+        }
+
+        auto childIt = tablePath->GetChildren().find(indexName);
+        if (childIt == tablePath->GetChildren().end()) {
+            continue;
+        }
+        TPathId indexPathId = childIt->second;
+
+        auto indexIt = context.SS->Indexes.find(indexPathId);
+        if (indexIt == context.SS->Indexes.end() || indexIt->second->AlterData) {
+            continue;
+        }
+
+        NKikimrSchemeOp::EIndexType indexType;
+        TVector<TString> keyColumns;
+
+        if (indexProto.HasBloomFilter()) {
+            indexType = NKikimrSchemeOp::EIndexTypeLocalBloomFilter;
+            for (ui32 colId : indexProto.GetBloomFilter().GetColumnIds()) {
+                if (auto it = columnIdToName.find(colId); it != columnIdToName.end()) {
+                    keyColumns.push_back(it->second);
+                }
+            }
+        } else if (indexProto.HasBloomNGrammFilter()) {
+            indexType = NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter;
+            if (auto it = columnIdToName.find(indexProto.GetBloomNGrammFilter().GetColumnId()); it != columnIdToName.end()) {
+                keyColumns.push_back(it->second);
+            }
+        } else {
+            continue;
+        }
+
+        TTableIndexInfo::TPtr alterData = indexIt->second->CreateNextVersion();
+        alterData->IndexKeys = keyColumns;
+        alterData->State = NKikimrSchemeOp::EIndexStateReady;
+        if (indexType == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+            alterData->SpecializedIndexDescription = indexProto.GetBloomFilter();
+        } else {
+            alterData->SpecializedIndexDescription = indexProto.GetBloomNGrammFilter();
+        }
+
+        context.SS->PersistTableIndexAlterData(db, indexPathId);
+    }
+}
+
 inline void FinalizeNewLocalIndexPaths(
     TStepId step,
     TPathElement::TPtr tablePath,
@@ -97,24 +159,26 @@ inline void FinalizeNewLocalIndexPaths(
 {
     for (const auto& [_, childPathId] : tablePath->GetChildren()) {
         auto it = context.SS->PathsById.find(childPathId);
-        if (it == context.SS->PathsById.end()) {
+        if (it == context.SS->PathsById.end() || !it->second->IsTableIndex()) {
             continue;
         }
         auto childEl = it->second;
-        if (!childEl->IsTableIndex() || childEl->PathState != NKikimrSchemeOp::EPathStateCreate) {
+
+        auto indexIt = context.SS->Indexes.find(childPathId);
+        if (indexIt == context.SS->Indexes.end() || !indexIt->second->AlterData) {
             continue;
         }
 
-        childEl->StepCreated = step;
-        context.SS->PersistCreateStep(db, childPathId, step);
+        if (childEl->PathState == NKikimrSchemeOp::EPathStateCreate) {
+            childEl->StepCreated = step;
+            context.SS->PersistCreateStep(db, childPathId, step);
+            childEl->PathState = TPathElement::EPathState::EPathStateNoChanges;
+            context.SS->PersistPath(db, childPathId);
+        }
 
-        Y_ABORT_UNLESS(context.SS->Indexes.contains(childPathId));
-        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(childPathId);
+        TTableIndexInfo::TPtr indexData = indexIt->second;
         context.SS->PersistTableIndex(db, childPathId);
         context.SS->Indexes[childPathId] = indexData->AlterData;
-
-        childEl->PathState = TPathElement::EPathState::EPathStateNoChanges;
-        context.SS->PersistPath(db, childPathId);
     }
 }
 

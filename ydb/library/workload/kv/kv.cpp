@@ -29,6 +29,33 @@ TString MakeRandomStringBytes(size_t len) {
     return s;
 }
 
+// Builds the NYdb::TValue payload for TTableClient::BulkUpsert(tablePath, TValue&& rows):
+// a List of Struct, one struct per row; field names are physical column names ("c0", "c1", ...),
+// types must match the table schema (Uint64 / String / ...).
+NYdb::TValue BuildKvTableBulkUpsertRowsValue(
+    const TVector<TRow>& rows,
+    size_t columnsCnt,
+    size_t intColumnsCnt)
+{
+    NYdb::TValueBuilder valueBuilder;
+    valueBuilder.BeginList();
+    for (const TRow& row : rows) {
+        auto& listItem = valueBuilder.AddListItem();
+        listItem.BeginStruct();
+        for (size_t col = 0; col < columnsCnt; ++col) {
+            const TString name = TStringBuilder() << "c" << col;
+            if (col < intColumnsCnt) {
+                listItem.AddMember(name).Uint64(row.Ints[col]);
+            } else {
+                listItem.AddMember(name).String(row.Strings[col - intColumnsCnt]);
+            }
+        }
+        listItem.EndStruct();
+    }
+    valueBuilder.EndList();
+    return valueBuilder.Build();
+}
+
 } // namespace
 
 // Note: there is no mechanism to update row values for now so all keys should be different
@@ -300,23 +327,8 @@ TQueryInfoList TKvWorkloadGenerator::BulkUpsert(TVector<TRow>&& rows) {
     const size_t columnsCnt = Params.ColumnsCnt;
     const size_t intColumnsCnt = Params.IntColumnsCnt;
     auto bulkUpsertOperation = [tablePath, rows = std::move(rows), columnsCnt, intColumnsCnt](NYdb::NTable::TTableClient& tableClient) {
-        NYdb::TValueBuilder valueBuilder;
-        valueBuilder.BeginList();
-        for (const TRow& row : rows) {
-            auto& listItem = valueBuilder.AddListItem();
-            listItem.BeginStruct();
-            for (size_t col = 0; col < columnsCnt; ++col) {
-                const TString name = TStringBuilder() << "c" << col;
-                if (col < intColumnsCnt) {
-                    listItem.AddMember(name).Uint64(row.Ints[col]);
-                } else {
-                    listItem.AddMember(name).String(row.Strings[col - intColumnsCnt]);
-                }
-            }
-            listItem.EndStruct();
-        }
-        valueBuilder.EndList();
-        return tableClient.BulkUpsert(tablePath, valueBuilder.Build()).GetValueSync();
+        return tableClient.BulkUpsert(tablePath, BuildKvTableBulkUpsertRowsValue(rows, columnsCnt, intColumnsCnt))
+            .GetValueSync();
     };
     TQueryInfo queryInfo;
     queryInfo.TableOperation = std::move(bulkUpsertOperation);
@@ -645,11 +657,6 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
                 .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
             opts.AddLongOption("rows", "Number of rows per bulk request")
                 .DefaultValue((ui64)NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
-            opts.AddLongOption("load-mb-per-sec",
-                "Approximate logical MiB/s for this workload (maps to ydb_cli --rate). "
-                "Mutually exclusive with --rate. Ignored if 0.")
-                .DefaultValue((ui64)0)
-                .StoreResult(&LoadMbPerSec);
             break;
         case TKvWorkloadGenerator::EType::InsertRandom:
             opts.AddLongOption("len", "String len")

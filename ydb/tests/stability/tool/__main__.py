@@ -1322,7 +1322,7 @@ Common usage scenarios:
         "--kv_amp_load_mb_per_sec",
         type=int,
         default=100,
-        help="For start_workload_kv_column_amp: approximate logical MiB/s (default: 100)",
+        help="For start_workload_kv_column_amp: target logical MiB/s, converted to ydb_cli --rate (0 = unlimited)",
         metavar="MB",
     )
     parser.add_argument(
@@ -1650,6 +1650,18 @@ def main():
                 raise SystemExit('start_workload_kv_column_amp: --kv-amp-threads must be >= 1')
             if kv_rows < 1:
                 raise SystemExit('start_workload_kv_column_amp: --kv-amp-rows must be >= 1')
+            # Same row-size model as kv bulk_upsert init: --int-cols 1 --cols 2 (one Uint64 + one String).
+            int_cols = 1
+            str_cols = 2 - int_cols
+            row_bytes = int_cols * 8 + str_cols * value_bytes
+            bytes_per_bulk = row_bytes * kv_rows
+            rate_arg = ''
+            if load_mb > 0:
+                if bytes_per_bulk < 1:
+                    raise SystemExit('start_workload_kv_column_amp: invalid bulk size for rate computation')
+                target_bps = load_mb * 1024 * 1024
+                rate = max(1, (target_bps + bytes_per_bulk - 1) // bytes_per_bulk)
+                rate_arg = f' --rate {rate}'
             first_node = stability_cluster.kikimr_cluster.nodes[1]
             first_node.ssh_command([
                 '/Berkanavt/nemesis/bin/ydb_cli',
@@ -1680,7 +1692,7 @@ def main():
                         f'--max-first-key {max_key} '
                         f'--int-cols 1 --key-cols 1 --cols 2 '
                         f'--rows {kv_rows} --threads {kv_threads} --seconds 86400 '
-                        f'--len {value_bytes} --load-mb-per-sec {load_mb}'
+                        f'--len {value_bytes}{rate_arg}'
                     ),
                 )
             stability_cluster.get_state()

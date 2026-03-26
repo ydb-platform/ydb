@@ -18,7 +18,6 @@
 #include <ydb/library/workload/abstract/workload_factory.h>
 #include <ydb/library/workload/fulltext/fulltext.h>
 #include <ydb/library/workload/vector/vector.h>
-#include <ydb/library/workload/kv/kv.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
@@ -378,23 +377,6 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
-    if (auto* kvParams = dynamic_cast<NYdbWorkload::TKvWorkloadParams*>(&Params)) {
-        if (Type == static_cast<int>(NYdbWorkload::TKvWorkloadGenerator::EType::BulkUpsertRandom) && kvParams->LoadMbPerSec > 0) {
-            if (Rate != 0) {
-                throw TMisuseException() << "Cannot use both --rate and --load-mb-per-sec for kv bulk_upsert";
-            }
-            const ui64 intCols = kvParams->IntColumnsCnt;
-            const ui64 strCols = kvParams->ColumnsCnt > intCols ? kvParams->ColumnsCnt - intCols : 0;
-            const ui64 rowBytes = intCols * 8 + strCols * kvParams->StringLen;
-            if (!rowBytes) {
-                throw TMisuseException() << "kv bulk_upsert: computed row size is zero";
-            }
-            const ui64 rowsPerBulk = Max<ui64>(kvParams->RowsCnt, 1);
-            const ui64 bytesPerBulk = rowBytes * rowsPerBulk;
-            const ui64 targetBytesPerSec = kvParams->LoadMbPerSec * 1024 * 1024;
-            Rate = Max<ui64>(1, (targetBytesPerSec + bytesPerBulk - 1) / bytesPerBulk);
-        }
-    }
     Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
     Params.DbPath = config.Database;
     Params.Verbose = config.IsVerbose();

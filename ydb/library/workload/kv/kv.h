@@ -57,9 +57,6 @@ public:
     std::string TableName = "kv_test";
 
     bool StaleRO = KvWorkloadConstants::STALE_RO;
-    /// For `bulk_upsert` run: target logical MiB/s (approximate). ydb_cli maps this to `--rate`.
-    /// Mutually exclusive with explicitly passing `--rate` on the CLI.
-    ui64 LoadMbPerSec = 0;
 
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
 

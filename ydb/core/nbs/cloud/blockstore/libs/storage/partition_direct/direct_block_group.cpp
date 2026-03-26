@@ -361,7 +361,7 @@ TDirectBlockGroup::WriteBlocksToPBuffers(
 
     auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
     auto result = promise.GetFuture();
-    // TODO а не надо ли тут идти в TWritePersistentBuffersRequestActor (в TDDiskActor)?
+
     auto future = StorageTransport->WriteToPBuffers(
         PBufferConnections[hostIndexes[0]].HostConnection,
         NKikimr::NDDisk::TBlockSelector(

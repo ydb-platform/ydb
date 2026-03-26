@@ -186,7 +186,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffersResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received TEvWritePersistentBufferResult with requestId# %lu",
+        "Received TEvWritePersistentBuffersResult with requestId# %lu",
         requestId);
 
     if (auto* r = WriteToPBuffersRequests.FindPtr(requestId)) {
@@ -195,8 +195,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffersResult(
         WriteToPBuffersRequests.erase(requestId);
     } else {
         // That means that request is already completed
-        // TODO надо ли обрабатывать такой ответ?
-        // он может прийти повторно, например, после таймаута на 1 PB
+        // TODO handle this case in writeRequests through weak_ptr with erase
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,

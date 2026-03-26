@@ -43,9 +43,11 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
 
 void TWriteRequestExecutor::Run()
 {
-    // SendWriteRequest(ELocation::PBuffer0);
-    // SendWriteRequest(ELocation::PBuffer1);
-    // SendWriteRequest(ELocation::PBuffer2);
+    /*
+    SendWriteRequest(ELocation::PBuffer0);
+    SendWriteRequest(ELocation::PBuffer1);
+    SendWriteRequest(ELocation::PBuffer2);
+    */
     SendWriteRequestToManyPBuffers();
 }
 

@@ -330,7 +330,7 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     info->SetExpectedSlotCount(slotCount);
     info->SetNumActiveSlots(pDiskInfo->NumActiveSlots + pDiskInfo->StaticSlotUsage);
     info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
-    info->SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus_E_Name(pDiskInfo->MaintenanceStatus));
+    info->SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::E_Name(pDiskInfo->MaintenanceStatus));
     info->SetSlotSizeInUnits(slotSizeInUnits);
 }
 
@@ -552,7 +552,7 @@ void TBlobStorageController::UpdateSystemViews() {
                 }
                 pb->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(NKikimrBlobStorage::EDriveStatus::ACTIVE));
                 pb->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE));
-                pb->SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus_E_Name(
+                pb->SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::E_Name(
                         NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST));
 
                 ui32 slotCount = 0;

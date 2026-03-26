@@ -62,11 +62,9 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
 void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     AFL_VERIFY(!!ScriptCursor)("source_idx", GetSourceIdx());
 
-    // In streaming mode with early pages, each page requires a fresh fetch+assemble
-    // cycle.  Advance the page index, reset stage data and StageResult (so the next
-    // fetch starts clean), and restart from the beginning of the original fetch script.
-    // TDecideStreamingModeStep is a no-op on re-entry (HasEarlyPages() guard), so
-    // restarting from step 0 is safe and cheap.
+    // In streaming mode, each page runs a fresh fetch+assemble cycle.
+    // Advance the page, reset stage state, and restart the original fetch script.
+    // Re-entering TDecideStreamingModeStep is safe because HasEarlyPages() guards it.
     if (IsStreamingMode() && HasMorePages() && StreamingFetchScript) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
             "event", "ContinueCursor_AdvanceEarlyPage")(
@@ -83,16 +81,9 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
             "total_pages", GetEarlyPages().size())(
             "reverse", GetContext()->GetReadMetadata()->IsDescSorted());
 
-        // Reset stage data and StageResult so the next fetch+assemble+finalize
-        // cycle starts with a clean slate.  EarlyPages and StreamingMode are
-        // preserved — they are needed by NeedFetchColumns, DoAssembleColumns,
-        // and Finalize for the next page.
-        //
-        // IMPORTANT: Reset the execution context so TProgramStep creates a fresh
-        // iterator for the next page.  Without this, HasProgramIterator() returns
-        // true (old exhausted iterator from the first page), DoExecuteInplace skips
-        // Start() and calls iterator->Next() on the exhausted iterator → crash at
-        // graph_execute.cpp:389.
+        // Reset stage state for the next page, but keep EarlyPages and StreamingMode.
+        // Also reset the execution context so TProgramStep creates a fresh iterator;
+        // otherwise it may reuse an exhausted one and crash.
         MutableExecutionContext().Stop();
         ScriptCursor.reset();
         ClearStageData();
@@ -102,13 +93,12 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
                 GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(),
             GetRecordsCountOptional()));
 
-        // Reset prefetch tracking flag since we're starting a new fetch cycle
+        // New fetch cycle: reset the prefetch flag.
         SetPrefetchTriggered(false);
-        // Reset the assembled-data-is-page-relative flag for the new fetch cycle.
-        // DoAssembleColumns (old path) will set it back to true if it runs.
+        // Reset the page-relative assembly flag for the new fetch cycle.
         SetAssembledDataPageRelative(false);
 
-        // Restart from the beginning of the original fetch script.
+        // Restart from the original fetch script.
         TFetchingScriptCursor cursor(StreamingFetchScript, 0);
         const auto& commonContext = *GetContext()->GetCommonContext();
         auto sourceCopy = sourcePtr;
@@ -134,9 +124,7 @@ void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::
     auto* plainReader = static_cast<TPlainReadData*>(&owner);
     auto sourceSimple = std::static_pointer_cast<IDataSource>(sourcePtr);
 
-    // In streaming mode, log progress for debugging
-    // Note: Partial result emission happens automatically in TSyncPointResult::OnSourceReady()
-    // which processes pages one by one via TPrepareResultStep -> TBuildResultStep
+    // In streaming mode, log page progress for debugging.
     if (sourceSimple->IsStreamingMode() && sourceSimple->HasMorePages()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_page_fetched")(
             "source_idx", sourceSimple->GetSourceIdx())(
@@ -177,25 +165,19 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
 
     if (HasEarlyPages() && StreamingMode) {
-        // TDecideStreamingModeStep already computed the full page list and set
-        // StreamingMode before any fetching happened.  For per-page fetch we create
-        // a single-page StageResult covering only the current page.  ContinueCursor
-        // will reset StageResult and restart the pipeline for the next page.
-        //
-        // We keep the absolute IndexStart so that CheckSourceIntervalUsage can
-        // correctly determine whether this interval has already been delivered on
-        // a resumed scan.  TBuildResultStep is responsible for using StartIndex=0
-        // when the source is in streaming mode (since the assembled batch starts
-        // at row 0, not at the absolute IndexStart).
+        // Streaming pages were computed earlier. Build StageResult for the current
+        // page only; ContinueCursor() will reset it for the next page.
+        // Keep the absolute IndexStart for resumed-scan checks; TBuildResultStep
+        // uses StartIndex=0 for the emitted batch.
         const auto& page = EarlyPages[CurrentEarlyPageIndex];
         StageResult->SetPages({ page });
-        // StreamingMode was already set by SetEarlyPages(); nothing to do.
+        // StreamingMode was already set by SetEarlyPages().
     } else if (memoryLimit && !IsSourceInMemory()) {
         const auto accessor = ExtractPortionAccessor();
         StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
         StreamingMode = TStreamingConfigHelper::ShouldUseStreamingMode();
     } else {
-        // No memory limit or source already in memory: single page covering the whole portion
+        // No memory limit or in-memory source: one page for the whole portion.
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
     }
 

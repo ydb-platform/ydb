@@ -260,14 +260,10 @@ public:
     }
 };
 
-// Runs immediately after TDetectInMemFlag. When a memory limit applies and the
-// source is NOT already in memory, this step calls BuildReadPages() to compute
-// the page list and stores it on the source together with the StreamingMode flag.
-// This makes the page boundaries available to NeedFetchColumns() and
-// DoAssembleColumns() so they can limit work to the current page, which is the
-// whole point of streaming mode.  Without this step those methods always see
-// StreamingMode==false / StageResult==nullptr and fall back to fetching the
-// entire portion at once.
+// Runs after TDetectInMemFlag. If a memory limit applies and the source is not
+// already in memory, compute read pages and store them with StreamingMode.
+// This lets NeedFetchColumns() and DoAssembleColumns() work on the current page
+// instead of the whole portion.
 class TDecideStreamingModeStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

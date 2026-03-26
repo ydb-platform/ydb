@@ -41,19 +41,14 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
         auto resultChunk = source->MutableStageResult().ExtractResultChunk();
         const bool isFinished = source->GetStageResult().IsFinished();
         if (resultChunk && resultChunk->HasData()) {
-            // In streaming mode every page (including the last one) is tracked for
-            // backpressure.  We always set partialSourceAddress so that
-            // OnSentDataFromInterval is called for every page, which in turn calls
-            // OnPageSent() to keep PagesInFlightCount balanced.
-            // For the last page Continue() will be a no-op because the source has
-            // already been popped from SourcesSequentially by the time the ack arrives.
+            // In streaming mode every page is tracked for backpressure.
+            // Always set partialSourceAddress so OnSentDataFromInterval can call
+            // OnPageSent(). For the last page Continue() becomes a no-op.
             const bool isStreamingMode = source->GetAs<IDataSource>()->IsStreamingMode();
             std::optional<TPartialSourceAddress> partialSourceAddress;
             if (isStreamingMode) {
-                // Always set address in streaming mode so OnSentDataFromInterval fires
-                // for every page (needed to keep PagesInFlightCount balanced).
-                // IsStreamingPage=true tells OnSentDataFromInterval to call OnPageSent(),
-                // which must be paired with this OnPageCreated() call.
+                // Always set the address in streaming mode so every page is paired
+                // with OnPageCreated()/OnPageSent().
                 partialSourceAddress = TPartialSourceAddress(source->GetSourceIdx(), GetPointIndex(), /*streamingPage=*/true);
                 Collection->OnPageCreated();
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_created")
@@ -72,21 +67,12 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                 Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
             reader.OnIntervalResult(
                 std::make_unique<TPartialReadResult>(source->GetResourceGuards(), source->MutableAs<IDataSource>()->GetGroupGuard(),
-                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress, source->GetDeprecatedPortionId()));
+                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress));
+            // In streaming mode, prefetch the next page while sending the current one,
+            // up to MaxPagesInFlight. If the limit is reached, Continue() will resume
+            // fetching after OnPageSent(). Use HasMorePages(), not !isFinished: per-page
+            // fetch makes isFinished true after each built page.
 
-            // In streaming mode, pre-fetch the next page immediately (while the current
-            // page is being sent to the client) if we are still below the limit.
-            // This allows up to MaxPagesInFlight pages to be in-flight simultaneously.
-            // When the limit is reached we skip the pre-fetch here; ISyncPoint::Continue
-            // (triggered by OnSentDataFromInterval after the client acknowledges the page)
-            // will call ContinueCursor once a slot is freed by OnPageSent.
-            // NOTE: both OnSourceReady and Continue run in the actor thread, so there
-            // is no race condition between the pre-fetch and the Continue call.
-            //
-            // Use HasMorePages() rather than !isFinished: with per-page fetch each
-            // Finalize() creates a single-page StageResult, so isFinished is always
-            // true after TBuildResultStep pops the page.  HasMorePages() correctly
-            // checks whether there are more pages in EarlyPages to fetch.
             const bool hasMorePages = source->GetAs<IDataSource>()->HasMorePages();
             if (isStreamingMode && hasMorePages) {
                 if (Collection->GetPagesInFlightCount() < Collection->GetMaxPagesInFlight()) {
@@ -112,16 +98,14 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                     source->MutableAs<IDataSource>()->SetPrefetchTriggered(false);
                 }
             } else if (!isFinished) {
-                // Non-streaming multi-page result (old path): continue within the
-                // existing StageResult pages.
+                // Non-streaming multi-page result: continue within StageResult.
                 source->MutableAs<IDataSource>()->ContinueCursor(source);
                 source->MutableAs<IDataSource>()->SetPrefetchTriggered(false);
             } else {
-                // No more pages or finished - reset prefetch flag
+                // No more work: reset the prefetch flag.
                 source->MutableAs<IDataSource>()->SetPrefetchTriggered(false);
             }
-            // In streaming mode with more pages, keep the source in the queue (Wait).
-            // In streaming mode with no more pages, or non-streaming finished, fall through.
+            // Wait while streaming has more pages, or while non-streaming is unfinished.
             if (!isFinished || (isStreamingMode && hasMorePages)) {
                 return ESourceAction::Wait;
             }

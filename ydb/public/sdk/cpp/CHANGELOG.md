@@ -2,7 +2,7 @@
 
 ## v3.16.0
 
-* Added support for the new inverted index type: JSON, intended to speed-up queries on Json or JsonDocument columns.
+* Added support for the new inverted index type: JSON, intended to speed up queries on Json or JsonDocument columns.
 
 * Fixed partition session id conflict
 

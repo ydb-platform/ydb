@@ -405,6 +405,7 @@ public:
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "TSnapshotsExchangerActor [Node " << SelfId().NodeId() << "] ";
         TXLOG_DEBUG("Creating TSnapshotsExchangerActor with board path: " << BoardPath);
+        UpdateBoardRetrySettings();
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
         TBase::Become(&TThis::StatePrepare);
     }
@@ -464,6 +465,30 @@ private:
         CreateSubscriber();
 
         TBase::Become(&TThis::StateWork);
+    }
+
+    void UpdateBoardRetrySettings() {
+        const auto& longTxConfig = AppData()->LongTxServiceConfig;
+
+        if (longTxConfig.HasPublisherSettings()) {
+            const auto& publisherSettings = longTxConfig.GetPublisherSettings();
+            if (publisherSettings.HasStartDelayMs()) {
+                PublisherSettings.StartDelayMs = TDuration::MilliSeconds(publisherSettings.GetStartDelayMs());
+            }
+            if (publisherSettings.HasMaxDelayMs()) {
+                PublisherSettings.MaxDelayMs = TDuration::MilliSeconds(publisherSettings.GetMaxDelayMs());
+            }
+        }
+
+        if (longTxConfig.HasSubscriberSettings()) {
+            const auto& subscriberSettings = longTxConfig.GetSubscriberSettings();
+            if (subscriberSettings.HasStartDelayMs()) {
+                SubscriberSettings.StartDelayMs = TDuration::MilliSeconds(subscriberSettings.GetStartDelayMs());
+            }
+            if (subscriberSettings.HasMaxDelayMs()) {
+                SubscriberSettings.MaxDelayMs = TDuration::MilliSeconds(subscriberSettings.GetMaxDelayMs());
+            }
+        }
     }
 
     void CreatePublisher() {

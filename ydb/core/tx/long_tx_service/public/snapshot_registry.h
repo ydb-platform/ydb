@@ -21,8 +21,6 @@ public:
     virtual bool HasSnapshot(ui64 tableId, const TRowVersion& version) const = 0;
 };
 
-//using IImmutableSnapshotRegistryPtr = std::shared_ptr<IImmutableSnapshotRegistry>;
-
 class IImmutableSnapshotRegistryHolder : public TThrRefBase {
 public:
    virtual ~IImmutableSnapshotRegistryHolder() = default;

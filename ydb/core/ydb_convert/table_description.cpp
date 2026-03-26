@@ -1719,7 +1719,33 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             );
             break;
         case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+            if (tableIndex.HasBloomFilterDescription()) {
+                const auto& desc = tableIndex.GetBloomFilterDescription();
+                if (desc.HasFalsePositiveProbability()) {
+                    index->mutable_local_bloom_filter_index()->set_false_positive_probability(desc.GetFalsePositiveProbability());
+                }
+            }
+            break;
         case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+            if (tableIndex.HasBloomNGrammFilterDescription()) {
+                const auto& desc = tableIndex.GetBloomNGrammFilterDescription();
+                auto* ngramIndex = index->mutable_local_bloom_ngram_filter_index();
+                if (desc.HasNGrammSize()) {
+                    ngramIndex->set_ngram_size(desc.GetNGrammSize());
+                }
+                if (desc.HasHashesCount()) {
+                    ngramIndex->set_hashes_count(desc.GetHashesCount());
+                }
+                if (desc.HasFilterSizeBytes()) {
+                    ngramIndex->set_filter_size_bytes(desc.GetFilterSizeBytes());
+                }
+                if (desc.HasRecordsCount()) {
+                    ngramIndex->set_records_count(desc.GetRecordsCount());
+                }
+                if (desc.HasCaseSensitive()) {
+                    ngramIndex->set_case_sensitive(desc.GetCaseSensitive());
+                }
+            }
             break;
         default:
             Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(tableIndex.GetType()));

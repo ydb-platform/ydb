@@ -5,6 +5,8 @@
 #pragma once
 #include "arrow_clickhouse_types.h"
 
+#include <string_view>
+
 #include <Common/SipHash.h>
 #include <Common/Arena.h>
 
@@ -118,17 +120,23 @@ inline bool insertDuration(MutableColumn & column, Int64 value)
 
 inline bool insertString(MutableColumn & column, const StringRef & value)
 {
-    return assert_cast<MutableColumnBinary &>(column).Append(arrow20::util::string_view{value.data, value.size}).ok();
+    return assert_cast<MutableColumnBinary &>(column)
+        .Append(std::string_view{value.data, value.size})
+        .ok();
 }
 
 inline bool insertFixedString(MutableColumn & column, const StringRef & value)
 {
-    return assert_cast<MutableColumnFixedString &>(column).Append(arrow20::util::string_view{value.data, value.size}).ok();
+    return assert_cast<MutableColumnFixedString &>(column)
+        .Append(std::string_view{value.data, value.size})
+        .ok();
 }
 
 inline bool insertDecimal(MutableColumn & column, const StringRef & value)
 {
-    return assert_cast<MutableColumnDecimal &>(column).Append(arrow20::util::string_view{value.data, value.size}).ok();
+    return assert_cast<MutableColumnDecimal &>(column)
+        .Append(std::string_view{value.data, value.size})
+        .ok();
 }
 
 template <typename DataType>

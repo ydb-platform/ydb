@@ -5,6 +5,8 @@
 #pragma once
 #include "arrow_clickhouse_types.h"
 
+#include <string_view>
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Common/BitHelpers.h>
 #include <AggregateFunctions/IAggregateFunction.h>
 #include <AggregateFunctions/AggregateFunctionWrapper.h>
@@ -189,11 +191,11 @@ public:
         return size <= MAX_SMALL_STRING_SIZE ? small_data : large_data;
     }
 
-    arrow20::util::string_view getStringView() const
+    std::string_view getStringView() const
     {
         if (!has())
             return {};
-        return arrow20::util::string_view(getData(), size);
+        return std::string_view(getData(), static_cast<size_t>(size));
     }
 
     void insertResultInto(MutableColumn & to) const
@@ -205,7 +207,7 @@ public:
     }
 
     /// Assuming to.has()
-    void changeImpl(arrow20::util::string_view value, Arena * arena)
+    void changeImpl(std::string_view value, Arena * arena)
     {
         Int32 value_size = value.size();
 

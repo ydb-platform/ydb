@@ -14,7 +14,10 @@ class ArrowAggregateFunctionWrapper : public arrow20::compute::ScalarAggregateFu
 {
 public:
     ArrowAggregateFunctionWrapper(std::string name)
-        : arrow20::compute::ScalarAggregateFunction(std::move(name), arrow20::compute::Arity::Unary(), nullptr)
+        : arrow20::compute::ScalarAggregateFunction(
+              std::move(name),
+              arrow20::compute::Arity::Unary(),
+              arrow20::compute::FunctionDoc::Empty())
     {}
 
     virtual AggregateFunctionPtr getHouseFunction(const DataTypes & argument_types) const = 0;
@@ -102,7 +105,10 @@ class ArrowGroupBy : public arrow20::compute::ScalarAggregateFunction
 {
 public:
     ArrowGroupBy(std::string name)
-        : arrow20::compute::ScalarAggregateFunction(std::move(name), arrow20::compute::Arity::VarArgs(1), nullptr)
+        : arrow20::compute::ScalarAggregateFunction(
+              std::move(name),
+              arrow20::compute::Arity::VarArgs(1),
+              arrow20::compute::FunctionDoc::Empty())
     {}
 
     arrow20::Result<arrow20::Datum> Execute(

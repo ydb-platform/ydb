@@ -5,6 +5,8 @@
 #pragma once
 #include "arrow_clickhouse_types.h"
 
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h>
+
 #include <cstring>
 #include <type_traits>
 
@@ -194,7 +196,7 @@ struct AggregateFunctionSumData
 
         while (ptr < end_ptr)
         {
-            if (arrow20::BitUtil::GetBit(condition_map, start))
+            if (arrow20::bit_util::GetBit(condition_map, start))
                 Impl::add(sum, *ptr);
             ++ptr;
             ++start;

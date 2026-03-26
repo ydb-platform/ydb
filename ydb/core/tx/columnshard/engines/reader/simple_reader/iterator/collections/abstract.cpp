@@ -15,8 +15,10 @@ ISourcesCollection::ISourcesCollection(
     if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
         MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
     }
-    // Initialize MaxPagesInFlight from streaming config in AppData
-    MaxPagesInFlight = TStreamingConfigHelper::GetMaxPagesInFlight();
+    UsePagesInFlightLimit = TStreamingConfigHelper::ShouldUseStreamingMode();
+    if (UsePagesInFlightLimit) {
+        MaxPagesInFlight = TStreamingConfigHelper::GetMaxPagesInFlight();
+    }
 }
 
 TString ISourcesCollection::DebugString() const {

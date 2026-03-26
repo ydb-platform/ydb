@@ -472,17 +472,17 @@ void TestStreamingEnabled() {
     UNIT_ASSERT_GT(iterationsCount, 1u);
 }
 
-void TestStreamingDisabled() {
+void TestStreamingDisabledImpl(const ui32 maxPagesInFlight) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
     // Enable SimpleReader
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
 
-    // Explicitly disable streaming.
+    // Explicitly disable streaming. MaxPagesInFlight must be ignored in this mode.
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
     streamingConfig->SetEnabled(false);
-    streamingConfig->SetMaxPagesInFlight(8);
+    streamingConfig->SetMaxPagesInFlight(maxPagesInFlight);
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -523,13 +523,21 @@ void TestStreamingDisabled() {
     const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();
     const ui32 iterationsCount = reader.GetIterationsCount();
 
-    Cerr << "StreamingDisabled: total pages created=" << totalCreated
+    Cerr << "StreamingDisabled(maxPagesInFlight=" << maxPagesInFlight << "): total pages created=" << totalCreated
          << ", iterations=" << iterationsCount << Endl;
 
     // With explicit disable the streaming path must never fire, so the
     // OnPageCreated hook (which is only called in streaming mode) must
     // report zero pages created.
     UNIT_ASSERT_VALUES_EQUAL(totalCreated, 0u);
+}
+
+void TestStreamingDisabled() {
+    TestStreamingDisabledImpl(8);
+}
+
+void TestStreamingDisabledZeroMaxPagesInFlight() {
+    TestStreamingDisabledImpl(0);
 }
 
 // Test for reverse scan with streaming enabled
@@ -1157,6 +1165,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(StreamingDisabled) {
         TestStreamingDisabled();
+    }
+
+    Y_UNIT_TEST(StreamingDisabledZeroMaxPagesInFlight) {
+        TestStreamingDisabledZeroMaxPagesInFlight();
     }
 
     Y_UNIT_TEST(MemoryLimitSingleRecordPages) {

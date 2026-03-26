@@ -16,7 +16,7 @@ bool TNotSortedCollection::DoCheckInFlightLimits() const {
     if (GetSourcesInFlightCount() >= InFlightLimit) {
         return false;
     }
-    if (GetPagesInFlightCount() >= GetMaxPagesInFlight()) {
+    if (GetUsePagesInFlightLimit() && GetPagesInFlightCount() >= GetMaxPagesInFlight()) {
         return false;
     }
     return true;

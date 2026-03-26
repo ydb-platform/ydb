@@ -84,16 +84,7 @@ private:
         return !NextSource && SourcesConstructor->IsFinished() && FetchingInFlightSources.empty();
     }
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override;
-    virtual bool DoCheckInFlightLimits() const override {
-        // Check both sources and pages limits
-        if (GetSourcesInFlightCount() >= InFlightLimit) {
-            return false;
-        }
-        if (GetPagesInFlightCount() >= GetMaxPagesInFlight()) {
-            return false;
-        }
-        return true;
-    }
+    virtual bool DoCheckInFlightLimits() const override;
 
     virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) override;
     ui32 GetInFlightIntervalsCount(const TCompareKeyForScanSequence& from, const TCompareKeyForScanSequence& to) const;

@@ -172,8 +172,11 @@ public:
         context.DbChanges.PersistAlterSecret(secretPath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        Y_ENSURE(!alterSecretProto.HasValueParamName(),
-            "ValueParamName must be resolved by scheme executer before reaching schemeshard");
+        if (alterSecretProto.HasValueParamName()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "Secret value must be set via Value, however ValueParamName was passed");
+            return result;
+        }
 
         auto alterData = secretInfo->CreateNextVersion();
         alterData->Description.SetValue(alterSecretProto.GetValue());

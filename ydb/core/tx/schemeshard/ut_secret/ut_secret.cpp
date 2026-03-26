@@ -771,6 +771,50 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsDirectory});
     }
 
+    Y_UNIT_TEST(RejectValueParamName) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "dir");
+        env.TestWaitNotification(runtime, txId);
+
+        // Create with ValueParamName should be rejected
+        TestCreateSecret(runtime, ++txId, "/MyRoot/dir",
+            R"(
+                Name: "test-secret"
+                ValueParamName: "$val"
+            )",
+            {{EStatus::StatusInvalidParameter, "ValueParamName was passed"}}
+        );
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/dir/test-secret", false, NLs::PathNotExist);
+
+        // Create normally so we can test alter
+        TestCreateSecret(runtime, ++txId, "/MyRoot/dir",
+            R"(
+                Name: "test-secret"
+                Value: "original"
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Alter with ValueParamName should be rejected
+        TestAlterSecret(runtime, ++txId, "/MyRoot/dir",
+            R"(
+                Name: "test-secret"
+                ValueParamName: "$val"
+            )",
+            {{EStatus::StatusInvalidParameter, "ValueParamName was passed"}}
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Value should remain unchanged
+        const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
+        TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
+        ExpectEqualSecretDescription(describeResult, "test-secret", "original", 0);
+    }
+
     Y_UNIT_TEST(AsyncAlterSameSecret) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

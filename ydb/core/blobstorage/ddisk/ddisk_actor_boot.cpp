@@ -117,7 +117,7 @@ namespace NKikimr::NDDisk {
         config.UseSQPoll = Config.UseSQPoll;
         config.UseIOPoll = Config.UseIOPoll;
         if (!UringRouter) {
-            if (DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
+            if (!Config.ForcePDiskFallback && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
                 UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
                 if (const auto result = UringRouter->RegisterFile(); !result) {
                     STLOG(PRI_WARN, BS_DDISK, BSDD18,

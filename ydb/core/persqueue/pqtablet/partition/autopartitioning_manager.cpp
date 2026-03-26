@@ -129,9 +129,13 @@ public:
     }
 
     void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override  {
-        TString decodedSourceId;
+        TString decodedSourceId = "";
         if (sourceId.size() > 0) {
-            decodedSourceId = NPQ::NSourceIdEncoding::Decode(sourceId);
+            if (NPQ::NSourceIdEncoding::IsValidEncoded(sourceId)) {
+                decodedSourceId = NPQ::NSourceIdEncoding::Decode(sourceId);
+            } else {
+                decodedSourceId = sourceId;
+            }
         }
 
         auto key128 = NKikimr::NPQ::AsInt<TUint128>(key);
@@ -139,7 +143,7 @@ public:
 
         SumWrittenBytes->Update(size, now);
 
-        auto sourceIdHash = Hash(decodedSourceId);
+        auto sourceIdHash = decodedSourceId.size() > 0 ? Hash(decodedSourceId) : 0;
         TString sourceIdHashStr = decodedSourceId.size() > 0 // Kinesis protocol use empty sourceId
             ? AsKeyBound(sourceIdHash)
             : "";
@@ -155,8 +159,7 @@ public:
 
         SourceIdCounter.Use(sourceIdHashStr, now);
 
-        auto* partition = GetPartition();
-        const auto& keyRange = partition->GetKeyRange();
+        const auto& keyRange = GetKeyRange();
 
         if (key && IsInKeyRange(key, keyRange)) {
             KeysManager.Add(key128, size);
@@ -306,22 +309,28 @@ private:
     }
 
     const NKikimrPQ::TPQTabletConfig_TPartition* GetPartition() {
-        if (Partition) {
-            return Partition;
-        }
-
-        Partition = FindIfPtr(Config.GetPartitions(), [&](const auto& v) {
+        auto partition = FindIfPtr(Config.GetPartitions(), [&](const auto& v) {
             return v.GetPartitionId() == PartitionId;
         });
-        AFL_ENSURE(Partition)("p", PartitionId);
-        return Partition;
+        AFL_ENSURE(partition)("p", PartitionId);
+        return partition;
+    }
+
+    const NKikimrPQ::TPartitionKeyRange& GetKeyRange() {
+        if (KeyRange) {
+            return *KeyRange;
+        }
+
+        auto partition = GetPartition();
+        KeyRange = partition->GetKeyRange();
+        return *KeyRange;
     }
 
     static constexpr auto DEFAULT_NUM_SKETCHES = 100;
 
     const NKikimrPQ::TPQTabletConfig& Config;
     const ui32 PartitionId;
-    const NKikimrPQ::TPQTabletConfig_TPartition* Partition = nullptr;
+    std::optional<NKikimrPQ::TPartitionKeyRange> KeyRange;
 
     TMaybe<TSlidingWindow> SumWrittenBytes;
     // SourceIdHash -> SlidingWindow

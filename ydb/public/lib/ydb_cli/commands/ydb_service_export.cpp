@@ -427,9 +427,8 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     // YDB supported recursive directories handling along with --destination-prefix option.
     // So if we use it, then we can suppose that YDB already supports expanding of items.
     const bool expandItems = (!CommonDestinationPrefix || !ExclusionPatterns.empty());
-    constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
     if (expandItems && settings.Item_.empty()) {
-        settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption || isFs ? CommonDestinationPrefix : TString{}});
+        settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption ? CommonDestinationPrefix : TString{}});
     }
 
     const TDriver driver = CreateDriver(config);

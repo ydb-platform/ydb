@@ -26,9 +26,6 @@ public:
     virtual void Parse(TConfig& config) override;
     virtual void ExtractParams(TConfig& config) override;
 
-    template <typename TSettings, typename TResponse>
-    int Run(TConfig& config, TSettings& settings);
-
     template <typename TSettings>
     void FillItems(TSettings& settings) const;
     template <typename TSettings>

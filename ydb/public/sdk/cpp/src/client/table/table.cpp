@@ -200,14 +200,6 @@ TCompact::TCompact()
     : TCompact(false, 1)
 {}
 
-bool TCompact::GetCascade() const {
-    return Cascade_;
-}
-
-uint32_t TCompact::GetMaxShardsInFlight() const {
-    return MaxShardsInFlight_;
-}
-
 void TCompact::SerializeTo(Ydb::Table::CompactItem& proto) const {
     proto.set_cascade(Cascade_);
     proto.set_max_shards_in_flight(MaxShardsInFlight_);

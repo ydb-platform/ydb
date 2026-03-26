@@ -554,9 +554,6 @@ public:
     TCompact(bool cascade, uint32_t maxShardsInFlight);
     TCompact();
 
-    bool GetCascade() const;
-    uint32_t GetMaxShardsInFlight() const;
-
     void SerializeTo(Ydb::Table::CompactItem& proto) const;
 private:
     bool Cascade_;

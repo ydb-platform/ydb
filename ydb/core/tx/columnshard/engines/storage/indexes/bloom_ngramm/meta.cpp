@@ -238,46 +238,35 @@ public:
 
 namespace {
 
-template <ui64 Size>
+constexpr ui64 DetectorMaxSize = 1 << 25;
+constexpr ui64 DetectorMinSize = 1 << 10;
+
+// For powers of 2 in [DetectorMinSize, DetectorMaxSize] detect TVectorInserterPower2
+// Otherwise fall back to TVectorInserter
+template<ui64 DetectorSize, class TFiller>
 class TBitmapDetector {
-private:
-    const TSkipBitmapIndex* Meta;
-    const ui32 ExtSize;
-    static constexpr ui64 NextSize = Size >> 1;
-
 public:
-    TBitmapDetector(const TSkipBitmapIndex* meta, const ui32 size)
-        : Meta(meta)
-        , ExtSize(size)
-    {
-        AFL_VERIFY(ExtSize <= Size);
-    }
-
-    template <class TFiller>
-    TString Detector(const TFiller& filler) const {
-        if (ExtSize == Size) {
-            TVectorInserterPower2<Size> inserter;
+    TString Detect(const TSkipBitmapIndex* meta, const ui32 size, const TFiller& filler) {
+        if (size == DetectorSize) {
+            TVectorInserterPower2<DetectorSize> inserter;
             filler(inserter);
-            return Meta->GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
+            return meta->GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
         } else {
-            return TBitmapDetector<NextSize>(Meta, ExtSize).Detector(filler);
+            return TBitmapDetector<DetectorSize / 2, TFiller>().Detect(meta, size, filler);
         }
     }
 };
 
-template <>
-class TBitmapDetector<0> {
+template<class TFiller>
+class TBitmapDetector<DetectorMinSize / 2, TFiller> {
 public:
-    TBitmapDetector(const TSkipBitmapIndex* /*meta*/, const ui32 /*size*/) {
-        AFL_VERIFY(false);
-    }
-
-    template <class TFiller>
-    static TString Detector(const TFiller& /*filler*/) {
-        AFL_VERIFY(false);
-        return "";
+    TString Detect(const TSkipBitmapIndex* meta, const ui32 size, const TFiller& filler) {
+        TVectorInserter inserter(size);
+        filler(inserter);
+        return meta->GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
     }
 };
+
 }   // namespace
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
@@ -317,28 +306,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         }
     };
     TString indexData;
-    if ((size & (size - 1)) == 0) {
-        if (size == 1024) {
-            indexData = TBitmapDetector<1024>(this, 1024).Detector(doFillFilter);
-        } else if (size == 2048) {
-            indexData = TBitmapDetector<2048>(this, 2048).Detector(doFillFilter);
-        } else if (size == 4096) {
-            indexData = TBitmapDetector<4096>(this, 4096).Detector(doFillFilter);
-        } else if (size == 4096 * 2) {
-            indexData = TBitmapDetector<4096 * 2>(this, 4096 * 2).Detector(doFillFilter);
-        } else if (size == 4096 * 4) {
-            indexData = TBitmapDetector<4096 * 4>(this, 4096 * 4).Detector(doFillFilter);
-        } else if (size == 4096 * 8) {
-            indexData = TBitmapDetector<4096 * 8>(this, 4096 * 8).Detector(doFillFilter);
-        } else if (size == 4096 * 16) {
-            indexData = TBitmapDetector<4096 * 16>(this, 4096 * 16).Detector(doFillFilter);
-        }
-    }
-    if (!indexData) {
-        TVectorInserter inserter(size);
-        doFillFilter(inserter);
-        indexData = GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
-    }
+    indexData = TBitmapDetector<DetectorMaxSize, decltype(doFillFilter)>().Detect(this, size, doFillFilter);
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 

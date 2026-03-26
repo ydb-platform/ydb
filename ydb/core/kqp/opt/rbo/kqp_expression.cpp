@@ -1,5 +1,5 @@
 #include "kqp_expression.h"
-#include <yql/essentials/core/yql_expr_optimize.h> 
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 using namespace NYql::NNodes;
 

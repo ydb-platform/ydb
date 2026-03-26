@@ -41,7 +41,7 @@ class TPartitionActor
     };
 
 private:
-    TExecutorPool ExecutorPool{4};
+    TExecutorPool ExecutorPool{32};
     NYdb::NBS::NProto::TStorageServiceConfig StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
 

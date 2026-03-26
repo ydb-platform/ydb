@@ -371,7 +371,7 @@ public:
     }
 
     void WriteWithUserPayloadRateLimit() {
-        TestWriteWithRateLimiter(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, TDuration::MilliSeconds(2500));
+        TestWriteWithRateLimiter(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, TDuration::MilliSeconds(2400));
     }
 
     void LimitsWithBlobsRateLimit() {

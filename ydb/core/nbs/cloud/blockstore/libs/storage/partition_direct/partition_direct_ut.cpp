@@ -466,6 +466,73 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 expectedData);
         }
     }
+
+    Y_UNIT_TEST(ShouldWriteAndReadMultipleBlocks)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        SetupStorage(env);
+
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        TString expectedData = NUnitTest::RandomString(
+            DefaultBlockSize * 128,
+            RandomNumber<ui32>());
+
+        {
+            auto request =
+                std::make_unique<TEvService::TEvWriteBlocksRequest>();
+            request->Record.SetStartIndex(100);
+            request->Record.MutableBlocks()->AddBuffers(expectedData);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+        }
+
+        env.Sim(TDuration::Seconds(10));
+
+        {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(100);
+            request->Record.SetBlocksCount(128);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+            UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.MutableBlocks()->GetBuffers(0),
+                expectedData);
+        }
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

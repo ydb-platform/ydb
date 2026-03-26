@@ -242,7 +242,7 @@ def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
     headers = {}
     if token is not None:
         headers['Authorization'] = token
-    response = requests.get(endpoint_url, headers=headers, verify=False, allow_redirects=False)
+    response = requests.get(endpoint_url, headers=headers, verify=False)
     token_desc = token if token is not None else "null"
     assert (
         response.status_code == expected_status

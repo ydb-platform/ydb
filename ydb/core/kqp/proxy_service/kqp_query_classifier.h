@@ -54,28 +54,25 @@ private:
 };
 
 ///
-/// Per-query classifier object. Created in the proxy,
-/// passed to the session actor with the query request.
+/// Manages per-query workload manager policies
 ///
 struct IWmQueryClassifier {
-    /// Assignment to a specific resource pool
+    static inline const NResourcePool::TPoolSettings EMPTY_POOL{};
+
     struct TResolvedPoolId {
         TString PoolId;
-        const NResourcePool::TPoolSettings* Config = nullptr;
     };
 
-    /// Execution without workload management (bypass)
-    struct TBypass {};
+    struct TBypass {
+        const NResourcePool::TPoolSettings* Config = &EMPTY_POOL;
+    };
 
-    /// Request rejected due to policy or access violation
     struct TReject {
         Ydb::StatusIds::StatusCode Code;
         TString Message;
     };
 
-    ///
-    /// Wait for query compilation to evaluate plan-based rules
-    ///
+    // Need query plan (e.g. FullScan check) to finish classification
     struct TPendingCompilation {};
 
     using TPreClassifyResult = std::variant<TBypass, TResolvedPoolId, TReject, TPendingCompilation>;
@@ -83,14 +80,9 @@ struct IWmQueryClassifier {
 
     virtual ~IWmQueryClassifier() = default;
 
-    ///
-    /// Returns the current classification state
-    ///
     virtual TPreClassifyResult GetPreClassifyResult() const = 0;
 
-    ///
-    /// Resume classification using the compiled query plan (e.g., FullScan check)
-    ///
+    /// Refines classification once the query plan is available
     [[nodiscard]] virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const = 0;
 };
 
@@ -108,15 +100,18 @@ public:
     ~TWmQueryClassifier() = default;
 
 public:
+    // Manual classification overrides
     void Reject(const Ydb::StatusIds::StatusCode code, const TString& message);
     void ResolveToDefault();
     void Resolve(const TString& poolId);
     void Bypass();
 
+    /// Returns IDs of pools that couldn't be found during classification
     const std::unordered_set<TString>& GetMissedPoolIds() const {
         return MissedPoolIds;
     }
 
+    /// Runs classification before the query is compiled
     TPreClassifyResult GetPreClassifyResult() const override;
 
     void PreCompileClassify();
@@ -147,7 +142,7 @@ private:
         if (!NWorkload::IsWorkloadServiceRequired(poolInfo->Config)) {
             store = TBypass{};
         } else {
-            store = TResolvedPoolId{.PoolId = poolId, .Config = &poolInfo->Config};
+            store = TResolvedPoolId{.PoolId = poolId};
         }
 
         return true;

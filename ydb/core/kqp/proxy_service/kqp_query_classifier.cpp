@@ -167,7 +167,7 @@ void TWmQueryClassifier::ResolveToDefault() {
 }
 
 void TWmQueryClassifier::Bypass() {
-    PreClassifyResult = TBypass();
+    PreClassifyResult = TBypass{};
 }
 
 void TWmQueryClassifier::PendingCompile(i64 rank) {

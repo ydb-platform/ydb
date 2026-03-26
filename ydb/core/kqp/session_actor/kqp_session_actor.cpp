@@ -337,13 +337,8 @@ public:
 
     template<typename T>
     void PassRequestToResourcePool(T stateFnc) {
-        if (!QueryState->HasPreparedQuery() && QueryState->UserRequestContext->PoolConfig) {
-            STLOG_D("Request placed into pool from cache",
-                (pool_id, QueryState->UserRequestContext->PoolId),
-                (trace_id, TraceId()));
-            CompileQuery();
-            return;
-        }
+        // If PoolConfig is filled WM is not required
+        Y_ENSURE(!QueryState->UserRequestContext->PoolConfig);
 
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
             QueryState->UserRequestContext->DatabaseId,
@@ -583,15 +578,15 @@ public:
 
         std::visit(TOverloaded {
             [this](const IWmQueryClassifier::TResolvedPoolId& s) {
-                STLOG_D("Classifier resolved pool, admission before compilation", (pool_id, s.PoolId), (trace_id, TraceId()));
+                STLOG_D("PreCompile Classify was resolved", (pool_id, s.PoolId), (trace_id, TraceId()));
                 PassRequestToResourcePool(&TThis::PreCompileState);
             },
             [this](const IWmQueryClassifier::TReject&) {
-                STLOG_N("Query rejected by classifier", (trace_id, TraceId()));
+                STLOG_N("PreCompile Classify was rejected", (trace_id, TraceId()));
                 ythrow TRequestFail(Ydb::StatusIds::PRECONDITION_FAILED) << "Query rejected by resource pool classifier";
             },
             [this](const auto&) {
-                STLOG_D("Classifier bypass or pending compilation, compiling", (trace_id, TraceId()));
+                STLOG_D("PreCompile Classify was bypass or pending compilation, compiling", (trace_id, TraceId()));
                 CompileQuery();
             },
         }, status);
@@ -1034,17 +1029,18 @@ public:
 
                 std::visit(TOverloaded {
                     [this](const IWmQueryClassifier::TResolvedPoolId& r) {
-                        STLOG_D("PostCompileClassify resolved pool", (pool_id, r.PoolId), (trace_id, TraceId()));
+                        STLOG_D("PostCompile Classify resolved", (pool_id, r.PoolId), (trace_id, TraceId()));
                         QueryState->UserRequestContext->PoolId = r.PoolId;
                         PassRequestToResourcePool(&TThis::PostCompileState);
                     },
-                    [this](const IWmQueryClassifier::TBypass&) {
-                        STLOG_D("PostCompileClassify bypass", (trace_id, TraceId()));
+                    [this](const IWmQueryClassifier::TBypass& b) {
+                        STLOG_D("PostCompile Classify bypass", (trace_id, TraceId()));
+                        QueryState->UserRequestContext->PoolId = "";
+                        QueryState->UserRequestContext->PoolConfig = *b.Config;
                     },
-                    [this](const IWmQueryClassifier::TReject&) {
-                        STLOG_N("Query rejected by classifier after compilation", (trace_id, TraceId()));
-                        ythrow TRequestFail(Ydb::StatusIds::PRECONDITION_FAILED)
-                            << "Query rejected by resource pool classifier after compilation";
+                    [this](const IWmQueryClassifier::TReject& r) {
+                        STLOG_N("PostCompile Classify rejected", (trace_id, TraceId()));
+                        ythrow TRequestFail(r.Code) << r.Message;
                     }
                 }, result);
 

@@ -1617,19 +1617,31 @@ private:
         Classify(ev, *classifier);
         const auto status = classifier->GetPreClassifyResult();
 
-        if (const auto* reject = std::get_if<IWmQueryClassifier::TReject>(&status)) {
-            ReplyProcessError(reject->Code, reject->Message, requestId);
-            return false;
-        }
-
-        if (const auto* resolved = std::get_if<IWmQueryClassifier::TResolvedPoolId>(&status)) {
-            ev->Get()->SetPoolId(resolved->PoolId);
-            // It is safe as pool info leaves in a classifier
-            if (resolved->Config) {
-                ev->Get()->SetPoolConfig(*resolved->Config);
+        bool isSuccess = std::visit(TOverloaded {
+            [this, &requestId](const IWmQueryClassifier::TReject& reject) {
+                ReplyProcessError(reject.Code, reject.Message, requestId);
+                return false;
+            },
+            [&ev](const IWmQueryClassifier::TResolvedPoolId& resolved) {
+                KQP_PROXY_LOG_D("Proxy Classify returns: resolved: " << resolved.PoolId);
+                ev->Get()->SetPoolId(resolved.PoolId);
+                return true;
+            },
+            [&ev](const IWmQueryClassifier::TBypass& bypass) {
+                KQP_PROXY_LOG_D("Proxy Classify returns: bypass");
+                ev->Get()->SetPoolId("");
+                ev->Get()->SetPoolConfig(*bypass.Config);
+                return true;
+            },
+            [&ev](const IWmQueryClassifier::TPendingCompilation&) {
+                KQP_PROXY_LOG_D("Proxy Classify returns: need compilation");
+                ev->Get()->SetPoolId("");
+                return true;
             }
-        } else {
-            ev->Get()->SetPoolId("");
+        }, status);
+
+        if (!isSuccess) {
+            return false;
         }
 
         ev->Get()->SetWmQueryClassifier(classifier);

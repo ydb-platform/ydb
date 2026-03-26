@@ -17,7 +17,7 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
         auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : Portions) {
             auto kindString = ::ToString(i->GetProduced());
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(kindString.data(), kindString.size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(kindString.data(), kindString.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
@@ -77,7 +77,7 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
         auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : Portions) {
             const auto tierName = i->GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(tierName.data(), tierName.size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(tierName.data(), tierName.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
@@ -115,7 +115,7 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
                 details.InsertValue("appeared", compactedPortion.GetAppeared().SerializeToJson());
             }
             const auto detailsInfo = details.GetStringRobust();
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(detailsInfo.data(), detailsInfo.size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(detailsInfo.data(), detailsInfo.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

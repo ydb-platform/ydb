@@ -46,11 +46,11 @@ struct TDecimalBlockExec {
         Y_UNUSED(valid2);
         Y_UNUSED(offset2);
         for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++resPtr) {
-            if (!valid1 || arrow20::BitUtil::GetBit(valid1, i + offset1)) {
+            if (!valid1 || arrow20::bit_util::GetBit(valid1, i + offset1)) {
                 *resPtr = Apply(*val1Ptr, *val2Ptr);
-                arrow20::BitUtil::SetBit(resValid, i);
+                arrow20::bit_util::SetBit(resValid, i);
             } else {
-                arrow20::BitUtil::ClearBit(resValid, i);
+                arrow20::bit_util::ClearBit(resValid, i);
             }
         }
     }
@@ -69,11 +69,11 @@ struct TDecimalBlockExec {
         Y_UNUSED(valid1);
         Y_UNUSED(offset1);
         for (int64_t i = 0; i < length; ++i, ++val2Ptr, ++resPtr) {
-            if (!valid2 || arrow20::BitUtil::GetBit(valid2, i + offset2)) {
+            if (!valid2 || arrow20::bit_util::GetBit(valid2, i + offset2)) {
                 *resPtr = Apply(*val1Ptr, *val2Ptr);
-                arrow20::BitUtil::SetBit(resValid, i);
+                arrow20::bit_util::SetBit(resValid, i);
             } else {
-                arrow20::BitUtil::ClearBit(resValid, i);
+                arrow20::bit_util::ClearBit(resValid, i);
             }
         }
     }
@@ -91,12 +91,12 @@ struct TDecimalBlockExec {
         val1Ptr += offset1;
         val2Ptr += offset2;
         for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++val2Ptr, ++resPtr) {
-            if ((!valid1 || arrow20::BitUtil::GetBit(valid1, i + offset1)) &&
-                (!valid2 || arrow20::BitUtil::GetBit(valid2, i + offset2))) {
+            if ((!valid1 || arrow20::bit_util::GetBit(valid1, i + offset1)) &&
+                (!valid2 || arrow20::bit_util::GetBit(valid2, i + offset2))) {
                 *resPtr = Apply(*val1Ptr, *val2Ptr);
-                arrow20::BitUtil::SetBit(resValid, i);
+                arrow20::bit_util::SetBit(resValid, i);
             } else {
-                arrow20::BitUtil::ClearBit(resValid, i);
+                arrow20::bit_util::ClearBit(resValid, i);
             }
         }
     }

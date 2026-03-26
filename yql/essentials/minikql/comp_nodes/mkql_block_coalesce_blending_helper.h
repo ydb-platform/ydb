@@ -21,7 +21,7 @@ Y_FORCE_INLINE bool GetBit(const ui8* bitMask, size_t offset) {
     if constexpr (isScalar || !isOptional) {
         return true;
     } else {
-        return arrow20::BitUtil::GetBit(bitMask, offset);
+        return arrow20::bit_util::GetBit(bitMask, offset);
     }
 }
 
@@ -30,7 +30,7 @@ Y_FORCE_INLINE void SetBitTo(ui8* bitMask, size_t offset, bool bit_value) {
     if constexpr (!isOptional) {
         return;
     } else {
-        arrow20::BitUtil::SetBitTo(bitMask, offset, bit_value);
+        arrow20::bit_util::SetBitTo(bitMask, offset, bit_value);
     }
 }
 
@@ -97,7 +97,7 @@ void CoalesceByOneElement(size_t elements,
                           size_t outOffset,
                           ui8* outBitMask) {
     for (size_t i = 0; i < elements; i++) {
-        if (arrow20::BitUtil::GetBit(leftBitMask, i + leftOffset)) {
+        if (arrow20::bit_util::GetBit(leftBitMask, i + leftOffset)) {
             out[i + outOffset] = left[i + leftOffset];
             SetBitTo<rightHasBitmask>(outBitMask, i + outOffset, true);
         } else {

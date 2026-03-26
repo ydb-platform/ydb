@@ -35,7 +35,7 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::Start::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : OptimizerTasks) {
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(i.GetStart().data(), i.GetStart().size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(i.GetStart().data(), i.GetStart().size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
@@ -43,7 +43,7 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::Finish::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : OptimizerTasks) {
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(i.GetFinish().data(), i.GetFinish().size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(i.GetFinish().data(), i.GetFinish().size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
@@ -51,7 +51,7 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::Details::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : OptimizerTasks) {
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(i.GetDetails().data(), i.GetDetails().size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(i.GetDetails().data(), i.GetDetails().size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

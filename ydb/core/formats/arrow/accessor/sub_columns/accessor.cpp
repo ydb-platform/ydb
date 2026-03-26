@@ -150,7 +150,7 @@ std::shared_ptr<arrow20::Array> TSubColumnsArray::BuildBJsonArray(const TColumnC
                 TStatusValidator::Validate(builder->AppendNull());
             } else {
                 const TConclusion<NBinaryJson::TBinaryJson> bJson = ToBinaryJson(value);
-                NArrow::Append<arrow20::BinaryType>(*builder, arrow20::util::string_view(bJson->data(), bJson->size()));
+                NArrow::Append<arrow20::BinaryType>(*builder, std::string_view(bJson->data(), bJson->size()));
             }
         };
 

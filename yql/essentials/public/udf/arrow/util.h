@@ -46,7 +46,7 @@ void ForEachArrayData(const arrow20::Datum& datum, const std::function<void(cons
 arrow20::Datum MakeArray(const TVector<std::shared_ptr<arrow20::ArrayData>>& chunks);
 
 inline bool IsNull(const arrow20::ArrayData& data, size_t index) {
-    return data.GetNullCount() > 0 && !arrow20::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset);
+    return data.GetNullCount() > 0 && !arrow20::bit_util::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset);
 }
 
 ui64 GetSizeOfArrayDataInBytes(const arrow20::ArrayData& data);
@@ -73,7 +73,7 @@ public:
         }
         uint8_t* ptr = mutable_data();
         if (!ptr || capacity > capacity_) {
-            int64_t newCapacity = arrow20::BitUtil::RoundUpToMultipleOf64(capacity);
+            int64_t newCapacity = arrow20::bit_util::RoundUpToMultipleOf64(capacity);
             if (ptr) {
                 ARROW_RETURN_NOT_OK(Pool_->Reallocate(capacity_, newCapacity, &ptr));
             } else {
@@ -91,7 +91,7 @@ public:
         }
         uint8_t* ptr = mutable_data();
         if (ptr && shrink_to_fit) {
-            int64_t newCapacity = arrow20::BitUtil::RoundUpToMultipleOf64(newSize);
+            int64_t newCapacity = arrow20::bit_util::RoundUpToMultipleOf64(newSize);
             if (capacity_ != newCapacity) {
                 ARROW_RETURN_NOT_OK(Pool_->Reallocate(capacity_, newCapacity, &ptr));
                 data_ = ptr;

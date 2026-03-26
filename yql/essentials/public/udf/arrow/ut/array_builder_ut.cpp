@@ -352,13 +352,13 @@ Y_UNIT_TEST(TestBuilderAllocatedSize) {
     const TBlockItem hugeItem = sItem2.MakeOptional();
 
     const size_t stringAllocStep =
-        arrow20::BitUtil::RoundUpToMultipleOf64(blockLen + 1) +       // String NullMask
-        arrow20::BitUtil::RoundUpToMultipleOf64((blockLen + 1) * 4) + // String Offsets
+        arrow20::bit_util::RoundUpToMultipleOf64(blockLen + 1) +       // String NullMask
+        arrow20::bit_util::RoundUpToMultipleOf64((blockLen + 1) * 4) + // String Offsets
         NMiniKQL::MaxBlockSizeInBytes;                              // String Data
     const size_t initialAllocated =
         stringAllocStep +
-        arrow20::BitUtil::RoundUpToMultipleOf64((blockLen + 1) * 8) + // Int64 Data
-        2 * arrow20::BitUtil::RoundUpToMultipleOf64(blockLen + 1);    // Double Optional
+        arrow20::bit_util::RoundUpToMultipleOf64((blockLen + 1) * 8) + // Int64 Data
+        2 * arrow20::bit_util::RoundUpToMultipleOf64(blockLen + 1);    // Double Optional
 
     size_t totalAllocated = 0;
     auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), doubleOptStructType, *data.ArrowPool, blockLen, nullptr, &totalAllocated);

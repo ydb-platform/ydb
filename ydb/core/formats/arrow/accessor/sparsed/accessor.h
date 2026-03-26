@@ -278,7 +278,7 @@ public:
             }
             LastRecordIndex = recordIndex;
             AFL_VERIFY(NArrow::Append<arrow20::UInt32Type>(*IndexBuilder, recordIndex));
-            AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow20::util::string_view(value.data(), value.size())));
+            AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, std::string_view(value.data(), value.size())));
             ++RecordsCount;
         }
 

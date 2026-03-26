@@ -1,6 +1,7 @@
 #include "dq_arrow_helpers.h"
 
 #include <memory>
+#include <string_view>
 
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_binary.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_nested.h>
@@ -969,7 +970,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
                 auto valueInner = value.GetVariantItem().Get<float>();
                 UNIT_ASSERT(valueArrow == valueInner);
             } else {
-                arrow20::util::string_view viewArrow;
+                std::string_view viewArrow;
                 if (value.GetVariantIndex() == 0) {
                     viewArrow = ysonArray->GetView(fieldIndex);
                 } else if (value.GetVariantIndex() == 1) {
@@ -1032,7 +1033,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
                 auto valueInner = value.GetVariantItem().Get<float>();
                 UNIT_ASSERT(valueArrow == valueInner);
             } else {
-                arrow20::util::string_view viewArrow;
+                std::string_view viewArrow;
                 if (value.GetVariantIndex() == 0) {
                     viewArrow = ysonArray->GetView(fieldIndex);
                 } else if (value.GetVariantIndex() == 1) {
@@ -1104,7 +1105,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
                 auto valueInner = value.GetVariantItem().Get<float>();
                 UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
             } else {
-                arrow20::util::string_view viewArrow;
+                std::string_view viewArrow;
                 if (value.GetVariantIndex() == 0) {
                     viewArrow = ysonArray->GetView(fieldIndex);
                 } else if (value.GetVariantIndex() == 1) {

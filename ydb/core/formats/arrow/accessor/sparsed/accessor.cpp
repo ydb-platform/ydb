@@ -33,7 +33,7 @@ std::shared_ptr<TSparsedArray> TSparsedArray::Make(const IChunkedArray& defaultA
                 std::optional<bool> isDefault;
                 if (scalar) {
                     if constexpr (arrow20::has_string_view<typename TWrap::T>()) {
-                        isDefault = arrow20::util::string_view((char*)scalar->value->data(), scalar->value->size()) == typedArray->GetView(i);
+                        isDefault = std::string_view((char*)scalar->value->data(), scalar->value->size()) == typedArray->GetView(i);
                     } else if constexpr (arrow20::has_c_type<typename TWrap::T>()) {
                         isDefault = scalar->value == typedArray->Value(i);
                     } else {

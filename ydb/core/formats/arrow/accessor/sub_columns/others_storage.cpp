@@ -160,7 +160,7 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
                     AFL_VERIFY(filteredRecordIndex < resultRecordsCount)("new_record_index", filteredRecordIndex)("count", resultRecordsCount)(
                         "shift", shiftSkippedCount)("record_index", itOthersData.GetRecordIndex());
                     NArrow::Append<arrow20::UInt32Type>(*recordIndexBuilder, filteredRecordIndex);
-                    NArrow::Append<arrow20::BinaryType>(*valuesBuilder, arrow20::util::string_view(itOthersData.GetRawValue().data(), itOthersData.GetRawValue().size()));
+                    NArrow::Append<arrow20::BinaryType>(*valuesBuilder, std::string_view(itOthersData.GetRawValue().data(), itOthersData.GetRawValue().size()));
                     originalKeys.emplace_back(itOthersData.GetKeyIndex());
                     usedKeys.AddKeyInfo(itOthersData.GetKeyIndex(), itOthersData.GetRawValue());
                 }

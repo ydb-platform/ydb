@@ -88,7 +88,7 @@ std::shared_ptr<arrow20::Array> PgConvertBool(const std::shared_ptr<arrow20::Arr
     auto output = builder.MutableData();
     for (size_t i = 0; i < length; ++i) {
         auto fullIndex = i + data->offset;
-        output[i] = BoolGetDatum(arrow20::BitUtil::GetBit(input, fullIndex));
+        output[i] = BoolGetDatum(arrow20::bit_util::GetBit(input, fullIndex));
     }
 
     auto dataBuffer = builder.Build(true).array()->buffers[1];

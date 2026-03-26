@@ -1,5 +1,7 @@
 #include "vector_data_generator.h"
 
+#include <string_view>
+
 #include <ydb/library/formats/arrow/csv/converter/csv_arrow.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
@@ -42,10 +44,10 @@ private:
     static std::pair<std::shared_ptr<arrow20::Schema>, std::shared_ptr<arrow20::RecordBatch>> DeserializeArrow(TDataPortion::TArrow* data) {
         arrow20::ipc::DictionaryMemo dictionary;
 
-        arrow20::io::BufferReader schemaBuffer(arrow20::util::string_view(data->Schema.data(), data->Schema.size()));
+        arrow20::io::BufferReader schemaBuffer(std::string_view(data->Schema.data(), data->Schema.size()));
         const std::shared_ptr<arrow20::Schema> schema = arrow20::ipc::ReadSchema(&schemaBuffer, &dictionary).ValueOrDie();
 
-        arrow20::io::BufferReader recordBatchBuffer(arrow20::util::string_view(data->Data.data(), data->Data.size()));
+        arrow20::io::BufferReader recordBatchBuffer(std::string_view(data->Data.data(), data->Data.size()));
         const std::shared_ptr<arrow20::RecordBatch> recordBatch = arrow20::ipc::ReadRecordBatch(schema, &dictionary, {}, &recordBatchBuffer).ValueOrDie();
 
         return std::make_pair(schema, recordBatch);
@@ -88,7 +90,7 @@ private:
             convertOptions.quoted_strings_can_be_null = false;
         }
 
-        auto bufferReader = std::make_shared<arrow20::io::BufferReader>(arrow20::util::string_view(data->Data.data(), data->Data.size()));
+        auto bufferReader = std::make_shared<arrow20::io::BufferReader>(std::string_view(data->Data.data(), data->Data.size()));
         auto csvReader = arrow20::csv::TableReader::Make(
             arrow20::io::default_io_context(),
             bufferReader,

@@ -8,6 +8,7 @@
 #include <util/string/builder.h>
 
 #include <arrow/array/validate.h>
+#include <arrow/util/bit_util.h>
 #include <arrow/util/config.h>
 
 namespace NKikimr::NMiniKQL {
@@ -60,7 +61,7 @@ std::shared_ptr<arrow20::ArrayData> ConvertYqlOffsetsToArrowStandard(
         result->type->id() == arrow20::Type::DENSE_UNION ||
         result->type->id() == arrow20::Type::SPARSE_UNION) {
         if (result->buffers[0]) {
-            auto actualSize = arrow20::BitUtil::BytesForBits(result->length + result->offset);
+            auto actualSize = arrow20::bit_util::BytesForBits(result->length + result->offset);
             MKQL_ENSURE(result->buffers[0]->size() >= actualSize, "Bitmask is invalid.");
         }
         result->offset = 0;

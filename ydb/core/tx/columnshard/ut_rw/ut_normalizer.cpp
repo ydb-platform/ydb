@@ -11,6 +11,8 @@
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/library/testlib/helpers.h>
 
+#include <string_view>
+
 namespace NKikimr {
 
 using namespace NColumnShard;
@@ -554,8 +556,8 @@ Y_UNIT_TEST_SUITE(Normalizers) {
             TString Data = HexDecode("01030000410000001C00000020000000040500000406000002000000C0040000000500006100620000000000000010400000000000001440");
         public:
             using TValue = arrow20::BinaryType;
-            arrow20::util::string_view GetValue(const ui32) const {
-                return arrow20::util::string_view(Data.data(), Data.size());
+            std::string_view GetValue(const ui32) const {
+                return std::string_view(Data.data(), Data.size());
             };
         };
 

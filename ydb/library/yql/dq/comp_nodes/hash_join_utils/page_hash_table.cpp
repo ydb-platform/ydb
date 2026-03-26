@@ -26,7 +26,7 @@ THolder<TPageHashTable> TPageHashTable::Create(const TTupleLayout* layout, ui32)
 template <typename TTraits, bool Prefetch>
 void TPageHashTableImpl<TTraits, Prefetch>::Build(const ui8* data, const ui8 *const overflow, ui32 nItems) {
     TotalPages_ = (nItems * SlotSize_ * 3 / 2 + PageSize_ - 1) / PageSize_;
-    const ui32 logTotalPages = arrow20::BitUtil::NumRequiredBits(TotalPages_ - 1);
+    const ui32 logTotalPages = arrow20::bit_util::NumRequiredBits(TotalPages_ - 1);
     TotalPages_ = 1ul << logTotalPages;    
     ProbeByteIndex_ = std::min<ui32>(32 - 8, logTotalPages);
 

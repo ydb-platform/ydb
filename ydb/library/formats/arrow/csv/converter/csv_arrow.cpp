@@ -1,5 +1,7 @@
 #include "csv_arrow.h"
 
+#include <string_view>
+
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/array.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h>
@@ -203,7 +205,7 @@ std::shared_ptr<arrow20::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TS
             return {};
         }
 
-        auto buffer = std::make_shared<arrow20::Buffer>(arrow20::util::string_view(csv.c_str(), csv.length()));
+        auto buffer = std::make_shared<arrow20::Buffer>(std::string_view(csv.c_str(), csv.length()));
         auto input = std::make_shared<arrow20::io::BufferReader>(buffer);
         auto res = arrow20::csv::StreamingReader::Make(arrow20::io::default_io_context(), input,
                                                      ReadOptions, ParseOptions, ConvertOptions);

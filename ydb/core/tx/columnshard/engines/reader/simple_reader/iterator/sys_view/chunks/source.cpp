@@ -70,11 +70,11 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
         auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
             const auto colName = Schema->GetIndexInfo().GetColumnFieldVerified(i.GetEntityId())->name();
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(colName.data(), colName.size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(colName.data(), colName.size()));
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
             const auto idxName = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId())->GetIndexName();
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(idxName.data(), idxName.size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(idxName.data(), idxName.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
@@ -92,15 +92,15 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
         auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
             const TString blobIdStr = GetPortionAccessor().GetBlobId(i.BlobRange.GetBlobIdxVerified()).ToStringNew();
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(blobIdStr.data(), blobIdStr.size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(blobIdStr.data(), blobIdStr.size()));
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
             if (auto range = i.GetBlobRangeOptional()) {
                 const TString blobIdStr = GetPortionAccessor().GetBlobId(range->GetBlobIdxVerified()).ToStringNew();
-                NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(blobIdStr.data(), blobIdStr.size()));
+                NArrow::Append<arrow20::StringType>(*builder, std::string_view(blobIdStr.data(), blobIdStr.size()));
             } else {
                 const TString blobIdStr = "__INPLACE";
-                NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(blobIdStr.data(), blobIdStr.size()));
+                NArrow::Append<arrow20::StringType>(*builder, std::string_view(blobIdStr.data(), blobIdStr.size()));
             }
         }
         return NArrow::FinishBuilder(std::move(builder));
@@ -140,11 +140,11 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
         auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
             const TString tierName = Portion->GetEntityStorageId(i.GetEntityId(), Schema->GetIndexInfo());
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(tierName.data(), tierName.size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(tierName.data(), tierName.size()));
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
             const TString tierName = Portion->GetEntityStorageId(i.GetEntityId(), Schema->GetIndexInfo());
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(tierName.data(), tierName.size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(tierName.data(), tierName.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
@@ -153,12 +153,12 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
         for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
             Y_UNUSED(i);
             const TString type = "COL";
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(type.data(), type.size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(type.data(), type.size()));
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
             Y_UNUSED(i);
             const TString type = "IDX";
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(type.data(), type.size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(type.data(), type.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
@@ -174,7 +174,7 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
                     if (it->GetMeta().HasAdditionalAccessorData()) {
                         data = it->GetMeta().GetAdditionalAccessorData()->DebugJson().GetStringRobust();
                     }
-                    NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(data.data(), data.size()));
+                    NArrow::Append<arrow20::StringType>(*builder, std::string_view(data.data(), data.size()));
                     ++it;
                 }
             } else {
@@ -183,7 +183,7 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
                     const NArrow::NAccessor::TSubColumnsPartialArray* arr =
                         static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk.get());
                     const TString data = arr->GetHeader().DebugJson().GetStringRobust();
-                    NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(data.data(), data.size()));
+                    NArrow::Append<arrow20::StringType>(*builder, std::string_view(data.data(), data.size()));
                 };
 
                 AFL_VERIFY(it->GetChunkIdx() == 0);
@@ -208,7 +208,7 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
             Y_UNUSED(i);
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view());
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

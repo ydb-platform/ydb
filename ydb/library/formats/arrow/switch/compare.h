@@ -1,4 +1,6 @@
 #pragma once
+#include <string_view>
+
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h>
 #include <util/system/yassert.h>
 #include <ydb/library/actors/core/log.h>
@@ -112,7 +114,7 @@ public:
 
     template <typename T>
     static std::partial_ordering CompareValueNotNull(const T& x, const T& y) {
-        if constexpr (std::is_same_v<T, arrow20::util::string_view>) {
+        if constexpr (std::is_same_v<T, std::string_view>) {
             size_t minSize = (x.size() < y.size()) ? x.size() : y.size();
             int cmp = memcmp(x.data(), y.data(), minSize);
             if (cmp < 0) {

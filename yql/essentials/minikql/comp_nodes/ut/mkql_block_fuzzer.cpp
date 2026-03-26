@@ -32,7 +32,7 @@ std::shared_ptr<arrow20::Buffer> CreateShiftedBitmask(arrow20::MemoryPool& pool,
     }
     auto resultBitmap = MakeDenseFalseBitmap(length + extraShift, &pool);
     for (size_t i = 0; i < length; i++) {
-        arrow20::BitUtil::SetBitTo(resultBitmap->mutable_data(), i + extraShift, arrow20::BitUtil::GetBit(bitmap->data(), bitmapOffset + i));
+        arrow20::bit_util::SetBitTo(resultBitmap->mutable_data(), i + extraShift, arrow20::bit_util::GetBit(bitmap->data(), bitmapOffset + i));
     }
     return resultBitmap;
 }

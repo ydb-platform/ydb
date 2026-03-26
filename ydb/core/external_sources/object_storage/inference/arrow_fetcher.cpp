@@ -260,7 +260,7 @@ private:
     }
 
     void HandleMetadataSizeRequest(const TString& data, TRequest request, const NActors::TActorContext& ctx) {
-        uint32_t metadataSize = arrow20::BitUtil::FromLittleEndian<uint32_t>(ReadUnaligned<uint32_t>(data.data()));
+        uint32_t metadataSize = arrow20::bit_util::FromLittleEndian<uint32_t>(ReadUnaligned<uint32_t>(data.data()));
 
         if (metadataSize > 10_MB) {
             auto error = MakeError(

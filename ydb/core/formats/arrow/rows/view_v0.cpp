@@ -86,7 +86,7 @@ public:
     template <class TWrap>
     bool OnBinary(const ui32 fieldIndex, const char* data, const ui32 size) {
         using TBuilder = typename arrow20::TypeTraits<typename TWrap::T>::BuilderType;
-        TStatusValidator::Validate((static_cast<TBuilder*>(Builders[fieldIndex].get()))->Append(arrow20::util::string_view(data, size)));
+        TStatusValidator::Validate((static_cast<TBuilder*>(Builders[fieldIndex].get()))->Append(std::string_view(data, size)));
         return false;
     }
 
@@ -225,14 +225,14 @@ TString TSimpleRowViewV0::BuildString(const std::shared_ptr<arrow20::RecordBatch
                 return true;
             }
             if constexpr (std::is_base_of<arrow20::FixedSizeBinaryType, typename TWrap::T>()) {
-                const arrow20::util::string_view sv = arrImpl.GetView(recordIndex);
+                const std::string_view sv = arrImpl.GetView(recordIndex);
                 const ui32 size = static_cast<const arrow20::FixedSizeBinaryType*>(batch->schema()->field(i)->type().get())->byte_width();
                 AFL_VERIFY(size == sv.size());
                 result.append(sv.data(), sv.size());
                 return true;
             }
             if constexpr (arrow20::has_string_view<typename TWrap::T>()) {
-                const arrow20::util::string_view sv = arrImpl.GetView(recordIndex);
+                const std::string_view sv = arrImpl.GetView(recordIndex);
                 const ui32 size = sv.size();
                 result.append((const char*)&size, sizeof(size));
                 result.append(sv.data(), sv.size());

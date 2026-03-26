@@ -47,7 +47,7 @@ std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 colum
         auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : Schemas) {
             const TString jsonDescription = i->DebugJson().GetStringRobust();
-            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(jsonDescription.data(), jsonDescription.size()));
+            NArrow::Append<arrow20::StringType>(*builder, std::string_view(jsonDescription.data(), jsonDescription.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

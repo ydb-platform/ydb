@@ -7,7 +7,7 @@
 #include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
 
 #include <ydb/library/accessor/accessor.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
 #include <map>
 
 namespace NKikimr::NOlap {

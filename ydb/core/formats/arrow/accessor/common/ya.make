@@ -1,7 +1,7 @@
 LIBRARY(library-formats-arrow-accessor-common)
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     library/cpp/json/writer
     ydb/library/actors/core
     yql/essentials/types/binary_json

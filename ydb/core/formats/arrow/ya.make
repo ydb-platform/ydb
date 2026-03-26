@@ -5,7 +5,7 @@ RECURSE_FOR_TESTS(
 LIBRARY()
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/core/scheme
     ydb/core/formats/arrow/accessor
     ydb/core/formats/arrow/dictionary

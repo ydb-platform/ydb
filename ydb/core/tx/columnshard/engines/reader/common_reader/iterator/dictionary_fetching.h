@@ -3,7 +3,7 @@
 
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_primitive.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 

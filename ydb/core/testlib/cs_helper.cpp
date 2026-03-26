@@ -10,10 +10,10 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h>
 
 namespace NKikimr::Tests::NCS {
 

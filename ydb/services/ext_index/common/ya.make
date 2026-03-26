@@ -11,7 +11,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/core/base
     ydb/core/protos
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
 )
 
 END()

@@ -6,8 +6,8 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NArrow {

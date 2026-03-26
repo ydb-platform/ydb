@@ -6,8 +6,8 @@
 
 #include <ydb/library/formats/arrow/validation/validation.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api.h>
 
 namespace NKikimr::NArrow::NSSA {
 

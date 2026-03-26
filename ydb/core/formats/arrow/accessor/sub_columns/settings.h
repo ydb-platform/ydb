@@ -6,7 +6,7 @@
 
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 

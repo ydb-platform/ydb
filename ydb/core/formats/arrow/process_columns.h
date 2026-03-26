@@ -3,7 +3,7 @@
 #include <ydb/library/accessor/validator_simple.h>
 #include <ydb/library/conclusion/result.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 
 #include <functional>
 

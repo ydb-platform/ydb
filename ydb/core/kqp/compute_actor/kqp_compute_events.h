@@ -7,7 +7,7 @@
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events_stats.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
 
 namespace NKikimr::NKqp {
 

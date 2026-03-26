@@ -9,10 +9,10 @@
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array.h>
 
 #include <util/generic/size_literals.h>
 

@@ -1,12 +1,12 @@
 #include "csv_arrow.h"
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 #include <util/string/join.h>
 
 

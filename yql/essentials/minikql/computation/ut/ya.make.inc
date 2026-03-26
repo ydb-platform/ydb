@@ -29,7 +29,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     library/cpp/threading/local_executor
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy

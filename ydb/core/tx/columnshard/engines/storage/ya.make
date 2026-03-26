@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/core/protos
     ydb/core/tx/columnshard/engines/storage/optimizer
     ydb/core/tx/columnshard/engines/storage/actualizer

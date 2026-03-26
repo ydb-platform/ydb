@@ -5,7 +5,7 @@ RECURSE_FOR_TESTS(
 LIBRARY()
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
 )
 
 GENERATE_ENUM_SERIALIZATION(operations.h)

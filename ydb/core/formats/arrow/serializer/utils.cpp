@@ -3,7 +3,7 @@
 
 #include <ydb/library/formats/arrow/validation/validation.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h>
 
 namespace NKikimr::NArrow {
 bool SupportsCompressionLevel(const arrow::Compression::type compression, const std::optional<i32>& compressionLevel) {

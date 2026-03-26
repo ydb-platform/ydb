@@ -3,7 +3,7 @@ LIBRARY()
 PEERDIR(
     ydb/core/protos
     ydb/core/formats/arrow
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/actors/core
     ydb/core/tx/columnshard/blobs_action/bs
     ydb/library/formats/arrow/protos

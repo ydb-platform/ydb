@@ -5,7 +5,7 @@ RECURSE_FOR_TESTS(
 LIBRARY()
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     contrib/restricted/cityhash-1.0.2
 
     ydb/library/arrow_clickhouse/Common

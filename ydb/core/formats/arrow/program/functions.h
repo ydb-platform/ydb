@@ -6,8 +6,8 @@
 
 #include <ydb/library/arrow_kernels/operations.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/function.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/exec.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h>
 
 namespace NKikimr::NArrow::NSSA {
 

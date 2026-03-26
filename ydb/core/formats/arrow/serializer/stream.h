@@ -2,10 +2,10 @@
 
 #include <util/generic/string.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/interfaces.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/status.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/result.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h>
 
 namespace NKikimr::NArrow::NSerialization {
 

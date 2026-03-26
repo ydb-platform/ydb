@@ -1,6 +1,6 @@
 #pragma once
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernel.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h>
 #include <type_traits>
 
 #ifdef WIN32

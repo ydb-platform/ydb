@@ -2,11 +2,11 @@
 
 #include <memory>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_nested.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_binary.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_nested.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

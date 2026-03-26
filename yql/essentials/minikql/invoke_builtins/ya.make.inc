@@ -51,7 +51,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/minikql/arrow
     yql/essentials/public/udf
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
 )
 
 YQL_LAST_ABI_VERSION()

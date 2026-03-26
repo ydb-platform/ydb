@@ -7,7 +7,7 @@
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow::NHash {

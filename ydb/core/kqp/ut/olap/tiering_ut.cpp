@@ -13,7 +13,7 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/builder.h>
 
 #include <library/cpp/testing/hook/hook.h>
 

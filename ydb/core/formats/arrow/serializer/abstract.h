@@ -8,8 +8,8 @@
 #include <ydb/services/bg_tasks/abstract/interface.h>
 #include <ydb/services/metadata/abstract/request_features.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/status.h>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 

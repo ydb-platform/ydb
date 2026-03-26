@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/library/formats/arrow)
 SIZE(SMALL)
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/arrow_kernels
 
     # for NYql::NUdf alloc stuff used in binary_json

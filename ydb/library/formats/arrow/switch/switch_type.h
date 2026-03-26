@@ -2,7 +2,7 @@
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
 #include <contrib/libs/xxhash/xxhash.h>
 #include <util/string/cast.h>
 #include <util/system/yassert.h>

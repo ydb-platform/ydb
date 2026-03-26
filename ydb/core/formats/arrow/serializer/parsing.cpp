@@ -1,5 +1,5 @@
 #include "parsing.h"
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h>
 
 namespace NKikimr::NArrow {
 

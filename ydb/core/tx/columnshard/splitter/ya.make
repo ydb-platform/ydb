@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/core/tx/columnshard/splitter/abstract
     ydb/core/tx/columnshard/engines/scheme
     ydb/core/formats/arrow/splitter

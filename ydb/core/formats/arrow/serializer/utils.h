@@ -1,6 +1,6 @@
 #pragma once
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/type_fwd.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/type_fwd.h>
 #include <util/system/types.h>
 
 #include <optional>

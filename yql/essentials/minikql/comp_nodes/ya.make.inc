@@ -162,7 +162,7 @@ COPY(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     contrib/libs/xxhash
     yql/essentials/types/binary_json
     yql/essentials/minikql

@@ -21,7 +21,7 @@ PEERDIR(
     library/cpp/uri
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
 )
 
 END()

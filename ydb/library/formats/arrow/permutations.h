@@ -2,8 +2,8 @@
 #include "arrow_helpers.h"
 
 #include <ydb/library/accessor/accessor.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 #include <util/system/types.h>
 
 namespace NKikimr::NArrow {

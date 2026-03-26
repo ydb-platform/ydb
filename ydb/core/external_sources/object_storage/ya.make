@@ -5,7 +5,7 @@ RECURSE(
 LIBRARY()
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     contrib/libs/curl
 
     ydb/core/fq/libs/config/protos

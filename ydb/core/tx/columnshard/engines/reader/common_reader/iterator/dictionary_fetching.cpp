@@ -5,7 +5,7 @@
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_primitive.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 

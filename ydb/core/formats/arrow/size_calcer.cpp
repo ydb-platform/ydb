@@ -2,7 +2,7 @@
 #include "switch/switch_type.h"
 #include "arrow_helpers.h"
 #include "dictionary/conversion.h"
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 #include <util/system/yassert.h>
 #include <util/string/builder.h>
 

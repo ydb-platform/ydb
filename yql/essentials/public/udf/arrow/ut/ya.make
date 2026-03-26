@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy

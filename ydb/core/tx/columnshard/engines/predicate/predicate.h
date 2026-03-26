@@ -7,7 +7,7 @@
 
 #include <ydb/library/arrow_kernels/operations.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NOlap {
 

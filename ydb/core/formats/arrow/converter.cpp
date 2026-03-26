@@ -9,8 +9,8 @@
 #include <util/memory/pool.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/builder.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
 
 #include <memory>
 #include <vector>

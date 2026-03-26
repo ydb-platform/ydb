@@ -5,7 +5,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/core/base
     ydb/core/tablet
     ydb/core/tablet_flat

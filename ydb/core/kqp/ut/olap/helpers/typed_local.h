@@ -7,7 +7,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h>
 
 #include <library/cpp/json/writer/json_value.h>
 

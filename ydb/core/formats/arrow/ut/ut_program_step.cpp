@@ -16,9 +16,9 @@
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/arrow_kernels/ut_common.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/exec.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <array>

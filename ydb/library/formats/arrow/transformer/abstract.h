@@ -1,7 +1,7 @@
 #pragma once
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/status.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NArrow::NTransformation {

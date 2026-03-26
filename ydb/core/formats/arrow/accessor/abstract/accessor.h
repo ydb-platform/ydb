@@ -6,10 +6,10 @@
 #include <ydb/library/accessor/validator.h>
 #include <ydb/library/formats/arrow/splitter/similar_packer.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/builder.h>
 

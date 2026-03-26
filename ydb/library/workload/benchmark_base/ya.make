@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     library/cpp/streams/factory/open_by_signature
     ydb/library/accessor
     ydb/library/formats/arrow/validation

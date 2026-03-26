@@ -1,7 +1,7 @@
 LIBRARY(library-formats-arrow-modifier)
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/conclusion
     ydb/library/formats/arrow/switch
     ydb/library/formats/arrow/protos

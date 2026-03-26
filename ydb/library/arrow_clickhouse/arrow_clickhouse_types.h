@@ -8,9 +8,9 @@
 
 #include <util/system/types.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/bitmap.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap.h>
 
 #include <common/StringRef.h>
 #include <common/extended_types.h>

@@ -2,10 +2,10 @@
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <library/cpp/streams/factory/open_by_signature/factory.h>
 #include <ydb/public/lib/ydb_cli/import/cli_arrow_helpers.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/reader.h>
-#include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/reader.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/file_reader.h>
 
 #include <util/stream/file.h>
 

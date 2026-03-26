@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/conclusion
     ydb/services/metadata/abstract
     ydb/library/actors/core

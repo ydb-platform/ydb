@@ -16,7 +16,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(column_engine_logs.h)
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/core/base
     ydb/core/formats
     ydb/core/protos

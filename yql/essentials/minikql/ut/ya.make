@@ -39,7 +39,7 @@ ADDINCL(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy

@@ -1,18 +1,18 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/status.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/builder.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernels/codegen_internal.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h>
 #pragma clang diagnostic pop
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/function.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h>
 
 #include <util/datetime/base.h>
 #include <util/system/yassert.h>

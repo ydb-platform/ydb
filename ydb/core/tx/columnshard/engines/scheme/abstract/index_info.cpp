@@ -3,7 +3,7 @@
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h>
 
 namespace NKikimr::NOlap {
 

@@ -2,9 +2,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/schema.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/schema.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/parquet/statistics.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/statistics.h>
 
 #include <google/protobuf/text_format.h>
 

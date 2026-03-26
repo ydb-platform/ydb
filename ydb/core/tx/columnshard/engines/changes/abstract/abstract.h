@@ -20,7 +20,7 @@
 #include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h>
 #include <util/datetime/base.h>
 #include <util/generic/guid.h>
 #include <util/generic/string.h>

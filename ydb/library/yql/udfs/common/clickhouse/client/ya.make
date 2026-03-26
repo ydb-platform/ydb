@@ -402,7 +402,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
         contrib/libs/poco/NetSSL_OpenSSL
         contrib/libs/fmt
         contrib/libs/re2
-        contrib/libs/apache/arrow
+        contrib/libs/apache/arrow_next
         contrib/libs/apache/orc
         contrib/libs/apache/avro
         library/cpp/sanitizer/include
@@ -417,7 +417,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
         #contrib/libs/icu/i18n
         contrib/libs/pdqsort
         contrib/libs/lz4
-        contrib/libs/apache/arrow/src
+        contrib/libs/apache/arrow_next/src
         contrib/libs/apache/avro/include
         contrib/libs/apache/orc/c++/include
         ydb/library/yql/udfs/common/clickhouse/client/base

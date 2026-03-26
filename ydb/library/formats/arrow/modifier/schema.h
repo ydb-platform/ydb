@@ -5,7 +5,7 @@
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/formats/arrow/common/iterator.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NArrow {

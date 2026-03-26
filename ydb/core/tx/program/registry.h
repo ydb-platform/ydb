@@ -1,6 +1,6 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/function.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernel.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NArrow::NSSA {

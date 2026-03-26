@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     library/cpp/regex/pcre
     library/cpp/scheme
     ydb/core/base

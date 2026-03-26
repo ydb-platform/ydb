@@ -10,9 +10,9 @@
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow::NSSA {

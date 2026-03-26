@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/tx/columnshard/splitter)
 SIZE(SMALL)
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/core/kqp/common
     ydb/core/kqp/session_actor
     ydb/core/mind

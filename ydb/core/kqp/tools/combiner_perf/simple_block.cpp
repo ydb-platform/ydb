@@ -12,10 +12,10 @@
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

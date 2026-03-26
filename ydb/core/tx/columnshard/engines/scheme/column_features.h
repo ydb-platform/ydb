@@ -10,8 +10,8 @@
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h>
 
 namespace NKikimr::NOlap {
 

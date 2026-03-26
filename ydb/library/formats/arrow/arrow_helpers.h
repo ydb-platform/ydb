@@ -2,10 +2,10 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/writer.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h>
 #include <library/cpp/json/writer/json_value.h>
 
 #include <map>

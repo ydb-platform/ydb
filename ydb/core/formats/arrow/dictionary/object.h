@@ -2,7 +2,7 @@
 
 #include <ydb/library/conclusion/result.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h>
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 
 namespace NKikimr::NArrow::NDictionary {

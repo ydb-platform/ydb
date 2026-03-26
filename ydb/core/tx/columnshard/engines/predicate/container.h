@@ -11,7 +11,7 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/formats/arrow/replace_key.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
 
 #include <optional>
 

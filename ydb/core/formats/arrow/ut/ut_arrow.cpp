@@ -10,8 +10,8 @@
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api.h>
 #include <util/random/shuffle.h>
 
 namespace NKikimr {

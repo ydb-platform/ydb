@@ -4,7 +4,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/actors/core
     ydb/library/actors/helpers
     library/cpp/digest/md5

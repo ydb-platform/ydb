@@ -6,7 +6,7 @@
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/formats/arrow/serializer/full.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 
 Y_UNIT_TEST_SUITE(StorageOptimizer) {
 

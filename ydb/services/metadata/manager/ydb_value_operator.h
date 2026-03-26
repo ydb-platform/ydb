@@ -4,7 +4,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <util/generic/vector.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h>
 
 namespace NKikimr::NMetadata::NInternal {
 

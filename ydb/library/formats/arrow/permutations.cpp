@@ -9,7 +9,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/xxhash/xxhash.h>
 
 namespace NKikimr::NArrow {

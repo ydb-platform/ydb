@@ -9,8 +9,8 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/options.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/options.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NArrow::NSerialization {
 

@@ -1,7 +1,7 @@
 #include "size_calcer.h"
 #include "arrow_helpers.h"
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/visitor_inline.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/visitor_inline.h>
 #include <util/system/yassert.h>
 #include <util/string/builder.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>

@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     yql/essentials/minikql
     yql/essentials/public/udf/arrow
 )

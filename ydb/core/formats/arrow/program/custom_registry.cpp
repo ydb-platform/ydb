@@ -5,8 +5,8 @@
 #include <ydb/library/arrow_kernels/func_common.h>
 #include <ydb/library/arrow_kernels/functions.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/registry_internal.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry_internal.h>
 #include <util/system/yassert.h>
 
 #ifndef WIN32

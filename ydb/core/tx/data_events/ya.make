@@ -13,7 +13,7 @@ PEERDIR(
     ydb/core/protos
     ydb/library/accessor
     ydb/library/conclusion
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/actors/core
     ydb/library/actors/wilson
 

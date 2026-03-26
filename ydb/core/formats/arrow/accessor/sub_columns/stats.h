@@ -7,9 +7,9 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_binary.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {

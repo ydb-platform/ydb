@@ -16,7 +16,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     contrib/libs/fmt
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common

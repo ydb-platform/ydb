@@ -5,8 +5,8 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/formats/arrow/size_calcer.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_binary.h>
 #include <util/system/types.h>
 #include <util/generic/string.h>
 

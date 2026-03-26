@@ -1,6 +1,6 @@
 #include "infer_config.h"
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h>
 
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 

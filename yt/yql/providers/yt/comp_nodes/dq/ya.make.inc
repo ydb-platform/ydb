@@ -13,7 +13,7 @@ PEERDIR(
     yt/yt/core
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     contrib/libs/flatbuffers
     yql/essentials/parser/pg_wrapper/interface
 )

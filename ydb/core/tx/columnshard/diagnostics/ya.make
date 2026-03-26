@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     contrib/libs/opentelemetry-proto
     ydb/core/base/generated
     ydb/core/control/lib/generated

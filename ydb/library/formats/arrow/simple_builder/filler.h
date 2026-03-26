@@ -1,7 +1,7 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/string_view.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/string_view.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

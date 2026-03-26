@@ -18,7 +18,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     contrib/libs/fmt
     contrib/libs/poco/Util
     ydb/library/actors/http

@@ -12,7 +12,7 @@ PEERDIR(
     ydb/core/formats/arrow/transformer
     ydb/core/formats/arrow/common
 
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
 )
 
 END()

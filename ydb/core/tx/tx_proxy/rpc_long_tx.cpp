@@ -12,7 +12,7 @@
 #include <ydb/library/signals/object_counter.h>
 #include <ydb/services/ext_index/common/service.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api.h>
 
 namespace NKikimr {
 

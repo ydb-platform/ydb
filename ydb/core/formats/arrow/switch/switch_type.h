@@ -4,7 +4,7 @@
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
 #include <util/system/yassert.h>
 
 extern "C" {

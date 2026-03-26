@@ -4,10 +4,10 @@
 
 #pragma once 
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/writer.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h>
 #include <util/generic/vector.h>
 #include <util/stream/file.h>
 #include <util/string/builder.h>

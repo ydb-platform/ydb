@@ -14,7 +14,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/core/base
     ydb/core/tablet
     ydb/core/tablet_flat

@@ -7,8 +7,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/digest/fnv.h>
 #include <util/string/builder.h>

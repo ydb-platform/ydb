@@ -12,7 +12,7 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/datum.h>
 
 #include <util/generic/maybe.h>
 #include <util/memory/pool.h>

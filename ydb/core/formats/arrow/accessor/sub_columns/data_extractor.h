@@ -7,7 +7,7 @@
 #include <ydb/services/bg_tasks/abstract/interface.h>
 #include <ydb/services/metadata/abstract/request_features.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h>
 #include <library/cpp/object_factory/object_factory.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {

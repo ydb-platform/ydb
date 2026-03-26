@@ -2,10 +2,10 @@
 #include "process_columns.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/json/writer/json_value.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/writer.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 

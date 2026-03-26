@@ -9,7 +9,7 @@
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h>
 
 namespace NKikimr::NArrow {
 

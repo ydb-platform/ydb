@@ -10,7 +10,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/common
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/lib/json_value
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     library/cpp/string_utils/csv
 )
 

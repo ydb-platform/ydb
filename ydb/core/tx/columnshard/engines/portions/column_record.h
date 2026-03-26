@@ -13,9 +13,9 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/splitter/stats.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h>
 #include <util/string/builder.h>
 
 namespace NKikimrColumnShardDataSharingProto {

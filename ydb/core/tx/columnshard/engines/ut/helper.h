@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/protos/tx_columnshard.pb.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 
 namespace NKikimr::NOlap::NEngines::NTest {
 

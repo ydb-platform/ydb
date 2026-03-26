@@ -8,9 +8,9 @@
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/table.h>
 
 namespace NKikimr::NArrow::NAccessor::NDictionary {
 

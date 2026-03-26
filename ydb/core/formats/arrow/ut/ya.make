@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/formats/arrow)
 SIZE(SMALL)
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/arrow_kernels
     ydb/library/formats/arrow/simple_builder
     ydb/core/formats/arrow/program

@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/formats/arrow/protos
     yql/essentials/core/issue/protos
     yql/essentials/public/types

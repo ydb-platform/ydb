@@ -7,7 +7,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/accessor
     ydb/library/conclusion
     ydb/library/formats/arrow/transformer

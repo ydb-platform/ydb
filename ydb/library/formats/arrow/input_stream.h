@@ -3,7 +3,7 @@
 // See: https://github.com/ClickHouse/ClickHouse/
 
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
 #include <functional>
 #include <atomic>
 

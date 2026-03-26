@@ -7,7 +7,7 @@
 
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 

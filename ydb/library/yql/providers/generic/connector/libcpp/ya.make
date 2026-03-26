@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     contrib/libs/grpc
     ydb/core/formats/arrow/serializer
     ydb/public/sdk/cpp/src/library/grpc/client

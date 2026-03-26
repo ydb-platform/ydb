@@ -3,10 +3,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/file.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/stdio.h>
-#include <contrib/libs/apache/arrow/cpp/src/parquet/stream_writer.h>
-#include <contrib/libs/apache/arrow/cpp/src/parquet/schema.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/file.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/stdio.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/stream_writer.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h>
 
 #include <util/folder/path.h>
 

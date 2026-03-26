@@ -1,8 +1,8 @@
 #pragma once
 #include <ydb/library/conclusion/result.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NArrow::NScalar {

@@ -16,7 +16,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NOlap;

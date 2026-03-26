@@ -7,9 +7,9 @@
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernel.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/table.h>
 #include <yql/essentials/core/arrow_kernels/registry/registry.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>

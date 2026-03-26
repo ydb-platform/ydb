@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
 #include <ydb/core/tx/columnshard/engines/scheme/common/cache.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 #include <library/cpp/string_utils/quote/quote.h>
 #include <util/generic/hash.h>
 

@@ -1,8 +1,8 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_dict.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_dict.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NArrow::NConstruction {

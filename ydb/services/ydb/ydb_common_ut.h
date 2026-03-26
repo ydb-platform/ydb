@@ -11,8 +11,8 @@
 
 #include <util/system/tempfile.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h> // for WriteCSV()
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/csv/api.h> // for WriteCSV()
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/api.h>
 
 #include <functional>
 

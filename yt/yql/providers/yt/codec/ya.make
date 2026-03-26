@@ -18,7 +18,7 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/io
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     yql/essentials/core
     yql/essentials/minikql
     yql/essentials/minikql/computation

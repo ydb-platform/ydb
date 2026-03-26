@@ -7,8 +7,8 @@
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
 #include <util/generic/string.h>
 #include <util/string/join.h>
 #include <util/system/types.h>

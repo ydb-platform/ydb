@@ -4,7 +4,7 @@
 
 #include <ydb/library/actors/core/log.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h>
 
 namespace NKikimr::NColumnShard {
 class TSplitterCounters;

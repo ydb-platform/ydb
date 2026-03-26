@@ -24,8 +24,8 @@
 #include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h>
 
 #include <util/stream/format.h>
 

@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     yql/essentials/minikql/computation
     yql/essentials/public/langver
 )

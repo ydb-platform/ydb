@@ -1,7 +1,7 @@
 #pragma once
 #include "direct_builder.h"
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h>
 #include <contrib/libs/simdjson/include/simdjson.h>
 #include <yql/essentials/types/binary_json/read.h>
 

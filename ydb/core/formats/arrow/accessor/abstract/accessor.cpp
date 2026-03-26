@@ -11,7 +11,7 @@
 #include <ydb/library/formats/arrow/switch/compare.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_primitive.h>
 
 namespace NKikimr::NArrow::NAccessor {
 

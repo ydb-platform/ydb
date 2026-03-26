@@ -1,7 +1,7 @@
 LIBRARY(library-formats-arrow-common)
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/formats/arrow/switch
     ydb/library/actors/core
     ydb/library/conclusion

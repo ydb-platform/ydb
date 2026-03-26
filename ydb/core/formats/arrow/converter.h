@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

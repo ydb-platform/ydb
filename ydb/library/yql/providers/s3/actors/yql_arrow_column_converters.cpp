@@ -1,8 +1,8 @@
 #include "yql_arrow_column_converters.h"
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
-#include <contrib/libs/apache/arrow/cpp/src/parquet/exception.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_binary.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h>
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>

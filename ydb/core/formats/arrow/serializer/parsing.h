@@ -2,7 +2,7 @@
 
 #include <util/system/yassert.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/type_fwd.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/type_fwd.h>
 #include <optional>
 #include <string>
 

@@ -5,7 +5,7 @@
 #include <ydb/services/metadata/manager/object.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
 #include <library/cpp/object_factory/object_factory.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/json/json_reader.h>

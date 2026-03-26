@@ -20,9 +20,9 @@
 
 #include <ydb/library/actors/core/log.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h>
 
 namespace NKikimrTxDataShard {
     class TKqpTransaction_TScanTaskMeta;

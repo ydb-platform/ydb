@@ -12,7 +12,7 @@ SET(ORIG_SOURCES
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     library/cpp/enumbitset
     library/cpp/packedtypes
     library/cpp/random_provider

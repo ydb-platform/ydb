@@ -1,5 +1,5 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.pb.h>
 #include <ydb/library/conclusion/status.h>

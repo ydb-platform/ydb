@@ -1,8 +1,8 @@
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/result.h>
 
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 

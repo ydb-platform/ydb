@@ -6,7 +6,7 @@
 
 #include <ydb/library/formats/arrow/splitter/stats.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 
 namespace NKikimr::NOlap::NCompaction {
 

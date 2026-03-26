@@ -7,8 +7,8 @@
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/formats/arrow/modifier/schema.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/table.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 #include <util/string/builder.h>
 #include <util/system/types.h>
 

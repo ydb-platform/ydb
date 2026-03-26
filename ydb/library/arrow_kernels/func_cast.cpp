@@ -4,9 +4,9 @@
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernel.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernels/scalar_cast_internal.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/time.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/scalar_cast_internal.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/time.h>
 #pragma clang diagnostic pop
 
 #include <unordered_map>

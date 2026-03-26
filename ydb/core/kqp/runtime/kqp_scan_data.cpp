@@ -13,7 +13,7 @@
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

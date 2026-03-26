@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/csv/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/api.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <set>

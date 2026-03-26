@@ -1,10 +1,10 @@
 #include "functions.h"
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernels/aggregate_basic_internal.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernels/codegen_internal.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/registry_internal.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/aggregate_basic_internal.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry_internal.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/table.h>
 
 namespace NKikimr::NArrow::NSSA {
 

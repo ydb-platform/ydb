@@ -15,7 +15,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/formats/arrow/protos
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/core/formats/arrow
     ydb/core/tx/columnshard/common/protos
     ydb/core/tx/columnshard/data_sharing/protos

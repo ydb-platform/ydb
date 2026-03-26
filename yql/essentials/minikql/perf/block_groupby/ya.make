@@ -1,7 +1,7 @@
 PROGRAM()
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     yql/essentials/minikql/arrow
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf

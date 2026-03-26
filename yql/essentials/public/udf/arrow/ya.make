@@ -16,7 +16,7 @@ SRCS(
 
 PEERDIR(
     yql/essentials/public/udf
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
 )
 
 PROVIDES(YqlUdfSdkArrow)

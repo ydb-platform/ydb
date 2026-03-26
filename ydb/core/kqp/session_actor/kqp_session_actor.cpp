@@ -1939,6 +1939,8 @@ public:
             (span_id_size, request.TraceId.GetSpanIdSize()),
             (trace_id, TraceId()));
 
+        txCtx->TxManager->SetSkipConflictCheckForTopicsInTransaction(AppData()->FeatureFlags.GetEnableSkipConflictCheckForTopicsInTransaction());
+
         if (!txCtx->BufferActorId
             && (txCtx->HasTableWrite || request.TopicOperations.GetSize() != 0)) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));

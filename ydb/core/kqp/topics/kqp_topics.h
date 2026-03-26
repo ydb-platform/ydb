@@ -96,7 +96,7 @@ public:
 
     void AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset);
 
-    void BuildTopicTxs(TTopicOperationTransactions &txs);
+    void BuildTopicTxs(TTopicOperationTransactions &txs, bool skipConflictCheck);
 
     void Merge(const TTopicPartitionOperations& rhs);
 
@@ -184,6 +184,8 @@ public:
     void SetTabletId(const TString& topic, ui32 partition,
                      ui64 tabletId);
 
+    void SetSkipConflictCheck(bool skipConflictCheck);
+
 private:
     THashMap<TTopicPartition, TTopicPartitionOperations, TTopicPartition::THash> Operations_;
     bool HasReadOperations_ = false;
@@ -195,6 +197,7 @@ private:
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
 
     THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
+    bool SkipConflictCheck = false;
 };
 
 }

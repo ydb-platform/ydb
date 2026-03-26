@@ -214,6 +214,7 @@ public:
     void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
         AFL_ENSURE(TopicOperations.GetSize() == 0);
         TopicOperations = std::move(topicOperations);
+        TopicOperations.SetSkipConflictCheck(SkipConflictCheck);
     }
 
     const NTopic::TTopicOperations& GetTopicOperations() const override {
@@ -230,6 +231,10 @@ public:
 
     bool HasTopics() const override {
         return GetTopicOperations().GetSize() != 0;
+    }
+
+    void SetSkipConflictCheckForTopicsInTransaction(bool skipConflictCheck) override {
+        SkipConflictCheck = skipConflictCheck;
     }
 
     TVector<NKikimrDataEvents::TLock> GetLocks() const override {
@@ -690,6 +695,7 @@ private:
     THashSet<ui64> ShardsToWait;
 
     NTopic::TTopicOperations TopicOperations;
+    bool SkipConflictCheck = false;
 
     ui64 MinStep = 0;
     ui64 MaxStep = 0;

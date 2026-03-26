@@ -223,7 +223,7 @@ void TTopicPartitionOperations::AddKafkaApiReadOperation(const TString& topic, u
     Operations_[consumerName].AddKafkaApiOffsetCommit(consumerName, offset);
 }
 
-void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
+void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs, bool skipConflictCheck)
 {
     Y_ENSURE(TabletId_.Defined());
     Y_ENSURE(Partition_.Defined());
@@ -261,6 +261,7 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
         } else if (SupportivePartition_.Defined()) {
             o->SetSupportivePartition(*SupportivePartition_);
         }
+        o->SetSkipConflictCheck(skipConflictCheck);
         t.hasWrite = true;
     }
 }
@@ -614,7 +615,7 @@ void TTopicOperations::CacheSchemeCacheNavigate(const NSchemeCache::TSchemeCache
 void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 {
     for (auto& [_, operations] : Operations_) {
-        operations.BuildTopicTxs(txs);
+        operations.BuildTopicTxs(txs, SkipConflictCheck);
     }
 }
 
@@ -643,6 +644,11 @@ TSet<ui64> TTopicOperations::GetSendingTabletIds() const
 {
     TSet<ui64> ids;
     for (auto& [_, operations] : Operations_) {
+        if (!operations.HasReadOperations() &&
+            operations.HasWriteOperations() && SkipConflictCheck) {
+            continue;
+        }
+
         ids.insert(operations.GetTabletId());
     }
     return ids;
@@ -662,6 +668,11 @@ TMaybe<TString> TTopicOperations::GetTabletName(ui64 tabletId) const {
 size_t TTopicOperations::GetSize() const
 {
     return Operations_.size();
+}
+
+void TTopicOperations::SetSkipConflictCheck(bool skipConflictCheck)
+{
+    SkipConflictCheck = skipConflictCheck;
 }
 
 }

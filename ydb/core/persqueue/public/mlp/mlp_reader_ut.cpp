@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .UncompressMessages = true
         });
 
-        auto now = TInstant::Now();
+        auto now = TInstant::Now().MilliSeconds();
 
         auto response = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
@@ -75,7 +75,9 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
-        UNIT_ASSERT_GE(response->Messages[0].ApproximateFirstReceiveTimestamp, now);
+        UNIT_ASSERT(response->Messages[0].ApproximateFirstReceiveTimestamp.has_value());
+        UNIT_ASSERT_GE_C(response->Messages[0].ApproximateFirstReceiveTimestamp->MilliSeconds(), now,
+            "ApproximateFirstReceiveTimestamp=" << response->Messages[0].ApproximateFirstReceiveTimestamp->MilliSeconds() << " now=" << now);
     }
 
     Y_UNIT_TEST(TopicWithManyIterationsData) {

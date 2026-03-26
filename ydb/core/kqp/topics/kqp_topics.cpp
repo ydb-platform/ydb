@@ -615,7 +615,7 @@ void TTopicOperations::CacheSchemeCacheNavigate(const NSchemeCache::TSchemeCache
 void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 {
     for (auto& [_, operations] : Operations_) {
-        operations.BuildTopicTxs(txs, SkipConflictCheck);
+        operations.BuildTopicTxs(txs, SkipConflictCheck_);
     }
 }
 
@@ -645,7 +645,7 @@ TSet<ui64> TTopicOperations::GetSendingTabletIds() const
     TSet<ui64> ids;
     for (auto& [_, operations] : Operations_) {
         if (!operations.HasReadOperations() &&
-            operations.HasWriteOperations() && SkipConflictCheck) {
+            operations.HasWriteOperations() && SkipConflictCheck_) {
             continue;
         }
 
@@ -672,7 +672,7 @@ size_t TTopicOperations::GetSize() const
 
 void TTopicOperations::SetSkipConflictCheck(bool skipConflictCheck)
 {
-    SkipConflictCheck = skipConflictCheck;
+    SkipConflictCheck_ = skipConflictCheck;
 }
 
 }

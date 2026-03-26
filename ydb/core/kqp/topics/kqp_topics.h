@@ -197,7 +197,7 @@ private:
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
 
     THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
-    bool SkipConflictCheck = false;
+    bool SkipConflictCheck_ = false;
 };
 
 }

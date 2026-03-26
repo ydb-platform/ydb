@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import pytest
 import requests
 
 
@@ -413,6 +414,108 @@ def test_public_endpoints_requiring_parameters_or_request_context_with_enforce_u
                 'viewer@builtin': 400,
                 'monitoring@builtin': 400,
                 'root@builtin': 400,
+            },
+        },
+    )
+
+
+DATABASE_ENDPOINTS_LIST = [
+    '/viewer/plan2svg',
+    # Endpoints below expose excessive information.
+    '/viewer/bscontrollerinfo',
+    '/viewer/cluster',
+    '/viewer/compute',
+    '/viewer/config',
+    '/viewer/counters',
+    '/viewer/hiveinfo',
+    '/viewer/hivestats',
+    '/viewer/labeledcounters',
+    '/viewer/netinfo',
+    '/viewer/pqconsumerinfo',
+    '/viewer/storage',
+    '/viewer/storage_usage',
+    '/viewer/tenants',
+    '/viewer/topicinfo',
+]
+
+
+def test_database_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        }
+        for endpoint_path in DATABASE_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST = [
+    '/operation/forget',
+    '/operation/get',
+    '/operation/list',
+    '/query/script/fetch',
+    '/viewer/browse',
+    '/viewer/commit_offset',
+    '/viewer/describe_consumer',
+    '/viewer/describe_replication',
+    '/viewer/describe_topic',
+    '/viewer/describe_transfer',
+    '/viewer/graph',
+    '/viewer/metainfo',
+    '/viewer/topic_data',
+    '/operation/list?database=%2FRoot',
+    # Endpoints below grant excessive rights.
+    '/operation/cancel',
+    '/query/script/execute',
+    '/scheme/directory',
+    '/viewer/put_record',
+]
+
+
+def test_database_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 400,
+            'viewer@builtin': 400,
+            'monitoring@builtin': 400,
+            'root@builtin': 400,
+        }
+        for endpoint_path in DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+@pytest.mark.xfail(reason='Empty request handling is unstable for this endpoint in the current environment')
+def test_database_endpoints_with_unstable_empty_request_handling_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token,
+        {
+            '/viewer/content': {
+                None: 401,
+                'user@builtin': 403,
+                'database@builtin': 504,
+                'viewer@builtin': 504,
+                'monitoring@builtin': 504,
+                'root@builtin': 504,
+            },
+            '/viewer/tabletcounters': {
+                None: 401,
+                'user@builtin': 403,
+                'database@builtin': None,
+                'viewer@builtin': None,
+                'monitoring@builtin': None,
+                'root@builtin': None,
             },
         },
     )

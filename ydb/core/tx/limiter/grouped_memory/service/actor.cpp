@@ -123,33 +123,7 @@ void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
     }
 }
 
-<<<<<<< HEAD
-size_t TMemoryLimiterActor::AcquireManager(ui64 externalProcessId, int delta) {
-=======
-void TMemoryLimiterActor::Handle(NMon::TEvHttpInfo::TPtr& ev) {
-    TStringStream html;
-    html << "<h2>Common</h2>";
-    html << "<b>Name:</b> " << Name << "<br \\>";
-    html << "<b>Config:</b> " << Config.DebugString() << "<br \\>";
-    html << "<b>Total processes count:</b> " << ProcessMapping.size() << "<br \\>";
-
-    html << "<h2>Load Balancer</h2>";
-    for (size_t i = 0; i < Managers.size(); ++i) {
-        html << "Manager " << i << ", load " << LoadQueue.GetLoad(i) << "<br \\>";
-    }
-
-    html << "<h2>Managers</h2>";
-    for (size_t i = 0; i < Managers.size(); ++i) {
-        html << "<pre>";
-        html << "Manager " << i << ", " << Managers[i]->DebugString();
-        html << "</pre>";
-    }
-
-    Send(ev->Sender, new NMon::TEvHttpInfoRes(html.Str()));
-}
-
 size_t TMemoryLimiterActor::AcquireManager(ui64 externalProcessId) {
->>>>>>> 8c3a8a11baa (balancer holder by process/scope/group (#36364))
     auto it = ProcessMapping.find(externalProcessId);
     if (it == ProcessMapping.end()) {
         size_t index = LoadQueue.Top();

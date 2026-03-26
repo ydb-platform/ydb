@@ -47,7 +47,10 @@ void TIamAuthFactory::Initialize(
     if (httpConfig.GetYandexCloudServiceRegion().size() == 0) {
         ythrow yexception() << "YandexCloudServiceRegion must not be empty";
     }
-    IActor* actor = NKikimr::NHttpProxy::CreateAccessServiceActor(config);
+
+    const bool useV2 = appData.FeatureFlags.GetEnableAccessServiceV2Interface();
+
+    IActor* actor = NKikimr::NHttpProxy::CreateAccessServiceActor(config, useV2);
     localServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NKikimr::NHttpProxy::MakeAccessServiceID(),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData.UserPoolId)));

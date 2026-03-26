@@ -129,7 +129,6 @@ TString CutBearer(TString token) {
     return token;
 }
 
-// TODO(vlad-serikov): Deduplicate
 template<class TEventRequest, class TResponseProxy>
 class TResolveSubjectTypeActor : public NActors::TActorBootstrapped<TResolveSubjectTypeActor<TEventRequest, TResponseProxy>> {
     using TBase = NActors::TActorBootstrapped<TResolveSubjectTypeActor<TEventRequest, TResponseProxy>>;
@@ -187,7 +186,6 @@ public:
         }
     }
 
-    // TODO(vlad-serikov): Deduplicate
     std::unique_ptr<NCloud::TEvAccessService::TEvAuthenticateRequestV1> CreateRequestV1() {
         auto request = std::make_unique<NCloud::TEvAccessService::TEvAuthenticateRequestV1>();
         request->Request.set_iam_token(Token);
@@ -621,8 +619,9 @@ public:
             if (accessServiceProto.GetPathToRootCA()) {
                 asSettings.CertificateRootCA = TUnbufferedFileInput(accessServiceProto.GetPathToRootCA()).ReadAll();
             }
+            // TODO(vlad-serikov): Test
             if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
-                AccessService = Register(NCloud::CreateAccessServiceV2(asSettings));
+                AccessService = Register(NCloud::CreateAccessServiceV2WithCache(asSettings));
 
             } else {
                 AccessService = Register(NCloud::CreateAccessServiceV1WithCache(asSettings));

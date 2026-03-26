@@ -194,7 +194,8 @@ void TBaseCloudAuthRequestProxy::ScheduleFolderServiceRequestRetry() {
     ScheduleRetry(FolderServiceRequestRetryPeriod_, FOLDER_SERVICE_REQUEST_WAKEUP_TAG);
 }
 
-void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV1::TPtr& ev) {
+template <typename TResponsePtr>
+void TBaseCloudAuthRequestProxy::ProcessAuthenticationResult(const TResponsePtr& ev) {
     ChangeCounters([this, &ev](){
         Counters_.IncCounter(
             NCloudAuth::EActionType::Authenticate,
@@ -229,40 +230,16 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessSer
     GetCloudIdAndAuthorize();
 }
 
-// TODO(vlad-serikov): Deduplicate
+// Explicit instantionation
+template void TBaseCloudAuthRequestProxy::ProcessAuthenticationResult<>(const NCloud::TEvAccessService::TEvAuthenticateResponseV1::TPtr&);
+template void TBaseCloudAuthRequestProxy::ProcessAuthenticationResult<>(const NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr&);
+
+void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV1::TPtr& ev) {
+    ProcessAuthenticationResult(ev);
+}
+
 void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
-    ChangeCounters([this, &ev](){
-        Counters_.IncCounter(
-            NCloudAuth::EActionType::Authenticate,
-            NCloudAuth::ECredentialType::Signature,
-            ev->Get()->Status.GRpcStatusCode
-        );
-        auto now = TActivationContext::Now();
-        Counters_.AuthenticateDuration->Collect((now - AuthenticateRequestStartTimestamp_).MilliSeconds());
-    });
-
-    if (!ev->Get()->Status.Ok()) {
-        RLOG_SQS_INFO("Authentication failed. GRpcStatusCode: "
-                        << ev->Get()->Status.GRpcStatusCode
-                        << ". InternalError: " << ev->Get()->Status.InternalError
-                        << ". Message: \"" << ev->Get()->Status.Msg
-                        << "\". Proto response: " << ev->Get()->Response);
-        if (CanRetry(ev->Get()->Status)) {
-            ScheduleAuthenticateRetry();
-        } else {
-            SetError(GetErrorClass(ev->Get()->Status), "IAM authentication error.");
-            SendReplyAndDie();
-        }
-        return;
-    } else if (!ev->Get()->Response.Getsubject().Hasservice_account()) {
-        SetError(NErrors::ACCESS_DENIED, "(this error should be unreachable).");
-        SendReplyAndDie();
-        return;
-    }
-
-    FolderId_ = ev->Get()->Response.Getsubject().Getservice_account().Getfolder_id();
-
-    GetCloudIdAndAuthorize();
+    ProcessAuthenticationResult(ev);
 }
 
 STATEFN(TBaseCloudAuthRequestProxy::ProcessAuthorization) {
@@ -605,7 +582,8 @@ void TMultiAuthFactory::Initialize(
 
     IActor* const accessService = CreateSqsAccessService(
         config.GetYandexCloudAccessServiceAddress(),
-        rootCAPath);
+        rootCAPath,
+        appData.FeatureFlags.GetEnableAccessServiceV2Interface());
 
     services.emplace_back(MakeSqsAccessServiceID(), setupActor(accessService));
 

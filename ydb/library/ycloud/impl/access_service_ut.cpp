@@ -54,7 +54,7 @@ struct TTestSetup {
         //AccessServiceActor = NCloud::CreateAccessService("localhost:" + ToString(ServicePort));
         NCloud::TAccessServiceSettings sets;
         sets.Endpoint = "localhost:" + ToString(ServicePort);
-        // TODO(vlad-serikov): Add V2
+        // TODO(vlad-serikov): Test
         AccessServiceActor = NCloud::CreateAccessServiceV1WithCache(sets);
         GetRuntime()->Register(AccessServiceActor);
     }
@@ -66,7 +66,7 @@ struct TTestSetup {
     }
 };
 
-// TODO(vlad-serikov): Add tests for V2 and deduplicate
+// TODO(vlad-serikov): Test
 Y_UNIT_TEST_SUITE(TAccessServiceTest) {
     Y_UNIT_TEST(Authenticate) {
         TTestSetup setup;

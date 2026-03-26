@@ -42,6 +42,7 @@ struct TTestSetup : public NUnitTest::TBaseFixture {
         Runtime.Initialize(MakeEgg());
         EdgeActor = Runtime.AllocateEdgeActor();
 
+        // TODO(vlad-serikov): Test
         AccessServiceActor = NNebiusCloud::CreateAccessServiceV1(TStringBuilder() << "localhost:" << ServicePort);
         AccessServiceActorId = Runtime.Register(AccessServiceActor);
 

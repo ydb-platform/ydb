@@ -19,7 +19,6 @@ namespace NKikimr::NSQS {
 static const TString SERVICE_ACCOUNT_PREFIX = "sa_";
 static const TString USER_ACCOUNT_PREFIX = "usr_";
 
-// TODO(vlad-serikov): Think about mock from testlib
 class TSqsAccessServiceMock
     : public TActor<TSqsAccessServiceMock>
 {
@@ -174,7 +173,6 @@ public:
         Send(ev->Sender, result.Release());
     }
 
-    // TODO(vlad-serikov): Think about this method
     void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeRequestV2::TPtr& ev) {
         THolder<NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2> result = MakeHolder<NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2>();
         if (++RequestNumber % 3 == 0) {
@@ -258,7 +256,7 @@ public:
     }
 };
 
-IActor* CreateSqsAccessService(const TString& address, const TString& pathToRootCA) {
+IActor* CreateSqsAccessService(const TString& address, const TString& pathToRootCA, bool useV2as) {
     if (!address) {
         return new TSqsAccessServiceMock();
     }
@@ -267,8 +265,9 @@ IActor* CreateSqsAccessService(const TString& address, const TString& pathToRoot
     settings.Endpoint = address;
     settings.CertificateRootCA = TUnbufferedFileInput(pathToRootCA).ReadAll();
 
-    if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
-        return NCloud::CreateAccessServiceV2(settings);
+    // TODO(vlad-serikov): Test
+    if (useV2as) {
+        return NCloud::CreateAccessServiceV2WithCache(settings);
     } else {
         return NCloud::CreateAccessServiceV1WithCache(settings);
     }

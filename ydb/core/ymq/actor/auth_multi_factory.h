@@ -92,6 +92,8 @@ public:
     void ScheduleFolderServiceRequestRetry();
     void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV1::TPtr& ev);
     void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev);
+    template <typename TResponsePtr>
+    void ProcessAuthenticationResult(const TResponsePtr& ev);
     void HandleAuthorizationResult(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev);
     void ProcessAuthorizationResult(const TEvTicketParser::TEvAuthorizeTicketResult& result);
     void HandleFolderServiceResponse(NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr& ev);

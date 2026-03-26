@@ -9,9 +9,27 @@
 
 namespace NCloud {
 
+namespace {
+
+template <bool ClearIamCookie, typename TMaskerFunc, typename T>
+T ObfuscateImpl(const T& p, const TMaskerFunc& maskFunc) {
+    T r(p);
+    if (r.iam_token()) {
+        r.set_iam_token(std::invoke(maskFunc, r.iam_token()));
+    }
+    if (r.api_key()) {
+        r.set_api_key(std::invoke(maskFunc, r.api_key()));
+    }
+    if constexpr (ClearIamCookie) {
+        r.clear_iam_cookie();
+    }
+    return r;
+}
+
+} // namespace
+
 using namespace NKikimr;
 
-// TODO(vlad-serikov): Deduplicate
 class TAccessServiceV1 : public NActors::TActor<TAccessServiceV1>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::servicecontrol::v1::AccessService> {
     using TThis = TAccessServiceV1;
     using TBase = NActors::TActor<TAccessServiceV1>;
@@ -22,15 +40,7 @@ class TAccessServiceV1 : public NActors::TActor<TAccessServiceV1>, NGrpcActorCli
         using TResponseEventType = TEvAccessService::TEvAuthenticateResponseV1;
 
         static yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest Obfuscate(const yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest& p) {
-            yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest r(p);
-            if (r.iam_token()) {
-                r.set_iam_token(MaskToken(r.iam_token()));
-            }
-            if (r.api_key()) {
-                r.set_api_key(MaskToken(r.api_key()));
-            }
-            r.clear_iam_cookie();
-            return r;
+            return ObfuscateImpl<true>(p, MaskToken);
         }
 
         static const yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse& Obfuscate(const yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse& p) {
@@ -48,14 +58,7 @@ class TAccessServiceV1 : public NActors::TActor<TAccessServiceV1>, NGrpcActorCli
         using TResponseEventType = TEvAccessService::TEvAuthorizeResponseV1;
 
         static yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest Obfuscate(const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest& p) {
-            yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest r(p);
-            if (r.iam_token()) {
-                r.set_iam_token(MaskToken(r.iam_token()));
-            }
-            if (r.api_key()) {
-                r.set_api_key(MaskToken(r.api_key()));
-            }
-            return r;
+            return ObfuscateImpl<false>(p, MaskToken);
         }
 
         static const yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse& Obfuscate(const yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse& p) {
@@ -94,15 +97,7 @@ class TAccessServiceV2 : public NActors::TActor<TAccessServiceV2>, NGrpcActorCli
         using TResponseEventType = TEvAccessService::TEvAuthenticateResponseV2;
 
         static yandex::cloud::priv::accessservice::v2::AuthenticateRequest Obfuscate(const yandex::cloud::priv::accessservice::v2::AuthenticateRequest& p) {
-            yandex::cloud::priv::accessservice::v2::AuthenticateRequest r(p);
-            if (r.iam_token()) {
-                r.set_iam_token(MaskToken(r.iam_token()));
-            }
-            if (r.api_key()) {
-                r.set_api_key(MaskToken(r.api_key()));
-            }
-            r.clear_iam_cookie();
-            return r;
+            return ObfuscateImpl<true>(p, MaskToken);
         }
 
         static const yandex::cloud::priv::accessservice::v2::AuthenticateResponse& Obfuscate(const yandex::cloud::priv::accessservice::v2::AuthenticateResponse& p) {
@@ -120,14 +115,7 @@ class TAccessServiceV2 : public NActors::TActor<TAccessServiceV2>, NGrpcActorCli
         using TResponseEventType = TEvAccessService::TEvAuthorizeResponseV2;
 
         static yandex::cloud::priv::accessservice::v2::AuthorizeRequest Obfuscate(const yandex::cloud::priv::accessservice::v2::AuthorizeRequest& p) {
-            yandex::cloud::priv::accessservice::v2::AuthorizeRequest r(p);
-            if (r.iam_token()) {
-                r.set_iam_token(MaskToken(r.iam_token()));
-            }
-            if (r.api_key()) {
-                r.set_api_key(MaskToken(r.api_key()));
-            }
-            return r;
+            return ObfuscateImpl<false>(p, MaskToken);
         }
 
         static const yandex::cloud::priv::accessservice::v2::AuthorizeResponse& Obfuscate(const yandex::cloud::priv::accessservice::v2::AuthorizeResponse& p) {
@@ -145,14 +133,7 @@ class TAccessServiceV2 : public NActors::TActor<TAccessServiceV2>, NGrpcActorCli
         using TResponseEventType = TEvAccessService::TEvBulkAuthorizeResponseV2;
 
         static yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest Obfuscate(const yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest& p) {
-            yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest r(p);
-            if (r.iam_token()) {
-                r.set_iam_token(MaskToken(r.iam_token()));
-            }
-            if (r.api_key()) {
-                r.set_api_key(MaskToken(r.api_key()));
-            }
-            return r;
+            return ObfuscateImpl<false>(p, MaskToken);
         }
 
         static const yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse& Obfuscate(const yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse& p) {
@@ -191,7 +172,6 @@ IActor* CreateAccessServiceV2(const TAccessServiceSettings& settings) {
     return new TAccessServiceV2(settings);
 }
 
-// TODO(vlad-serikov): Think about AccessServiceV2 with cache
 IActor* CreateAccessServiceV1WithCache(const TAccessServiceSettings& settings) {
     IActor* accessService = CreateAccessServiceV1(settings);
     accessService = NGrpcActorClient::CreateGrpcServiceCache<
@@ -203,4 +183,15 @@ IActor* CreateAccessServiceV1WithCache(const TAccessServiceSettings& settings) {
     return accessService;
 }
 
+IActor* CreateAccessServiceV2WithCache(const TAccessServiceSettings& settings) {
+    IActor* accessService = CreateAccessServiceV2(settings);
+    accessService = NGrpcActorClient::CreateGrpcServiceCache<
+        TEvAccessService::TEvAuthenticateRequestV2,
+        TEvAccessService::TEvAuthenticateResponseV2>(accessService);
+    accessService = NGrpcActorClient::CreateGrpcServiceCache<
+        TEvAccessService::TEvAuthorizeRequestV2,
+        TEvAccessService::TEvAuthorizeResponseV2>(accessService);
+    return accessService;
 }
+
+} // namespace NCloud

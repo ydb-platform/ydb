@@ -28,7 +28,7 @@ void THttpProxyTestMock::InitAll(const TInitParameters initParameters) {
     AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
     InitKikimr(initParameters.YandexCloudMode, initParameters.EnableMetering, initParameters.EnforceUserTokenRequirement);
     InitAccessServiceService();
-    InitHttpServer(initParameters.YandexCloudMode, initParameters.EnableSqsTopic);
+    InitHttpServer(initParameters.YandexCloudMode, initParameters.EnableSqsTopic, initParameters.UseV2as);
 }
 
 TString THttpProxyTestMock::FormAuthorizationStr(const TString& region) const {
@@ -764,7 +764,7 @@ void THttpProxyTestMock::InitAccessServiceService() {
     AccessServiceServer = builder.BuildAndStart();
 }
 
-void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopic) {
+void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopic, bool useV2as) {
     using namespace NKikimr::NHttpProxy;
     NKikimrConfig::TServerlessProxyConfig config;
     config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");
@@ -809,10 +809,10 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     auto as = ActorRuntime->GetAnyNodeActorSystem();
     opts.SetLogger(NYdbGrpc::CreateActorSystemLogger(*as, NKikimrServices::GRPC_SERVER));
 
-    TActorId actorId = as->Register(CreateAccessServiceActor(config));
+    TActorId actorId = as->Register(CreateAccessServiceActor(config, useV2as));
     as->RegisterLocalService(MakeAccessServiceID(), actorId);
 
-    actorId = as->Register(CreateAccessServiceActor(config));
+    actorId = as->Register(CreateAccessServiceActor(config, useV2as));
     as->RegisterLocalService(NSQS::MakeSqsAccessServiceID(), actorId);
 
     actorId = as->Register(CreateIamTokenServiceActor(config));

@@ -564,7 +564,10 @@ private:
     void RequestAccessServiceAuthorization(const TString& key, TTokenRecord& record) const {
         if (AppData()->FeatureFlags.GetEnableAccessServiceBulkAuthorization()) {
             AccessServiceBulkAuthorize(key, record);
-        } else if (NebiusAccessServiceValidator) {
+            return;
+        }
+
+        else if (NebiusAccessServiceValidator) {
             NebiusAccessServiceAuthorize(key, record);
         } else {
             AccessServiceAuthorize(key, record);
@@ -1081,29 +1084,14 @@ private:
         record.AuthorizeRequests.emplace_back(ev.Release());
     }
 
-    // TODO(vlad-serikov): Deduplicate later
-    static auto GetTokenType(TEvAccessServiceAuthenticateRequestV1* request) {
-        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
-    }
-
-    static auto GetTokenType(TEvAccessServiceAuthorizeRequestV1* request) {
-        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
-    }
-
-    static auto GetTokenType(TEvAccessServiceAuthenticateRequestV2* request) {
-        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
-    }
-
-    static auto GetTokenType(TEvAccessServiceAuthorizeRequestV2* request) {
-        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
-    }
-
-    static auto GetTokenType(TEvNebiusAccessServiceAuthenticateRequest*) {
-        return TDerived::ETokenType::NebiusAccessService; // the only supported
-    }
-
-    static auto GetTokenType(TEvNebiusAccessServiceAuthorizeRequest*) {
-        return TDerived::ETokenType::NebiusAccessService; // the only supported
+    template <typename TRequest>
+    static auto GetTokenType(TRequest* request) {
+        if constexpr (std::is_same_v<TRequest, TEvNebiusAccessServiceAuthenticateRequest> ||
+                      std::is_same_v<TRequest, TEvNebiusAccessServiceAuthorizeRequest>) {
+            return TDerived::ETokenType::NebiusAccessService;  // the only supported
+        } else {
+            return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+        }
     }
 
     template <typename TTokenRecord>
@@ -1487,216 +1475,113 @@ private:
         }
     }
 
-    void Handle(NCloud::TEvAccessService::TEvAuthorizeResponseV1::TPtr& ev) {
-        NCloud::TEvAccessService::TEvAuthorizeResponseV1* response = ev->Get();
-        TEvAccessServiceAuthorizeRequestV1* request = response->Request->Get<TEvAccessServiceAuthorizeRequestV1>();
+    template <typename TEvRequest, typename TEvResponse>
+    void HandleAuthorizeResponse(typename TEvResponse::TPtr& ev) {
+        auto* response = ev->Get();
+        auto* request = response->Request->template Get<TEvRequest>();
         const TString& key(request->Key);
+
         auto& userTokens = GetDerived()->GetUserTokens();
         auto itToken = userTokens.find(key);
         if (itToken == userTokens.end()) {
-            BLOG_ERROR("Ticket(key) "
-                        << MaskTicket(key)
-                        << " has expired during permission check");
-        } else {
-            auto& record = itToken->second;
-            TString permission = request->Request.permission();
-            auto itPermission = record.Permissions.find(permission);
-            if (itPermission != record.Permissions.end()) {
-                if (response->Status.Ok()) {
-                    TString errorMessage;
-                    if (ApplySubjectName(response->Response.subject(), itPermission->second.Subject, errorMessage)) {
-                        itPermission->second.SubjectType = ConvertSubjectType(response->Response.subject().type_case());
-                        itPermission->second.Error.clear();
-                        if (record.Subject.empty()) {
-                            record.Subject = itPermission->second.Subject;
-                            record.SubjectType = itPermission->second.SubjectType;
-                        }
-                        BLOG_TRACE("Ticket "
-                                    << record.GetMaskedTicket()
-                                    << " permission "
-                                    << permission
-                                    << " now has a valid subject \""
-                                    << record.Subject
-                                    << "\"");
+            BLOG_ERROR("Ticket(key) " << MaskTicket(key)
+                                      << " has expired during permission check");
+            return;
+        }
+
+        auto& record = itToken->second;
+        TString permission = request->Request.permission();
+        auto itPermission = record.Permissions.find(permission);
+        if (itPermission != record.Permissions.end()) {
+            if (response->Status.Ok()) {
+                TString errorMessage;
+                if (ApplySubjectName(response->Response.subject(), itPermission->second.Subject, errorMessage)) {
+                    itPermission->second.SubjectType = ConvertSubjectType(response->Response.subject().type_case());
+                    itPermission->second.Error.clear();
+                    if (record.Subject.empty()) {
+                        record.Subject = itPermission->second.Subject;
+                        record.SubjectType = itPermission->second.SubjectType;
                     }
-                } else {
-                    bool retryable = IsRetryableGrpcError(response->Status);
-                    itPermission->second.Error = {.Message = TString{response->Status.Msg}, .Retryable = retryable};
-                    if (itPermission->second.Subject.empty() || !retryable) {
-                        itPermission->second.Subject.clear();
-                        BLOG_TRACE("Ticket "
-                                    << record.GetMaskedTicket()
-                                    << " permission "
-                                    << permission
-                                    << " now has a permanent error \""
-                                    << itPermission->second.Error
-                                    << "\" "
-                                    << " retryable:"
-                                    << retryable);
-                    } else if (retryable) {
-                        BLOG_TRACE("Ticket "
-                                    << record.GetMaskedTicket()
-                                    << " permission "
-                                    << permission
-                                    << " now has a retryable error \""
-                                    << response->Status.Msg
-                                    << "\"");
-                    }
+                    BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                                         << " permission " << permission
+                                         << " now has a valid subject \"" << record.Subject << "\"");
                 }
             } else {
-                BLOG_W("Received response for unknown permission " << permission << " for ticket " << record.GetMaskedTicket());
+                bool retryable = IsRetryableGrpcError(response->Status);
+                itPermission->second.Error = {.Message = TString{response->Status.Msg}, .Retryable = retryable};
+                if (itPermission->second.Subject.empty() || !retryable) {
+                    itPermission->second.Subject.clear();
+                    BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                                         << " permission " << permission
+                                         << " now has a permanent error \"" << itPermission->second.Error << "\" "
+                                         << " retryable:" << retryable);
+                } else if (retryable) {
+                    BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                                         << " permission " << permission
+                                         << " now has a retryable error \"" << response->Status.Msg << "\"");
+                }
             }
-            if (--record.ResponsesLeft == 0) {
-                ui32 permissionsOk = 0;
-                ui32 retryableErrors = 0;
-                bool requiredPermissionFailed = false;
-                TEvTicketParser::TError error;
-                for (const auto& [permission, rec] : record.Permissions) {
-                    if (rec.IsPermissionOk()) {
-                        ++permissionsOk;
-                    } else if (rec.IsRequired()) {
-                        TString id;
-                        if (TString folderId = record.GetAttributeValue(permission, "folder_id")) {
-                            id += "folder_id " + folderId;
-                        } else if (TString cloudId = record.GetAttributeValue(permission, "cloud_id")) {
-                            id += "cloud_id " + cloudId;
-                        } else if (TString serviceAccountId = record.GetAttributeValue(permission, "service_account_id")) {
-                            id += "service_account_id " + serviceAccountId;
-                        }
+        } else {
+            BLOG_W("Received response for unknown permission " << permission
+                                                               << " for ticket " << record.GetMaskedTicket());
+        }
+
+        if (--record.ResponsesLeft == 0) {
+            ui32 permissionsOk = 0;
+            ui32 retryableErrors = 0;
+            bool requiredPermissionFailed = false;
+            TEvTicketParser::TError error;
+            for (const auto& [permission, rec] : record.Permissions) {
+                if (rec.IsPermissionOk()) {
+                    ++permissionsOk;
+                } else if (rec.IsRequired()) {
+                    TString id;
+                    if (TString folderId = record.GetAttributeValue(permission, "folder_id")) {
+                        id += "folder_id " + folderId;
+                    } else if (TString cloudId = record.GetAttributeValue(permission, "cloud_id")) {
+                        id += "cloud_id " + cloudId;
+                    } else if (TString serviceAccountId = record.GetAttributeValue(permission, "service_account_id")) {
+                        id += "service_account_id " + serviceAccountId;
+                    }
+                    error = rec.Error;
+                    error.Message = permission + " for " + id + " - " + error.Message;
+                    requiredPermissionFailed = true;
+                    break;
+                } else {
+                    if (rec.Error.Retryable) {
+                        ++retryableErrors;
                         error = rec.Error;
-                        error.Message = permission + " for " + id + " - " + error.Message;
-                        requiredPermissionFailed = true;
                         break;
-                    } else {
-                        if (rec.Error.Retryable) {
-                            ++retryableErrors;
-                            error = rec.Error;
-                            break;
-                        } else if (!error) {
-                            error = rec.Error;
-                        }
+                    } else if (!error) {
+                        error = rec.Error;
                     }
                 }
-                if (permissionsOk > 0 && retryableErrors == 0 && !requiredPermissionFailed) {
-                    record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
-                    if (ResolveAccountName(record, key)) {
-                        return;
-                    }
-                    SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, record.Subject, {}));
-                } else if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
-                    SetError(request->Key, record, error);
+            }
+            if (permissionsOk > 0 && retryableErrors == 0 && !requiredPermissionFailed) {
+                record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+                if (ResolveAccountName(record, key)) {
+                    return;
                 }
+                SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, record.Subject, {}));
+            } else if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
+                SetError(request->Key, record, error);
             }
-            if (record.ResponsesLeft == 0) {
-                Respond(record);
-            }
+        }
+        if (record.ResponsesLeft == 0) {
+            Respond(record);
         }
     }
 
+    void Handle(NCloud::TEvAccessService::TEvAuthorizeResponseV1::TPtr& ev) {
+        HandleAuthorizeResponse<
+            TEvAccessServiceAuthorizeRequestV1,
+            NCloud::TEvAccessService::TEvAuthorizeResponseV1>(ev);
+    }
+
     void Handle(NCloud::TEvAccessService::TEvAuthorizeResponseV2::TPtr& ev) {
-        NCloud::TEvAccessService::TEvAuthorizeResponseV2* response = ev->Get();
-        TEvAccessServiceAuthorizeRequestV2* request = response->Request->Get<TEvAccessServiceAuthorizeRequestV2>();
-        const TString& key(request->Key);
-        auto& userTokens = GetDerived()->GetUserTokens();
-        auto itToken = userTokens.find(key);
-        if (itToken == userTokens.end()) {
-            BLOG_ERROR("Ticket(key) "
-                        << MaskTicket(key)
-                        << " has expired during permission check");
-        } else {
-            auto& record = itToken->second;
-            TString permission = request->Request.permission();
-            auto itPermission = record.Permissions.find(permission);
-            if (itPermission != record.Permissions.end()) {
-                if (response->Status.Ok()) {
-                    TString errorMessage;
-                    if (ApplySubjectName(response->Response.subject(), itPermission->second.Subject, errorMessage)) {
-                        itPermission->second.SubjectType = ConvertSubjectType(response->Response.subject().type_case());
-                        itPermission->second.Error.clear();
-                        if (record.Subject.empty()) {
-                            record.Subject = itPermission->second.Subject;
-                            record.SubjectType = itPermission->second.SubjectType;
-                        }
-                        BLOG_TRACE("Ticket "
-                                    << record.GetMaskedTicket()
-                                    << " permission "
-                                    << permission
-                                    << " now has a valid subject \""
-                                    << record.Subject
-                                    << "\"");
-                    }
-                } else {
-                    bool retryable = IsRetryableGrpcError(response->Status);
-                    itPermission->second.Error = {.Message = TString{response->Status.Msg}, .Retryable = retryable};
-                    if (itPermission->second.Subject.empty() || !retryable) {
-                        itPermission->second.Subject.clear();
-                        BLOG_TRACE("Ticket "
-                                    << record.GetMaskedTicket()
-                                    << " permission "
-                                    << permission
-                                    << " now has a permanent error \""
-                                    << itPermission->second.Error
-                                    << "\" "
-                                    << " retryable:"
-                                    << retryable);
-                    } else if (retryable) {
-                        BLOG_TRACE("Ticket "
-                                    << record.GetMaskedTicket()
-                                    << " permission "
-                                    << permission
-                                    << " now has a retryable error \""
-                                    << response->Status.Msg
-                                    << "\"");
-                    }
-                }
-            } else {
-                BLOG_W("Received response for unknown permission " << permission << " for ticket " << record.GetMaskedTicket());
-            }
-            if (--record.ResponsesLeft == 0) {
-                ui32 permissionsOk = 0;
-                ui32 retryableErrors = 0;
-                bool requiredPermissionFailed = false;
-                TEvTicketParser::TError error;
-                for (const auto& [permission, rec] : record.Permissions) {
-                    if (rec.IsPermissionOk()) {
-                        ++permissionsOk;
-                    } else if (rec.IsRequired()) {
-                        TString id;
-                        if (TString folderId = record.GetAttributeValue(permission, "folder_id")) {
-                            id += "folder_id " + folderId;
-                        } else if (TString cloudId = record.GetAttributeValue(permission, "cloud_id")) {
-                            id += "cloud_id " + cloudId;
-                        } else if (TString serviceAccountId = record.GetAttributeValue(permission, "service_account_id")) {
-                            id += "service_account_id " + serviceAccountId;
-                        }
-                        error = rec.Error;
-                        error.Message = permission + " for " + id + " - " + error.Message;
-                        requiredPermissionFailed = true;
-                        break;
-                    } else {
-                        if (rec.Error.Retryable) {
-                            ++retryableErrors;
-                            error = rec.Error;
-                            break;
-                        } else if (!error) {
-                            error = rec.Error;
-                        }
-                    }
-                }
-                if (permissionsOk > 0 && retryableErrors == 0 && !requiredPermissionFailed) {
-                    record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
-                    if (ResolveAccountName(record, key)) {
-                        return;
-                    }
-                    SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, record.Subject, {}));
-                } else if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
-                    SetError(request->Key, record, error);
-                }
-            }
-            if (record.ResponsesLeft == 0) {
-                Respond(record);
-            }
-        }
+        HandleAuthorizeResponse<
+            TEvAccessServiceAuthorizeRequestV2,
+            NCloud::TEvAccessService::TEvAuthorizeResponseV2>(ev);
     }
 
     void Handle(TEvTicketParser::TEvRefreshTicket::TPtr& ev) {
@@ -2333,6 +2218,7 @@ protected:
         UserAccountDomain = Config.GetUserAccountDomain();
         ServiceDomain = Config.GetServiceDomain();
 
+        // TODO(vlad-serikov): Test
         if (Config.GetUseAccessService()) {
             if (Config.GetAccessServiceType() == "Yandex_v2") {
                 NCloud::TAccessServiceSettings settings;
@@ -2341,33 +2227,36 @@ protected:
                 // V1
                 AccessServiceValidatorV1 = Register(NCloud::CreateAccessServiceV1(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
                 if (Config.GetCacheAccessServiceAuthentication()) {
-                    AccessServiceValidatorV1 = Register(
-                        NGrpcActorClient::CreateGrpcServiceCache<
-                            NCloud::TEvAccessService::TEvAuthenticateRequestV1,
-                            NCloud::TEvAccessService::TEvAuthenticateResponseV1>(
-                                AccessServiceValidatorV1,
-                                Config.GetGrpcCacheSize(),
-                                TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())),
-                        TMailboxType::HTSwap,
-                        AppData()->UserPoolId);
+                    AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequestV1, NCloud::TEvAccessService::TEvAuthenticateResponseV1>(
+                                                            AccessServiceValidatorV1,
+                                                            Config.GetGrpcCacheSize(),
+                                                            TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                            TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
                 }
                 if (Config.GetCacheAccessServiceAuthorization()) {
-                    AccessServiceValidatorV1 = Register(
-                        NGrpcActorClient::CreateGrpcServiceCache<
-                            NCloud::TEvAccessService::TEvAuthorizeRequestV1,
-                            NCloud::TEvAccessService::TEvAuthorizeResponseV1>(
-                                AccessServiceValidatorV1,
-                                Config.GetGrpcCacheSize(),
-                                TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())),
-                        TMailboxType::HTSwap,
-                        AppData()->UserPoolId);
+                    AccessServiceValidatorV1 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequestV1, NCloud::TEvAccessService::TEvAuthorizeResponseV1>(
+                                                            AccessServiceValidatorV1,
+                                                            Config.GetGrpcCacheSize(),
+                                                            TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                            TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
                 }
 
                 // V2
                 AccessServiceValidatorV2 = Register(NCloud::CreateAccessServiceV2(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
-                // TODO(vlad-serikov): Think about cache
+                if (Config.GetCacheAccessServiceAuthentication()) {
+                    AccessServiceValidatorV2 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequestV2, NCloud::TEvAccessService::TEvAuthenticateResponseV2>(
+                                                            AccessServiceValidatorV2,
+                                                            Config.GetGrpcCacheSize(),
+                                                            TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                            TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
+                }
+                if (Config.GetCacheAccessServiceAuthorization()) {
+                    AccessServiceValidatorV2 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequestV2, NCloud::TEvAccessService::TEvAuthorizeResponseV2>(
+                                                            AccessServiceValidatorV2,
+                                                            Config.GetGrpcCacheSize(),
+                                                            TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                            TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
+                }
             } else if (Config.GetAccessServiceType() == "Nebius_v1") {
                 NNebiusCloud::TAccessServiceSettings settings;
                 FillAccessServiceSettings(settings);

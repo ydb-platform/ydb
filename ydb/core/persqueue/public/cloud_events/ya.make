@@ -16,7 +16,6 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     ydb/core/persqueue/events
     ydb/core/persqueue/public/cloud_events/proto
-    ydb/core/protos
     ydb/core/protos/schemeshard
     ydb/core/base
 )

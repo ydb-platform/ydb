@@ -1,5 +1,7 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(location.h)
+
 SRCS(
     location.cpp
     dirty_map.cpp

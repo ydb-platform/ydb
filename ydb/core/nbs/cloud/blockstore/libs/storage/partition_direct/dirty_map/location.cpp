@@ -49,6 +49,54 @@ bool IsPBuffer(ELocation location)
     }
 }
 
+ELocation TranslateDDiskToPBuffer(ELocation location)
+{
+    switch (location) {
+        case ELocation::PBuffer0:
+        case ELocation::PBuffer1:
+        case ELocation::PBuffer2:
+        case ELocation::HOPBuffer0:
+        case ELocation::HOPBuffer1:
+        case ELocation::Unknown:
+            Y_ABORT_UNLESS(false);
+
+        case ELocation::DDisk0:
+            return ELocation::PBuffer0;
+        case ELocation::DDisk1:
+            return ELocation::PBuffer1;
+        case ELocation::DDisk2:
+            return ELocation::PBuffer2;
+        case ELocation::HODDisk0:
+            return ELocation::HOPBuffer0;
+        case ELocation::HODDisk1:
+            return ELocation::HOPBuffer1;
+    }
+}
+
+ELocation TranslatePBufferToDDisk(ELocation location)
+{
+    switch (location) {
+        case ELocation::PBuffer0:
+            return ELocation::DDisk0;
+        case ELocation::PBuffer1:
+            return ELocation::DDisk1;
+        case ELocation::PBuffer2:
+            return ELocation::DDisk2;
+        case ELocation::HOPBuffer0:
+            return ELocation::HODDisk0;
+        case ELocation::HOPBuffer1:
+            return ELocation::HODDisk1;
+
+        case ELocation::DDisk0:
+        case ELocation::DDisk1:
+        case ELocation::DDisk2:
+        case ELocation::HODDisk0:
+        case ELocation::HODDisk1:
+        case ELocation::Unknown:
+            Y_ABORT_UNLESS(false);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // static
@@ -187,6 +235,19 @@ TString TLocationMask::Print() const
 TLocationMask::TLocationMask(ui16 mask)
     : Mask(mask)
 {}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TRoute::operator==(const TRoute& other) const
+{
+    return Source == other.Source && Destination == other.Destination;
+}
+
+bool TRoute::operator<(const TRoute& other) const
+{
+    return Source < other.Source ||
+           (Source == other.Source && Destination < other.Destination);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

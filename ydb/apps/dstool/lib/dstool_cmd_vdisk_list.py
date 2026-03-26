@@ -54,6 +54,7 @@ def do(args):
         'PDiskSlotSizeInUnits',
         'UsedSize',
         'AvailableSize',
+        'SlotSize',
         'TotalSize',
         'VDiskSlotUsage',
         'VDiskRawUsage',
@@ -79,6 +80,7 @@ def do(args):
     col_units = {
         'UsedSize': 'bytes',
         'AvailableSize': 'bytes',
+        'SlotSize': 'bytes',
         'TotalSize': 'bytes',
         'VDiskSlotUsage': '%',
         'VDiskRawUsage': '%',
@@ -88,7 +90,7 @@ def do(args):
         visible_columns.extend(['PDiskDriveStatus', 'PDiskDecommitStatus'])
 
     if args.show_vdisk_usage:
-        visible_columns.extend(['UsedSize', 'AvailableSize', 'TotalSize', 'VDiskSlotUsage'])
+        visible_columns.extend(['UsedSize', 'AvailableSize', 'SlotSize', 'TotalSize', 'VDiskSlotUsage'])
 
     table_output = table.TableOutput(all_columns, col_units=col_units, default_visible_columns=visible_columns)
 
@@ -122,6 +124,8 @@ def do(args):
             _, row['PDiskSlotSizeInUnits'] = common.get_pdisk_inferred_settings(pdisk)
             row['UsedSize'] = vslot.VDiskMetrics.AllocatedSize
             row['AvailableSize'] = vslot.VDiskMetrics.AvailableSize
+            weight = common.get_vslot_owner_weight(row['GroupSizeInUnits'], row['PDiskSlotSizeInUnits'])
+            row['SlotSize'] = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
             row['TotalSize'] = row['UsedSize'] + row['AvailableSize']
             row['VDiskSlotUsage'] = None
             row['VDiskRawUsage'] = None

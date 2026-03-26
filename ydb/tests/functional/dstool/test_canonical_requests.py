@@ -243,6 +243,7 @@ class Test(TestBase):
             'VDiskRawUsage',
             'NormalizedOccupancy',
             'UsedSize',
+            'SlotSize',
             'TotalSize',
             'CapacityAlert',
             'GroupSizeInUnits',
@@ -254,6 +255,7 @@ class Test(TestBase):
             'VDiskRawUsage',
             'NormalizedOccupancy',
             'UsedSize',
+            'Limit',
             'TotalSize',
             'CapacityAlert',
         ]
@@ -261,6 +263,7 @@ class Test(TestBase):
         return [
             self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
             self._trace('group', 'list', '-H', '--columns', *group_columns),
+            self._trace('pool', 'list', '-H', '--show-vdisk-estimated-usage'),
         ]
 
     def test_group_resize(self):

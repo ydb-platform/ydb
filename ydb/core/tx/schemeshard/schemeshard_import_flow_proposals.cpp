@@ -4,6 +4,8 @@
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
+#include <google/protobuf/util/time_util.h>
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
@@ -15,6 +17,8 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+using google::protobuf::util::TimeUtil;
 
 static bool FillDefaultValues(
     const NKikimr::NSchemeShard::TImportInfo::TItem& item,
@@ -468,14 +472,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
             addedConsumer.SetImportant(true);
         }
 
-        addedConsumer.SetAvailabilityPeriodMs(consumer.availability_period().seconds() * 1000);
+        addedConsumer.SetAvailabilityPeriodMs(TimeUtil::DurationToMilliseconds(consumer.availability_period()));
         if (consumer.has_shared_consumer_type()) {
             const auto& sharedConsumerType = consumer.shared_consumer_type();
             addedConsumer.SetType(::NKikimrPQ::TPQTabletConfig_EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_MLP);
             addedConsumer.SetKeepMessageOrder(sharedConsumerType.keep_messages_order());
-            addedConsumer.SetDefaultProcessingTimeoutSeconds(sharedConsumerType.default_processing_timeout().seconds());
-            addedConsumer.SetDefaultDelayMessageTimeMs(sharedConsumerType.receive_message_delay().seconds() * 1000);
-            addedConsumer.SetDefaultReceiveMessageWaitTimeMs(sharedConsumerType.receive_message_wait_time().seconds() * 1000);
+            addedConsumer.SetDefaultProcessingTimeoutSeconds(TimeUtil::DurationToSeconds(sharedConsumerType.default_processing_timeout()));
+            addedConsumer.SetDefaultDelayMessageTimeMs(TimeUtil::DurationToMilliseconds(sharedConsumerType.receive_message_delay()));
+            addedConsumer.SetDefaultReceiveMessageWaitTimeMs(TimeUtil::DurationToMilliseconds(sharedConsumerType.receive_message_wait_time()));
             const auto& deadLetterPolicy = sharedConsumerType.dead_letter_policy();
 
             if (sharedConsumerType.has_dead_letter_policy() && deadLetterPolicy.enabled()) {

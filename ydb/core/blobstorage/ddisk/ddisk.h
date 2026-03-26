@@ -98,6 +98,10 @@ namespace NKikimr::NDDisk {
             pb->SetOffsetInBytes(OffsetInBytes);
             pb->SetSize(Size);
         }
+
+        void Print(IOutputStream& os) const {
+            os << "{VChunkIndex:" << VChunkIndex << " OffsetInBytes:" << OffsetInBytes << " Size:" << Size << "}";
+        }
     };
 
     struct TWriteInstruction {

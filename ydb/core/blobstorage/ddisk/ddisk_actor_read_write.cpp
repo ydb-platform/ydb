@@ -51,11 +51,29 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        // TODO: check that request is within a single chunk
-
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
+        const TWriteInstruction instr(record.GetInstruction());
+
+        if (instr.PayloadId) {
+            const TRope& data = ev->Get()->GetPayload(*instr.PayloadId);
+            auto dataIter = data.Begin();
+            if (dataIter.ContiguousSize() != data.size() ||
+                    reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % BlockSize != 0) {
+                TStringStream ss;
+                ss << "payload must be contiguous and aligned to " << BlockSize << " bytes"
+                    << ", contiguousSize# " << dataIter.ContiguousSize()
+                    << " dataSize# " << data.size()
+                    << " aligned# " << (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % BlockSize == 0);
+                SendReply(*ev, std::make_unique<TEvWriteResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                    ss.Str()));
+                Counters.Interface.Write.Request(0);
+                Counters.Interface.Write.Reply(false);
+                return;
+            }
+        }
 
         TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
@@ -67,8 +85,6 @@ namespace NKikimr::NDDisk {
         }
 
         Counters.Interface.Write.Request(selector.Size);
-
-        const TWriteInstruction instr(record.GetInstruction());
 
         auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Write",
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
@@ -117,11 +133,12 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvRead::TPtr ev) {
+        STLOG(PRI_TRACE, BS_DDISK, BSDD21,
+            "TDDiskActor::Handle(TEvRead)", (DDiskId, DDiskId), (Msg, ev->Get()->Record));
+
         if (!CheckQuery(*ev, &Counters.Interface.Read)) {
             return;
         }
-
-        // TODO: check that request is within a single chunk
 
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());

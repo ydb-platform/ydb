@@ -23,8 +23,8 @@
 {{ ydb-short-name }} периодически сохраняет [чекпоинт](./checkpoints.md) — снимок состояния запроса, содержащий:
 
 - [смещения](../../concepts/datamodel/topic.md#consumer-offset) во входных топиках - позиции, до которых события были прочитаны и обработаны;
-- состояния агрегаций - промежуточные результаты операций, например накопленные значения в [GROUP BY HOP](../../yql/reference/syntax/select/group-by.md#group-by-hop);
-- состояние [MATCH_RECOGNIZE](../../yql/reference/syntax/select/match_recognize.md).
+- состояния агрегаций - промежуточные результаты операций, например накопленные значения в [GROUP BY HOP](../../yql/reference/syntax/select/group-by.md#group-by-hop){% if feature_match_recogznize==true %};
+- состояние [MATCH_RECOGNIZE](../../yql/reference/syntax/select/match_recognize.md){% endif %}.
 
 {{ ydb-short-name }} хранит смещения чтения в собственных чекпоинтах, а не полагается на смещения [потребителя (consumer)](../../concepts/datamodel/topic.md#consumer) во внешней системе.
 
@@ -36,7 +36,7 @@
 
 ## Гарантии обработки данных (dataplane): at-least-once {#at-least-once}
 
-Если в процессе обработки потока происходит сбой (перезапуск вычислительного узла, сетевой разрыв, таймаут), {{ ydb-short-name }} автоматически восстанавливает запрос из последнего чекпоинта. Гарантия [at-least-once](https://en.wikipedia.org/wiki/Reliable_messaging#At-least-once_delivery) обеспечивается для всех типов потоковых запросов: каждое событие будет обработано как минимум один раз. Запрос возобновляет чтение с сохранённого смещения и отправляет результаты обработки повторно. Это относится ко всем видам запросов: к запросам без состояния (фильтрация, обогащение, трансформация) и к запросам с внутренним состоянием ([GROUP BY HOP](../../yql/reference/syntax/select/group-by.md#group-by-hop), [MATCH_RECOGNIZE](../../yql/reference/syntax/select/match_recognize.md)).
+Если в процессе обработки потока происходит сбой (перезапуск вычислительного узла, сетевой разрыв, таймаут), {{ ydb-short-name }} автоматически восстанавливает запрос из последнего чекпоинта. Гарантия [at-least-once](https://en.wikipedia.org/wiki/Reliable_messaging#At-least-once_delivery) обеспечивается для всех типов потоковых запросов: каждое событие будет обработано как минимум один раз. Запрос возобновляет чтение с сохранённого смещения и отправляет результаты обработки повторно. Это относится ко всем видам запросов: к запросам без состояния (фильтрация, обогащение, трансформация) и к запросам с внутренним состоянием ([GROUP BY HOP](../../yql/reference/syntax/select/group-by.md#group-by-hop){% if feature_match_recogznize==true %}, [MATCH_RECOGNIZE](../../yql/reference/syntax/select/match_recognize.md){% endif %}).
 
 ```mermaid
 sequenceDiagram
@@ -97,7 +97,7 @@ sequenceDiagram
 
 ### Потеря событий при пересоздании запроса {#incomplete-windows-restart}
 
-{% if alter_streaming_query = true %}
+{% if alter_streaming_query == true %}
 Для изменения текста запроса используется команда [ALTER](../../yql/reference/syntax/alter-streaming-query.md) с `FORCE = "TRUE"`. При включении этой опции
 {% else %}
 Для изменения текста запроса используется сочетание команд [DROP](../../yql/reference/syntax/drop-streaming-query.md) + [CREATE](../../yql/reference/syntax/create-streaming-query.md). При `DROP`

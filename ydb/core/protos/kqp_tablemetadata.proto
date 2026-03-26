@@ -11,6 +11,11 @@ message TKqpPathIdProto {
     optional uint64 TableId = 2;
 }
 
+message TCompression {
+    optional string Algorithm = 1;
+    optional int64 Level = 2;
+}
+
 message TKqpColumnMetadataProto {
     enum EDefaultKind {
         DEFAULT_KIND_UNSPECIFIED = 0;
@@ -33,4 +38,5 @@ message TKqpColumnMetadataProto {
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
     optional TKqpPathIdProto DefaultFromSequencePathId = 12;
+    optional TCompression Compression = 13;
 };

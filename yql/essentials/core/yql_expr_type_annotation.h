@@ -3,6 +3,7 @@
 #include "yql_graph_transformer.h"
 #include "yql_type_annotation.h"
 
+#include <expected>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/sql_types/block.h>
@@ -84,6 +85,8 @@ TSettingNodeValidator RequireSingleValueSettings(const TSettingNodeValidator& va
 bool EnsureLambda(const TExprNode& node, TExprContext& ctx);
 IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, ui32 argumentsCount, ui32 maxArgumentsCount = Max<ui32>(),
     bool withTypes = true);
+IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, bool& isUniversal, ui32 argumentsCount, ui32 maxArgumentsCount = Max<ui32>(),
+    bool withTypes = true);
 bool EnsureTupleSize(TExprNode& node, ui32 expectedSize, TExprContext& ctx);
 bool EnsureTupleMinSize(TExprNode& node, ui32 minSize, TExprContext& ctx);
 bool EnsureTupleMaxSize(TExprNode& node, ui32 maxSize, TExprContext& ctx);
@@ -153,7 +156,7 @@ bool EnsureDryType(TPositionHandle position, const TTypeAnnotationNode& type, TE
 bool EnsureDryType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureValidJsonPath(const TExprNode& node, TExprContext& ctx);
+bool EnsureValidJsonPath(const TExprNode& node, TExprContext& ctx, bool& isUniversal);
 
 bool IsVoidType(const TExprNode& node, TExprContext& ctx);
 bool EnsureVoidType(const TExprNode& node, TExprContext& ctx);
@@ -167,6 +170,8 @@ bool EnsureTaggedType(TPositionHandle position, const TTypeAnnotationNode& type,
 bool EnsureComposableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext& ctx);
 bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext& ctx, bool& isUniversal);
+bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, bool& isUniversal);
 bool EnsureComparableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureComparableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx);
 bool EnsureEquatableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
@@ -203,7 +208,7 @@ bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type,
 bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx, bool inner = false);
 IGraphTransformer::TStatus EnsureDependsOnTailAndRewrite(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types,
-    unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0
+    ui32 requiredArgumentCount, ui32 requiredDependsOnCount, bool& isUniversal
 );
 
 const TTypeAnnotationNode* MakeTypeHandleResourceType(TExprContext& ctx);
@@ -316,6 +321,7 @@ EDataSlot WithTzDate(EDataSlot dataSlot);
 EDataSlot WithoutTzDate(EDataSlot dataSlot);
 EDataSlot MakeSigned(EDataSlot dataSlot);
 EDataSlot MakeUnsigned(EDataSlot dataSlot);
+std::expected<std::pair<const TDataExprType*, bool>, TString> IsAddAllowedYqlTypes(const TTypeAnnotationNode* left, const TTypeAnnotationNode* right, TExprContext& ctx);
 bool IsDataTypeDecimal(EDataSlot dataSlot);
 bool IsDataTypeDateOrTzDateOrInterval(EDataSlot dataSlot);
 bool IsDataTypeDateOrTzDate(EDataSlot dataSlot);

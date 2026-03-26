@@ -2,7 +2,7 @@
 
 #include "tool_interface.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -12,6 +12,6 @@ struct TExecQueryToolSettings {
     TDriver Driver;
 };
 
-ITool::TPtr CreateExecQueryTool(const TExecQueryToolSettings& settings, const TInteractiveLogger& log);
+ITool::TPtr CreateExecQueryTool(const TExecQueryToolSettings& settings);
 
 } // namespace NYdb::NConsoleClient::NAi

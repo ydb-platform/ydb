@@ -4,8 +4,7 @@
 
 #include <yql/essentials/public/purecalc/io_specs/protobuf_raw/spec.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 /**
  * Processing mode for working with non-raw protobuf messages.
  *
@@ -17,7 +16,7 @@ class TProtobufInputSpec: public TProtobufRawInputSpec {
                   "should be derived from google::protobuf::Message");
 
 public:
-    TProtobufInputSpec(
+    explicit TProtobufInputSpec(
         const TMaybe<TString>& timestampColumn = Nothing(),
         const TProtoSchemaOptions& options = {})
         : TProtobufRawInputSpec(*T::descriptor(), timestampColumn, options)
@@ -36,7 +35,7 @@ class TProtobufOutputSpec: public TProtobufRawOutputSpec {
                   "should be derived from google::protobuf::Message");
 
 public:
-    TProtobufOutputSpec(
+    explicit TProtobufOutputSpec(
         const TProtoSchemaOptions& options = {},
         google::protobuf::Arena* arena = nullptr)
         : TProtobufRawOutputSpec(*T::descriptor(), nullptr, options, arena)
@@ -54,7 +53,7 @@ class TProtobufMultiOutputSpec: public TProtobufRawMultiOutputSpec {
         "all types should be derived from google::protobuf::Message");
 
 public:
-    TProtobufMultiOutputSpec(
+    explicit TProtobufMultiOutputSpec(
         const TProtoSchemaOptions& options = {},
         TMaybe<TVector<google::protobuf::Arena*>> arenas = {})
         : TProtobufRawMultiOutputSpec({T::descriptor()...}, Nothing(), options, std::move(arenas))
@@ -143,5 +142,4 @@ struct TOutputSpecTraits<TProtobufMultiOutputSpec<T...>> {
         TOutputSpecTraits<TProtobufRawMultiOutputSpec>::SetConsumerToWorker(outputSpec, worker, std::move(wrapper));
     }
 };
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

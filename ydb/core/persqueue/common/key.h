@@ -366,8 +366,11 @@ bool TKey::IsHead() const
 }
 
 inline
-TString GetTxKey(ui64 txId)
+TString GetTxKey(ui64 txId, TMaybe<ui32> partition = Nothing())
 {
+    if (partition.Defined()) {
+        return Sprintf("tx_%020" PRIu64 "_%010" PRIu32, txId, *partition);
+    }
     return Sprintf("tx_%020" PRIu64, txId);
 }
 

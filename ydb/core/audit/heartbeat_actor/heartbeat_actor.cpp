@@ -38,7 +38,7 @@ public:
 
     void HeartbeatLog() {
         AUDIT_LOG(
-            AUDIT_PART("component", "audit")
+            AUDIT_PART("component", "audit-service")
             AUDIT_PART("subject", "metadata@system")
             AUDIT_PART("sanitized_token", "{none}")
             AUDIT_PART("operation", "HEARTBEAT")

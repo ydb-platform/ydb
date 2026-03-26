@@ -48,7 +48,7 @@ private:
     const TClientContext Context_;
 
     TTransactionId ParentTransactionId_;
-    TMaybe<TFormat> Format_;
+    TFormat Format_;
     TTableReaderOptions Options_;
 
     std::unique_ptr<TPingableTransaction> ReadTransaction_;

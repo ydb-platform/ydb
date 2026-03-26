@@ -2,8 +2,7 @@
 
 #include <yql/essentials/public/udf/udf_registrator.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 inline constexpr char STANDART_STREAM_PROXY_INJECTION_SCRIPT[] =
     R"(
@@ -77,5 +76,4 @@ TUniquePtr<IUdfModule> GetYqlPythonUdfModule(
     EPythonFlavor pythonFlavor,
     bool standalone);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

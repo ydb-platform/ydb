@@ -46,7 +46,7 @@ public:
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"), "BadRequest");
         }
         if (!Viewer->CheckAccessMonitoring(GetRequest())) {
-            return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
+            return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
         }
         ui32 groupId = 0;
         ui32 groupGeneration = 0;

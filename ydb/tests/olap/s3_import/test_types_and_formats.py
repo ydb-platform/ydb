@@ -400,8 +400,8 @@ class TestTypesAndFormats(S3ImportTestBase):
 
         access_key_id_secret_name = f"{test_bucket}_key_id"
         access_key_secret_secret_name = f"{test_bucket}_key_secret"
-        self.ydb_client.query(f"CREATE SECRET {access_key_id_secret_name} WITH value=('{self.s3_client.key_id}')")
-        self.ydb_client.query(f"CREATE SECRET {access_key_secret_secret_name} WITH value=('{self.s3_client.key_secret}')")
+        self.ydb_client.query(f"CREATE SECRET {access_key_id_secret_name} WITH (value='{self.s3_client.key_id}')")
+        self.ydb_client.query(f"CREATE SECRET {access_key_secret_secret_name} WITH (value='{self.s3_client.key_secret}')")
 
         self.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE {s3_source_name} WITH (

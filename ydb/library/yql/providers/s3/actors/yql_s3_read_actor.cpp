@@ -29,6 +29,7 @@
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/providers/s3/serializations/serialization_interval.h>
+#include <ydb/core/util/exceptions.h>
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -44,7 +45,6 @@
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/util.h>
-#include <yql/essentials/utils/exceptions.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
@@ -138,6 +138,7 @@ namespace NYql::NDq {
 
 using namespace ::NActors;
 using namespace ::NYql::NS3Details;
+using namespace ::NKikimr;
 
 using ::NYql::NS3Lister::ES3PatternVariant;
 using ::NYql::NS3Lister::ES3PatternType;
@@ -519,10 +520,19 @@ public:
     std::map<ui64, ui64> RowGroupReaderIndex;
 
     static void OnResult(TActorSystem* actorSystem, TActorId selfId, TEvS3Provider::TReadRange range, ui64 cookie, IHTTPGateway::TResult&& result) {
-        if (!result.Issues) {
-            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Content)), 0, cookie));
-        } else {
+        if (result.Issues) {
             actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Issues)), 0, cookie));
+        } else if (const auto httpCode = result.Content.HttpResponseCode; httpCode < 200 || httpCode >= 300) {
+            const TString response = result.Content.Extract();
+            TString s3ErrorCode;
+            TString message;
+            if (!ParseS3ErrorResponse(response, s3ErrorCode, message)) {
+                message = response;
+            }
+            SubstGlobal(message, '\r', ' ');
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, BuildIssues(httpCode, s3ErrorCode, message)), 0, cookie));
+        } else {
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Content)), 0, cookie));
         }
     }
 

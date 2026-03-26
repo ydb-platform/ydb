@@ -77,6 +77,10 @@ class YdbClient:
             raise f"{path} has unexpected type"
         return self._remove_recursively(path)
 
+    def close(self):
+        self.session_pool.stop()
+        self.driver.stop()
+
 
 class WorkloadBase:
     def __init__(self, client, tables_prefix, workload_name, stop):

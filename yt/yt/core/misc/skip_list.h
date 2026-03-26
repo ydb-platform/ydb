@@ -56,7 +56,7 @@ public:
         TIterator(const TSkipList* owner, const TNode* current);
         TIterator(const TIterator& other);
 
-        TIterator& operator = (const TIterator& other);
+        TIterator& operator=(const TIterator& other);
 
         //! Advances the iterator to the previous item.
         void MovePrev();

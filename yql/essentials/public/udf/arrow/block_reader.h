@@ -10,8 +10,7 @@
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_value_utils.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class IBlockReader: private TNonCopyable {
 public:
@@ -342,7 +341,7 @@ public:
 template <bool Nullable>
 class TTupleBlockReader final: public TTupleBlockReaderBase<Nullable, TTupleBlockReader<Nullable>> {
 public:
-    TTupleBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
+    explicit TTupleBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
         : Children_(std::move(children))
         , Items_(Children_.size())
     {
@@ -403,8 +402,8 @@ public:
 
     size_t GetChildrenDefaultDataWeight() const {
         size_t size = 0;
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            size += Children_[i]->GetDefaultValueWeight();
+        for (const auto& child : Children_) {
+            size += child->GetDefaultValueWeight();
         }
         return size;
     }
@@ -547,7 +546,7 @@ public:
 
 class TExternalOptionalBlockReader final: public TBlockReaderBase {
 public:
-    TExternalOptionalBlockReader(std::unique_ptr<IBlockReader>&& inner)
+    explicit TExternalOptionalBlockReader(std::unique_ptr<IBlockReader>&& inner)
         : Inner_(std::move(inner))
     {
     }
@@ -734,5 +733,4 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
     Y_ENSURE(false, "Unsupported type");
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

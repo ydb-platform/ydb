@@ -3,18 +3,16 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
 
 PyDoc_STRVAR(_csv_list_dialects__doc__,
 "list_dialects($module, /)\n"
 "--\n"
 "\n"
-"Return a list of all known dialect names.\n"
-"\n"
-"    names = csv.list_dialects()");
+"Return a list of all known dialect names.");
 
 #define _CSV_LIST_DIALECTS_METHODDEF    \
     {"list_dialects", (PyCFunction)_csv_list_dialects, METH_NOARGS, _csv_list_dialects__doc__},
@@ -32,9 +30,7 @@ PyDoc_STRVAR(_csv_unregister_dialect__doc__,
 "unregister_dialect($module, /, name)\n"
 "--\n"
 "\n"
-"Delete the name/dialect mapping associated with a string name.\n"
-"\n"
-"    csv.unregister_dialect(name)");
+"Delete the name/dialect mapping associated with a string name.");
 
 #define _CSV_UNREGISTER_DIALECT_METHODDEF    \
     {"unregister_dialect", _PyCFunction_CAST(_csv_unregister_dialect), METH_FASTCALL|METH_KEYWORDS, _csv_unregister_dialect__doc__},
@@ -89,9 +85,7 @@ PyDoc_STRVAR(_csv_get_dialect__doc__,
 "get_dialect($module, /, name)\n"
 "--\n"
 "\n"
-"Return the dialect instance associated with name.\n"
-"\n"
-"    dialect = csv.get_dialect(name)");
+"Return the dialect instance associated with name.");
 
 #define _CSV_GET_DIALECT_METHODDEF    \
     {"get_dialect", _PyCFunction_CAST(_csv_get_dialect), METH_FASTCALL|METH_KEYWORDS, _csv_get_dialect__doc__},
@@ -147,8 +141,6 @@ PyDoc_STRVAR(_csv_field_size_limit__doc__,
 "--\n"
 "\n"
 "Sets an upper limit on parsed fields.\n"
-"\n"
-"    csv.field_size_limit([limit])\n"
 "\n"
 "Returns old limit. If limit is not given, no new limit is set and\n"
 "the old limit is returned");
@@ -206,4 +198,4 @@ skip_optional_pos:
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=94374e41eb2806ee input=a9049054013a1b77]*/
+/*[clinic end generated code: output=e6c0cd889fbf6e9f input=a9049054013a1b77]*/

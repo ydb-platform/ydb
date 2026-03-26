@@ -39,21 +39,19 @@ protected:
         const auto settingsKind = restore.GetSettingsCase();
         switch (settingsKind) {
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:
+        case NKikimrSchemeOp::TRestoreTask::kFSSettings:
         #ifndef KIKIMR_DISABLE_S3_OPS
-            tx->SetAsyncJobActor(ctx.Register(CreateS3Downloader(DataShard.SelfId(), op->GetTxId(), restore, tableInfo),
-                TMailboxType::HTSwap, AppData(ctx)->BatchPoolId));
+            tx->SetAsyncJobActor(ctx.Register(
+                CreateS3Downloader(DataShard.SelfId(), op->GetTxId(), restore, tableInfo),
+                TMailboxType::HTSwap,
+                AppData(ctx)->BatchPoolId));
             break;
         #else
-            Abort(op, ctx, "Imports from S3 are disabled");
+            Abort(op, ctx, TStringBuilder() << "Imports from "
+                << (settingsKind == NKikimrSchemeOp::TRestoreTask::kS3Settings ? "S3" : "FS")
+                << " are disabled");
             return false;
         #endif
-
-        case NKikimrSchemeOp::TRestoreTask::kFSSettings:
-            // TODO(st-shchetinin): Implement FS restore in DataShard
-            // https://github.com/ydb-platform/ydb/issues/28596
-            op->SetAsyncJobResult(new TImportJobProduct(true, TString(), 0, 0));
-            break;
-
         default:
             Abort(op, ctx, TStringBuilder() << "Unknown settings: " << static_cast<ui32>(settingsKind));
             return false;

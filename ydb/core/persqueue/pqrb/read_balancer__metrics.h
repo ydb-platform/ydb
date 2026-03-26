@@ -74,6 +74,7 @@ private:
         TCounters MLPClientLabeledCounters;
         ::NMonitoring::THistogramPtr MLPMessageLockAttemptsCounter;
         ::NMonitoring::THistogramPtr MLPMessageLockingDurationCounter;
+        ::NMonitoring::THistogramPtr MLPWaitingLockingDurationCounter;
 
         ::NMonitoring::TDynamicCounters::TCounterPtr DeletedByRetentionPolicyCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr DeletedByDeadlinePolicyCounter;

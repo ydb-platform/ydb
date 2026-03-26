@@ -9,13 +9,14 @@ PEERDIR(
     ydb/core/fq/libs/events
     ydb/core/protos
     ydb/library/actors/core
-    yql/essentials/providers/common/proto
     ydb/library/yql/providers/dq/api/protos
+    ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/proto
     ydb/public/api/protos
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/sdk/cpp/src/client/topic
+    yql/essentials/providers/common/proto
 )
 
 YQL_LAST_ABI_VERSION()

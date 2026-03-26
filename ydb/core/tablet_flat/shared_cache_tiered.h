@@ -62,6 +62,10 @@ namespace NKikimr::NSharedCache {
             return RegularTier->GetSize() + TryKeepInMemoryTier->GetSize();
         }
 
+        ui64 GetEvictOpsCounter() const {
+            return RegularTier->GetEvictOpsCounter() + TryKeepInMemoryTier->GetEvictOpsCounter();
+        }
+
         TString Dump() const {
             TStringBuilder result;
             bool first = true;

@@ -29,18 +29,21 @@ const std::shared_ptr<arrow::Field>& TColumnLoader::GetField() const {
     return ResultField;
 }
 
-TChunkConstructionData TColumnLoader::BuildAccessorContext(const ui32 recordsCount, const std::optional<ui32>& notNullCount) const {
-    return TChunkConstructionData(recordsCount, DefaultValue, ResultField->type(), Serializer.GetObjectPtr(), notNullCount);
+TChunkConstructionData TColumnLoader::BuildAccessorContext(const ui32 recordsCount, const std::optional<ui32>& notNullCount,
+    std::shared_ptr<IAdditionalAccessorData> additionalAccessorData) const {
+    return TChunkConstructionData(recordsCount, DefaultValue, ResultField->type(), Serializer.GetObjectPtr(), notNullCount, std::move(additionalAccessorData));
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TColumnLoader::ApplyConclusion(
-    const TString& dataStr, const ui32 recordsCount, const std::optional<ui32>& notNullCount) const {
-    return BuildAccessor(dataStr, BuildAccessorContext(recordsCount, notNullCount));
+    const TString& dataStr, const ui32 recordsCount, const std::optional<ui32>& notNullCount,
+    std::shared_ptr<IAdditionalAccessorData> additionalAccessorData) const {
+    return BuildAccessor(dataStr, BuildAccessorContext(recordsCount, notNullCount, std::move(additionalAccessorData)));
 }
 
 std::shared_ptr<IChunkedArray> TColumnLoader::ApplyVerified(
-    const TString& dataStr, const ui32 recordsCount, const std::optional<ui32>& notNullCount) const {
-    return BuildAccessor(dataStr, BuildAccessorContext(recordsCount, notNullCount)).DetachResult();
+    const TString& dataStr, const ui32 recordsCount, const std::optional<ui32>& notNullCount,
+    std::shared_ptr<IAdditionalAccessorData> additionalAccessorData) const {
+    return BuildAccessor(dataStr, BuildAccessorContext(recordsCount, notNullCount, std::move(additionalAccessorData))).DetachResult();
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TColumnLoader::BuildAccessor(

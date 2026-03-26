@@ -35,6 +35,11 @@ class TestTabletsMovement(object):
         cls.mon_url = f"http://{node.host}:{node.mon_port}"
         cls.ydb_client.wait_connection()
 
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
     def write_data(
         self,
         table: str,
@@ -125,7 +130,6 @@ class TestTabletsMovement(object):
             result_sets = self.ydb_client.query(
                 f"""
                     select
-                        String::Hex(Sum(Digest::MurMurHash32(Pickle(TableRow())))) AS data_hash,
                         SUM(val) AS value_sum,
                         COUNT(*) AS rows_count
                     from `{table_path}`

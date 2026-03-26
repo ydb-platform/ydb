@@ -1,0 +1,16 @@
+use plato;
+
+pragma yt.NativeYtTypeCompatibility = "legacy,bigtzdate";
+pragma yt.UseNativeYtTypes;
+pragma yt.UseColumnGroupsFromInputTables;
+
+$tzdate32 = TzDate32("1950-01-01,Europe/Moscow");
+$tzdatetime64 = TzDatetime64("-2200-01-02T03:04:05,Europe/Moscow");
+$tztimestamp64 = TzTimestamp64("2200-01-02T03:04:05.67890,Europe/Moscow");
+
+insert into Output
+select t.*, $tzdate32 as dt, $tzdatetime64 as dtm, $tztimestamp64 as ts from Input as t;
+
+commit;
+
+select * from Output;

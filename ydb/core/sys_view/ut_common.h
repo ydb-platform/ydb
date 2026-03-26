@@ -11,6 +11,10 @@
 namespace NKikimr {
 namespace NSysView {
 
+NKikimrSchemeOp::TPathDescription DescribePath(TTestActorRuntime& runtime, TString&& path);
+
+NYdb::NQuery::TExecuteQueryResult ExecuteQuery(NYdb::NQuery::TSession& session, const std::string& query);
+
 NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSettings(
     const TString &name, const TStoragePools &pools = {});
 
@@ -28,7 +32,6 @@ struct TTestEnvSettings {
     bool EnableOlapCompression = false;
     bool EnableTableCacheModes = false;
     bool EnableFulltextIndex = false;
-    TMaybe<bool> EnableRealSystemViewPaths;
     NKikimrProto::TAuthConfig AuthConfig = {};
     TMaybe<ui32> DataShardStatsReportIntervalSeconds;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;

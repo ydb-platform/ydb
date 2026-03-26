@@ -11,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/api/client/yc_private/accessservice
     ydb/public/api/client/yc_private/iam
 )
 

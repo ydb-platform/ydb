@@ -8,7 +8,9 @@
 #include <yql/essentials/core/yql_func_stack.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/utils/exception_utils.h>
 #include <yql/essentials/utils/log/log.h>
+
 #include <util/datetime/cputimer.h>
 #include <util/generic/scope.h>
 
@@ -17,6 +19,24 @@ namespace NYql {
 namespace {
 
 constexpr bool PrintCallableTimes = false;
+
+constexpr ui32 MaxChildrenForFuzzing = 100;
+
+THashSet<TStringBuf> FuzzUntypedExcludes = {
+    "S3ReadObject!",
+    "S3ParseSettings",
+    "DqCnMerge",
+    "DqJoin",
+    "DqPhyMapJoin",
+    "DqPhyCrossJoin",
+    "DqPhyJoinDict",
+};
+
+// IO funcs will be skipped during partial typecheck
+THashSet<TStringBuf> FuzzUniversalExcludes = {
+    "ConfRead!",
+    "PgReadTable!",
+};
 
 class TTypeAnnotationTransformer : public TGraphTransformerBase {
 public:
@@ -28,21 +48,24 @@ public:
     {
     }
 
-    ~TTypeAnnotationTransformer() {
-        if (PrintCallableTimes) {
+    ~TTypeAnnotationTransformer() override {
+        if (!PrintCallableTimes) {
+            return;
+        }
+        NYql::WithAbortOnException([&] {
             std::vector<std::pair<TStringBuf, std::pair<ui64, ui64>>> pairs;
             pairs.reserve(CallableTimes_.size());
             for (auto& x : CallableTimes_) {
                 pairs.emplace_back(x.first, x.second);
             }
 
-            Sort(pairs.begin(), pairs.end(), [](auto a,auto b) { return a.second.first > b.second.first; });
+            Sort(pairs.begin(), pairs.end(), [](auto a, auto b) { return a.second.first > b.second.first; });
             Cerr << "=============\n";
             for (auto& x : pairs) {
                 Cerr << x.first << " : " << CyclesToDuration(x.second.first) << " # " << x.second.second << Endl;
             }
             Cerr << "=============\n";
-        }
+        }, "TTypeAnnotationTransformer");
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -124,7 +147,7 @@ public:
         return combinedStatus;
     }
 
-    void Rewind() {
+    void Rewind() override {
         CallableTransformer_->Rewind();
         CallableInputs_.clear();
         Processed_.clear();
@@ -133,6 +156,8 @@ public:
         FunctionStack_.Reset();
         CallableTimes_.clear();
         IsComplete_ = false;
+        FuzzLambdaNode_.Reset();
+        FuzzUniversalNode_.Reset();
     }
 
 
@@ -584,10 +609,107 @@ private:
         }
     }
 
+    enum class EFuzzMode {
+        UntypedLambda,
+        Universal
+    };
+
+    void FuzzCallable(const TExprNode::TPtr& originalInput, TExprContext& ctx, EFuzzMode mode, TStringBuf description) {
+        if (originalInput->ChildrenSize() == 0) {
+            return;
+        }
+
+        if (originalInput->ChildrenSize() > MaxChildrenForFuzzing) {
+            return;
+        }
+
+        TExprNode::TPtr subst;
+        switch (mode) {
+        case EFuzzMode::UntypedLambda:
+            {
+                if (FuzzUntypedExcludes.contains(originalInput->Content())) {
+                    return;
+                }
+
+                if (!FuzzLambdaNode_) {
+                    auto voidNode = ctx.NewCallable(originalInput->Pos(), "Void", {});
+                    voidNode->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+                    auto argsNode = ctx.NewArguments(originalInput->Pos(), {});
+                    argsNode->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+                    FuzzLambdaNode_ = ctx.NewLambda(originalInput->Pos(),
+                                                    std::move(argsNode), std::move(voidNode));
+                }
+
+                subst = FuzzLambdaNode_;
+                break;
+            }
+        case EFuzzMode::Universal:
+            {
+                if (FuzzUniversalExcludes.contains(originalInput->Content())) {
+                    return;
+                }
+
+                if (!FuzzUniversalNode_) {
+                    auto arg = ctx.NewCallable(originalInput->Pos(), "UniversalType", {});
+                    arg->SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TUniversalExprType>()));
+                    FuzzUniversalNode_ = ctx.NewCallable(originalInput->Pos(), "InstanceOf", {arg});
+                    FuzzUniversalNode_->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+                }
+
+                subst = FuzzUniversalNode_;
+                break;
+            }
+        }
+
+        ctx.IssueManager.Mute(mode == EFuzzMode::Universal);
+        Y_DEFER {
+            ctx.IssueManager.Unmute();
+        };
+
+        for (ui32 i = 0; i < originalInput->ChildrenSize(); ++i) {
+            auto fuzzInput = ctx.ShallowCopy(*originalInput);
+            fuzzInput->ChildRef(i) = subst;
+
+            TExprNode::TPtr fuzzOutput;
+            try {
+                auto fuzzStatus = CallableTransformer_->Transform(fuzzInput, fuzzOutput, ctx);
+                switch (mode) {
+                case EFuzzMode::UntypedLambda:
+                    Y_UNUSED(fuzzStatus);
+                    break;
+                case EFuzzMode::Universal:
+                    if (fuzzStatus == IGraphTransformer::TStatus::Error) {
+                        throw yexception() << "Error status";
+                    }
+
+                    break;
+                }
+            } catch (...) {
+                ythrow yexception() << "Fuzz " << description << " failed for callable " << originalInput->Content()
+                    << ", mutated input #" << i << ", reason: " << CurrentExceptionMessage();
+            }
+        }
+    }
+
 protected:
     virtual IGraphTransformer::TStatus DoCallableTransform(const TExprNode::TPtr& input,
-        TExprNode::TPtr& output, TExprContext& ctx) {
-        return CallableTransformer_->Transform(input, output, ctx);
+                                                           TExprNode::TPtr& output, TExprContext& ctx) {
+        TExprNode::TPtr inputCopy;
+        if (GetTypes().FuzzUntypedLambda || (Mode_ == ETypeCheckMode::Initial && GetTypes().FuzzUniversal)) {
+            inputCopy = ctx.ShallowCopy(*input);
+        }
+
+        auto status = CallableTransformer_->Transform(input, output, ctx);
+
+        if (GetTypes().FuzzUntypedLambda && status != TStatus::Error) {
+            FuzzCallable(inputCopy, ctx, EFuzzMode::UntypedLambda, "untyped lambda");
+        }
+
+        if (Mode_ == ETypeCheckMode::Initial && GetTypes().FuzzUniversal && status != TStatus::Error) {
+            FuzzCallable(inputCopy, ctx, EFuzzMode::Universal, "universal");
+        }
+
+        return status;
     }
 
     TTypeAnnotationContext& GetTypes() {
@@ -606,6 +728,8 @@ private:
     TFunctionStack FunctionStack_;
     THashMap<TStringBuf, std::pair<ui64, ui64>> CallableTimes_;
     bool KeepWorldEnabled_ = false;
+    TExprNode::TPtr FuzzLambdaNode_;
+    TExprNode::TPtr FuzzUniversalNode_;
 };
 
 } // namespace
@@ -786,7 +910,7 @@ public:
         if (input->IsCallable({"MrTableConcat", "MrTableRange",
             "MrTableConcatStrict", "MrTableRangeStrict", "TempTable", "MrFolder",
             "MrTableEach", "MrTableEachStrict", "MrPartitions", "MrPartitionsStrict",
-            "MrPartitionList", "MrPartitionListStrict"})) {
+            "MrPartitionList", "MrPartitionListStrict", "MrWalkFolders"})) {
             input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
@@ -800,22 +924,19 @@ public:
         }
 
         if (input->IsCallable({"Udf", "ScriptUdf", "EvaluateAtom",
-            "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode"})) {
+            "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode", "Parameter",
+            "SubqueryOrderBy", "SubqueryAssumeOrderBy", "SubqueryExtendFor", "SubqueryUnionAllFor",
+            "SubqueryMergeFor", "SubqueryUnionMergeFor",
+            "SubqueryExtend","SubqueryUnionAll", "SubqueryMerge", "SubqueryUnionMerge",
+            "EvaluateFor!", "EvaluateParallelFor!", "EvaluateIf!"})) {
             input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
 
         if (input->IsCallable({"FileContent","FilePath","FolderPath", "TableName",
-            "SecureParam"})) {
+            "SecureParam", "TablePath"})) {
             input->SetTypeAnn(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::String));
             return IGraphTransformer::TStatus::Ok;
-        }
-
-        for (auto child : input->Children()) {
-            if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-                input->SetTypeAnn(child->GetTypeAnn());
-                return IGraphTransformer::TStatus::Ok;
-            }
         }
 
         return TBase::DoCallableTransform(input, output, ctx);
@@ -834,7 +955,7 @@ namespace {
 class TFakeArrowResolver : public IArrowResolver {
 public:
     EStatus LoadFunctionMetadata(const TPosition& pos, TStringBuf name, const TVector<const TTypeAnnotationNode*>& argTypes,
-        const TTypeAnnotationNode* returnType, TExprContext& ctx) const {
+        const TTypeAnnotationNode* returnType, TExprContext& ctx) const override {
         Y_UNUSED(pos);
         Y_UNUSED(name);
         Y_UNUSED(argTypes);
@@ -843,7 +964,7 @@ public:
         return EStatus::OK;
     }
 
-    EStatus HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, TExprContext& ctx) const {
+    EStatus HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, TExprContext& ctx) const override {
         Y_UNUSED(pos);
         Y_UNUSED(from);
         Y_UNUSED(to);
@@ -851,7 +972,7 @@ public:
         return EStatus::OK;
     }
 
-    virtual EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx,
+    EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx,
         const TUnsupportedTypeCallback& onUnsupported = {}) const final {
         Y_UNUSED(pos);
         Y_UNUSED(types);
@@ -877,12 +998,12 @@ public:
         return Nothing();
     }
 
-    bool HasLayer(const NLayers::TKey& key) const {
+    bool HasLayer(const NLayers::TKey& key) const override {
         Y_UNUSED(key);
         return false;
     }
 
-    bool AddLayer(const TString& name, const TMaybe<TString>& parent, const TMaybe<TString>& url, TExprContext& ctx) {
+    bool AddLayer(const TString& name, const TMaybe<TString>& parent, const TMaybe<TString>& url, TExprContext& ctx) override {
         Y_UNUSED(name);
         Y_UNUSED(parent);
         Y_UNUSED(url);
@@ -904,6 +1025,8 @@ public:
 
 bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issues,
     std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory) {
+    YQL_ENSURE(astRoot, "AST root is null");
+
     TExprContext ctx;
     TExprNode::TPtr exprRoot;
     if (!CompileExpr(*astRoot, exprRoot, ctx, /* resolver= */ nullptr, /* urlListerManager */ nullptr,

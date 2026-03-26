@@ -3,7 +3,6 @@
 import time
 import os
 
-
 import grpc
 import six
 import logging
@@ -39,13 +38,13 @@ def to_bytes(v):
 
 
 class KeyValueClient(object):
-    def __init__(self, server, port, cluster=None, retry_count=1):
+    def __init__(self, server, port, cluster=None, retry_count=1, sleep_retry_seconds=10):
         self.server = server
         self.port = port
         self._cluster = cluster
         self.__domain_id = 1
         self.__retry_count = retry_count
-        self.__retry_sleep_seconds = 10
+        self.__retry_sleep_seconds = sleep_retry_seconds
         self._options = [
             ('grpc.max_receive_message_length', 64 * 10 ** 6),
             ('grpc.max_send_message_length', 64 * 10 ** 6)
@@ -64,7 +63,8 @@ class KeyValueClient(object):
         while True:
             try:
                 callee = self._get_invoke_callee(method, version)
-                return callee(request)
+                result = callee(request)
+                return result
             except (RuntimeError, grpc.RpcError):
                 retry -= 1
 
@@ -73,18 +73,51 @@ class KeyValueClient(object):
 
                 time.sleep(self.__retry_sleep_seconds)
 
-    def kv_write(self, path, partition_id, key, value, channel=None, version='v1'):
+    def make_write_request(self, path, partition_id, kv_pairs, channel=None):
         request = keyvalue_api.ExecuteTransactionRequest()
         request.path = path
         request.partition_id = partition_id
-        write = request.commands.add().write
-        write.key = key
-        write.value = to_bytes(value)
-        if channel is not None:
-            write.storage_channel = channel
+        for key, value in kv_pairs:
+            write = request.commands.add().write
+            write.key = key
+            write.value = to_bytes(value)
+            if channel is not None:
+                write.storage_channel = channel
+        return request
+
+    def kv_write(self, path, partition_id, key, value, channel=None, version='v1'):
+        request = self.make_write_request(path, partition_id, [(key, value)], channel)
         return self.invoke(request, 'ExecuteTransaction', version)
 
-    def kv_read(self, path, partition_id, key, offset=None, size=None, version='v1'):
+    def kv_writes(self, path, partition_id, kv_pairs, channel=None, version='v1'):
+        request = self.make_write_request(path, partition_id, kv_pairs, channel)
+        return self.invoke(request, 'ExecuteTransaction', version)
+
+    def make_delete_range_request(self, path, partition_id, from_key=None, to_key=None,
+                                  from_inclusive=True, to_inclusive=False):
+        request = keyvalue_api.ExecuteTransactionRequest()
+        request.path = path
+        request.partition_id = partition_id
+        delete_range = request.commands.add().delete_range
+        if from_key is not None:
+            if from_inclusive:
+                delete_range.range.from_key_inclusive = from_key
+            else:
+                delete_range.range.from_key_exclusive = from_key
+        if to_key is not None:
+            if to_inclusive:
+                delete_range.range.to_key_inclusive = to_key
+            else:
+                delete_range.range.to_key_exclusive = to_key
+        return request
+
+    def kv_delete_range(self, path, partition_id, from_key=None, to_key=None,
+                        from_inclusive=True, to_inclusive=False, version='v1'):
+        request = self.make_delete_range_request(path, partition_id, from_key, to_key,
+                                                 from_inclusive, to_inclusive)
+        return self.invoke(request, 'ExecuteTransaction', version)
+
+    def make_read_request(self, path, partition_id, key, offset=None, size=None):
         request = keyvalue_api.ReadRequest()
         request.path = path
         request.partition_id = partition_id
@@ -93,6 +126,10 @@ class KeyValueClient(object):
             request.offset = offset
         if size is not None:
             request.size = size
+        return request
+
+    def kv_read(self, path, partition_id, key, offset=None, size=None, version='v1'):
+        request = self.make_read_request(path, partition_id, key, offset, size)
         return self.invoke(request, 'Read', version)
 
     def kv_get_tablets_read_state(self, path, partition_ids):

@@ -44,6 +44,10 @@ struct TMasterExitReadOnlyOptions
     bool Retry = true;
 };
 
+struct TResetDynamicallyPropagatedMasterCellsOptions
+    : public TTimeoutOptions
+{ };
+
 struct TDiscombobulateNonvotingPeersOptions
     : public TTimeoutOptions
 { };
@@ -231,6 +235,9 @@ struct IAdminClient
 
     virtual TFuture<void> MasterExitReadOnly(
         const TMasterExitReadOnlyOptions& options = {}) = 0;
+
+    virtual TFuture<void> ResetDynamicallyPropagatedMasterCells(
+        const TResetDynamicallyPropagatedMasterCellsOptions& options = {}) = 0;
 
     virtual TFuture<void> DiscombobulateNonvotingPeers(
         NHydra::TCellId cellId,

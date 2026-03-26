@@ -1,13 +1,8 @@
 UNITTEST_FOR(ydb/core/util)
 
 FORK_SUBTESTS()
-IF (WITH_VALGRIND)
-    SPLIT_FACTOR(30)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+REQUIREMENTS(cpu:4)
+SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt
@@ -36,12 +31,15 @@ SRCS(
     lf_stack_ut.cpp
     log_priority_mute_checker_ut.cpp
     lz4_data_generator_ut.cpp
+    max_tracker_ut.cpp
+    numerical_maybe_ut.cpp
     operation_queue_priority_ut.cpp
     operation_queue_ut.cpp
     page_map_ut.cpp
     queue_inplace_ut.cpp
     queue_oneone_inplace_ut.cpp
     simple_cache_ut.cpp
+    spsc_circular_queue_ut.cpp
     stlog_ut.cpp
     token_bucket_ut.cpp
     ui64id_ut.cpp

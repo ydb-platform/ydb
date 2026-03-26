@@ -124,7 +124,7 @@ public:
     virtual i64 GetEvents(ui64 minEvents, ui64 maxEvents, TAsyncIoOperationResult *events, TDuration timeout) = 0;
     virtual void PreparePRead(IAsyncIoOperation *op, void *destination, size_t size, size_t offset) = 0;
     virtual void PreparePWrite(IAsyncIoOperation *op, const void *source, size_t size, size_t offset) = 0;
-    virtual void PreparePTrim(IAsyncIoOperation *op, size_t size, size_t offset) = 0;
+    virtual void PreparePTrim(IAsyncIoOperation *op, ui64 size, ui64 offset) = 0;
     virtual bool DoTrim(IAsyncIoOperation *op) = 0;
     virtual EIoResult Setup(ui64 maxevents, bool doLock) = 0;
     virtual void InitializeMonitoring(TPDiskMon &mon) = 0;

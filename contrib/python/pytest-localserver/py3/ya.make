@@ -2,12 +2,15 @@
 
 PY3_LIBRARY()
 
+SUBSCRIBER(g:python-contrib)
+
 VERSION(0.10.0)
 
 LICENSE(MIT)
 
 PEERDIR(
     contrib/python/Werkzeug
+    contrib/python/pytest
 )
 
 NO_LINT()

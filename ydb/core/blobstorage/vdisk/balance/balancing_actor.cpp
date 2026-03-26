@@ -156,12 +156,13 @@ namespace NBalancing {
                 // collect parts to send on main
                 if (Ctx->Cfg.EnableSend && SendOnMainParts.Size() < Ctx->Cfg.MaxToSendPerEpoch) {
                     if (auto partsToSend = merger.Ingress.LocalParts(top.GType) & moveMask; !partsToSend.Empty()) {
-                        for (const auto& [parts, data]: merger.Parts) {
+                        for (const auto& [parts, data, isHugeBlob] : merger.Parts) {
                             if (!(partsToSend & parts).Empty()) {
                                 SendOnMainParts.Data.emplace_back(TPartInfo{
-                                    .Key=It.GetCurKey().LogoBlobID(),
-                                    .PartsMask=parts,
-                                    .PartData=data
+                                    .Key = It.GetCurKey().LogoBlobID(),
+                                    .PartsMask = parts,
+                                    .PartData = data,
+                                    .IsHugeBlob = isHugeBlob,
                                 });
                             }
                         }
@@ -177,10 +178,13 @@ namespace NBalancing {
                             STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB10, VDISKP(Ctx->VCtx, "Delete"), (LogoBlobId, TryDeleteParts.Data.back().ToString()));
                         }
 
-                        for (const auto& [parts, data]: merger.Parts) {
+                        for (const auto& [parts, data, isHugeBlob] : merger.Parts) {
                             if (!(partsToDelete & parts).Empty()) {
                                 TryDeletePartsFullData[key].emplace_back(TPartInfo{
-                                    .Key=key, .PartsMask=parts, .PartData=data
+                                    .Key = key,
+                                    .PartsMask = parts,
+                                    .PartData = data,
+                                    .IsHugeBlob = isHugeBlob,
                                 });
                             }
                         }

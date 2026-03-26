@@ -80,6 +80,12 @@ enum AvailabilityMode {
     // Ignore any storage group & state storage checks.
     // Using this mode might cause data unavailability.
     AVAILABILITY_MODE_FORCE = 3;
+
+    // In this mode:
+    // - attempts to apply AVAILABILITY_MODE_STRONG;
+    // - if strong constraints cannot be satisfied, falls back to AVAILABILITY_MODE_WEAK;
+    // - never escalates to AVAILABILITY_MODE_FORCE.
+    AVAILABILITY_MODE_SMART = 4;
 }
 
 message MaintenanceTaskOptions {

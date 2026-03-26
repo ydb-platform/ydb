@@ -5,8 +5,7 @@
 #include <util/system/info.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 class TScopedMemoryMapper {
@@ -21,7 +20,7 @@ public:
         }
     };
 
-    TScopedMemoryMapper(bool aligned) {
+    explicit TScopedMemoryMapper(bool aligned) {
         Aligned_ = aligned;
         TFakeMmap::OnMunmap = [this](void* addr, size_t s) {
             Munmaps_.push_back({addr, s});
@@ -115,11 +114,11 @@ Y_UNIT_TEST(AlignedMmapUnalignedSize) {
     auto block = std::shared_ptr<void>(alloc.GetBlock(size), [&](void* addr) { alloc.ReturnBlock(addr, size); });
 
     UNIT_ASSERT_EQUAL(2, mmapper.MunmapsSize());
-    auto expected0 = (TScopedMemoryMapper::TUnmapEntry{(char*)mmapper.PointerToAlignedMemory() + size, TAlignedPagePool::POOL_PAGE_SIZE - smallSize});
+    auto expected0 = (TScopedMemoryMapper::TUnmapEntry{.Addr = (char*)mmapper.PointerToAlignedMemory() + size, .Size = TAlignedPagePool::POOL_PAGE_SIZE - smallSize});
     UNIT_ASSERT_EQUAL(expected0, mmapper.Munmaps(0));
     auto expected1 = TScopedMemoryMapper::TUnmapEntry{
-        (char*)mmapper.PointerToAlignedMemory() + TAlignedPagePool::ALLOC_AHEAD_PAGES * TAlignedPagePool::POOL_PAGE_SIZE + size - smallSize,
-        smallSize};
+        .Addr = (char*)mmapper.PointerToAlignedMemory() + TAlignedPagePool::ALLOC_AHEAD_PAGES * TAlignedPagePool::POOL_PAGE_SIZE + size - smallSize,
+        .Size = smallSize};
     UNIT_ASSERT_EQUAL(expected1, mmapper.Munmaps(1));
 
     UNIT_ASSERT_VALUES_EQUAL(block.get(), mmapper.PointerToAlignedMemory());
@@ -193,5 +192,4 @@ Y_UNIT_TEST(YellowZoneZeroDivision) {
 
 } // Y_UNIT_TEST_SUITE(TAlignedPagePoolTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

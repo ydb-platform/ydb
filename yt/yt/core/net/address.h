@@ -45,7 +45,7 @@ TStringBuf GetServiceHostName(TStringBuf address);
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Constructs an address of the form |[address]:port|.
-std::string FormatNetworkAddress(TStringBuf address, int port);
+TString FormatNetworkAddress(TStringBuf address, int port);
 
 class TIP6Address;
 
@@ -74,8 +74,8 @@ public:
 
     static TNetworkAddress CreateIPv6Any(int port);
     static TNetworkAddress CreateIPv6Loopback(int port);
-    static TNetworkAddress CreateUnixDomainSocketAddress(const std::string& socketPath);
-    static TNetworkAddress CreateAbstractUnixDomainSocketAddress(const std::string& socketName);
+    static TNetworkAddress CreateUnixDomainSocketAddress(const TString& socketPath);
+    static TNetworkAddress CreateAbstractUnixDomainSocketAddress(const TString& socketName);
 
     TIP6Address ToIP6Address() const;
 
@@ -98,9 +98,9 @@ struct TNetworkAddressFormatOptions
 };
 
 void FormatValue(TStringBuilderBase* builder, const TNetworkAddress& address, TStringBuf spec);
-std::string ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options = {});
+TString ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options = {});
 
-bool operator == (const TNetworkAddress& lhs, const TNetworkAddress& rhs);
+bool operator==(const TNetworkAddress& lhs, const TNetworkAddress& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -135,12 +135,12 @@ private:
 
 void FormatValue(TStringBuilderBase* builder, const TIP6Address& address, TStringBuf spec);
 
-bool operator == (const TIP6Address& lhs, const TIP6Address& rhs);
+bool operator==(const TIP6Address& lhs, const TIP6Address& rhs);
 
-TIP6Address operator & (const TIP6Address& lhs, const TIP6Address& rhs);
-TIP6Address operator | (const TIP6Address& lhs, const TIP6Address& rhs);
-TIP6Address& operator &= (TIP6Address& lhs, const TIP6Address& rhs);
-TIP6Address& operator |= (TIP6Address& lhs, const TIP6Address& rhs);
+TIP6Address operator&(const TIP6Address& lhs, const TIP6Address& rhs);
+TIP6Address operator|(const TIP6Address& lhs, const TIP6Address& rhs);
+TIP6Address& operator&=(TIP6Address& lhs, const TIP6Address& rhs);
+TIP6Address& operator|=(TIP6Address& lhs, const TIP6Address& rhs);
 
 void Deserialize(TIP6Address& value, NYTree::INodePtr node);
 void Deserialize(TIP6Address& value, NYson::TYsonPullParserCursor* cursor);

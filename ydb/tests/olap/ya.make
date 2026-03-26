@@ -21,11 +21,12 @@ PY3TEST()
         test_upsert.py
     )
     FORK_SUBTESTS()
-    SPLIT_FACTOR(100)
+    SPLIT_FACTOR(150)
 
-    IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    REQUIREMENTS(cpu:2)
+    IF (SANITIZER_TYPE)
         SIZE(LARGE)
-        TAG(ya:fat)
+        INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     ELSE()
         SIZE(MEDIUM)
     ENDIF()
@@ -43,13 +44,14 @@ PY3TEST()
 END()
 
 RECURSE(
-    column_family
+    column_compression
     common
     docs
     high_load
     large
     lib
     load
+    minmax_index
     oom
     s3_import
     scenario

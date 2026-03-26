@@ -6,8 +6,8 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_expr_types.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
     IGraphTransformer::TStatus InferUnionType(
         TPositionHandle pos,
@@ -123,7 +123,7 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus SkipNullMembersWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus FilterNullElementsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus SkipNullElementsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-    IGraphTransformer::TStatus WinOnWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus WinOnWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
     IGraphTransformer::TStatus WindowTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
     IGraphTransformer::TStatus ToWindowTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus CalcOverWindowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
@@ -156,5 +156,5 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus SqueezeToListWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus EmptyFromWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus TimeOrderRecoverWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NYql::NTypeAnnImpl
+

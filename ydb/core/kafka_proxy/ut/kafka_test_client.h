@@ -19,13 +19,15 @@ struct TTopicConfig {
             std::optional<TString> retentionMs = std::nullopt,
             std::optional<TString> retentionBytes = std::nullopt,
             const std::map<TString, TString>& configs = DummyMap,
-            TKafkaInt16 replicationFactor = 1)
+            TKafkaInt16 replicationFactor = 1,
+            std::optional<TString> timestampType = std::nullopt)
         : Name(name)
         , PartitionsNumber(partionsNumber)
         , RetentionMs(retentionMs)
         , RetentionBytes(retentionBytes)
         , Configs(configs)
         , ReplicationFactor(replicationFactor)
+        , TimestampType(timestampType)
     {
     }
 
@@ -35,6 +37,7 @@ struct TTopicConfig {
     std::optional<TString> RetentionBytes;
     std::map<TString, TString> Configs;
     TKafkaInt16 ReplicationFactor;
+    std::optional<TString> TimestampType;
 };
 
 struct TReadInfo {
@@ -63,7 +66,11 @@ class TKafkaTestClient {
 
         TMessagePtr<TSaslHandshakeResponseData> SaslHandshake(const TString& mechanism = "PLAIN");
 
-        TMessagePtr<TSaslAuthenticateResponseData> SaslAuthenticate(const TString& user, const TString& password);
+        TMessagePtr<TSaslAuthenticateResponseData> SaslPlainAuthenticate(const TString& user, const TString& password);
+
+        TMessagePtr<TSaslAuthenticateResponseData> SaslScramAuthenticateFirstMsg(const TString& user, const TString& clientNonce);
+
+        TMessagePtr<TSaslAuthenticateResponseData> SaslScramAuthenticateFinalMsg(const TString& nonce, const TString& clientProof);
 
         TMessagePtr<TInitProducerIdResponseData> InitProducerId(const std::optional<TString>& transactionalId = {}, ui64 txnTimeoutMs = 1000);
 
@@ -78,6 +85,13 @@ class TKafkaTestClient {
                                                   ui32 baseSequence = 0,
                                                   const std::optional<TProducerInstanceId>& producerInstanceId = {},
                                                   const std::optional<TString>& transactionalId = {});
+        void ProduceAsync(const TTopicPartition& topicPartition,
+                            const std::vector<std::pair<TString, TString>>& keyValueMessages,
+                            ui32 baseSequence,
+                            const std::optional<TProducerInstanceId>& producerInstanceId,
+                            const std::optional<TString>& transactionalId);
+
+        TMessagePtr<TProduceResponseData> ReadLastResult(i32 customCorrelationId = -1);
 
         TMessagePtr<TListOffsetsResponseData> ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic);
 
@@ -135,11 +149,15 @@ class TKafkaTestClient {
 
         void UnknownApiKey();
 
-        void AuthenticateToKafka();
+        void PlainAuthenticateToKafka();
 
-        void AuthenticateToKafka(const TString& userName, const TString& userPassword);
+        void PlainAuthenticateToKafka(const TString& userName, const TString& userPassword);
 
-        TRequestHeaderData Header(NKafka::EApiKey apiKey, TKafkaVersion version);
+        void ScramAuthenticateToKafka();
+
+        void ScramAuthenticateToKafka(const TString& userName, const TString& userPassword);
+
+        TRequestHeaderData Header(NKafka::EApiKey apiKey, TKafkaVersion version,  i32 customCorrelationId = -1);
 
         template <std::derived_from<TApiMessage> T>
         TMessagePtr<T> WriteAndRead(TRequestHeaderData& header, TApiMessage& request, bool silent = false);

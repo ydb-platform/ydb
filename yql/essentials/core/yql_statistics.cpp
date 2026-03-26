@@ -6,10 +6,13 @@
 #include <util/string/join.h>
 
 #include <sstream>
+#include <utility>
 
 using namespace NYql;
 
-static TString ConvertToStatisticsTypeString(EStatisticsType type) {
+namespace {
+
+TString ConvertToStatisticsTypeString(EStatisticsType type) {
     switch (type) {
         case EStatisticsType::BaseTable:
             return "BaseTable";
@@ -17,13 +20,10 @@ static TString ConvertToStatisticsTypeString(EStatisticsType type) {
             return "FilteredFactTable";
         case EStatisticsType::ManyManyJoin:
             return "ManyManyJoin";
-        default:
-            Y_ENSURE(false,"Unknown EStatisticsType");
     }
-    return "";
 }
 
-static TString ConvertToStatisticsTypeString(EStorageType storageType) {
+TString ConvertToStatisticsTypeString(EStorageType storageType) {
     switch (storageType) {
         case EStorageType::NA:
             return "NA";
@@ -31,11 +31,10 @@ static TString ConvertToStatisticsTypeString(EStorageType storageType) {
             return "RowStorage";
         case EStorageType::ColumnStorage:
             return "ColumnStorage";
-        default:
-            Y_ENSURE(false,"Unknown Storage type");
     }
-    return "";
 }
+
+} // namespace
 
 TString TOptimizerStatistics::ToString() const {
     std::stringstream ss;
@@ -177,8 +176,8 @@ TOptimizerStatistics::TOptimizerStatistics(
     , ByteSize(byteSize)
     , Cost(cost)
     , Selectivity(1.0)
-    , KeyColumns(keyColumns)
-    , ColumnStatistics(columnMap)
+    , KeyColumns(std::move(keyColumns))
+    , ColumnStatistics(std::move(columnMap))
     , ShuffledByColumns(nullptr)
     , SortColumns(nullptr)
     , StorageType(storageType)

@@ -1,5 +1,6 @@
 #include "yql_config_provider.h"
 
+#include <yql/essentials/providers/common/config/yql_config_qplayer.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -16,26 +17,25 @@
 #include <yql/essentials/utils/retry.h>
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/yson/node/node_io.h>
 
 #include <util/string/cast.h>
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
 #include <util/string/builder.h>
 
+#include <utility>
 #include <vector>
 
 namespace NYql {
 
-const TString ActivationComponent = "Activation";
-const TString ActivationLabel = "YqlCore";
+const TString YqlCoreActivationLabel = "YqlCore";
 
 namespace {
 using namespace NNodes;
 
 class TConfigCallableExecutionTransformer: public TSyncTransformerBase {
 public:
-    TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
+    explicit TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
         : Types_(types)
     {
         Y_UNUSED(Types_);
@@ -134,13 +134,13 @@ public:
         }
     };
 
-    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
-                    const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
+    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, TString username,
+                    TAllowSettingPolicy policy, bool forPartialTypeCheck)
         : Types_(types)
         , ForPartialTypeCheck_(forPartialTypeCheck)
         , CoreConfig_(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
-        , Username_(username)
-        , Policy_(policy)
+        , Username_(std::move(username))
+        , Policy_(std::move(policy))
     {
     }
 
@@ -168,7 +168,7 @@ public:
         if (CoreConfig_) {
             TPosition pos;
             TVector<TCoreAttr> flags;
-            if (auto loadedFlags = LoadFlags()) {
+            if (auto loadedFlags = NCommon::LoadActivatedFlagsFromQContext<TCoreAttr>(YqlCoreActivationLabel, Types_.QContext)) {
                 flags = std::move(*loadedFlags);
             } else {
                 const auto& configFlags = CoreConfig_->GetFlags();
@@ -181,7 +181,7 @@ public:
                     return false;
                 }
             }
-            SaveFlags(flags);
+            NCommon::SaveActivatedFlagsToQContext<TCoreAttr>(flags, YqlCoreActivationLabel, Types_.QContext);
         }
         return true;
     }
@@ -759,6 +759,12 @@ private:
                 return false;
             }
             Types_.DiscoveryMode = true;
+        } else if (name == "WindowNewPipeline" || name == "DisableWindowNewPipeline") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.WindowNewPipeline = (name == "WindowNewPipeline");
         } else if (name == "EnableSystemColumns") {
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -844,7 +850,7 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                 return false;
             }
-            auto& userDataBlock = (Types_.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}});
+            auto& userDataBlock = (Types_.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{.Type = EUserDataType::URL, .UrlToken = {}, .Data = TString(args[0]), .Usage = {}, .FrozenFile = {}});
             userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
         } else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") {
             if (args.size() != 0) {
@@ -1141,6 +1147,24 @@ private:
                 return false;
             }
             Types_.EnableStandaloneLineage = ("EnableStandaloneLineage" == name);
+        } else if (name == "LineageOutputLimit") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            if (!TryFromString(args[0], Types_.LineageOutputLimit)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
+        } else if (name == "LineageMemoryLimit") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            if (!TryFromString(args[0], Types_.LineageMemoryLimit)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
         } else if (name == "Layer") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected exatly 1 argument, but got " << args.size()));
@@ -1437,40 +1461,6 @@ private:
         }
 
         return parseResult == TWarningRule::EParseResult::PARSE_OK;
-    }
-
-    TMaybe<TVector<TCoreAttr>> LoadFlags() {
-        TMaybe<TVector<TCoreAttr>> loadedFlags;
-        if (!Types_.QContext.CanRead()) {
-            return loadedFlags;
-        }
-        if (auto loaded = Types_.QContext.GetReader()->Get({ActivationComponent, ActivationLabel}).GetValueSync()) {
-            auto flagsNode = NYT::NodeFromYsonString(loaded->Value);
-            TVector<TCoreAttr> flags;
-            for (const auto& [flagName, flagValue] : flagsNode.AsMap()) {
-                TCoreAttr flag;
-                YQL_ENSURE(flag.ParseFromString(flagValue.AsString()));
-                flags.emplace_back(std::move(flag));
-            }
-            loadedFlags = std::move(flags);
-            YQL_CLOG(INFO, ProviderConfig) << "YqlCore flags are loaded at replay mode";
-        }
-        return loadedFlags;
-    }
-
-    void SaveFlags(const TVector<TCoreAttr>& flags) {
-        if (!Types_.QContext.CanWrite()) {
-            return;
-        }
-        auto flagsNode = NYT::TNode::CreateMap();
-        for (const auto& flag : flags) {
-            TString data;
-            YQL_ENSURE(flag.SerializeToString(&data));
-            flagsNode[flag.GetName()] = std::move(data);
-        }
-        auto flagsYson = NYT::NodeToYsonString(flagsNode, NYT::NYson::EYsonFormat::Binary);
-        Types_.QContext.GetWriter()->Put({ActivationComponent, ActivationLabel}, flagsYson).GetValueSync();
-        YQL_CLOG(INFO, ProviderConfig) << "YqlCore flags are saved to QStorage";
     }
 
 private:

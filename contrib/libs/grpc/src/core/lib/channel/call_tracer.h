@@ -21,6 +21,7 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 
@@ -31,6 +32,8 @@
 
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_stack.h"
+#include "src/core/lib/channel/context.h"
+#include "src/core/lib/channel/tcp_tracer.h"
 #include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/resource_quota/arena.h"
@@ -50,14 +53,38 @@ namespace grpc_core {
 // The base class for all tracer implementations.
 class CallTracerAnnotationInterface {
  public:
+  // Enum associated with types of Annotations.
+  enum class AnnotationType {
+    kMetadataSizes,
+    kHttpTransport,
+    kDoNotUse_MustBeLast,
+  };
+
+  // Base class to define a new type of annotation.
+  class Annotation {
+   public:
+    explicit Annotation(AnnotationType type) : type_(type) {}
+    AnnotationType type() const { return type_; }
+    virtual TString ToString() const = 0;
+    virtual ~Annotation() = default;
+
+   private:
+    const AnnotationType type_;
+  };
+
   virtual ~CallTracerAnnotationInterface() {}
   // Records an annotation on the call attempt.
   // TODO(yashykt): If needed, extend this to attach attributes with
   // annotations.
   virtual void RecordAnnotation(y_absl::string_view annotation) = 0;
+  virtual void RecordAnnotation(const Annotation& annotation) = 0;
   virtual TString TraceId() = 0;
   virtual TString SpanId() = 0;
   virtual bool IsSampled() = 0;
+  // Indicates whether this tracer is a delegating tracer or not.
+  // `DelegatingClientCallTracer`, `DelegatingClientCallAttemptTracer` and
+  // `DelegatingServerCallTracer` are the only delegating call tracers.
+  virtual bool IsDelegatingTracer() { return false; }
 };
 
 // The base class for CallAttemptTracer and ServerCallTracer.
@@ -85,6 +112,10 @@ class CallTracerInterface : public CallTracerAnnotationInterface {
   virtual void RecordReceivedDecompressedMessage(
       const SliceBuffer& recv_decompressed_message) = 0;
   virtual void RecordCancel(grpc_error_handle cancel_error) = 0;
+  // Traces a new TCP transport attempt for this call attempt. Note the TCP
+  // transport may finish tracing and unref the TCP tracer before or after the
+  // call completion in gRPC core. No TCP tracing when null is returned.
+  virtual std::shared_ptr<TcpTracerInterface> StartNewTcpTrace() = 0;
 };
 
 // Interface for a tracer that records activities on a call. Actual attempts for
@@ -116,7 +147,7 @@ class ClientCallTracer : public CallTracerAnnotationInterface {
 
   // Records a new attempt for the associated call. \a transparent denotes
   // whether the attempt is being made as a transparent retry or as a
-  // non-transparent retry/heding attempt. (There will be at least one attempt
+  // non-transparent retry/hedging attempt. (There will be at least one attempt
   // even if the call is not being retried.) The `ClientCallTracer` object
   // retains ownership to the newly created `CallAttemptTracer` object.
   // RecordEnd() serves as an indication that the call stack is done with all
@@ -147,6 +178,9 @@ class ServerCallTracerFactory {
 
   virtual ServerCallTracer* CreateNewServerCallTracer(Arena* arena) = 0;
 
+  // Returns true if a server is to be traced, false otherwise.
+  virtual bool IsServerTraced(const ChannelArgs& /*args*/) { return true; }
+
   // Use this method to get the server call tracer factory from channel args,
   // instead of directly fetching it with `GetObject`.
   static ServerCallTracerFactory* Get(const ChannelArgs& channel_args);
@@ -161,6 +195,17 @@ class ServerCallTracerFactory {
 };
 
 void RegisterServerCallTracerFilter(CoreConfiguration::Builder* builder);
+
+// Convenience functions to add call tracers to a call context. Allows setting
+// multiple call tracers to a single call. It is only valid to add client call
+// tracers before the client_channel filter sees the send_initial_metadata op.
+void AddClientCallTracerToContext(grpc_call_context_element* call_context,
+                                  ClientCallTracer* tracer);
+
+// TODO(yashykt): We want server call tracers to be registered through the
+// ServerCallTracerFactory, which has yet to be made into a list.
+void AddServerCallTracerToContext(grpc_call_context_element* call_context,
+                                  ServerCallTracer* tracer);
 
 }  // namespace grpc_core
 

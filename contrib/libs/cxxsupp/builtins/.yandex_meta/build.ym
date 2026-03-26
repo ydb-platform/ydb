@@ -3,14 +3,13 @@
 {% block current_version %}21.1.8{% endblock %}
 
 {% block current_url %}
-https://github.com/llvm/llvm-project/releases/download/llvmorg-{{self.version().strip()}}/compiler-rt-{{self.version().strip()}}.src.tar.xz
+https://github.com/llvm/llvm-project/archive/llvmorg-{{self.version().strip()}}.tar.gz
 {% endblock %}
 
 {% block patch_source %}
 {{super()}}
 (
-rm CMakeLists.txt
-cd lib/builtins
+cd compiler-rt/lib/builtins
 rm CMakeLists.txt
 rm aarch64/lse.S
 sed -e 's|.*#include.*ptrauth.h.*||' -i crtbegin.c
@@ -81,7 +80,7 @@ ENDIF()
 
 {% block gen_ya_make %}
 (
-cd lib/builtins
+cd compiler-rt/lib/builtins
 
 cat << EOF > join.py
 import os
@@ -190,7 +189,7 @@ ls x86_64/*.c cpu_model/x86.*c  x86_64/*.S > special
 python3 join.py common special x86_64
 echo ')'
 
-# As llvm/compiler-rt/lib/builtins says:
+# As llvm/compiler-rt/lib/builtins/CMakeLists.txt says:
 # Implement extended-precision builtins, assuming long double is 80 bits.
 # long double is not 80 bits on Android or MSVC.
 echo 'IF(NOT OS_WINDOWS AND NOT OS_ANDROID) SRCS(x86_64/floatdixf.c'
@@ -218,7 +217,7 @@ rm join.py common special
 
 {% block move_to_output %}
 {{super()}}
-cp -R lib/builtins/* ${OUTPUT}/
+cp -R compiler-rt/lib/builtins/* ${OUTPUT}/
 {% endblock %}
 
 {% block run_license_analyzer %}

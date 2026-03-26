@@ -9,12 +9,12 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_external_node_invalidator.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 #include <memory>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 struct TWorkerGraph {
     TWorkerGraph(
         const TExprNode::TPtr& exprRoot,
@@ -49,6 +49,7 @@ struct TWorkerGraph {
     const NKikimr::NMiniKQL::TType* OutputType;
     const NKikimr::NMiniKQL::TType* RawOutputType;
     TVector<NKikimr::NMiniKQL::IComputationExternalNode*> SelfNodes;
+    NKikimr::NMiniKQL::TComputationExternalNodeInvalidator ExternalNodeInvalidator;
     TVector<const NKikimr::NMiniKQL::TStructType*> InputTypes;
     TVector<const NKikimr::NMiniKQL::TStructType*> OriginalInputTypes;
     TVector<const NKikimr::NMiniKQL::TStructType*> RawInputTypes;
@@ -107,6 +108,8 @@ public:
     ui64 GetNativeYtTypeFlags() const override;
     ITimeProvider* GetTimeProvider() const override;
     void Invalidate() override;
+    void CheckState(bool finish) override;
+    virtual void PrepareCheckState(bool finish) = 0;
 
 protected:
     void Release() override;
@@ -123,11 +126,12 @@ private:
 
 public:
     using TWorker::TWorker;
-    ~TPullStreamWorker();
+    ~TPullStreamWorker() override;
 
 public:
     void SetInput(NKikimr::NUdf::TUnboxedValue&&, ui32) override;
     NKikimr::NUdf::TUnboxedValue& GetOutput() override;
+    void PrepareCheckState(bool finish) final;
 
 protected:
     void Release() override;
@@ -145,13 +149,14 @@ private:
 
 public:
     using TWorker::TWorker;
-    ~TPullListWorker();
+    ~TPullListWorker() override;
 
 public:
     void SetInput(NKikimr::NUdf::TUnboxedValue&&, ui32) override;
     NKikimr::NUdf::TUnboxedValue& GetOutput() override;
     NKikimr::NUdf::TUnboxedValue& GetOutputIterator() override;
     void ResetOutputIterator() override;
+    void PrepareCheckState(bool finish) final;
 
 protected:
     void Release() override;
@@ -169,6 +174,7 @@ public:
 private:
     void FeedToConsumer();
     NYql::NUdf::IBoxedValue* GetPushStream() const;
+    void PrepareCheckState(bool finish) final;
 
 public:
     void SetConsumer(THolder<IConsumer<const NKikimr::NUdf::TUnboxedValue*>>) override;
@@ -178,5 +184,4 @@ public:
 protected:
     void Release() override;
 };
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

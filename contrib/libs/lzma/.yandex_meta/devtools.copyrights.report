@@ -57,11 +57,11 @@ BELONGS ya.make
     Files with this license:
         COPYING [52:52]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 8cf91579d8cb4087b6bd775cd2b2bbed
+KEEP     COPYRIGHT_SERVICE_LABEL 5f5e9e47226779ba99f336f54299845e
 BELONGS ya.make
     License text:
          Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
-         51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+         <https://fsf.org/>
          Everyone is permitted to copy and distribute verbatim copies
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -69,6 +69,19 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         COPYING.GPLv2 [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f7f8840aa36d6cc95796e76aa10a6ef
+BELONGS ya.make
+    License text:
+         Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+         <https://fsf.org/>
+         Everyone is permitted to copy and distribute verbatim copies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING.LGPLv2.1 [4:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c0a580767e4df988cbeb3a33fe57d251
 BELONGS ya.make
@@ -80,16 +93,3 @@ BELONGS ya.make
     Files with this license:
         COPYING.GPLv2 [251:256]
         COPYING.LGPLv2.1 [428:433]
-
-KEEP     COPYRIGHT_SERVICE_LABEL cea1b82351539a871d540971f218116e
-BELONGS ya.make
-    License text:
-         Copyright (C) 1991, 1999 Free Software Foundation, Inc.
-         51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-         Everyone is permitted to copy and distribute verbatim copies
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        COPYING.LGPLv2.1 [4:6]

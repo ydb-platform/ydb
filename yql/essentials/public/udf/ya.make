@@ -62,5 +62,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    udf_debug_checks_ut
     ut
 )

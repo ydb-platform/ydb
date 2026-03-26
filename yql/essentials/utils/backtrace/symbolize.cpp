@@ -5,9 +5,7 @@
 #include <util/string/split.h>
 #include <util/stream/str.h>
 
-namespace NYql {
-
-namespace NBacktrace {
+namespace NYql::NBacktrace {
 TString Symbolize(const TString& input, const THashMap<TString, TString>& mapping) {
 #if defined(__linux__) && defined(__x86_64__)
     TString output;
@@ -39,7 +37,7 @@ TString Symbolize(const TString& input, const THashMap<TString, TString>& mappin
                     modulePath = it->second;
                 }
                 usedFilenames.emplace_back(std::move(modulePath));
-                frames.emplace_back(TStackFrame{usedFilenames.back().c_str(), address - offset});
+                frames.emplace_back(TStackFrame{.File = usedFilenames.back().c_str(), .Address = address - offset});
             }
         } else {
             out << line << "\n";
@@ -57,6 +55,4 @@ TString Symbolize(const TString& input, const THashMap<TString, TString>& mappin
 #endif
 }
 
-} /* namespace NBacktrace */
-
-} /* namespace NYql */
+} // namespace NYql::NBacktrace

@@ -11,7 +11,6 @@ SRCS(
     config_helpers.cpp
     config_parser.cpp
     config_parser.h
-    driver.h
     factories.h
     factories.cpp
     grpc_servers_manager.h
@@ -56,7 +55,6 @@ PEERDIR(
     ydb/core/cms/console
     ydb/core/control
     ydb/core/counters_info
-    ydb/core/driver_lib/base_utils
     ydb/core/driver_lib/cli_config_base
     ydb/core/driver_lib/cli_utils
     ydb/core/driver_lib/version
@@ -75,7 +73,7 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/keyvalue
     ydb/core/kqp
-    ydb/core/kqp/federated_query
+    ydb/core/kqp/federated_query/actors
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
     ydb/core/load_test
@@ -94,6 +92,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter
+    ydb/core/retro_tracing_impl
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/security
@@ -139,6 +138,7 @@ PEERDIR(
     ydb/library/actors/memory_log
     ydb/library/actors/prof
     ydb/library/actors/protos
+    ydb/library/actors/retro_tracing
     ydb/library/actors/util
     ydb/library/folder_service
     ydb/library/folder_service/proto
@@ -186,6 +186,17 @@ PEERDIR(
     yt/yql/providers/yt/comp_nodes/dq/llvm16
     yt/yql/providers/yt/comp_nodes/llvm16
 )
+
+IF (OS_LINUX)
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/bootstrap
+        ydb/core/nbs/cloud/blockstore/config/protos
+        ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
+        ydb/core/nbs/cloud/blockstore/libs/storage/volume
+
+        ydb/services/nbs
+    )
+ENDIF()
 
 IF (NOT OS_WINDOWS)
     PEERDIR(

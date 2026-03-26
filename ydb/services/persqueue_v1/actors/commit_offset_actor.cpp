@@ -29,32 +29,8 @@ TCommitOffsetActor::TCommitOffsetActor(
     Y_ASSERT(request);
 }
 
-TCommitOffsetActor::TCommitOffsetActor(
-        NKikimr::NGRpcService::IRequestOpCtx * ctx, const NPersQueue::TTopicsListController& topicsHandler,
-        const TActorId& schemeCache, const TActorId& newSchemeCache,
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
-)
-    : TBase(ctx)
-    , SchemeCache(schemeCache)
-    , NewSchemeCache(newSchemeCache)
-    , AuthInitActor()
-    , Counters(counters)
-    , TopicsHandler(std::make_unique<NPersQueue::TTopicsListController>(topicsHandler))
-{
-    Y_ASSERT(ctx);
-}
-
 TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
     : TBase(ctx)
-    , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
-    , NewSchemeCache(MakeSchemeCacheID())
-    , AuthInitActor()
-    , Counters(nullptr)
-{
-}
-
-TCommitOffsetActor::TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request)
-    : TBase(request)
     , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
     , NewSchemeCache(MakeSchemeCacheID())
     , AuthInitActor()
@@ -145,7 +121,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         return;
     }
     AFL_ENSURE(TopicAndTablets.size() == 1);
-    auto& [topic, topicInitInfo] = *TopicAndTablets.begin();
+    auto& [_, topicInitInfo] = *TopicAndTablets.begin();
 
     if (topicInitInfo.Partitions.find(PartitionId) == topicInitInfo.Partitions.end()) {
         AnswerError("partition id not found in topic", PersQueue::ErrorCode::WRONG_PARTITION_NUMBER, ctx);
@@ -197,6 +173,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         };
         commits.push_back(commit);
 
+        auto topic = topicInitInfo.TopicNameConverter->GetPrimaryPath();
         Kqp = std::make_unique<TDistributedCommitHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits);
         Kqp->SendCreateSessionRequest(ctx);
     }

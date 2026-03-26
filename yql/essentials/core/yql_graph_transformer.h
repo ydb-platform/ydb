@@ -9,6 +9,7 @@
 #include <util/datetime/base.h>
 
 #include <functional>
+#include <utility>
 
 namespace NYql {
 
@@ -50,6 +51,8 @@ public:
             return Level != other;
         }
 
+        // Using ELevel as TStatus is a common pattern
+        // NOLINTNEXTLINE(google-explicit-constructor)
         TStatus(ELevel level, bool hasRestart = false)
             : Level(level)
             , HasRestart(hasRestart)
@@ -174,7 +177,7 @@ public:
         return scope.HandleStatus(DoApplyAsyncChanges(input, output, ctx));
     }
 
-    virtual TStatistics GetStatistics() const override { return Statistics_; }
+    TStatistics GetStatistics() const override { return Statistics_; }
 
 public:
     virtual TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
@@ -195,18 +198,18 @@ struct TTransformStage {
     EYqlIssueCode IssueCode;
     TString IssueMessage;
 
-    TTransformStage(const TAutoPtr<IGraphTransformer>& transformer, const TString& name, EYqlIssueCode issueCode, const TString& issueMessage = {})
-        : Name(name)
+    TTransformStage(const TAutoPtr<IGraphTransformer>& transformer, TString name, EYqlIssueCode issueCode, TString  issueMessage = {})
+        : Name(std::move(name))
         , IssueCode(issueCode)
-        , IssueMessage(issueMessage)
+        , IssueMessage(std::move(issueMessage))
         , RawTransformer_(transformer.Get())
         , Transformer_(transformer)
     {}
 
-    TTransformStage(IGraphTransformer& transformer, const TString& name, EYqlIssueCode issueCode, const TString& issueMessage = {})
-        : Name(name)
+    TTransformStage(IGraphTransformer& transformer, TString name, EYqlIssueCode issueCode, TString issueMessage = {})
+        : Name(std::move(name))
         , IssueCode(issueCode)
-        , IssueMessage(issueMessage)
+        , IssueMessage(std::move(issueMessage))
         , RawTransformer_(&transformer)
     {}
 
@@ -279,7 +282,7 @@ public:
 template <typename TFunctor>
 class TFunctorTransformer: public TSyncTransformerBase {
 public:
-    TFunctorTransformer(TFunctor functor)
+    explicit TFunctorTransformer(TFunctor functor)
         : Functor_(std::move(functor)) {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
@@ -300,7 +303,7 @@ template <typename TFunctor>
 class TSinglePassFunctorTransformer final: public TFunctorTransformer<TFunctor> {
     using TBase = TFunctorTransformer<TFunctor>;
 public:
-    TSinglePassFunctorTransformer(TFunctor functor)
+    explicit TSinglePassFunctorTransformer(TFunctor functor)
         : TFunctorTransformer<TFunctor>(std::move(functor))
     {}
 
@@ -334,8 +337,8 @@ THolder<IGraphTransformer> CreateSinglePassFunctorTransformer(TFunctor functor) 
     return MakeHolder<TSinglePassFunctorTransformer<TFunctor>>(std::move(functor));
 }
 
-typedef std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)> TAsyncTransformCallback;
-typedef NThreading::TFuture<TAsyncTransformCallback> TAsyncTransformCallbackFuture;
+using TAsyncTransformCallback = std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)>;
+using TAsyncTransformCallbackFuture = NThreading::TFuture<TAsyncTransformCallback>;
 
 template <typename TDerived>
 class TAsyncCallbackTransformer : public TGraphTransformerBase {
@@ -457,7 +460,7 @@ inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Sync
     return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
 }
 
-typedef std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash> TSyncMap;
+using TSyncMap = std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash>;
 }
 
 template<>

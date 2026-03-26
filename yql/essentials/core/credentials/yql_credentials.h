@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <unordered_set>
+#include <utility>
 
 namespace NYql {
 
@@ -15,10 +16,10 @@ struct TCredential {
     const TString Subcategory;
     const TString Content;
 
-    TCredential(const TString& category, const TString& subcategory, const TString& content)
-        : Category(category)
-        , Subcategory(subcategory)
-        , Content(content)
+    TCredential(TString category, TString subcategory, TString content)
+        : Category(std::move(category))
+        , Subcategory(std::move(subcategory))
+        , Content(std::move(content))
     {
     }
 };
@@ -33,7 +34,7 @@ public:
     using TPtr = TIntrusivePtr<TCredentials>;
 
     TCredentials() = default;
-    ~TCredentials() = default;
+    ~TCredentials() override = default;
 
     void AddCredential(const TString& alias, const TCredential& cred);
     void SetUserCredentials(const TUserCredentials& userCredentials) {

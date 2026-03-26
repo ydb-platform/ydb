@@ -97,7 +97,7 @@ namespace NDnsResolver {
         // Optional list of custom dns servers (ip.v4[:port], ip::v6 or [ip::v6]:port format)
         TVector<TString> Servers;
         // Keep soket open between dns requests
-        bool KeepSocket = true;
+        bool KeepSocket = false;
         // Force tcp to perform dns requests
         bool ForceTcp = false;
         // Add trailing dot to hostname

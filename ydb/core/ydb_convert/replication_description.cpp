@@ -119,6 +119,23 @@ void ConvertStats(
     // nop
 }
 
+void ConvertStats(
+    const NKikimrReplication::TReplicationStats& from,
+    Ydb::Replication::DescribeTransferResult& to)
+{
+    auto& destination = *to.mutable_stats();
+    destination.mutable_min_worker_uptime()->CopyFrom(from.GetTransfer().GetMinWorkerUptime());
+    destination.mutable_read_bytes()->CopyFrom(from.GetReadBytes());
+    destination.mutable_read_messages()->CopyFrom(from.GetReadMessages());
+    destination.mutable_write_bytes()->CopyFrom(from.GetWriteBytes());
+    destination.mutable_write_rows()->CopyFrom(from.GetWriteRows());
+    destination.mutable_decompression_cpu_time()->CopyFrom(from.GetDecompressionCpuTime());
+    destination.mutable_processing_cpu_time()->CopyFrom(from.GetTransfer().GetProcessingCpuTime());
+    destination.mutable_stats_collection_start()->CopyFrom(from.GetStatsCollectionStart());
+
+    destination.mutable_workers_stats()->CopyFrom(from.GetTransfer().GetWorkersStats());
+}
+
 template<typename T>
 void ConvertState(const NKikimrReplication::TReplicationState& from, T& to) {
     switch (from.GetStateCase()) {
@@ -226,6 +243,7 @@ void FillTransferDescription(
     ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
     ConvertState(inDesc.GetState(), out);
     ConvertTransferSpecific(inDesc.GetTransferSpecific(), out);
+    ConvertStats(inDesc.GetStats(), out);
 }
 
 bool FillTransferDescription(

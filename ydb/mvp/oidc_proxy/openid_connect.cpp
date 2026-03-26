@@ -1,19 +1,19 @@
-#include "context.h"
 #include "openid_connect.h"
+#include "context.h"
 
+#include <ydb/core/util/random.h>
 #include <ydb/core/util/wildcard.h>
 #include <ydb/library/security/util.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <util/random/random.h>
-#include <util/string/builder.h>
-#include <util/string/hex.h>
-
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
+
+#include <util/string/builder.h>
+#include <util/string/hex.h>
 
 namespace NMVP::NOIDC {
 
@@ -283,6 +283,12 @@ TString GetAddressWithoutPort(const TString& address) {
     }
 
     return address;
+}
+
+TString GenerateRandomBase64(size_t byteNumber) {
+    TString bytes = TString::Uninitialized(byteNumber);
+    NKikimr::SafeEntropyPoolRead(bytes.Detach(), bytes.size());
+    return Base64EncodeUrlNoPadding(bytes);
 }
 
 // Append request address to X-Forwarded-For header

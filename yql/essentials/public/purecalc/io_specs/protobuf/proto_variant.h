@@ -28,7 +28,7 @@ public:
     }
 
 private:
-    typedef TProtoMultiOutput<T...> (*initfunc)(google::protobuf::Message*);
+    using initfunc = TProtoMultiOutput<T...> (*)(google::protobuf::Message*);
 
     template <size_t... I>
     inline std::array<initfunc, sizeof...(T)> BuildInitFuncs(std::index_sequence<I...>) {
@@ -42,7 +42,7 @@ protected:
 template <typename... T>
 class TProtobufsMappingStream: public IStream<TProtoMultiOutput<T...>>, public TProtobufsMappingBase<T...> {
 public:
-    TProtobufsMappingStream(THolder<IStream<TProtoRawMultiOutput>> oldStream)
+    explicit TProtobufsMappingStream(THolder<IStream<TProtoRawMultiOutput>> oldStream)
         : OldStream_(std::move(oldStream))
     {
     }
@@ -60,7 +60,7 @@ private:
 template <typename... T>
 class TProtobufsMappingConsumer: public IConsumer<TProtoRawMultiOutput>, public TProtobufsMappingBase<T...> {
 public:
-    TProtobufsMappingConsumer(THolder<IConsumer<TProtoMultiOutput<T...>>> oldConsumer)
+    explicit TProtobufsMappingConsumer(THolder<IConsumer<TProtoMultiOutput<T...>>> oldConsumer)
         : OldConsumer_(std::move(oldConsumer))
     {
     }

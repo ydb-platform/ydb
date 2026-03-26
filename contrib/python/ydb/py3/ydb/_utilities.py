@@ -9,6 +9,9 @@ import collections
 import urllib.parse
 from . import ydb_version
 
+import typing
+
+interceptor: typing.Any
 try:
     from . import interceptor
 except ImportError:
@@ -35,8 +38,10 @@ def future():
     return futures.Future()
 
 
-def x_ydb_sdk_build_info_header():
-    return ("x-ydb-sdk-build-info", "ydb-python-sdk/" + ydb_version.VERSION)
+def x_ydb_sdk_build_info_header(additional_sdk_headers):
+    sdk_header_list = ["ydb-python-sdk/" + ydb_version.VERSION]
+    sdk_header_list.extend(additional_sdk_headers)
+    return ("x-ydb-sdk-build-info", ";".join(sdk_header_list))
 
 
 def is_secure_protocol(endpoint):

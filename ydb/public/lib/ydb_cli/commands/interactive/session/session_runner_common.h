@@ -2,13 +2,11 @@
 
 #include "session_runner_interface.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log.h>
-
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
 
 #include <util/stream/output.h>
 
-#include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -17,7 +15,7 @@ protected:
     inline const static NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
 public:
-    TSessionRunnerBase(const TLineReaderSettings& settings, const TInteractiveLogger& log);
+    explicit TSessionRunnerBase(const TLineReaderSettings& settings);
 
     virtual ILineReader::TPtr Setup() override;
 
@@ -31,7 +29,6 @@ protected:
     static ftxui::Element CreateEntityName(const TString& name);
 
 protected:
-    TInteractiveLogger Log;
     ILineReader::TPtr LineReader;
     TLineReaderSettings Settings;
 };

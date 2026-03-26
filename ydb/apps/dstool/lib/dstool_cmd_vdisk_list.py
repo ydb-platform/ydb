@@ -1,4 +1,5 @@
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_disk_color_pb2 as kikimr_disk_color
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 
@@ -51,10 +52,13 @@ def do(args):
         'VDiskKind',
         'GroupSizeInUnits',
         'PDiskSlotSizeInUnits',
-        'Usage',
         'UsedSize',
         'AvailableSize',
         'TotalSize',
+        'VDiskSlotUsage',
+        'VDiskRawUsage',
+        'NormalizedOccupancy',
+        'CapacityAlert',
         'SatisfactionRank',
         'PoolName',
         'BoxId',
@@ -68,21 +72,23 @@ def do(args):
         'VSlotId',
         'VSlotStatus',
         'GroupSizeInUnits',
+        'CapacityAlert',
         'IsDonor',
         'ReadOnly',
     ]
     col_units = {
-        'Usage': '%',
         'UsedSize': 'bytes',
         'AvailableSize': 'bytes',
-        'TotalSize': 'bytes'
+        'TotalSize': 'bytes',
+        'VDiskSlotUsage': '%',
+        'VDiskRawUsage': '%',
     }
 
     if args.show_pdisk_status:
         visible_columns.extend(['PDiskDriveStatus', 'PDiskDecommitStatus'])
 
     if args.show_vdisk_usage:
-        visible_columns.extend(['Usage', 'UsedSize', 'AvailableSize', 'TotalSize'])
+        visible_columns.extend(['UsedSize', 'AvailableSize', 'TotalSize', 'VDiskSlotUsage'])
 
     table_output = table.TableOutput(all_columns, col_units=col_units, default_visible_columns=visible_columns)
 
@@ -117,7 +123,35 @@ def do(args):
             row['UsedSize'] = vslot.VDiskMetrics.AllocatedSize
             row['AvailableSize'] = vslot.VDiskMetrics.AvailableSize
             row['TotalSize'] = row['UsedSize'] + row['AvailableSize']
-            row['Usage'] = row['UsedSize'] / row['TotalSize'] if row['TotalSize'] > 0 else 0.0
+            row['VDiskSlotUsage'] = None
+            row['VDiskRawUsage'] = None
+            row['NormalizedOccupancy'] = None
+            row['CapacityAlert'] = None
+
+            if vslot.VDiskMetrics.HasField('VDiskSlotUsage'):
+                row['VDiskSlotUsage'] = vslot.VDiskMetrics.VDiskSlotUsage / 100
+
+            if vslot.VDiskMetrics.HasField('VDiskRawUsage'):
+                row['VDiskRawUsage'] = vslot.VDiskMetrics.VDiskRawUsage / 100
+            elif pdisk.PDiskMetrics.EnforcedDynamicSlotSize > 0:
+                # VDiskRawUsage metric was added in 26.1.1
+                # For older versions we calculate it on client side
+                #
+                # Formula matches blobstorage_pdisk_keeper.h GetVDiskRawUsage()
+                #   VDiskRawUsage = 100.0 * (used / hardLimit)
+                # Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(), EnforcedDynamicSlotSize is calculated as:
+                #   EnforcedDynamicSlotSize = min(HardLimit / Weight) across all owners
+                #
+                weight = common.get_vslot_owner_weight(row['GroupSizeInUnits'], row['PDiskSlotSizeInUnits'])
+                vdisk_slot_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
+                row['VDiskRawUsage'] = vslot.VDiskMetrics.AllocatedSize / vdisk_slot_size
+
+            if vslot.VDiskMetrics.HasField('NormalizedOccupancy'):
+                row['NormalizedOccupancy'] = vslot.VDiskMetrics.NormalizedOccupancy
+
+            if vslot.VDiskMetrics.HasField('CapacityAlert'):
+                row['CapacityAlert'] = kikimr_disk_color.TPDiskSpaceColor.E.Name(vslot.VDiskMetrics.CapacityAlert)
+
             row['PDiskPage'] = 'actors/pdisks/pdisk%09u' % (vslot_data.PDiskId)
             row['VDiskPage'] = 'actors/vdisks/vdisk%09u_%09u' % (vslot_data.PDiskId, vslot_data.VSlotId)
             rows.append(row)

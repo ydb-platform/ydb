@@ -395,6 +395,9 @@ public:
         Finished = true;
     }
 
+    void Flush() override {
+    }
+
     TChunkedBuffer FinishPackAndCheckSize() {
         TChunkedBuffer result = Packer.Finish();
         if (!IsLocalChannel && result.Size() > ChunkSizeLimit) {
@@ -411,6 +414,10 @@ public:
 
     bool IsFinished() const override {
         return Finished && !HasData();
+    }
+
+    bool IsEarlyFinished() const override {
+        return false;
     }
 
     ui64 Drop() override { // Drop channel data because channel was finished. Leave checkpoint because checkpoints keep going through channel after finishing channel data transfer.
@@ -440,6 +447,10 @@ public:
         if (Packer.IsBlock()) {
             Packer.SetMinFillPercentage(IsLocalChannel ? Nothing() : ArrayBufferMinFillPercentage);
         }
+    }
+
+    bool IsLocal() const override {
+        return IsLocalChannel;
     }
 
 private:

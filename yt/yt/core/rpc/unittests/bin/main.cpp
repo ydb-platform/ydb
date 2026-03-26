@@ -52,7 +52,7 @@ int main(int argc, char* argv[])
             false,
             /*createChannel*/ {},
             GetNullMemoryUsageTracker(),
-            false);
+            /*useAuthenticator*/ false);
 
         server->RegisterService(service);
         server->Start();

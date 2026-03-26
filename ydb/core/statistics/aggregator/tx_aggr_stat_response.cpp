@@ -36,7 +36,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         for (auto& column : Record.GetColumns()) {
             auto tag = column.GetTag();
             for (auto& statistic : column.GetStatistics()) {
-                if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
+                if (statistic.GetType() == static_cast<ui32>(EStatType::COUNT_MIN_SKETCH)) {
                     if (!Self->ColumnNames.contains(tag)) {
                         continue;
                     }
@@ -57,6 +57,11 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         if (Record.FailedTabletsSize() == 0 ||
             Self->TraversalRound >= Self->MaxTraversalRoundCount)
         {
+            for (auto& [tag, sketch] : Self->CountMinSketches) {
+                TString strSketch(sketch->AsStringBuf());
+                Self->StatisticsToSave.emplace_back(
+                    tag, EStatType::COUNT_MIN_SKETCH, std::move(strSketch));
+            }
             Self->SaveStatisticsToTable();
             return true;
         }

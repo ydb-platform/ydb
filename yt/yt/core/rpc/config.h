@@ -478,7 +478,7 @@ DEFINE_REFCOUNTED_TYPE(TDispatcherDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TServiceMethod
+struct TOverloadTrackedServiceMethod
     : public NYTree::TYsonStructLite
 {
     std::string Service;
@@ -486,14 +486,14 @@ struct TServiceMethod
 
     int MaxWindow;
 
-    REGISTER_YSON_STRUCT_LITE(TServiceMethod);
+    REGISTER_YSON_STRUCT_LITE(TOverloadTrackedServiceMethod);
 
     static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TServiceMethodConfig
+struct TOverloadTrackedServiceMethodConfig
     : public NYTree::TYsonStruct
 {
     std::string Service;
@@ -502,19 +502,19 @@ struct TServiceMethodConfig
     int MaxWindow;
     double WaitingTimeoutFraction;
 
-    REGISTER_YSON_STRUCT(TServiceMethodConfig);
+    REGISTER_YSON_STRUCT(TOverloadTrackedServiceMethodConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TServiceMethodConfig)
+DEFINE_REFCOUNTED_TYPE(TOverloadTrackedServiceMethodConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TOverloadTrackerConfigBase
     : public NYTree::TYsonStruct
 {
-    std::vector<TServiceMethod> MethodsToThrottle;
+    std::vector<TOverloadTrackedServiceMethod> MethodsToThrottle;
 
     REGISTER_YSON_STRUCT(TOverloadTrackerConfigBase);
 
@@ -570,7 +570,7 @@ struct TOverloadControllerConfig
 {
     bool Enabled;
     THashMap<std::string, TOverloadTrackerConfig> Trackers;
-    std::vector<TServiceMethodConfigPtr> Methods;
+    std::vector<TOverloadTrackedServiceMethodConfigPtr> Methods;
     TDuration LoadAdjustingPeriod;
 
     REGISTER_YSON_STRUCT(TOverloadControllerConfig);

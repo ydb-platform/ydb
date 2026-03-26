@@ -214,6 +214,13 @@ public:
             settings.Add(std::move(skipJsonErrors));
         }
 
+        if (auto streamingTopicRead = topicKeyParser.GetStreamingTopicRead()) {
+            if (!topicKeyParser.ParseStreamingTopicRead(*streamingTopicRead, ctx)) {
+                return nullptr;
+            }
+            settings.Add(std::move(streamingTopicRead));
+        }
+
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())
@@ -235,6 +242,10 @@ public:
 
     const THashMap<TString, TString>* GetClusterTokens() override {
         return &State_->Configuration->Tokens;
+    }
+
+    const THashSet<TString>& GetValidClusters() override {
+        return State_->Configuration->GetValidClusters();
     }
 
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {

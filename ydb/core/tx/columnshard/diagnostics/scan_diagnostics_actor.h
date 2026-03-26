@@ -11,7 +11,7 @@
 
 namespace NKikimr::NColumnShard::NDiagnostics  {
 
-class TScanDiagnosticsActor: public NActors::TActor<TScanDiagnosticsActor> {
+class TScanDiagnosticsActor: public NActors::TActorBootstrapped<TScanDiagnosticsActor> {
     struct TScanDiagnosticsInfo {
         ui64 RequestId;
         TString RequestMessage;
@@ -42,7 +42,7 @@ class TScanDiagnosticsActor: public NActors::TActor<TScanDiagnosticsActor> {
     void AddScanDiagnostics(const std::shared_ptr<TScanDiagnosticsInfo>& info, std::deque<std::shared_ptr<TScanDiagnosticsInfo>>& lastScans);
 
 public:
-    TScanDiagnosticsActor();
+    void Bootstrap();
 };
 
 }

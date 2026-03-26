@@ -1168,14 +1168,6 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx) {
     const auto& writeRequest = ev->Request.write_request();
 
-    if constexpr (!UseMigrationProtocol) {
-        if (writeRequest.has_tx() && !AppData(ctx)->FeatureFlags.GetEnableTopicServiceTx()) {
-            CloseSession("Disabled transaction support for TopicService.",
-                         PersQueue::ErrorCode::ERROR, ctx);
-            return;
-        }
-    }
-
     if (PendingRequests.empty()) {
         PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
     } else if constexpr (!UseMigrationProtocol) {
@@ -1254,12 +1246,6 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
 
     pendingRequest->UserWriteRequests.emplace_back(std::move(ev));
     pendingRequest->ByteSize = request.ByteSize();
-
-    auto msgMetaEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicMessageMeta();
-    if (!msgMetaEnabled && maxMessageMetadataSize > 0) {
-        CloseSession("Message level metadata support is disabled on server size", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
 
     if (maxMessageMetadataSize > MAX_METADATA_SIZE_PER_MESSAGE) {
         CloseSession(
@@ -1542,10 +1528,15 @@ void TWriteSessionActor<UseMigrationProtocol>::LogSession(const TActorContext& c
             return InitRequest.path();
         }
     }();
+    if (DiscoveryConverter && DiscoveryConverter->IsValid()) {
+        topic_path = DiscoveryConverter->GetPrintableString();
+    }
     LOG_INFO_S(
             ctx, NKikimrServices::PQ_WRITE_PROXY,
-            "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie << " userAgent=\"" << UserAgent
-                                      << "\" ip=" << PeerName << " proto=" << ProtoName << " "
+            "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie 
+                                      << " userAgent=\"" << UserAgent
+                                      << "\" ip=" << PeerName << " proto=" << ProtoName
+                                      << " user=" << (Token ? Token->GetUserSID() : "-")
                                       << " topic=" << topic_path
                                       << " durationSec=" << (ctx.Now() - StartTime).Seconds()
     );

@@ -20,21 +20,22 @@ namespace NYT::NYTProf {
 
 void SymbolizeByExternalPProf(NProto::Profile* profile, const TSymbolizationOptions& options)
 {
-    TTempDir tmpDir = TTempDir::NewTempDir(std::string(options.TmpDir));
+    TTempDir tmpDir = TTempDir::NewTempDir(TString(options.TmpDir));
     if (options.KeepTmpDir) {
         tmpDir.DoNotRemove();
     }
 
-    auto writeFile = [&] (const std::string& name) {
+    auto writeFile = [&] (const TString& name) -> TString {
         auto path = tmpDir.Path() / name;
         TFile file{path, EOpenModeFlag::CreateAlways|EOpenModeFlag::WrOnly|EOpenModeFlag::AX|EOpenModeFlag::ARW};
         auto binary = NResource::Find("/ytprof/" + name);
         file.Write(binary.data(), binary.size());
-        return TString(path);
+        return path;
     };
 
-    std::string pprofPath;
-    std::optional<std::string> llvmSymbolyzerPath;
+
+    TString pprofPath;
+    std::optional<TString> llvmSymbolyzerPath;
 
     if (NResource::Has("/ytprof/pprof")) {
         pprofPath = writeFile("pprof");

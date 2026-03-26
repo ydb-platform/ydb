@@ -10,7 +10,7 @@ namespace NYql {
 class TPlanFormatterBase: public IPlanFormatter {
 public:
     TPlanFormatterBase() = default;
-    ~TPlanFormatterBase() = default;
+    ~TPlanFormatterBase() override = default;
 
     bool HasCustomPlan(const TExprNode& node) override;
     void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
@@ -42,7 +42,7 @@ protected:
 class TDataProviderBase: public IDataProvider, public TPlanFormatterBase {
 public:
     TDataProviderBase() = default;
-    ~TDataProviderBase() = default;
+    ~TDataProviderBase() override = default;
 
     bool Initialize(TExprContext& ctx) override;
     IGraphTransformer& GetConfigurationTransformer() override;

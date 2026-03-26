@@ -17,6 +17,7 @@ from six.moves.queue import Queue
 import yatest
 
 from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.common.types import FailDomainType
 from . import daemon
 from . import kikimr_config
 from . import kikimr_node_interface
@@ -25,6 +26,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
 from ydb.tests.library.clients.kikimr_config_client import config_client_factory
+from ydb.tests.library.clients.kikimr_monitoring import KikimrMonitor
 
 
 logger = logging.getLogger(__name__)
@@ -71,9 +73,13 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self._tenant_affiliation = tenant_affiliation
         self.grpc_port = port_allocator.grpc_port
         self.mon_port = port_allocator.mon_port
+        self.mon_uses_https = self.__configurator.monitoring_tls_cert_path is not None
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
+        self.http_proxy_port = None
+        if not configurator.simple_config and configurator.http_proxy_enabled:
+            self.http_proxy_port = port_allocator.http_proxy_port
         self.sqs_port = None
         if not configurator.simple_config and configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
@@ -243,6 +249,21 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             ]
         )
 
+        if self.__configurator.monitoring_tls_cert_path is not None:
+            command.append(
+                "--mon-cert=%s" % self.__configurator.monitoring_tls_cert_path
+            )
+
+        if self.__configurator.monitoring_tls_key_path is not None:
+            command.append(
+                "--mon-key=%s" % self.__configurator.monitoring_tls_key_path
+            )
+
+        if self.__configurator.monitoring_tls_ca_path is not None:
+            command.append(
+                "--mon-ca=%s" % self.__configurator.monitoring_tls_ca_path
+            )
+
         if os.environ.get("YDB_ALLOCATE_PGWIRE_PORT", "") == "true":
             command.append("--pgwire-port=%d" % self.pgwire_port)
 
@@ -251,6 +272,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         if self.sqs_port is not None:
             command.extend(["--sqs-port=%d" % self.sqs_port])
+
+        if self.http_proxy_port is not None:
+            command.extend(["--http-proxy-port=%d" % self.http_proxy_port])
 
         if self.data_center is not None:
             command.append(
@@ -335,6 +359,21 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def enable_config_dir(self):
         self.__use_config_store = True
         self.update_command(self.__make_run_command())
+
+    def disable_config_dir(self, cleanup=True):
+        self.__use_config_store = False
+        self.update_command(self.__make_run_command())
+        if cleanup:
+            if self.__configurator.separate_node_configs:
+                node_config_dir = os.path.join(
+                    self.__config_path,
+                )
+                if os.path.exists(node_config_dir):
+                    shutil.rmtree(node_config_dir)
+            else:
+                config_file = os.path.join(self.__config_path, "config.yaml")
+                if os.path.exists(config_file):
+                    os.remove(config_file)
 
     def set_seed_nodes_file(self, seed_nodes_file):
         self.__seed_nodes_file = seed_nodes_file
@@ -552,7 +591,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
         if bs_needed:
-            self.__wait_for_bs_controller_to_start(timeout_seconds=timeout_seconds)
+            token = self.root_token or self.__configurator.default_clusteradmin
+            self.__wait_for_bs_controller_to_start(timeout_seconds=timeout_seconds, token=token)
             if not self.__configurator.use_self_management:
                 self.__add_bs_box()
 
@@ -563,6 +603,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 name=p['name'],
                 kind=p['kind'],
                 pdisk_user_kind=p['pdisk_user_kind'],
+                num_groups=p.get('num_groups'),
             )
             pools[p['name']] = p['kind']
 
@@ -778,6 +819,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node_id in node_ids:
             self.nodes[node_id].enable_config_dir()
 
+    def disable_config_dir(self, node_ids=None):
+        if node_ids is None:
+            node_ids = self.__configurator.all_node_ids()
+        self.__configurator.use_config_store = False
+        for node_id in node_ids:
+            self.nodes[node_id].disable_config_dir()
+
     @property
     def config_path(self):
         if self.__configurator.separate_node_configs:
@@ -800,9 +848,18 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         else:
             self.__configurator.write_proto_configs(self.__config_path)
 
-    def overwrite_configs(self, config):
+    def overwrite_configs(self, config, node_ids=None):
         self.__configurator.full_config = config
-        self.__write_configs()
+        if node_ids is None:
+            self.__write_configs()
+        else:
+            if not self.__configurator.separate_node_configs:
+                raise ValueError(
+                    "overwrite_configs(node_ids=...) is only supported when "
+                    "separate_node_configs is enabled"
+                )
+            for node_id in node_ids:
+                self.__write_node_config(node_id)
 
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()
@@ -877,9 +934,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 if retries == 0:
                     raise
 
-    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None):
+    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None, num_groups=None):
         if erasure is None:
             erasure = self.__configurator.static_erasure
+        if num_groups is None:
+            num_groups = 2
         request = bs.TConfigRequest()
         cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = 1
@@ -892,7 +951,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         cmd.DefineStoragePool.Kind = kind
         cmd.DefineStoragePool.ErasureSpecies = str(erasure)
         cmd.DefineStoragePool.VDiskKind = "Default"
-        cmd.DefineStoragePool.NumGroups = 2
+        cmd.DefineStoragePool.NumGroups = num_groups
+
+        if str(erasure) == "mirror-3-dc" and len(self.__configurator.all_node_ids()) == 3:
+            cmd.DefineStoragePool.Geometry.RealmLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.RealmLevelEnd = int(FailDomainType.Room)
+            cmd.DefineStoragePool.Geometry.DomainLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.DomainLevelEnd = int(FailDomainType.Disk) + 1
 
         pdisk_filter = cmd.DefineStoragePool.PDiskFilter.add()
         pdisk_filter.Property.add().Type = 0
@@ -900,8 +965,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
         return name
 
-    def __wait_for_bs_controller_to_start(self, timeout_seconds=240):
-        monitors = [node.monitor for node in self.nodes.values()]
+    def __wait_for_bs_controller_to_start(self, timeout_seconds=240, token=None):
+        monitors = [
+            KikimrMonitor(
+                node.host,
+                node.mon_port,
+                use_https=getattr(node, 'mon_uses_https', False),
+                token=token
+            )
+            for node in self.nodes.values()
+        ]
 
         def predicate():
             return blobstorage_controller_has_started_on_some_node(monitors)
@@ -1202,11 +1275,11 @@ mon={mon}""".format(
 
     def cleanup_disk(self, path):
         self.ssh_command(
-            'sudo dd if=/dev/zero of={} bs=1M count=1 status=none;'.format(path),
+            'sudo /Berkanavt/kikimr/bin/kikimr admin bs disk obliterate {};'.format(path),
             raise_on_error=True)
 
     def cleanup_disks(self):
         self.ssh_command(
             "for X in /dev/disk/by-partlabel/kikimr_*; "
-            "do sudo dd if=/dev/zero of=$X bs=1M count=1 status=none; done",
+            "do sudo /Berkanavt/kikimr/bin/kikimr admin bs disk obliterate $X; done",
             raise_on_error=True)

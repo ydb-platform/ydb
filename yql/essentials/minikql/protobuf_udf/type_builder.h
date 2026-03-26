@@ -11,8 +11,7 @@
 
 #include <google/protobuf/message.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 enum class EFieldFlag: ui16 {
     Void = 1 << 0,
@@ -103,5 +102,4 @@ void ProtoTypeBuild(IFunctionTypeInfoBuilder& builder, TProtoInfo* info) {
 
 bool AvoidOptionalScalars(bool syntaxAware, const NProtoBuf::FieldDescriptor* fd);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

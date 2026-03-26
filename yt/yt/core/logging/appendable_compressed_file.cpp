@@ -177,10 +177,10 @@ private:
             })
                 .AsyncVia(SerializedInvoker_));
 
-        // We use .Get() here instead of WaitFor() here to ensure that this method doesn't do context switches.
+        // We use BlockingGet() here instead of WaitFor() here to ensure that this method doesn't do context switches.
         // Otherwise, flush events in TLogManager may intersect, because another event could start while we are
         // waiting in WaitFor().
-        auto outputBuffer = asyncOutputBuffer.Get().ValueOrThrow();
+        auto outputBuffer = asyncOutputBuffer.BlockingGet().ValueOrThrow();
         File_.Pwrite(outputBuffer.Data(), outputBuffer.Size(), OutputPosition_);
         OutputPosition_ += outputBuffer.Size();
     }

@@ -1,12 +1,14 @@
 #pragma once
 
 #include <util/generic/fwd.h>
+#include <util/system/compiler.h>
 
 namespace NKikimrPQ {
 
 class TPQConfig;
 class TPQTabletConfig;
 class TPQTabletConfig_TConsumer;
+class TPQTabletConfig_TPartition;
 class TMirrorPartitionConfig;
 class TMLPStorageSnapshot;
 class TMLPStorageWAL;
@@ -21,7 +23,9 @@ bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool s
 
 namespace NPQ {
 
-bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig, bool isLocalDC);
+bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& config, bool isLocalDC);
+bool DetailedMetricsAreEnabled(const NKikimrPQ::TPQTabletConfig& config);
+const NKikimrPQ::TPQTabletConfig_TPartition* GetPartitionConfigFromAllPartitions(const NKikimrPQ::TPQTabletConfig& config Y_LIFETIME_BOUND, const ui32 partitionId) noexcept;
 
 }
 

@@ -18,6 +18,7 @@
 #include "ydb_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 
 #if !defined(_win32_)
 #include <ydb/core/base/backtrace.h>
@@ -322,10 +323,10 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         auto userParser = [this](const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly) -> bool {
             Y_UNUSED(isFileName);
             Y_UNUSED(errors);
-            TString user;
-            if (authData["user"]) {
-                user = authData["user"].as<TString>();
+            if (!authData["user"]) {
+                return false;
             }
+            TString user = authData["user"].as<TString>();
             if (value) {
                 *value = user;
             }
@@ -525,6 +526,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 void TClientCommandRootCommon::Parse(TConfig& config) {
     TClientCommandRootBase::Parse(config);
     config.VerbosityLevel = VerbosityLevel;
+    SetupGlobalLogger(VerbosityLevel);
 }
 
 void TClientCommandRootCommon::ExtractParams(TConfig& config) {
@@ -548,7 +550,7 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (std::vector<TString> errors = ParseResult->Validate(); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
     }
-    if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, !config.OnlyExplicitProfile ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
+    if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, (!Profile && !config.OnlyExplicitProfile) ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
     }
     if (IsVerbose()) {
@@ -594,17 +596,56 @@ void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
         return;
     }
 
+    const TOptionParseResult* userResult = ParseResult->FindResult("user");
+    const TOptionParseResult* passwordResult = ParseResult->FindResult("password-file");
+    // Handle explicit --password-file without any user before auth method is chosen.
+    // Example: "ydb --password-file pwd.txt scheme ls" should fail even if
+    // static-credentials wasn't selected as the auth method.
+    if (passwordResult) {
+        const EOptionValueSource passwordSource = passwordResult->GetValueSource();
+        const bool hasUser =
+            userResult && userResult->GetValueSource() != EOptionValueSource::DefaultValue;
+        if (passwordSource == EOptionValueSource::Explicit && !hasUser) {
+            MisuseErrors.push_back("User password was provided without user name");
+            return;
+        }
+        if (passwordSource == EOptionValueSource::EnvironmentVariable && !hasUser) {
+            // Ignore YDB_PASSWORD without any user, even if static-credentials isn't selected.
+            Password.reset();
+            PasswordFile.clear();
+        }
+    }
+
     if (ParseResult->GetChosenAuthMethod() != "static-credentials") {
         return;
     }
 
-    const TOptionParseResult* userResult = ParseResult->FindResult("user");
-    const TOptionParseResult* passwordResult = ParseResult->FindResult("password-file");
-    if (passwordResult && userResult) {
-        if (passwordResult->GetValueSource() != EOptionValueSource::DefaultValue && userResult->GetValueSource() == EOptionValueSource::DefaultValue) { // Both from command line or both from env
-            MisuseErrors.push_back("User password was provided without user name");
-            return;
+    if (passwordResult) {
+        const EOptionValueSource passwordSource = passwordResult->GetValueSource();
+        const EOptionValueSource userSource = userResult
+            ? userResult->GetValueSource()
+            : EOptionValueSource::DefaultValue;
+        // Ignore profile password if user comes from a different source.
+        const bool ignoreExplicitProfilePassword =
+            passwordSource == EOptionValueSource::ExplicitProfile &&
+            userSource != EOptionValueSource::ExplicitProfile;
+        const bool ignoreActiveProfilePassword =
+            passwordSource == EOptionValueSource::ActiveProfile &&
+            userSource != EOptionValueSource::ActiveProfile;
+        if (ignoreExplicitProfilePassword || ignoreActiveProfilePassword) {
+            Password.reset();
+            PasswordFile.clear();
+            if (IsVerbose()) {
+                Cerr << "Ignoring profile password because username is not from the same profile" << Endl;
+            }
+            if (TMaybe<TString> envPassword = TryGetEnv("YDB_PASSWORD")) {
+                Password = envPassword.GetRef();
+            }
         }
+    }
+
+    if (!MisuseErrors.empty()) {
+        return;
     }
 
     if (UserName.empty()) {
@@ -737,7 +778,7 @@ int TClientCommandRootCommon::Run(TConfig& config) {
     TString prompt;
     if (!ProfileName.empty()) {
         prompt = ProfileName;
-    } if (const auto& activeProfileName = ProfileManager->GetActiveProfileName(); !config.OnlyExplicitProfile && activeProfileName) {
+    } else if (const auto& activeProfileName = ProfileManager->GetActiveProfileName(); !config.OnlyExplicitProfile && activeProfileName) {
         prompt = activeProfileName;
     }
 

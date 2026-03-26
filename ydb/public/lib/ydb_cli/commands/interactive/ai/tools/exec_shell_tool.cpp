@@ -6,6 +6,7 @@
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
+#include <util/string/builder.h>
 #include <util/string/strip.h>
 #include <util/generic/scope.h>
 #include <stdio.h>
@@ -75,8 +76,8 @@ IMPORTANT:
     }
 
 public:
-    TExecShellTool(const TExecShellToolSettings& settings, const TInteractiveLogger& log)
-        : TBase(CreateParametersSchema(), DESCRIPTION, log)
+    explicit TExecShellTool(const TExecShellToolSettings& settings)
+        : TBase(CreateParametersSchema(), DESCRIPTION)
         , Driver(settings.Driver)
     {}
 
@@ -171,7 +172,7 @@ private:
             .Prompt = "shell> ",
             .EnableSwitchMode = false,
             .ContinueAfterCancel = false,
-        }, Log);
+        });
 
         auto response = lineReader->ReadLine(Command);
         lineReader->Finish(!response.has_value());
@@ -212,8 +213,8 @@ private:
 
 } // anonymous namespace
 
-ITool::TPtr CreateExecShellTool(const TExecShellToolSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<TExecShellTool>(settings, log);
+ITool::TPtr CreateExecShellTool(const TExecShellToolSettings& settings) {
+    return std::make_shared<TExecShellTool>(settings);
 }
 
 } // namespace NYdb::NConsoleClient::NAi

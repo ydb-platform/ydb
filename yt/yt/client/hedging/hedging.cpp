@@ -146,6 +146,9 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, AlterReplicationCard, (NChaosClient::TReplicationCardId, const TAlterReplicationCardOptions&));
     UNSUPPORTED_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (const TChaosLeaseStartOptions&));
     UNSUPPORTED_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (NChaosClient::TChaosLeaseId, const TChaosLeaseAttachOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, SetUserBanned, (const std::string&, bool, const TSetUserBannedOptions&));
+    UNSUPPORTED_METHOD(TFuture<bool>, GetUserBanned, (const std::string&, const TGetUserBannedOptions&));
+    UNSUPPORTED_METHOD(TFuture<std::vector<std::string>>, ListBannedUsers, (const TListBannedUsersOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (const TYPath&, const NTableClient::TNameTablePtr&, const TSharedRange<NTableClient::TUnversionedRow>&, const TGetInSyncReplicasOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (const TYPath&, const TGetInSyncReplicasOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<TTabletInfo>>, GetTabletInfos, (const TYPath&, const std::vector<int>&, const TGetTabletInfosOptions&));
@@ -204,6 +207,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<TCellIdToConsistentStateMap>, GetMasterConsistentState, (const TGetMasterConsistentStateOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ExitReadOnly, (NObjectClient::TCellId, const TExitReadOnlyOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, MasterExitReadOnly, (const TMasterExitReadOnlyOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, ResetDynamicallyPropagatedMasterCells, (const TResetDynamicallyPropagatedMasterCellsOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (NObjectClient::TCellId, const TDiscombobulateNonvotingPeersOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SwitchLeader, (NObjectClient::TCellId, const std::string&, const TSwitchLeaderOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ResetStateHash, (NObjectClient::TCellId, const TResetStateHashOptions&));

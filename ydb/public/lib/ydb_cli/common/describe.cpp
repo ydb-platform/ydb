@@ -21,37 +21,13 @@ namespace NYdb::NConsoleClient {
 
 namespace {
 
-struct TPrettyDurationFormatParameters {
-    double EntitiesPerSecond;
-    TStringBuf EntityName;
-    TStringBuf ZeroString;
-    TStringBuf MaxString;
-    int MaxPrecision;
-};
-
-constexpr TPrettyDurationFormatParameters PRETTY_HOURS_DEFAULT{
-    .EntitiesPerSecond = 3600,
-    .EntityName = "hours",
-    .ZeroString = "0 hours",
-    .MaxString = "+infinity",
-    .MaxPrecision = 3,
-};
-
-constexpr TPrettyDurationFormatParameters PRETTY_HOURS_NON_ZERO{
-    .EntitiesPerSecond = 3600,
-    .EntityName = "hours",
-    .ZeroString = "",
-    .MaxString = "+infinity",
-    .MaxPrecision = 3,
-};
-
-TString PrettyDurationString(TDuration duration, const TPrettyDurationFormatParameters& paramerters) {
+// Helper function to format duration in human-readable format
+// Returns empty string for zero duration, otherwise returns duration in format like "2h", "5m 30s", etc.
+TString HumanReadableDurationOrEmpty(TDuration duration) {
     if (duration == TDuration::Zero()) {
-        return ToString(paramerters.ZeroString);
-    } else if (duration == TDuration::Max()) {
-        return ToString(paramerters.MaxString);
+        return "";
     }
-    return TStringBuilder() << Prec(duration.MillisecondsFloat() / (paramerters.EntitiesPerSecond * 1000.0), PREC_POINT_DIGITS_STRIP_ZEROES, paramerters.MaxPrecision) << " " << paramerters.EntityName;
+    return ToString(HumanReadable(duration));
 }
 
 TString FormatCodecs(const std::vector<NYdb::NTopic::ECodec>& codecs) {
@@ -69,7 +45,7 @@ void PrintTopicConsumers(const std::vector<NYdb::NTopic::TConsumer>& consumers, 
             .Column(1, FormatCodecs(c.GetSupportedCodecs()))
             .Column(2, c.GetReadFrom().ToRfc822StringLocal())
             .Column(3, c.GetImportant() ? "Yes" : "No")
-            .Column(4, PrettyDurationString(c.GetAvailabilityPeriod(), PRETTY_HOURS_NON_ZERO));
+            .Column(4, HumanReadableDurationOrEmpty(c.GetAvailabilityPeriod()));
     }
     out << Endl << "Consumers: " << Endl;
     out << table;
@@ -88,7 +64,7 @@ void PrintStatistics(const NTopic::TTopicDescription& topicDescription, IOutputS
 
 void PrintMain(const NTopic::TTopicDescription& topicDescription, IOutputStream& out) {
     out << Endl << "Main:";
-    out << Endl << "RetentionPeriod: " << PrettyDurationString(topicDescription.GetRetentionPeriod(), PRETTY_HOURS_DEFAULT);
+    out << Endl << "RetentionPeriod: " << HumanReadable(topicDescription.GetRetentionPeriod());
     if (topicDescription.GetRetentionStorageMb().has_value()) {
         out << Endl << "StorageRetention: " << *topicDescription.GetRetentionStorageMb() << " MB";
     }
@@ -171,7 +147,7 @@ int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& 
     const NYdb::NTopic::TConsumer& consumer = description.GetConsumer();
     out << "Consumer " << consumer.GetConsumerName() << ": " << Endl;
     out << "Important: " << (consumer.GetImportant() ? "Yes" : "No") << Endl;
-    if (const auto availabilityPeriodStr = PrettyDurationString(consumer.GetAvailabilityPeriod(), PRETTY_HOURS_NON_ZERO)) {
+    if (const auto availabilityPeriodStr = HumanReadableDurationOrEmpty(consumer.GetAvailabilityPeriod())) {
         out << "Availability period: " << availabilityPeriodStr << Endl;
     }
     if (const TInstant& readFrom = consumer.GetReadFrom()) {
@@ -366,7 +342,7 @@ void PrintColumnFamilies(const NTable::TTableDescription& tableDescription, IOut
     if (tableDescription.GetColumnFamilies().empty()) {
         return;
     }
-    TPrettyTable table({ "Name", "Data", "Compression", "Keep in memory" },
+    TPrettyTable table({ "Name", "Data", "Compression", "Cache mode" },
         TPrettyTableConfig().WithoutRowDelimiters());
 
     for (const NTable::TColumnFamilyDescription& family : tableDescription.GetColumnFamilies()) {
@@ -385,15 +361,15 @@ void PrintColumnFamilies(const NTable::TTableDescription& tableDescription, IOut
                     << static_cast<size_t>(family.GetCompression().value()) << ")";
             }
         }
-        TStringBuilder keepInMemory;
-        if (family.GetKeepInMemory().has_value()) {
-            keepInMemory << keepInMemory << family.GetKeepInMemory().value();
+        TStringBuilder cacheMode;
+        if (family.GetCacheMode().has_value()) {
+            cacheMode << family.GetCacheMode().value();
         }
         table.AddRow()
             .Column(0, family.GetName())
             .Column(1, data ? data.value() : "")
             .Column(2, compression)
-            .Column(3, keepInMemory);
+            .Column(3, cacheMode);
     }
     out << Endl << "Column families: " << Endl;
     out << table;
@@ -442,9 +418,11 @@ void PrintTtlSettings(const NTable::TTableDescription& tableDescription, IOutput
     }
     default:
         NColorizer::TColors colors = NConsoleClient::AutoColors(out);
-        out << "(unknown):" << Endl
-            << colors.RedColor() << "Unknown ttl settings mode. Please update your version of YDB cli"
-            << colors.OldColor() << Endl;
+
+        out << colors.RedColor()
+            << "Unknown TTL settings mode: " << static_cast<int>(settings->GetMode())
+            << colors.OldColor()
+            << Endl;
     }
 
     if (settings->GetRunInterval()) {
@@ -491,8 +469,58 @@ void PrintReadReplicasSettings(const NTable::TTableDescription& tableDescription
         break;
     default:
         NColorizer::TColors colors = NConsoleClient::AutoColors(out);
-        out << colors.RedColor() << "Unknown read replicas settings mode. Please update your version of YDB cli"
-            << colors.OldColor() << Endl;
+
+        out << colors.RedColor()
+            << "Unknown read replicas settings mode: " << static_cast<int>(settings->GetMode())
+            << colors.OldColor()
+            << Endl;
+    }
+}
+
+/**
+ * Print the configuration for the table metrics.
+ *
+ * @param[in] tableDescription The description of the table
+ * @param[in] out The output stream to print to
+ */
+void PrintMetricsSettings(const NTable::TTableDescription& tableDescription, IOutputStream& out) {
+    const auto& settings = tableDescription.GetMetricsSettings();
+    if (!settings) {
+        return;
+    }
+
+    out << Endl << "Metrics settings: " << Endl;
+
+    switch (settings->GetMetricsLevel()) {
+    case NTable::TMetricsSettings::EMetricsLevel::Unspecified:
+        out << "Metrics level: UNSPECIFIED" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Disabled:
+        out << "Metrics level: DISABLED" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Database:
+        out << "Metrics level: DATABASE" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Table:
+        out << "Metrics level: TABLE" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Partition:
+        out << "Metrics level: PARTITION" << Endl;
+        break;
+
+    default:
+        NColorizer::TColors colors = NConsoleClient::AutoColors(out);
+
+        out << colors.RedColor()
+            << "Unknown metrics level: " << static_cast<int>(settings->GetMetricsLevel())
+            << colors.OldColor()
+            << Endl;
+
+        break;
     }
 }
 
@@ -797,6 +825,7 @@ int TDescribeLogic::PrintTableResponsePretty(const NTable::TTableDescription& ta
             << (tableDescription.GetKeyBloomFilter().value() ? "true" : "false") << Endl;
     }
     PrintReadReplicasSettings(tableDescription, Out);
+    PrintMetricsSettings(tableDescription, Out);
     PrintPermissionsIfNeeded(tableDescription, options);
     if (options.ShowStats) {
         PrintStatistics(tableDescription, Out);

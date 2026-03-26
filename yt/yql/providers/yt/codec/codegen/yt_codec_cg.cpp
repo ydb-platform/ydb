@@ -36,6 +36,22 @@ extern "C" void ThrowBadDecimal() {
     throw yexception() << "Invalid decimal data";
 }
 
+extern "C" void ThrowBadTz(int slot, EBadTzReason reason) {
+    TStringBuf reasonStr;
+    switch (reason) {
+    case EBadTzReason::BAD_TZ_LENGTH:
+        reasonStr = ": unexpected data length";
+        break;
+    case EBadTzReason::BAD_TZ_TIME:
+        reasonStr = ": time point is out of range";
+        break;
+    case EBadTzReason::BAD_TZ_TIMEZONE:
+        reasonStr = ": unknown timezone";
+        break;
+    }
+    throw yexception() << "Invalid " << static_cast<NUdf::EDataSlot>(slot) << " data" << reasonStr;
+}
+
 extern "C" void YtCodecReadString(void* vbuf, void* vpod) {
     NYql::NCommon::TInputBuf& buf = *(NYql::NCommon::TInputBuf*)vbuf;
     NUdf::TUnboxedValue& pod = *(NUdf::TUnboxedValue*)vpod;
@@ -202,6 +218,8 @@ public:
         auto& context = Codegen_->GetContext();
         const auto elem = new LoadInst(Type::getInt128Ty(context), elemPtr, "elem", Block_);
         const auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
+        const bool nativeTz = nativeYtTypeFlags & NTCF_TZDATE;
+        const bool nativeBigTz = nativeYtTypeFlags & NTCF_BIGTZDATE;
         switch (schemeType) {
         case NUdf::TDataType<bool>::Id: {
             const auto data = CastInst::Create(Instruction::Trunc, elem, Type::getInt1Ty(context), "data", Block_);
@@ -391,7 +409,7 @@ public:
             const auto eight = CastInst::Create(Instruction::BitCast, elem, strType, "eight", Block_);
             const auto type = Type::getInt8Ty(context);
             const auto tzId = ExtractElementInst::Create(eight, ConstantInt::get(type, 4), "id", Block_);
-            CallInst::Create(module.getFunction("WriteTzDate"), { buf, data, tzId }, "", Block_);
+            CallInst::Create(module.getFunction(nativeTz ? "WriteTzDateNative" : "WriteTzDate"), { buf, data, tzId }, "", Block_);
             break;
         }
 
@@ -402,7 +420,7 @@ public:
             const auto eight = CastInst::Create(Instruction::BitCast, elem, strType, "eight", Block_);
             const auto type = Type::getInt8Ty(context);
             const auto tzId = ExtractElementInst::Create(eight, ConstantInt::get(type, 4), "id", Block_);
-            CallInst::Create(module.getFunction("WriteTzDatetime"), { buf, data, tzId }, "", Block_);
+            CallInst::Create(module.getFunction(nativeTz ? "WriteTzDatetimeNative" : "WriteTzDatetime"), { buf, data, tzId }, "", Block_);
             break;
         }
 
@@ -413,7 +431,7 @@ public:
             const auto eight = CastInst::Create(Instruction::BitCast, elem, strType, "eight", Block_);
             const auto type = Type::getInt8Ty(context);
             const auto tzId = ExtractElementInst::Create(eight, ConstantInt::get(type, 4), "id", Block_);
-            CallInst::Create(module.getFunction("WriteTzTimestamp"), { buf, data, tzId }, "", Block_);
+            CallInst::Create(module.getFunction(nativeTz ? "WriteTzTimestampNative" : "WriteTzTimestamp"), { buf, data, tzId }, "", Block_);
             break;
         }
 
@@ -424,7 +442,7 @@ public:
             const auto eight = CastInst::Create(Instruction::BitCast, elem, strType, "eight", Block_);
             const auto type = Type::getInt8Ty(context);
             const auto tzId = ExtractElementInst::Create(eight, ConstantInt::get(type, 4), "id", Block_);
-            CallInst::Create(module.getFunction("WriteTzDate32"), { buf, data, tzId }, "", Block_);
+            CallInst::Create(module.getFunction(nativeBigTz ? "WriteTzDate32Native" : "WriteTzDate32"), { buf, data, tzId }, "", Block_);
             break;
         }
 
@@ -435,7 +453,7 @@ public:
             const auto eight = CastInst::Create(Instruction::BitCast, elem, strType, "eight", Block_);
             const auto type = Type::getInt8Ty(context);
             const auto tzId = ExtractElementInst::Create(eight, ConstantInt::get(type, 4), "id", Block_);
-            CallInst::Create(module.getFunction("WriteTzDatetime64"), { buf, data, tzId }, "", Block_);
+            CallInst::Create(module.getFunction(nativeBigTz ? "WriteTzDatetime64Native" : "WriteTzDatetime64"), { buf, data, tzId }, "", Block_);
             break;
         }
 
@@ -446,7 +464,7 @@ public:
             const auto eight = CastInst::Create(Instruction::BitCast, elem, strType, "eight", Block_);
             const auto type = Type::getInt8Ty(context);
             const auto tzId = ExtractElementInst::Create(eight, ConstantInt::get(type, 4), "id", Block_);
-            CallInst::Create(module.getFunction("WriteTzTimestamp64"), { buf, data, tzId }, "", Block_);
+            CallInst::Create(module.getFunction(nativeBigTz ? "WriteTzTimestamp64Native" : "WriteTzTimestamp64"), { buf, data, tzId }, "", Block_);
             break;
         }
 
@@ -650,6 +668,8 @@ private:
         auto& module = Codegen_->GetModule();
         auto& context = Codegen_->GetContext();
         const auto schemeType = dataType->GetSchemeType();
+        const bool nativeTz = nativeYtTypeFlags & NTCF_TZDATE;
+        const bool nativeBigTz = nativeYtTypeFlags & NTCF_BIGTZDATE;
         switch (schemeType) {
         case NUdf::TDataType<bool>::Id: {
             CallInst::Create(module.getFunction("ReadBool"), { buf, velemPtr }, "", Block_);
@@ -742,32 +762,32 @@ private:
         }
 
         case NUdf::TDataType<NUdf::TTzDate>::Id: {
-            CallInst::Create(module.getFunction("ReadTzDate"), { buf, velemPtr }, "", Block_);
+            CallInst::Create(module.getFunction(nativeTz ? "ReadTzDateNative" : "ReadTzDate"), { buf, velemPtr }, "", Block_);
             break;
         }
 
         case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
-            CallInst::Create(module.getFunction("ReadTzDatetime"), { buf, velemPtr }, "", Block_);
+            CallInst::Create(module.getFunction(nativeTz ? "ReadTzDatetimeNative" : "ReadTzDatetime"), { buf, velemPtr }, "", Block_);
             break;
         }
 
         case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
-            CallInst::Create(module.getFunction("ReadTzTimestamp"), { buf, velemPtr }, "", Block_);
+            CallInst::Create(module.getFunction(nativeTz ? "ReadTzTimestampNative" : "ReadTzTimestamp"), { buf, velemPtr }, "", Block_);
             break;
         }
 
         case NUdf::TDataType<NUdf::TTzDate32>::Id: {
-            CallInst::Create(module.getFunction("ReadTzDate32"), { buf, velemPtr }, "", Block_);
+            CallInst::Create(module.getFunction(nativeBigTz ? "ReadTzDate32Native" : "ReadTzDate32"), { buf, velemPtr }, "", Block_);
             break;
         }
 
         case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
-            CallInst::Create(module.getFunction("ReadTzDatetime64"), { buf, velemPtr }, "", Block_);
+            CallInst::Create(module.getFunction(nativeBigTz ? "ReadTzDatetime64Native" : "ReadTzDatetime64"), { buf, velemPtr }, "", Block_);
             break;
         }
 
         case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
-            CallInst::Create(module.getFunction("ReadTzTimestamp64"), { buf, velemPtr }, "", Block_);
+            CallInst::Create(module.getFunction(nativeBigTz ? "ReadTzTimestamp64Native" : "ReadTzTimestamp64"), { buf, velemPtr }, "", Block_);
             break;
         }
 
@@ -823,6 +843,7 @@ private:
 
         if (type->IsData()) {
             auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
+            bool smallTz = false;
             switch (schemeType) {
             case NUdf::TDataType<bool>::Id: {
                 const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(ui8));
@@ -860,18 +881,29 @@ private:
                 CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
                 break;
             }
+            case NUdf::TDataType<NUdf::TTzDate>::Id:
+            case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+            case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+                smallTz = true;
+                [[fallthrough]];
+            case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+                if ((smallTz && (nativeYtTypeFlags & NTCF_TZDATE)) || (!smallTz && (nativeYtTypeFlags & NTCF_BIGTZDATE))) {
+                    auto typeInfo = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType));
+                    const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)(typeInfo.FixedSize + sizeof(ui16)));
+                    CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);
+                } else {
+                    CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
+                }
+                break;
+            }
             case NUdf::TDataType<NUdf::TUtf8>::Id:
             case NUdf::TDataType<char*>::Id:
             case NUdf::TDataType<NUdf::TJson>::Id:
             case NUdf::TDataType<NUdf::TYson>::Id:
             case NUdf::TDataType<NUdf::TUuid>::Id:
-            case NUdf::TDataType<NUdf::TJsonDocument>::Id:
-            case NUdf::TDataType<NUdf::TTzDate>::Id:
-            case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-            case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
-            case NUdf::TDataType<NUdf::TTzDate32>::Id:
-            case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
-            case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+            case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
                 CallInst::Create(module.getFunction("SkipVarData"), { buf }, "", Block_);
                 break;
             }
@@ -1070,6 +1102,7 @@ void YtCodecAddMappings(NCodegen::ICodegen& codegen) {
     codegen.AddGlobalMapping("YtCodecWriteJsonDocument", (const void*)&YtCodecWriteJsonDocument);
     codegen.AddGlobalMapping("YtCodecReadJsonDocument", (const void*)&YtCodecReadJsonDocument);
     codegen.AddGlobalMapping("ThrowBadDecimal", (const void*)&ThrowBadDecimal);
+    codegen.AddGlobalMapping("ThrowBadTz", (const void*)&ThrowBadTz);
 }
 
 template<bool Flat>

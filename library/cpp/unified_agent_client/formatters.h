@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/string.h>
+#include <util/string/builder.h>
 #include <util/folder/path.h>
 #include <format>
 
@@ -28,6 +29,14 @@ struct std::formatter<TStringBuf> : std::formatter<std::string_view> {
     }
 };
 
+// Formatter specialization for TStringBuilder
+template <>
+struct std::formatter<TStringBuilder> : std::formatter<TString> {
+    auto format(const TStringBuilder& str, std::format_context& ctx) const {
+        return std::formatter<TString>::format(str, ctx);
+    }
+};
+
 // Formatter specialization for TFsPath (Yandex's filesystem path type)
 // Safe: format() immediately copies data to output buffer before 'str' is destroyed (C++20 temporary lifetime rule)
 template <>
@@ -38,4 +47,3 @@ struct std::formatter<TFsPath> : std::formatter<std::string_view> {
             std::string_view(str.data(), str.size()), ctx);
     }
 };
-

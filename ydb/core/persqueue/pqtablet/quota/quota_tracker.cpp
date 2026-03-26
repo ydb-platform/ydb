@@ -2,18 +2,24 @@
 
 
 namespace NKikimr::NPQ {
+    namespace {
+        constexpr size_t MicroSecondsPerSecond = 1000000;
+    }
+
     TQuotaTracker::TQuotaTracker(const ui64 maxBurst, const ui64 speedPerSecond, const TInstant timestamp)
-        : AvailableSize(maxBurst)
-        , SpeedPerSecond(speedPerSecond)
+        : AvailableSize(maxBurst * MicroSecondsPerSecond)
+        , QuotaSpeed(speedPerSecond)
+        , MaxBurst(maxBurst * MicroSecondsPerSecond)
         , LastUpdateTime(timestamp)
-        , MaxBurst(maxBurst)
     {}
 
     bool TQuotaTracker::UpdateConfigIfChanged(const ui64 maxBurst, const ui64 speedPerSecond) {
-        if (maxBurst != MaxBurst || speedPerSecond != SpeedPerSecond) {
-            SpeedPerSecond = speedPerSecond;
-            MaxBurst = maxBurst;
-            AvailableSize = maxBurst;
+        const auto newMaxBurst = maxBurst * MicroSecondsPerSecond;
+        const auto newQuotaSpeed = speedPerSecond;
+        if (newMaxBurst != MaxBurst || newQuotaSpeed != QuotaSpeed) {
+            AvailableSize = newMaxBurst;
+            QuotaSpeed = newQuotaSpeed;
+            MaxBurst = newMaxBurst;
             return true;
         }
         return false;
@@ -27,17 +33,17 @@ namespace NKikimr::NPQ {
             QuotedTime += diff;
         }
 
-        AvailableSize = Min<i64>(AvailableSize + (ui64)SpeedPerSecond * diff.MicroSeconds() / 1000'000, MaxBurst);
+        AvailableSize = Min<i64>(AvailableSize + static_cast<i64>(QuotaSpeed) * static_cast<i64>(diff.MicroSeconds()), MaxBurst);
     }
 
     bool TQuotaTracker::CanExaust(const TInstant timestamp) {
         Update(timestamp);
-        return AvailableSize > 0;
+        return AvailableSize >= (i64)MicroSecondsPerSecond; // a whole quota unit has become available
     }
 
     void TQuotaTracker::Exaust(const ui64 size, const TInstant timestamp) {
         Update(timestamp);
-        AvailableSize -= (i64)size;
+        AvailableSize -= (i64)size * MicroSecondsPerSecond;
         Update(timestamp);
     }
 
@@ -47,7 +53,7 @@ namespace NKikimr::NPQ {
     }
 
     ui64 TQuotaTracker::GetTotalSpeed() const {
-        return SpeedPerSecond;
+        return QuotaSpeed;
     }
 
 } // NKikimr::NPQ

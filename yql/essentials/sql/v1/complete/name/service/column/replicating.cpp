@@ -25,6 +25,8 @@ public:
             return response;
         }
 
+        // TODO(YQL-20095): Explore real problem to fix this.
+        // NOLINTNEXTLINE(bugprone-exception-escape)
         return std::move(response).Apply([request, ranking = Ranking_](auto f) -> TNameResponse {
             TNameResponse response = f.ExtractValue();
 

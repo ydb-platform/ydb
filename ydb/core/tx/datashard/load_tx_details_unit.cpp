@@ -42,7 +42,7 @@ EExecutionStatus TLoadTxDetailsUnit::Execute(TOperation::TPtr op,
     TActiveTransaction::TPtr tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-    if (!Pipeline.LoadTxDetails(txc, ctx, tx))
+    if (!Pipeline.LoadTxDetails(txc, ctx, tx, tx->GetUserSID()))
         return EExecutionStatus::Restart;
 
     return EExecutionStatus::Executed;

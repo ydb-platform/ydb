@@ -7,6 +7,7 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <util/string/join.h>
+#include <util/string/strip.h>
 
 #include <format>
 #include <ranges>
@@ -39,8 +40,14 @@ std::string ColumnToString(const Ydb::Table::ColumnMeta& column) {
 
 }
 
-TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableResult& description) {
+TString BuildCreateExternalTableQuery(
+    const TString& db,
+    const TString& backupRoot,
+    const Ydb::Table::DescribeExternalTableResult& description)
+{
     return std::format(
+        "-- database: \"{}\"\n"
+        "-- backup root: \"{}\"\n"
         "CREATE EXTERNAL TABLE IF NOT EXISTS `{}` (\n"
         "  {}\n"
         ") WITH (\n"
@@ -48,6 +55,8 @@ TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableRes
         "{}"
         "{}\n"
         ");",
+        db.c_str(),
+        backupRoot.c_str(),
         description.self().name().c_str(),
         JoinSeq(",\n", std::views::transform(description.columns(), ColumnToString)).c_str(),
         KeyValueToString("DATA_SOURCE", description.data_source_path()),
@@ -59,11 +68,52 @@ TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableRes
     );
 }
 
+namespace {
+
+TString GetDataSourcePath(TStringInput query) {
+    TString line;
+    TString pattern = R"(DATA_SOURCE = ')";
+    while (query.ReadLine(line)) {
+        StripInPlace(line);
+        if (line.StartsWith(pattern)) {
+            TStringBuf result = TStringBuf(line).Skip(pattern.size());
+            if (result.EndsWith(',')) {
+                result.Chop(2); // Last "',"
+            } else {
+                result.Chop(1); // Last "'"
+            }
+            return TString(result);
+        }
+    }
+
+    return "";
+}
+
+bool RewriteDataSourcePath(
+    TString& query,
+    const TString& dbRestoreRoot,
+    NYql::TIssues& issues)
+{
+    TString dataSourcePath = GetDataSourcePath(query);
+    if (dataSourcePath.empty()) {
+        return false;
+    }
+
+    dataSourcePath = RewriteAbsolutePath(dataSourcePath, GetDatabase(query), dbRestoreRoot);
+    return RewriteCreateQuery(query, "DATA_SOURCE = '{}'", dataSourcePath, issues);
+}
+
+}
+
 bool RewriteCreateExternalTableQuery(
     TString& query,
+    const TString& dbRestoreRoot,
     const TString& dbPath,
     NYql::TIssues& issues)
 {
+    if (!RewriteDataSourcePath(query, dbRestoreRoot, issues)) {
+        return false;
+    }
     return RewriteCreateQuery(query, "CREATE EXTERNAL TABLE IF NOT EXISTS `{}`", dbPath, issues);
 }
 

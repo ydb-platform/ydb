@@ -12,13 +12,13 @@ from _common import (
     rootrel_arc_src,
     sort_uniq,
     to_yesno,
+    split_list_by_value,
 )
 from _dart_fields import create_dart_record
 
-
 if TYPE_CHECKING:
     from lib.nots.erm_json_lite import ErmJsonLite
-    from lib.nots.package_manager import PackageManagerType, BasePackageManager
+    from lib.nots.package_manager import PackageManager
     from lib.nots.semver import Version
     from lib.nots.typescript import TsConfig
 
@@ -29,6 +29,29 @@ if TYPE_CHECKING:
 ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.0  # seconds per file
 
 REQUIRED_MISSING = "~~required~~"
+
+TS_LINT_DART_FIELDS = (
+    # dart data can be merged into one. merge key is ScriptRelPath + SourceFolderPath + TestName
+    # we use df.TestName.name_from_macro_args to set different keys to prevent merging
+    # see devtools/ya/test/dartfile/__init__.py
+    df.ScriptRelPath.first_flat,  # required, used to lookup a SUITE_MAP in devtools/ya/test/explore/__init__.py
+    df.SourceFolderPath.normalized,  # required
+    df.TestName.name_from_macro_args,  # required, we use it to pass script name to runner
+    df.TestRecipes.value,  # from macro USE_RECIPE()
+    df.Size.from_macro_args_and_unit,
+    df.CustomDependencies.test_depends_only,  # from macro DEPENDS()
+    df.NodejsRootVarName.value,
+    df.TsCheckType.value,
+)
+
+TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
+    df.TestEnv.value,  # from macro ENV()
+    df.TestData.from_unit,  # from macro DATA()
+    df.TestTimeout.from_unit,  # from macro TIMEOUT()
+    df.Tag.from_unit,  # from macro TAG()
+    df.Requirements.from_unit,  # from macro REQUIREMENTS()
+    df.TsTestForPath.value,
+)
 
 
 class COLORS:
@@ -57,6 +80,7 @@ class TsTestType(StrEnum):
     TSC_TYPECHECK = auto()
     TS_STYLELINT = auto()
     TS_BIOME = auto()
+    TS_CHECK = auto()
 
 
 class UnitType:
@@ -392,27 +416,16 @@ def _create_erm_json(unit: NotsUnitType):
     return ErmJsonLite.load(erm_packages_path)
 
 
-def _get_pm_type(unit: NotsUnitType) -> 'PackageManagerType':
-    resolved: PackageManagerType | None = unit.get("PM_TYPE")
-    if not resolved:
-        raise Exception("PM_TYPE is not set yet.")
-
-    return resolved
-
-
 def _get_source_path(unit: NotsUnitType) -> str:
     sources_path = unit.get("TS_TEST_FOR_DIR") if unit.get("TS_TEST_FOR") else unit.path()
     return sources_path
 
 
-def _create_pm(unit: NotsUnitType) -> 'BasePackageManager':
-    from lib.nots.package_manager import get_package_manager_type
+def _create_pm(unit: NotsUnitType) -> 'PackageManager':
+    from lib.nots.package_manager import PackageManager
 
     sources_path = _get_source_path(unit)
     module_path = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else unit.get("MODDIR")
-
-    # noinspection PyPep8Naming
-    PackageManager = get_package_manager_type(_get_pm_type(unit))
 
     return PackageManager(
         sources_path=unit.resolve(sources_path),
@@ -421,6 +434,7 @@ def _create_pm(unit: NotsUnitType) -> 'BasePackageManager':
         nodejs_bin_path=None,
         script_path=None,
         module_path=module_path,
+        inject_peers=unit.get("_INJECT_PEERS_ARG") is not None,
     )
 
 
@@ -448,9 +462,9 @@ def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
 
 @_with_report_configure_error
 def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
-    from lib.nots.package_manager import BasePackageManager
+    from lib.nots.package_manager import PackageManager
 
-    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
+    pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
     erm_json = _create_erm_json(unit)
     dirs = []
 
@@ -487,8 +501,8 @@ def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
 
 @_with_report_configure_error
 def on_ts_configure(unit: NotsUnitType) -> None:
-    from lib.nots.package_manager.base import PackageJson
-    from lib.nots.package_manager.base.utils import build_pj_path
+    from lib.nots.package_manager import PackageJson
+    from lib.nots.package_manager.utils import build_pj_path
     from lib.nots.typescript import TsConfig
 
     tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
@@ -881,7 +895,7 @@ def _select_matching_version(
 
 def _is_ts_proto_auto(unit: NotsUnitType) -> bool:
     """TS_PROTO without package.json"""
-    from lib.nots.package_manager.base.utils import build_pj_path
+    from lib.nots.package_manager.utils import build_pj_path
 
     is_ts_proto = unit.get("TS_PROTO") == "yes" or unit.get("TS_PROTO_PREPARE_DEPS") == "yes"
     if not is_ts_proto:
@@ -908,13 +922,13 @@ def on_ts_proto_configure(unit: NotsUnitType) -> None:
     unit.on_node_modules_configure()
 
     if unit.get("_GRPC_ENABLED") == "yes":
-        from lib.nots.package_manager import BasePackageManager
+        from lib.nots.package_manager import PackageManager
 
         output_services_opts = [s for s in unit.get("_TS_PROTO_OPT").split() if s.startswith("outputServices")]
         if output_services_opts:
             return
 
-        pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+        pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
         version = pj.get_dep_specifier("@grpc/grpc-js")
 
         if version:
@@ -1005,6 +1019,86 @@ def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
     nm_required_for = node_modules_for.split(":") if node_modules_for else []
 
     return arc_path in nm_required_for
+
+
+@_with_report_configure_error
+def on_ts_library_configure(unit: NotsUnitType) -> None:
+    import lib.nots.package_manager.constants as constants
+
+    ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
+
+    if not ts_outputs:
+        ymake.report_configure_error(
+            "\n"
+            "Module outputs are not set.\n"
+            f"Use macro {COLORS.cyan}TS_BUILD_OUTPUTS(build){COLORS.reset} to set it up."
+        )
+        return
+
+    pm = _create_pm(unit)
+    pj = pm.load_package_json_from_dir(pm.sources_path)
+    has_deps = pj.has_dependencies()
+
+    if has_deps:
+        unit.onpeerdir(pj.get_workspace_dep_paths(base_path=pm.module_path))
+        nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
+        if nm_bundle_needed:
+            nm_output = _build_directives(["hide", "output"], [constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME])
+            unit.set(["_NODE_MODULES_BUNDLE_ARG", f"--nm-bundle yes {nm_output}"])
+
+    pj_files = set(pj.get_files())
+    missing_outputs = set(ts_outputs) - pj_files
+
+    if missing_outputs:
+        ymake.report_configure_error(
+            "\n"
+            f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
+            f"Following directories are missing in {COLORS.cyan}package.json#files{COLORS.reset}: {COLORS.red}{', '.join(missing_outputs)}{COLORS.reset}"
+        )
+
+    # Code navigation
+    if unit.get("TS_YNDEXING") == "yes":
+        unit.on_do_ts_yndexing()
+
+
+@_with_report_configure_error
+def on_ts_check_configure(unit: NotsUnitType) -> None:
+    if not _is_tests_enabled(unit):
+        return
+
+    ts_check_list = split_list_by_value(_parse_list_var(unit, "_TS_CHECK_LIST", " "), unit.get("_TS_CHECK_SEPARATOR"))
+    if not ts_check_list:
+        return
+
+    test_files = df.TestFiles.ts_check_srcs(unit, (), {})
+    if not test_files:
+        return
+
+    pm = _create_pm(unit)
+    unit.on_setup_install_node_modules_recipe(pm.module_path)
+    unit.on_setup_extract_output_tars_recipe(pm.module_path)
+
+    peers = _create_pm(unit).get_local_peers_from_package_json()
+    if peers:
+        unit.ondepends(peers)
+
+    for script_name, is_medium, check_type in ts_check_list:
+        flat_args = ("ts_check",)
+        spec_args = dict(
+            NAME=[script_name],  # df.TestName.name_from_macro_args expects array
+            TS_CHECK_TYPE=check_type,
+        )
+        if is_medium == "yes":
+            spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE
+
+        dart_fields = TS_LINT_DART_FIELDS if check_type == "lint" else TS_TEST_DART_FIELDS
+
+        dart_record = create_dart_record(dart_fields, unit, flat_args, spec_args)
+        dart_record[df.TestFiles.KEY] = test_files
+
+        data = ytest.dump_test(unit, dart_record)
+        if data:
+            unit.set_property(["DART_DATA", data])
 
 
 @_with_report_configure_error
@@ -1140,6 +1234,13 @@ def on_ts_test_for_configure(
         unit.set_property(["DART_DATA", data])
 
 
+def on__ts_test_for_configure(unit: NotsUnitType) -> None:
+    # it has to be here because it uses TS_TEST_FOR_PATH that is set in plugin.
+    # if you call _SET_TS_TEST_FOR_INPUTS() directly
+    # from _TS_TEST_FOR_EPILOGUE(), TS_TEST_FOR_PATH is not set yet.
+    unit.on_set_ts_test_for_inputs()
+
+
 # noinspection PyUnusedLocal
 @_with_report_configure_error
 def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) -> None:
@@ -1249,10 +1350,10 @@ def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: 
 
 @_with_report_configure_error
 def on_ts_next_experimental_build_mode(unit: NotsUnitType) -> None:
-    from lib.nots.package_manager import BasePackageManager
+    from lib.nots.package_manager import PackageManager
     from lib.nots.semver import Version
 
-    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+    pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
     erm_json = _create_erm_json(unit)
     version = _select_matching_version(erm_json, "next", pj.get_dep_specifier("next"))
 

@@ -43,6 +43,7 @@ public:
     TGCLogEntry SnapshotLog(ui32 step);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step);
     void OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext &ctx);                 // notification about log commit - could send GC to blob storage
+    void OnConfirmSnapshot(ui32 step, const TActorContext &ctx);                                 // notification about snapshot confirmation - will GC blobs in storage
     TDuration OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);         // notification on any garbage collection results
     void ApplyLogEntry(TGCLogEntry &entry);                                                      // apply one log entry, used during recovery and also from WriteToLog
     void ApplyLogSnapshot(TGCLogEntry &snapshot, const  TVector<std::pair<ui32, ui64>> &barriers);

@@ -19,9 +19,9 @@ struct THedgingRequest final
     : public TRefTracked<THedgingRequest>
 {
     THedgingRequest(
-        TFuture<void> requestFuture,
+        TFuture<void> primaryRequestFuture,
         TClosure startSecondaryRequest)
-        : PrimaryRequestFuture(std::move(requestFuture))
+        : PrimaryRequestFuture(std::move(primaryRequestFuture))
         , StartSecondaryRequest(std::move(startSecondaryRequest))
     { }
 
@@ -48,7 +48,7 @@ class TAdaptiveHedgingManager
     : public IAdaptiveHedgingManager
 {
 public:
-    TAdaptiveHedgingManager(TAdaptiveHedgingManagerConfigPtr config)
+    explicit TAdaptiveHedgingManager(TAdaptiveHedgingManagerConfigPtr config)
         : Config_(std::move(config))
     {
         YT_VERIFY(Config_->SecondaryRequestRatio);
@@ -70,14 +70,14 @@ public:
         auto hedgingDelay = HedgingDelay_.load(std::memory_order::relaxed);
 
         TDelayedExecutor::Submit(
-            BIND([request = std::move(hedgingRequest), hedgingManager = MakeStrong(this)] () mutable {
+            BIND([request = std::move(hedgingRequest), this, this_ = MakeStrong(this)] () mutable {
                 if (request->PrimaryRequestFuture.IsSet()) {
-                    hedgingManager->AdjustHedgingDelay(/*isRequestHedged*/ false);
+                    AdjustHedgingDelay(/*isRequestHedged*/ false);
                     return;
                 }
 
-                hedgingManager->AdjustHedgingDelay(/*isRequestHedged*/ true);
-                hedgingManager->TryRunSecondaryRequest(std::move(request));
+                AdjustHedgingDelay(/*isRequestHedged*/ true);
+                TryRunSecondaryRequest(std::move(request));
             }),
             hedgingDelay,
             GetCurrentInvoker());
@@ -110,16 +110,13 @@ public:
 
     TAdaptiveHedgingManagerStatistics CollectStatistics() override
     {
-        TAdaptiveHedgingManagerStatistics statistics;
-
-        statistics.PrimaryRequestCount = PrimaryRequestCount_.exchange(0, std::memory_order::relaxed);
-        statistics.SecondaryRequestCount = SecondaryRequestCount_.exchange(0, std::memory_order::relaxed);
-        statistics.QueuedRequestCount = QueuedRequestCount_.exchange(0, std::memory_order::relaxed);
-        statistics.MaxQueueSize = MaxQueueSize_.exchange(0, std::memory_order::relaxed);
-
-        statistics.HedgingDelay = HedgingDelay_.load(std::memory_order::relaxed);
-
-        return statistics;
+        return TAdaptiveHedgingManagerStatistics{
+            .PrimaryRequestCount = PrimaryRequestCount_.exchange(0, std::memory_order::relaxed),
+            .SecondaryRequestCount = SecondaryRequestCount_.exchange(0, std::memory_order::relaxed),
+            .QueuedRequestCount = QueuedRequestCount_.exchange(0, std::memory_order::relaxed),
+            .MaxQueueSize = MaxQueueSize_.exchange(0, std::memory_order::relaxed),
+            .HedgingDelay = HedgingDelay_.load(std::memory_order::relaxed),
+        };
     }
 
 private:
@@ -151,13 +148,16 @@ private:
     void AdjustHedgingDelay(bool isRequestHedged)
     {
         auto hedgingDelay = HedgingDelay_.load(std::memory_order::relaxed);
-
-        if (isRequestHedged) {
-            hedgingDelay *= Config_->HedgingDelayTuneFactor;
-            hedgingDelay /= *Config_->SecondaryRequestRatio;
-        } else {
-            hedgingDelay /= Config_->HedgingDelayTuneFactor;
+        if (Config_->HedgingDelayTuneFactor != 1) {
+            if (*Config_->SecondaryRequestRatio == 1) {
+                hedgingDelay = TDuration::Zero();
+            } else if (isRequestHedged) {
+                hedgingDelay *= std::pow(Config_->HedgingDelayTuneFactor, 1. / *Config_->SecondaryRequestRatio - 1.);
+            } else {
+                hedgingDelay /= Config_->HedgingDelayTuneFactor;
+            }
         }
+
         hedgingDelay = std::max(Config_->MinHedgingDelay, std::min(Config_->MaxHedgingDelay, hedgingDelay));
 
         HedgingDelay_.store(hedgingDelay, std::memory_order::relaxed);

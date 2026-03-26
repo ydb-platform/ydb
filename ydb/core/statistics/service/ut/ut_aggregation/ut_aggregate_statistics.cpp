@@ -92,7 +92,7 @@ std::unique_ptr<TEvStatistics::TEvAggregateStatisticsResponse> CreateAggregateSt
         column->SetTag(col.Tag);
 
         auto statistics = column->AddStatistics();
-        statistics->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
+        statistics->SetType(static_cast<ui32>(EStatType::COUNT_MIN_SKETCH));
         auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create());
 
         for (const auto& cell : col.Cells) {
@@ -117,7 +117,7 @@ std::unique_ptr<TEvStatistics::TEvStatisticsResponse> CreateStatisticsResponse(c
         column->SetTag(col.Tag);
 
         auto statistics = column->AddStatistics();
-        statistics->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
+        statistics->SetType(static_cast<ui32>(EStatType::COUNT_MIN_SKETCH));
         auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create());
 
         for (const auto& cell : col.Cells) {
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(AggregateStatistics) {
             const auto tag = column.GetTag();
 
             for (auto& statistic : column.GetStatistics()) {
-                if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
+                if (statistic.GetType() == static_cast<ui32>(EStatType::COUNT_MIN_SKETCH)) {
                     auto data = statistic.GetData().data();
                     auto sketch = reinterpret_cast<const TCountMinSketch*>(data);
 

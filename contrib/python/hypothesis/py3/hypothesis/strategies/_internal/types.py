@@ -35,7 +35,12 @@ from types import FunctionType
 from typing import TYPE_CHECKING, Any, NewType, get_args, get_origin
 
 from hypothesis import strategies as st
-from hypothesis.errors import HypothesisWarning, InvalidArgument, ResolutionFailed
+from hypothesis.errors import (
+    HypothesisException,
+    HypothesisWarning,
+    InvalidArgument,
+    ResolutionFailed,
+)
 from hypothesis.internal.compat import PYPY, BaseExceptionGroup, ExceptionGroup
 from hypothesis.internal.conjecture.utils import many as conjecture_utils_many
 from hypothesis.internal.filtering import max_len, min_len
@@ -99,7 +104,7 @@ try:
 except AttributeError:  # pragma: no cover
     pass  # Is missing for `python<3.10`
 try:
-    TypeGuardTypes += (typing.TypeIs,)  # type: ignore
+    TypeGuardTypes += (typing.TypeIs,)
 except AttributeError:  # pragma: no cover
     pass  # Is missing for `python<3.13`
 try:
@@ -110,7 +115,7 @@ except AttributeError:  # pragma: no cover
 
 RequiredTypes: tuple = ()
 try:
-    RequiredTypes += (typing.Required,)  # type: ignore
+    RequiredTypes += (typing.Required,)
 except AttributeError:  # pragma: no cover
     pass  # Is missing for `python<3.11`
 try:
@@ -121,7 +126,7 @@ except AttributeError:  # pragma: no cover
 
 NotRequiredTypes: tuple = ()
 try:
-    NotRequiredTypes += (typing.NotRequired,)  # type: ignore
+    NotRequiredTypes += (typing.NotRequired,)
 except AttributeError:  # pragma: no cover
     pass  # Is missing for `python<3.11`
 try:
@@ -132,7 +137,7 @@ except AttributeError:  # pragma: no cover
 
 ReadOnlyTypes: tuple = ()
 try:
-    ReadOnlyTypes += (typing.ReadOnly,)  # type: ignore
+    ReadOnlyTypes += (typing.ReadOnly,)
 except AttributeError:  # pragma: no cover
     pass  # Is missing for `python<3.13`
 try:
@@ -143,7 +148,7 @@ except AttributeError:  # pragma: no cover
 
 LiteralStringTypes: tuple = ()
 try:
-    LiteralStringTypes += (typing.LiteralString,)  # type: ignore
+    LiteralStringTypes += (typing.LiteralString,)
 except AttributeError:  # pragma: no cover
     pass  # Is missing for `python<3.11`
 try:
@@ -197,7 +202,7 @@ for name in (
 ):
     try:
         NON_RUNTIME_TYPES += (getattr(typing, name),)
-    except AttributeError:
+    except AttributeError:  # pragma: no cover
         pass
     try:
         NON_RUNTIME_TYPES += (getattr(typing_extensions, name),)
@@ -250,6 +255,67 @@ def try_issubclass(thing, superclass):
     except (AttributeError, TypeError):
         # Some types can't be the subject or object of an instance or subclass check
         return False
+
+
+def _evaluate_type_alias_type(thing, *, typevars):  # pragma: no cover # 3.12+
+    if isinstance(thing, typing.TypeVar):
+        if thing not in typevars:
+            raise ValueError(
+                f"Cannot look up value for unbound type var {thing}. "
+                f"Bound typevars: {typevars}"
+            )
+        return typevars[thing]
+
+    origin = get_origin(thing)
+    if origin is None:
+        # not a parametrized type, so nothing to substitute.
+        return thing
+
+    args = get_args(thing)
+    # we had an origin, so we must have an args
+    # note: I'm only mostly confident this is true and there may be a subtle
+    # violator.
+    assert args
+
+    concrete_args = tuple(
+        _evaluate_type_alias_type(arg, typevars=typevars) for arg in args
+    )
+    if isinstance(origin, typing.TypeAliasType):
+        for param in origin.__type_params__:
+            # there's no principled reason not to support these, they're just
+            # annoying to implement.
+            if isinstance(param, typing.TypeVarTuple):
+                raise HypothesisException(
+                    f"Hypothesis does not yet support resolution for TypeVarTuple "
+                    f"{param} (in origin: {origin!r}). Please open an issue if "
+                    "you would like to see support for this."
+                )
+            if isinstance(param, typing.ParamSpec):
+                raise HypothesisException(
+                    f"Hypothesis does not yet support resolution for ParamSpec "
+                    f"{param} (in origin: {origin!r}). Please open an issue if you "
+                    "would like to see support for this."
+                )
+        # this zip is non-strict to allow for e.g.
+        # `type A[T1, T2] = list[T1]; st.from_type(A[int]).example()`,
+        # which leaves T2 free but is still acceptable as it never references
+        # it.
+        #
+        # We disallow referencing a free / unbound type var by erroring
+        # elsewhere in this function.
+        typevars |= dict(zip(origin.__type_params__, concrete_args, strict=False))
+        return _evaluate_type_alias_type(origin.__value__, typevars=typevars)
+
+    return origin[concrete_args]
+
+
+def evaluate_type_alias_type(thing):  # pragma: no cover # covered on 3.12+
+    # this function takes a GenericAlias whose origin is a TypeAliasType,
+    # which corresponds to `type A[T] = list[T]; thing = A[int]`, and returns
+    # the fully-instantiated underlying type.
+    assert isinstance(thing, GenericAlias)
+    assert is_a_type_alias_type(get_origin(thing))
+    return _evaluate_type_alias_type(thing, typevars={})
 
 
 def is_a_type_alias_type(thing):  # pragma: no cover # covered by 3.12+ tests
@@ -651,8 +717,13 @@ utc_offsets = st.builds(
 # exposed for it, and NotImplemented itself is typed as Any so that it can be
 # returned without being listed in a function signature:
 # https://github.com/python/mypy/issues/6710#issuecomment-485580032
+if sys.version_info < (3, 12):
+    _RegistryKeyT: typing.TypeAlias = type
+else:  # pragma: no cover
+    _RegistryKeyT: typing.TypeAlias = type | typing.TypeAliasType
+
 _global_type_lookup: dict[
-    type, st.SearchStrategy | typing.Callable[[type], st.SearchStrategy]
+    _RegistryKeyT, st.SearchStrategy | typing.Callable[[type], st.SearchStrategy]
 ] = {
     type(None): st.none(),
     bool: st.booleans(),
@@ -910,8 +981,11 @@ def resolve_Tuple(thing):
     elem_types = getattr(thing, "__args__", None) or ()
     if len(elem_types) == 2 and elem_types[-1] is Ellipsis:
         return st.lists(st.from_type(elem_types[0])).map(tuple)
-    elif len(elem_types) == 1 and elem_types[0] == ():
-        return st.tuples()  # Empty tuple; see issue #1583
+    elif len(elem_types) == 1 and elem_types[0] == ():  # pragma: no cover
+        # Empty tuple; see issue #1583.
+        # Only possible on 3.10. `from typing import Tuple; Tuple[()].__args__`
+        # is ((),) on 3.10, and () on 3.11+.
+        return st.tuples()
     return st.tuples(*map(st.from_type, elem_types))
 
 

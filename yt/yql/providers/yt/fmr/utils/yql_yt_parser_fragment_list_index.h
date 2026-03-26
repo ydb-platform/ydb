@@ -1,28 +1,11 @@
 #pragma once
 
 #include <library/cpp/yson/detail.h>
-
-#include <util/generic/string.h>
-#include <util/generic/hash.h>
-#include <util/generic/set.h>
-#include <util/generic/vector.h>
-#include <util/generic/hash_set.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
 
 using namespace NYson::NDetail;
 
 namespace NYql::NFmr {
-// Represents a byte range in the source data for a column value
-struct TColumnOffsetRange {
-    ui64 StartOffset = 0;
-    ui64 EndOffset = 0;
-
-    bool IsValid() const {
-        return EndOffset > StartOffset;
-    }
-};
-
-using TRowIndexMarkup = TVector<TColumnOffsetRange>;
-
 // Binary YSON parser for ListFragment format that extracts byte offsets for key columns
 // Usage:
 //   TParserFragmentListIndex parser(data, keyColumns);
@@ -34,11 +17,11 @@ using TRowIndexMarkup = TVector<TColumnOffsetRange>;
 // Last (StartOffset, EndOffset) defines boundaries of row
 class TParserFragmentListIndex {
 public:
-    TParserFragmentListIndex(TStringBuf data, const TVector<TString>& keyColumns);
+    TParserFragmentListIndex(TStringBuf data, const std::vector<TString>& keyColumns);
 
     void Parse();
 
-    const TVector<TRowIndexMarkup>& GetRows() const {
+    const std::vector<TRowIndexMarkup>& GetRows() const {
         return RowOffsets_;
     }
 
@@ -69,7 +52,7 @@ private:
     const char* const DataStart_;
     const char* const DataEnd_;
     THashMap<TString, ui64> KeyColumnsMap_;
-    TVector<TRowIndexMarkup> RowOffsets_;
+    std::vector<TRowIndexMarkup> RowOffsets_;
     THashMap<TString, TColumnOffsetRange> CurrentRow_;
 };
 

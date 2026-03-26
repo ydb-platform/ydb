@@ -1,18 +1,26 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/log.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/wrappers/retry_policy.h>
-#include <util/system/mutex.h>
 
-#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/events/abstract.h>
 #include <ydb/core/wrappers/events/common.h>
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/events/object_exists.h>
 
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <util/system/mutex.h>
+
 #include <memory>
+
+namespace NKikimrConfig {
+    class TAwsClientConfig;
+};
 
 namespace NKikimr::NWrappers {
 
@@ -124,7 +132,6 @@ public:
         TDuration delay = TDuration::Zero();
 
         if (ev->IsSuccess()) {
-            
             Backoff->Reset();
         } else if (NWrappers::ShouldBackoff(ev->GetError())) {
             AFL_VERIFY(Backoff);
@@ -201,7 +208,7 @@ public:
     virtual ~IExternalStorageConfig() = default;
     IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = true) const;
     template <typename TSettings>
-    static IExternalStorageConfig::TPtr Construct(const TSettings& settings);
+    static IExternalStorageConfig::TPtr Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const TSettings& settings, NMonitoring::TDynamicCounterPtr rootCounters = AppData()->Counters);
 };
 } // NExternalStorage
 

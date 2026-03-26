@@ -71,7 +71,7 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
     size_t totalSize = item.MessageBody.size() + (item.SerializedMessageAttributes.has_value() ?
         item.SerializedMessageAttributes.value().size() : 0);
 
-    cmdWrite.SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(""));
+    cmdWrite.SetSourceId("");
     cmdWrite.SetDisableDeduplication(true);
     cmdWrite.SetCreateTimeMS(TInstant::Now().MilliSeconds());
     cmdWrite.SetUncompressedSize(item.MessageBody.size());

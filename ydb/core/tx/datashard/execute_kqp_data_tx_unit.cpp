@@ -79,7 +79,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
     DataShard.ReleaseCache(*tx);
 
     if (tx->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
+        switch (Pipeline.RestoreDataTx(tx, txc, ctx, tx->GetUserSID())) {
             case ERestoreDataStatus::Ok:
                 break;
 
@@ -244,6 +244,11 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             KqpEraseLocks(tabletId, kqpLocks, sysLocks);
             auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
             tx->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
+            if (!locksBrokenByTx.empty()) {
+                if (auto breakerQuerySpanId = sysLocks.GetCurrentBreakerQuerySpanId()) {
+                    tx->Result()->Record.MutableTxStats()->AddBreakerQuerySpanIds(*breakerQuerySpanId);
+                }
+            }
             NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
             DataShard.SubscribeNewLocks(ctx);
 
@@ -457,20 +462,9 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR);
 
+        // Note: we don't return TxLocks in the reply since all changes are rolled back and lock is unaffected
         op->Result()->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED,
             TStringBuilder() << "Shard " << DataShard.TabletID() << " cannot write more uncommitted changes");
-
-        for (auto& table : guardLocks.AffectedTables) {
-            Y_ENSURE(guardLocks.LockTxId);
-            op->Result()->AddTxLock(
-                guardLocks.LockTxId,
-                DataShard.TabletID(),
-                DataShard.Generation(),
-                Max<ui64>(),
-                table.GetTableId().OwnerId,
-                table.GetTableId().LocalPathId,
-                false);
-        }
 
         tx->ReleaseTxData(txc, ctx);
 
@@ -517,6 +511,11 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
 
     // Set the count of locks broken by this transaction
     op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
+    if (!locksBrokenByTx.empty()) {
+        if (auto breakerQuerySpanId = DataShard.SysLocksTable().GetCurrentBreakerQuerySpanId()) {
+            op->Result()->Record.MutableTxStats()->AddBreakerQuerySpanIds(*breakerQuerySpanId);
+        }
+    }
 
     LOG_T("add locks to result: " << locks.size());
     for (const auto& lock : locks) {

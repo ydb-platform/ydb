@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 #include <library/cpp/yt/compact_containers/compact_set.h>
 
 namespace NYT::NYPath {
@@ -13,15 +14,15 @@ std::vector<TStringBuf> TokenizeTriePath(const TYPath &path Y_LIFETIME_BOUND);
 ////////////////////////////////////////////////////////////////////////////////
 
 DEFINE_ENUM(ETrieNodeType,
-    ((Outlier)      (0))
-    ((Intermediary) (1))
-    ((Leaf)         (2))
-    ((AfterLeaf)    (3))
+    (Outlier)
+    (Intermediary)
+    (Leaf)
+    (AfterLeaf)
 );
 
 DEFINE_ENUM(ETrieNestedPathPolicy,
-    ((Shorten)    (0))
-    ((Extend)     (1))
+    (Shorten)
+    (Extend)
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -68,8 +69,8 @@ public:
 
     TTrie(const TTrie& other);
     TTrie& operator=(const TTrie& other);
-    TTrie(TTrie&&) = default;
-    TTrie& operator=(TTrie&&) = default;
+    TTrie(TTrie&&) noexcept = default;
+    TTrie& operator=(TTrie&&) noexcept = default;
 
     void AddPath(TYPath path);
     void Merge(const TTrie& other);

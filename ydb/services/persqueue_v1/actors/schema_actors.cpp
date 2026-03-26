@@ -8,6 +8,8 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
+#include <library/cpp/json/json_writer.h>
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
@@ -142,6 +144,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
 
         const auto& pqConfig = AppData(ActorContext())->PQConfig;
 
+        NJson::TJsonValue consumersAdvancedMonitoringSettings;
         for (const auto& consumer : config.GetConsumers()) {
             auto rr = settings->add_read_rules();
             auto consumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ActorContext());
@@ -173,6 +176,19 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                 }
                 rr->set_service_type(pqConfig.GetDefaultClientServiceType().GetName());
             }
+            NJson::TJsonValue customMonitoringSettings;
+            if (consumer.HasMetricsLevel()) {
+                customMonitoringSettings["metrics_level"] = consumer.GetMetricsLevel();
+            }
+            if (const auto& monitoringProjectId = consumer.GetMonitoringProjectId(); !monitoringProjectId.empty()) {
+                customMonitoringSettings["monitoring_project_id"] = monitoringProjectId;
+            }
+            if (customMonitoringSettings.IsDefined()) { // at least one attribute is set
+                consumersAdvancedMonitoringSettings[consumerName] = std::move(customMonitoringSettings);
+            }
+        }
+        if (consumersAdvancedMonitoringSettings.IsDefined()) { // at least one consumer has custom monitoring settings
+             (*settings->mutable_attributes())["_advanced_monitoring"] = WriteJson(consumersAdvancedMonitoringSettings, false, true);
         }
         if (NPQ::MirroringEnabled(config)) {
             auto rmr = settings->mutable_remote_mirror_rule();
@@ -251,7 +267,7 @@ void TAddReadRuleActor::ModifyPersqueueConfig(
     auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
 
     TString error;
-    auto messageAndCode = AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig);
+    auto messageAndCode = AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig, nullptr);
     auto status = messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK ?
                                 CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, Ydb::StatusIds::ALREADY_EXISTS)
                                 : Ydb::StatusIds::BAD_REQUEST;
@@ -513,6 +529,12 @@ bool TDescribeTopicActorImpl::StateWork(TAutoPtr<IEventHandle>& ev, const TActor
     return true;
 }
 
+void TDescribeTopicActorImpl::PassAway(const TActorContext& ctx) {
+    for (auto& [_, tablet] : Tablets) {
+        NTabletPipe::CloseClient(ctx, tablet.Pipe);
+    }
+}
+
 void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     if (!TDescribeTopicActorImpl::StateWork(ev, this->ActorContext())) {
         TBase::StateWork(ev);
@@ -559,11 +581,8 @@ void TDescribeTopicActorImpl::RestartTablet(ui64 tabletId, const TActorContext& 
     if (pipe && pipe != tabletInfo.Pipe) return;
     if (tabletInfo.ResultRecived) return;
 
-    if (tabletId == BalancerTabletId) {
-        if (GotLocation && GotReadSessions) {
-            return;
-        }
-        BalancerPipe = nullptr;
+    if (tabletId == BalancerTabletId && GotLocation && GotReadSessions) {
+        return;
     }
 
     NTabletPipe::CloseClient(ctx, tabletInfo.Pipe);
@@ -621,7 +640,6 @@ void TDescribeTopicActorImpl::RequestTablet(TTabletInfo& tablet, const TActorCon
         tablet.Pipe = CreatePipe(tablet.TabletId, ctx);
 
     if (tablet.TabletId == BalancerTabletId) {
-        BalancerPipe = &tablet.Pipe;
         RequestBalancer(ctx);
     } else {
         RequestPartitionStatus(tablet, ctx);
@@ -682,7 +700,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
         }
     }
     NTabletPipe::SendData(
-        ctx, *BalancerPipe,
+        ctx, Tablets[BalancerTabletId].Pipe,
         new TEvPersQueue::TEvGetPartitionsLocation(partsVector)
     );
     ++RequestsInfly;
@@ -691,7 +709,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
 void TDescribeTopicActorImpl::RequestReadSessionsInfo(const TActorContext& ctx) {
     AFL_ENSURE(Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer);
     NTabletPipe::SendData(
-            ctx, *BalancerPipe,
+            ctx, Tablets[BalancerTabletId].Pipe,
                     new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
             );
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Request sessions");
@@ -789,10 +807,14 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
 }
 
 void TDescribeTopicActorImpl::CheckCloseBalancerPipe(const TActorContext& ctx) {
-    if (!GotLocation || !GotReadSessions)
+    if (!GotLocation || !GotReadSessions) {
         return;
-    NTabletPipe::CloseClient(ctx, *BalancerPipe);
-    *BalancerPipe = TActorId{};
+    }
+    auto& balancerPipe = Tablets[BalancerTabletId].Pipe;
+    if (balancerPipe) {
+        NTabletPipe::CloseClient(ctx, balancerPipe);
+        balancerPipe = {};
+    }
     BalancerTabletId = 0;
 }
 
@@ -921,6 +943,10 @@ bool TDescribeTopicActor::ApplyResponse(
     return true;
 }
 
+void TDescribeTopicActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
 
 
 void TDescribeTopicActor::Reply(const TActorContext& ctx) {
@@ -1035,6 +1061,10 @@ bool TDescribeConsumerActor::ApplyResponse(
     return true;
 }
 
+void TDescribeConsumerActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
 
 void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
@@ -1321,6 +1351,11 @@ bool TDescribePartitionActor::ApplyResponse(
     return true;
 }
 
+void TDescribePartitionActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
+
 void TDescribePartitionActor::RaiseError(
         const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status,
         const TActorContext&
@@ -1395,10 +1430,17 @@ bool TPartitionsLocationActor::ApplyResponse(
         partLocation.PartitionId = part.GetPartitionId();
         partLocation.Generation = part.GetGeneration();
         partLocation.NodeId = nodeId;
-        Response->Partitions.emplace_back(std::move(partLocation));
+        if (TopicPartitionsIds.contains(partLocation.PartitionId)) {
+            Response->Partitions.emplace_back(std::move(partLocation));
+        }
     }
     Finalize();
     return true;
+}
+
+void TPartitionsLocationActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
 }
 
 void TPartitionsLocationActor::Finalize() {

@@ -11,23 +11,21 @@ namespace NYdb::NConsoleClient {
     struct TSqsWorkloadReaderParams {
         TDuration TotalSec;
         TString QueueUrl;
-        TMaybe<TString> EndpointOverride;
-        TString Account;
-        TString Token;
+        TMaybe<TString> AwsAccessKeyId;
+        TMaybe<TString> AwsSessionToken;
         std::shared_ptr<TLog> Log;
         std::shared_ptr<std::atomic_bool> ErrorFlag;
         std::shared_ptr<Aws::SQS::SQSClient> SqsClient;
         std::shared_ptr<std::mutex> Mutex;
         std::shared_ptr<std::condition_variable> FinishedCond;
         std::shared_ptr<size_t> StartedCount;
-        ui32 Concurrency;
+        ui32 WorkersCount;
         ui32 BatchSize;
         TMaybe<ui32> ErrorMessagesRate;
-        TString ErrorMessagesDestiny;
+        TString ErrorMessagesPolicy;
         TDuration HandleMessageDelay;
         TDuration VisibilityTimeout;
-        bool SetSubjectToken;
-        bool ValidateFifo;
+        bool ValidateMessagesOrder;
         std::shared_ptr<std::mutex> HashMapMutex;
         std::shared_ptr<THashMap<TString, ui64>> LastReceivedMessageInGroup;
         std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;

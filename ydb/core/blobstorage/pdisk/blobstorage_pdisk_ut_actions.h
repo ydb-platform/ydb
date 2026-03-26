@@ -2464,5 +2464,18 @@ public:
     {}
 };
 
+class TTestRawReadsAndWrites : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TChunkIdx ChunkIdx;
+
+    void TestFSM(const TActorContext& ctx);
+
+public:
+    TTestRawReadsAndWrites(const TIntrusivePtr<TTestConfig>& cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
 
 } // NKikimr

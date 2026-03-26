@@ -39,7 +39,9 @@ protected:
 
     void CheckDisabled(TExprContext& ctx) final {
         if (DisabledValue && TBase::Get() && !DisableReported) {
-            ctx.AddWarning(TIssue(DisabledReason).SetCode(DEFAULT_ERROR, TSeverityIds::S_WARNING));
+            if (DisabledReason) {
+                ctx.AddWarning(TIssue(DisabledReason).SetCode(DEFAULT_ERROR, TSeverityIds::S_WARNING));
+            }
             DisableReported = true;
         }
     }

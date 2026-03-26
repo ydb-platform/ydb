@@ -18,5 +18,5 @@ class TestYdbMixedWorkload(StressFixture):
             "--endpoint", self.endpoint,
             "--database", self.database,
             "--store_type", store_type,
-            "--duration", "100",
+            "--duration", self.base_duration,
         ])

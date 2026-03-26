@@ -739,6 +739,10 @@ public:
         Y_UNUSED(inputActorId);
     }
 
+    bool IsLocal() const override {
+        return false;;
+    }
+
     bool IsFinished() const override {
         ythrow yexception() << "unimplemented";
     }
@@ -1108,6 +1112,9 @@ public:
             TaskRunner->RaiseException();
         }
     }
+
+    void Flush() override {
+    }
     // |>
 
     // <| consumer methods
@@ -1123,6 +1130,11 @@ public:
             TaskRunner->RaiseException();
         }
     }
+
+    bool IsEarlyFinished() const override {
+        return false;
+    }
+
     // can throw TDqChannelStorageException
     [[nodiscard]]
     bool Pop(TDqSerializedBatch& data) override {
@@ -1193,6 +1205,10 @@ public:
     void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
         Y_UNUSED(outputActorId);
         Y_UNUSED(inputActorId);
+    }
+
+    bool IsLocal() const override {
+        return false;;
     }
 
     template<typename T>
@@ -1289,12 +1305,19 @@ public:
         }
     }
 
+    bool IsEarlyFinished() const override {
+        return false;
+    }
+
     NKikimr::NMiniKQL::TType* GetOutputType() const override {
         return OutputType;
     }
 
     void Finish() override {
         Y_ABORT("Unimplemented");
+    }
+
+    void Flush() override {
     }
 
     bool Pop(NDqProto::TWatermark& watermark) override {

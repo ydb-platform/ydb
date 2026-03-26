@@ -3,6 +3,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/yql_udf_resolver.h>
+#include <yql/essentials/sql/settings/translation_sql_flags.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 
@@ -55,7 +56,7 @@ struct TYtViewDescription {
     bool Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion,
         const TString& viewId, const TQContext& qContext, TExprContext& ctx,
         IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool enableViewIsolation, IUdfResolver::TPtr udfResolver);
+        bool enableViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags);
     void CleanupCompiledSQL();
 };
 
@@ -77,11 +78,11 @@ struct TYtTableDescriptionBase {
     bool Fill(const TString& provider, const TString& cluster, const TString& table, const TStructExprType* type,
         const TString& viewSql, ui16 syntaxVersion, const TQContext& qContext, const THashMap<TString, TString>& metaAttrs, TExprContext& ctx,
         IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool enableViewIsolation, IUdfResolver::TPtr udfResolver);
+        bool enableViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags);
     void CleanupCompiledSQL();
     bool FillViews(const TString& provider, const TString& cluster, const TString& table, const THashMap<TString, TString>& metaAttrs,
         const TQContext& qContext, TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool enableViewIsolation, IUdfResolver::TPtr udfResolver);
+        bool enableViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags);
 };
 
 }

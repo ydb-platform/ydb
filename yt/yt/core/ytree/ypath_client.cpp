@@ -59,6 +59,13 @@ TYPathRequest::TYPathRequest(
     ypathExt->set_target_path(std::move(path));
 }
 
+TYPathRequest::TYPathRequest(const TYPathRequest& other)
+    : Tag_(other.Tag_)
+    , Attachments_(other.Attachments())
+{
+    Header_.CopyFrom(other.Header_);
+}
+
 TRequestId TYPathRequest::GetRequestId() const
 {
     return NullRequestId;
@@ -376,6 +383,8 @@ TFuture<TSharedRefArray> ExecuteVerb(
     NLogging::TLogger logger,
     NLogging::ELogLevel logLevel)
 {
+    NTracing::TChildTraceContextGuard traceContextGuard("YPathClient.ExecuteVerb");
+
     IYPathServicePtr suffixService;
     TYPath suffixPath;
     try {
@@ -574,13 +583,7 @@ TFuture<std::vector<std::string>> AsyncYPathList(
     }
     return ExecuteVerb(service, request)
         .Apply(BIND([] (TYPathProxy::TRspListPtr response) {
-            auto tstringResult = ConvertTo<std::vector<TString>>(TYsonString(response->value()));
-            std::vector<std::string> result;
-            result.reserve(tstringResult.size());
-            for (const auto& str : tstringResult) {
-                result.push_back(str);
-            }
-            return result;
+            return ConvertTo<std::vector<std::string>>(TYsonString(response->value()));;
         }));
 }
 

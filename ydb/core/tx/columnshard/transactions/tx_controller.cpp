@@ -69,6 +69,9 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             txInfo.MaxStep = txInfo.MinStep + MaxCommitTxDelay.MilliSeconds();
             ++countOverrideDeadline;
         } else {
+            // For transactions without deadline (e.g., schema transactions),
+            // use GetAllowedStep() to ensure MinStep is not zero after restart
+            txInfo.MinStep = GetAllowedStep();
             ++countNoDeadline;
         }
         txInfo.PlanStep = rowset.GetValueOrDefault<Schema::TxInfo::PlanStep>(0);
@@ -186,9 +189,10 @@ std::optional<TTxController::TTxInfo> TTxController::PopFirstPlannedTx() {
     if (!PlanQueue.empty()) {
         auto node = PlanQueue.extract(PlanQueue.begin());
         auto& item = node.value();
+        auto txId = item.TxId;
         TPlanQueueItem tx(item.Step, item.TxId);
         RunningQueue.emplace(std::move(item));
-        return GetTxInfoVerified(item.TxId);
+        return GetTxInfoVerified(txId);
     }
     return std::nullopt;
 }
@@ -199,11 +203,11 @@ void TTxController::ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTra
     AFL_VERIFY(opIt != Operators.end())("tx_id", txId);
     Counters.OnFinishPlannedTx(opIt->second->GetOpType());
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_TX)("event", "finished_tx")("tx_id", txId);
-    OnTxCompleted(txId);
     Schema::EraseTxInfo(db, txId);
 }
 
 void TTxController::ProgressOnComplete(const TPlanQueueItem& txItem) {
+    OnTxCompleted(txItem.TxId);
     AFL_VERIFY(RunningQueue.erase(txItem))("info", txItem.DebugString());
 }
 

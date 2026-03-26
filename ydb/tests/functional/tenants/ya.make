@@ -17,7 +17,7 @@ TEST_SRCS(
     test_users_groups_with_acl.py
 )
 
-SPLIT_FACTOR(20)
+SPLIT_FACTOR(50)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
 
@@ -42,6 +42,7 @@ IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:10 cpu:16)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 END()

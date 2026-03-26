@@ -16,11 +16,12 @@ TPool* TTreeElement::GetParent() const {
 // TQuery
 ///////////////////////////////////////////////////////////////////////////////
 
-TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStaticAttributes& attrs)
+TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMinFairShare, const TStaticAttributes& attrs)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id, attrs)
     , TTreeElement(id, attrs)
     , NHdrf::TQuery<ETreeType::DYNAMIC>(id, attrs)
     , DelayParams(delayParams)
+    , AllowMinFairShare(allowMinFairShare)
 {
 }
 

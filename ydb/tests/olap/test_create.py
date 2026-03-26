@@ -35,6 +35,11 @@ class TestCreate(object):
 
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
     def get_table_path(self):
         # avoid using same table in parallel tests
         return f"{self.test_dir}/table{random.randrange(99999)}"
@@ -67,7 +72,7 @@ class TestCreate(object):
             (1, -2, -3, -4, -5, 6, 7, 8, 9);
             """
         )
-        result_sets = self.ydb_client.query(f"SELECT * FROM `{table_path}`")
+        result_sets = self.ydb_client.query(f"SELECT * FROM `{table_path}` ORDER BY id")
 
         rows = []
         for result_set in result_sets:
@@ -230,7 +235,7 @@ class TestCreate(object):
             """
         )
 
-        result_sets = self.ydb_client.query(f"SELECT * FROM `{table_path}`;")
+        result_sets = self.ydb_client.query(f"SELECT * FROM `{table_path}` ORDER BY id;")
         rows = []
         for result_set in result_sets:
             rows.extend(result_set.rows)

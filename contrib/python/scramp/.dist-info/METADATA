@@ -1,8 +1,8 @@
 Metadata-Version: 2.4
 Name: scramp
-Version: 1.4.6
+Version: 1.4.8
 Summary: An implementation of the SCRAM protocol.
-Project-URL: Homepage, https://github.com/tlocke/scramp
+Project-URL: Homepage, https://codeberg.org/tlocke/scramp
 Author: The Contributors
 License: MIT No Attribution
 License-File: LICENSE
@@ -13,21 +13,16 @@ Classifier: License :: OSI Approved :: MIT No Attribution License (MIT-0)
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
-Classifier: Programming Language :: Python :: 3.10
-Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: Implementation
 Classifier: Programming Language :: Python :: Implementation :: CPython
-Classifier: Programming Language :: Python :: Implementation :: PyPy
-Requires-Python: >=3.8
+Requires-Python: >=3.10
 Requires-Dist: asn1crypto>=1.5.1
 Description-Content-Type: text/markdown
 
 # Scramp
 
 A Python implementation of the [SCRAM authentication protocol](
-https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism>).
+https://en.wikipedia.org/wiki/Salted_Challenge_Response_Authentication_Mechanism).
 Scramp supports the following mechanisms:
 
 - SCRAM-SHA-1
@@ -39,6 +34,45 @@ Scramp supports the following mechanisms:
 - SCRAM-SHA3-512
 - SCRAM-SHA3-512-PLUS
 
+## Table Of Contents
+<!-- mtoc-start -->
+
+* [Installation](#installation)
+* [Examples](#examples)
+  * [Client and Server](#client-and-server)
+  * [Client only](#client-only)
+  * [Server only](#server-only)
+  * [Server Error](#server-error)
+* [Standards](#standards)
+* [API Docs](#api-docs)
+  * [scramp.MECHANISMS](#scrampmechanisms)
+  * [scramp.ScramClient](#scrampscramclient)
+  * [scramp.ScramMechanism](#scrampscrammechanism)
+  * [scramp.ScramServer](#scrampscramserver)
+  * [scramp.make\_channel\_binding(name, ssl\_socket)](#scrampmake_channel_bindingname-ssl_socket)
+* [Testing](#testing)
+* [OpenSSF Scorecard](#openssf-scorecard)
+* [Doing A Release Of Scramp](#doing-a-release-of-scramp)
+* [Release Notes](#release-notes)
+  * [Version 1.4.8, 2026-01-06](#version-148-2026-01-06)
+  * [Version 1.4.7, 2026-01-04](#version-147-2026-01-04)
+  * [Version 1.4.6, 2025-07-05](#version-146-2025-07-05)
+  * [Version 1.4.5, 2024-04-13](#version-145-2024-04-13)
+  * [Version 1.4.4, 2022-11-01](#version-144-2022-11-01)
+  * [Version 1.4.3, 2022-10-26](#version-143-2022-10-26)
+  * [Version 1.4.2, 2022-10-22](#version-142-2022-10-22)
+  * [Version 1.4.1, 2021-08-25](#version-141-2021-08-25)
+  * [Version 1.4.0, 2021-03-28](#version-140-2021-03-28)
+  * [Version 1.3.0, 2021-03-28](#version-130-2021-03-28)
+  * [Version 1.2.2, 2021-02-13](#version-122-2021-02-13)
+  * [Version 1.2.1, 2021-02-07](#version-121-2021-02-07)
+  * [Version 1.2.0, 2020-05-30](#version-120-2020-05-30)
+  * [Version 1.1.1, 2020-03-28](#version-111-2020-03-28)
+  * [Version 1.1.0, 2019-02-24](#version-110-2019-02-24)
+  * [Version 1.0.0, 2019-02-17](#version-100-2019-02-17)
+  * [Version 0.0.0, 2019-02-10](#version-000-2019-02-10)
+
+<!-- mtoc-end -->
 
 ## Installation
 
@@ -199,65 +233,6 @@ v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=
 ```
 
 
-### Server only with passlib
-
-Here's an example using just the server and using the [passlib hashing library](
-https://passlib.readthedocs.io/en/stable/index.html). The server nonce and salt is
-specified in order to give a reproducible example, but in production you'd omit the
-`s_nonce` and `salt` parameters and let Scramp generate them:
-
-```python
->>> from scramp import ScramMechanism
->>> from passlib.hash import scram
->>>
->>> USERNAME = 'user'
->>> PASSWORD = 'pencil'
->>> S_NONCE = '%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0'
->>> SALT = b'[m\x99h\x9d\x125\x8e\xec\xa0K\x14\x126\xfa\x81'
->>> ITERATION_COUNT = 4096
->>>
->>> db = {}
->>> hash = scram.using(salt=SALT, rounds=ITERATION_COUNT).hash(PASSWORD)
->>>
->>> salt, iteration_count, digest = scram.extract_digest_info(hash, 'sha-256')
->>> 
->>> stored_key, server_key = m.make_stored_server_keys(digest)
->>>
->>> db[USERNAME] = salt, stored_key, server_key, iteration_count
->>>
->>> # Define your own function for getting a password given a username
->>> def auth_fn(username):
-...     return db[username]
->>>
->>> # Normally the s_nonce parameter would be omitted, in which case the
->>> # server will generate the nonce itself.
->>>
->>> m = ScramMechanism()
->>> s = m.make_server(auth_fn, s_nonce=S_NONCE)
->>>
->>> # Set the first message from the client
->>> s.set_client_first('n,,n=user,r=rOprNGfwEbeRWgbNEkqO')
->>>
->>> # Get the first server message, and send it to the client
->>> sfirst = s.get_server_first()
->>> print(sfirst)
-r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096
->>>
->>> # Set the final message from the client
->>> s.set_client_final(
-...     'c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,'
-...     'p=dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ=')
->>>
->>> # Get the final server message and send it to the client
->>> sfinal = s.get_server_final()
->>> print(sfinal)
-v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=
->>>
->>> # If it all runs through without raising an exception, the authentication
->>> # has succeeded
-```
-
-
 ### Server Error
 
 Here's an example of when setting a message from the client causes an error. The server
@@ -304,14 +279,14 @@ e=channel-binding-not-supported
 ```
 
 
-### Standards
+## Standards
 
-- [RFC 5802](https://tools.ietf.org/html/rfc5802>) Describes SCRAM.
-- [RFC 7677](https://datatracker.ietf.org/doc/html/rfc7677>) Registers SCRAM-SHA-256 and SCRAM-SHA-256-PLUS.
+- [RFC 5802](https://tools.ietf.org/html/rfc5802) Describes SCRAM.
+- [RFC 7677](https://datatracker.ietf.org/doc/html/rfc7677) Registers SCRAM-SHA-256 and SCRAM-SHA-256-PLUS.
 - [draft-melnikov-scram-sha-512-02](https://datatracker.ietf.org/doc/html/draft-melnikov-scram-sha-512) Registers SCRAM-SHA-512 and SCRAM-SHA-512-PLUS.
 - [draft-melnikov-scram-sha3-512](https://datatracker.ietf.org/doc/html/draft-melnikov-scram-sha3-512) Registers SCRAM-SHA3-512 and SCRAM-SHA3-512-PLUS.
 - [RFC 5929](https://datatracker.ietf.org/doc/html/rfc5929) Channel Bindings for TLS.
-- [draft-ietf-kitten-tls-channel-bindings-for-tls13](https://datatracker.ietf.org/doc/html/draft-ietf-kitten-tls-channel-bindings-for-tls13>) Defines the `tls-exporter` channel binding, which is [not yet supported by Scramp](https://github.com/tlocke/scramp/issues/9).
+- [draft-ietf-kitten-tls-channel-bindings-for-tls13](https://datatracker.ietf.org/doc/html/draft-ietf-kitten-tls-channel-bindings-for-tls13) Defines the `tls-exporter` channel binding, which is [not yet supported by Scramp](https://codeberg.org/tlocke/scramp/issues/9).
 
 
 ## API Docs
@@ -359,9 +334,8 @@ The `ScramMechanism` object has the following methods and properties:
   - `salt` - It's sometimes useful to set this binary parameter when testing / debugging, but in production this should be omitted, in which case a salt will be generated.
 - `make_server(auth_fn, channel_binding=None, s_nonce=None)` - returns a `ScramServer` object. It takes the following parameters:
   - `auth_fn` This is a function provided by the programmer that has one parameter, a username of type `str` and returns returns the tuple `(salt, stored_key, server_key, iteration_count)`. Where `salt`, `stored_key` and `server_key` are of a binary type, and `iteration_count` is an `int`.
-  - `channel_binding` - Providing a value for this parameter allows channel binding to be used (ie.  it lets you use mechanisms ending in `-PLUS`). The value for `channel_binding` is a tuple consisting of the channel binding name and the channel binding data. For example, if the channel binding name is 'tls-unique', the `channel_binding` parameter would be `('tls-unique', data)`, where `data` is obtained by calling [SSLSocket.get\_channel\_binding()](https://docs.python.org/3/library/ssl.html#ssl.SSLSocket.get_channel_binding>). The convenience function `scramp.make_channel_binding()` can be used to create a channel binding tuple. If `channel_binding` is provided and the mechanism isn't a `-PLUS` variant, then the server will negotiate with the client to use the `-PLUS` variant if the client supports it, or otherwise to use the mechanism without channel binding.
+  - `channel_binding` - Providing a value for this parameter allows channel binding to be used (ie. it lets you use mechanisms ending in `-PLUS`). The value for `channel_binding` is a tuple consisting of the channel binding name and the channel binding data. For example, if the channel binding name is 'tls-unique', the `channel_binding` parameter would be `('tls-unique', data)`, where `data` is obtained by calling [SSLSocket.get\_channel\_binding()](https://docs.python.org/3/library/ssl.html#ssl.SSLSocket.get_channel_binding). The convenience function `scramp.make_channel_binding()` can be used to create a channel binding tuple. If `channel_binding` is provided and the mechanism isn't a `-PLUS` variant, then the server will negotiate with the client to use the `-PLUS` variant if the client supports it, or otherwise to use the mechanism without channel binding.
   - `s_nonce` - The server nonce as a `str`. It's sometimes useful to set this when testing / debugging, but in production this should be omitted, in which case `ScramServer` will generate a server nonce.
-- `make_stored_server_keys(salted_password)` - Returns `(stored_key, server_key)` tuple of `bytes` objects given a salted password. This is useful if you want to use a separate hashing implementation from the one provided by Scramp. It takes the following parameter:
   - `salted_password` - A binary object representing the hashed password.
 - `iteration_count` - The minimum iteration count recommended for this mechanism.
 
@@ -394,7 +368,7 @@ A helper function that makes a `channel_binding` tuple when given a channel bind
 
 It might be worth running the [OpenSSF Scorecard](https://securityscorecards.dev/):
 
-`sudo docker run -e GITHUB_AUTH_TOKEN=<auth_token> gcr.io/openssf/scorecard:stable --repo=github.com/tlocke/scramp`
+`podman run -e GITHUB_AUTH_TOKEN=<auth_token> gcr.io/openssf/scorecard:stable --repo=github.com/tlocke/scramp`
 
 
 ## Doing A Release Of Scramp
@@ -408,6 +382,24 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 
 
 ## Release Notes
+
+### Version 1.4.8, 2026-01-06
+
+- Use the [`secrets`](https://docs.python.org/3/library/secrets.html) module from
+  the Standard Library for generating the salt and nonce.
+
+
+### Version 1.4.7, 2026-01-04
+
+- The main change in this release is that we now use
+  [`hashlib.pbkdf2_hmac()`](https://docs.python.org/3/library/hashlib.html#hashlib.pbkdf2_hmac)
+  from the standard library, rather than our own Python implementation.
+  Since this is fast, we no longer need to provide a way of using a custom
+  key derivation function, and so `make_stored_server_keys()` has been removed.
+- To avoid timing attacks we now use
+  [`hmac.compare_digest()`](https://docs.python.org/3/library/hmac.html#hmac.compare_digest)
+  for digest comparisons.
+
 
 ### Version 1.4.6, 2025-07-05
 

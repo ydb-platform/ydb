@@ -14,6 +14,44 @@
 
 namespace NYdb::inline Dev::NTopic {
 
+//! Result of close operation.
+//! If close was successful, returns Success. This status means that all messages in buffer were persistently written to the server.
+//! If close was not successful because of timeout, returns Timeout.
+//! If close was not successful because of error, returns Error.
+enum class ECloseStatus {
+    Success = 0,
+    Timeout = 1,
+    Error = 2,
+    AlreadyClosed = 3,
+};
+
+//! Description why session was closed.
+struct TCloseDescription : public TSessionClosedEvent {};
+
+//! Result of close operation.
+struct TCloseResult {
+    //! Status of close operation.
+    ECloseStatus Status;
+    //! Description why session was closed.
+    std::optional<TCloseDescription> ClosedDescription;
+
+    bool IsSuccess() const {
+        return Status == ECloseStatus::Success;
+    }
+
+    bool IsTimeout() const {
+        return Status == ECloseStatus::Timeout;
+    }
+
+    bool IsError() const {
+        return Status == ECloseStatus::Error;
+    }
+
+    bool IsAlreadyClosed() const {
+        return Status == ECloseStatus::AlreadyClosed;
+    }
+};
+
 //! Settings for write session.
 struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     using TSelf = TWriteSessionSettings;
@@ -110,6 +148,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! Function to handle ReadyToAccept event.
         //! If this handler is set, write these events will be handled by handler,
         //! otherwise sent to TWriteSession::GetEvent().
+        //! NOTE: DO NOT USE THIS HANDLER IN IProducer INTERFACE.
         FLUENT_SETTING(TReadyToAcceptHandler, ReadyToAcceptHandler);
 
         //! Function to handle close session events.
@@ -144,14 +183,104 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
 };
 
+template<class T>
+concept Serializable =
+    requires(const T& t) {
+        { Serialize(t) } -> std::convertible_to<std::string>;
+    };
+
 //! Contains the message to write and all the options.
 struct TWriteMessage {
     using TSelf = TWriteMessage;
     using TMessageMeta = std::vector<std::pair<std::string, std::string>>;
+private:
+    //! This field is used to store serialized data.
+    std::optional<std::string> DataHolder;
+
 public:
     TWriteMessage() = delete;
     TWriteMessage(std::string_view data)
         : Data(data)
+    {}
+
+    TWriteMessage(const std::string& key, std::string_view data)
+        : Data(data)
+        , Key(key)
+    {}
+
+    TWriteMessage(uint32_t partition, std::string_view data)
+        : Data(data)
+        , Partition(partition)
+    {}
+
+    TWriteMessage(const TWriteMessage& other)
+        : DataHolder(other.DataHolder)
+        , Data(other.DataHolder ? std::string_view(*DataHolder) : other.Data)
+        , Codec(other.Codec)
+        , OriginalSize(other.OriginalSize)
+        , SeqNo_(other.SeqNo_)
+        , CreateTimestamp_(other.CreateTimestamp_)
+        , MessageMeta_(other.MessageMeta_)
+        , Tx_(other.Tx_)
+        , Key(other.Key)
+        , Partition(other.Partition)
+    {}
+
+    TWriteMessage(TWriteMessage&& other) noexcept
+        : DataHolder(std::move(other.DataHolder))
+        , Data(DataHolder ? std::string_view(*DataHolder) : other.Data)
+        , Codec(std::move(other.Codec))
+        , OriginalSize(other.OriginalSize)
+        , SeqNo_(std::move(other.SeqNo_))
+        , CreateTimestamp_(std::move(other.CreateTimestamp_))
+        , MessageMeta_(std::move(other.MessageMeta_))
+        , Tx_(std::move(other.Tx_))
+        , Key(std::move(other.Key))
+        , Partition(std::move(other.Partition))
+    {}
+
+    TWriteMessage& operator=(const TWriteMessage& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        DataHolder = other.DataHolder;
+        Data = DataHolder ? std::string_view(*DataHolder) : other.Data;
+        Codec = other.Codec;
+        OriginalSize = other.OriginalSize;
+        SeqNo_ = other.SeqNo_;
+        CreateTimestamp_ = other.CreateTimestamp_;
+        MessageMeta_ = other.MessageMeta_;
+        Key = other.Key;
+        Partition = other.Partition;
+        Tx_ = other.Tx_;
+
+        return *this;
+    }
+
+    TWriteMessage& operator=(TWriteMessage&& other) noexcept {
+        if (this == &other) {
+            return *this;
+        }
+
+        DataHolder = std::move(other.DataHolder);
+        Data = DataHolder ? std::string_view(*DataHolder) : other.Data;
+        Codec = std::move(other.Codec);
+        OriginalSize = other.OriginalSize;
+        SeqNo_ = std::move(other.SeqNo_);
+        CreateTimestamp_ = std::move(other.CreateTimestamp_);
+        MessageMeta_ = std::move(other.MessageMeta_);
+        Key = std::move(other.Key);
+        Partition = std::move(other.Partition);
+        Tx_ = std::move(other.Tx_);
+
+        return *this;
+    }
+
+    template<Serializable T>
+    TWriteMessage(const T& data)
+        : DataHolder(Serialize(data))
+        , Data(*DataHolder)
     {}
 
     //! A message that is already compressed by codec. Codec from WriteSessionSettings does not apply to this message.
@@ -166,7 +295,6 @@ public:
     bool Compressed() const {
         return Codec.has_value();
     }
-
     //! Message body.
     std::string_view Data;
 
@@ -193,10 +321,22 @@ public:
     {
         return Tx_ ? &Tx_->get() : nullptr;
     }
+
+    const std::optional<std::string>& GetKey() const {
+        return Key;
+    }
+
+    const std::optional<uint32_t>& GetPartition() const {
+        return Partition;
+    }
+
+private:
+    std::optional<std::string> Key;
+    std::optional<uint32_t> Partition;
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.
-class ISimpleBlockingWriteSession : public TThrRefBase {
+class ISimpleBlockingWriteSession {
 public:
     //! Write single message. Blocks for up to blockTimeout if inflight is full or memoryUsage is exceeded;
     //! return - true if write succeeded, false if message was not enqueued for write within blockTimeout.
@@ -219,7 +359,7 @@ public:
 
     virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
 
-    //! Returns true if write session is alive and acitve. False if session was closed.
+    //! Returns true if write session is alive and active. False if session was closed.
     virtual bool IsAlive() const = 0;
 
     virtual TWriterCounters::TPtr GetCounters() = 0;
@@ -269,11 +409,11 @@ public:
     //! Return true if all writes were completed and acked, false if timeout was reached and some writes were aborted.
     virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
 
-    //! Writer counters with different stats (see TWriterConuters).
+    //! Writer counters with different stats (see TWriterCounters).
     virtual TWriterCounters::TPtr GetCounters() = 0;
 
     //! Close() with timeout = 0 and destroy everything instantly.
     virtual ~IWriteSession() = default;
 };
 
-}
+} // namespace NYdb::NTopic

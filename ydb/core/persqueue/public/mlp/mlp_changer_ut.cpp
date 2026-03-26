@@ -108,7 +108,7 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 2
         });
 
@@ -138,12 +138,12 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
     }
 
     {
-        CreateMessageDeadlineChangerActor(runtime, {
+        CreateMessageDeadlineChangerActor(runtime, TMessageDeadlineChangerSettings{
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .Messages = { TMessageId(0, 0) },
-            .Deadline = TInstant::Now() - TDuration::Seconds(1)
+            .Deadlines = {TInstant::Now() - TDuration::Seconds(1), },
         });
 
         auto result = GetChangeResponse(runtime);
@@ -163,7 +163,7 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(5),
+            .ProcessingTimeout = TDuration::Seconds(5),
             .MaxNumberOfMessage = 2
         });
 
@@ -234,7 +234,7 @@ Y_UNIT_TEST(CapacityTest) {
                     .TopicName = "/Root/topic1",
                     .Consumer = "mlp-consumer",
                     .WaitTime = TDuration::Seconds(1),
-                    .VisibilityTimeout = TDuration::Seconds(5),
+                    .ProcessingTimeout = TDuration::Seconds(5),
                     .MaxNumberOfMessage = 1
                 }));
 

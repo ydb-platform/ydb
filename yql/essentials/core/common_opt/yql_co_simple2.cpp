@@ -1,5 +1,5 @@
 #include "yql_co.h"
-#include "yql_co_pgselect.h"
+#include "yql_co_sqlselect.h"
 
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_csee.h>
@@ -671,7 +671,7 @@ TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ct
 bool IsOptimizeXNotXEnabled(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
     static const char Flag[] = "OptimizeXNotX";
-    return IsOptimizerEnabled<Flag>(*optCtx.Types) && !IsOptimizerDisabled<Flag>(*optCtx.Types);
+    return !IsOptimizerDisabled<Flag>(*optCtx.Types);
 }
 
 const TExprNode* UnwrapUnessential(const TExprNode* node) {
@@ -1079,8 +1079,8 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["PgGrouping"] = ExpandPgGrouping;
-    map["YqlGrouping"] = ExpandPgGrouping;
+    map["PgGrouping"] = ExpandSqlGrouping;
+    map["YqlGrouping"] = ExpandSqlGrouping;
 
     map["PruneKeys"] = map["PruneAdjacentKeys"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext&) {
         TCoPruneKeysBase pruneKeys(node);

@@ -294,17 +294,20 @@ CreateAsyncDoubleMetricProcessNetworkIo(metrics::Meter *meter)
 }
 
 /**
-  Number of file descriptors in use by the process.
-  <p>
-  updowncounter
- */
-static constexpr const char *kMetricProcessOpenFileDescriptorCount =
-    "process.open_file_descriptor.count";
-static constexpr const char *descrMetricProcessOpenFileDescriptorCount =
-    "Number of file descriptors in use by the process.";
-static constexpr const char *unitMetricProcessOpenFileDescriptorCount = "{file_descriptor}";
+  Deprecated, use @code process.unix.file_descriptor.count @endcode instead.
 
-static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+  @deprecated
+  {"note": "Replaced by @code process.unix.file_descriptor.count @endcode.", "reason": "renamed",
+  "renamed_to": "process.unix.file_descriptor.count"} <p> updowncounter
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricProcessOpenFileDescriptorCount =
+    "process.open_file_descriptor.count";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricProcessOpenFileDescriptorCount =
+    "Deprecated, use `process.unix.file_descriptor.count` instead.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricProcessOpenFileDescriptorCount =
+    "{file_descriptor}";
+
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricProcessOpenFileDescriptorCount(metrics::Meter *meter)
 {
   return meter->CreateInt64UpDownCounter(kMetricProcessOpenFileDescriptorCount,
@@ -312,7 +315,7 @@ CreateSyncInt64MetricProcessOpenFileDescriptorCount(metrics::Meter *meter)
                                          unitMetricProcessOpenFileDescriptorCount);
 }
 
-static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricProcessOpenFileDescriptorCount(metrics::Meter *meter)
 {
   return meter->CreateDoubleUpDownCounter(kMetricProcessOpenFileDescriptorCount,
@@ -320,7 +323,7 @@ CreateSyncDoubleMetricProcessOpenFileDescriptorCount(metrics::Meter *meter)
                                           unitMetricProcessOpenFileDescriptorCount);
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricProcessOpenFileDescriptorCount(metrics::Meter *meter)
 {
   return meter->CreateInt64ObservableUpDownCounter(kMetricProcessOpenFileDescriptorCount,
@@ -328,7 +331,7 @@ CreateAsyncInt64MetricProcessOpenFileDescriptorCount(metrics::Meter *meter)
                                                    unitMetricProcessOpenFileDescriptorCount);
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricProcessOpenFileDescriptorCount(metrics::Meter *meter)
 {
   return meter->CreateDoubleObservableUpDownCounter(kMetricProcessOpenFileDescriptorCount,
@@ -412,6 +415,49 @@ CreateAsyncDoubleMetricProcessThreadCount(metrics::Meter *meter)
 }
 
 /**
+  Number of unix file descriptors in use by the process.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricProcessUnixFileDescriptorCount =
+    "process.unix.file_descriptor.count";
+static constexpr const char *descrMetricProcessUnixFileDescriptorCount =
+    "Number of unix file descriptors in use by the process.";
+static constexpr const char *unitMetricProcessUnixFileDescriptorCount = "{file_descriptor}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricProcessUnixFileDescriptorCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricProcessUnixFileDescriptorCount,
+                                         descrMetricProcessUnixFileDescriptorCount,
+                                         unitMetricProcessUnixFileDescriptorCount);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricProcessUnixFileDescriptorCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricProcessUnixFileDescriptorCount,
+                                          descrMetricProcessUnixFileDescriptorCount,
+                                          unitMetricProcessUnixFileDescriptorCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricProcessUnixFileDescriptorCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricProcessUnixFileDescriptorCount,
+                                                   descrMetricProcessUnixFileDescriptorCount,
+                                                   unitMetricProcessUnixFileDescriptorCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricProcessUnixFileDescriptorCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricProcessUnixFileDescriptorCount,
+                                                    descrMetricProcessUnixFileDescriptorCount,
+                                                    unitMetricProcessUnixFileDescriptorCount);
+}
+
+/**
   The time the process has been running.
   <p>
   Instrumentations SHOULD use a gauge with type @code double @endcode and measure uptime in seconds
@@ -451,6 +497,48 @@ static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDouble
 {
   return meter->CreateDoubleObservableGauge(kMetricProcessUptime, descrMetricProcessUptime,
                                             unitMetricProcessUptime);
+}
+
+/**
+  Number of handles held by the process.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricProcessWindowsHandleCount = "process.windows.handle.count";
+static constexpr const char *descrMetricProcessWindowsHandleCount =
+    "Number of handles held by the process.";
+static constexpr const char *unitMetricProcessWindowsHandleCount = "{handle}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricProcessWindowsHandleCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricProcessWindowsHandleCount,
+                                         descrMetricProcessWindowsHandleCount,
+                                         unitMetricProcessWindowsHandleCount);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricProcessWindowsHandleCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricProcessWindowsHandleCount,
+                                          descrMetricProcessWindowsHandleCount,
+                                          unitMetricProcessWindowsHandleCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricProcessWindowsHandleCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricProcessWindowsHandleCount,
+                                                   descrMetricProcessWindowsHandleCount,
+                                                   unitMetricProcessWindowsHandleCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricProcessWindowsHandleCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricProcessWindowsHandleCount,
+                                                    descrMetricProcessWindowsHandleCount,
+                                                    unitMetricProcessWindowsHandleCount);
 }
 
 }  // namespace process

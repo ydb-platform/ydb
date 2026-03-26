@@ -27,6 +27,7 @@ namespace NActors {
             EvQueryStats,
             EvStats,
             EvPassAwayIfNeeded,
+            EvRdmaPendingHandshake,
         };
 
         struct TEvCleanupEventQueue : TEventLocal<TEvCleanupEventQueue, EvCleanupEventQueue> {};
@@ -89,6 +90,7 @@ namespace NActors {
 
 #define SESSION_EVENTS(HANDLER)                                \
     fFunc(TEvInterconnect::EvForward, HANDLER)                 \
+    fFunc(TEvForwardSubscribeSession::EventType, HANDLER)      \
     fFunc(TEvInterconnect::TEvConnectNode::EventType, HANDLER) \
     fFunc(TEvents::TEvSubscribe::EventType, HANDLER)           \
     fFunc(TEvents::TEvUnsubscribe::EventType, HANDLER)
@@ -107,6 +109,7 @@ namespace NActors {
     STATEFN(STATE) {                                                                            \
         const ui32 type = ev->GetTypeRewrite();                                                 \
         const bool profiled = type != TEvInterconnect::EvForward                                \
+            && type != TEvForwardSubscribeSession::EventType                                    \
             && type != TEvInterconnect::EvConnectNode                                           \
             && type != TEvents::TSystem::Subscribe                                              \
             && type != TEvents::TSystem::Unsubscribe;                                           \
@@ -134,8 +137,9 @@ namespace NActors {
                 cFunc(EvPassAwayIfNeeded, HandlePassAwayIfNeeded)                               \
                 hFunc(TEvSubscribeForConnection, Handle);                                       \
                 hFunc(TEvReportConnection, Handle);                                             \
+                cFunc(EvRdmaPendingHandshake, HandleRdmaDelayedHandshake)                       \
                 default:                                                                        \
-                    Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);                        \
+                    Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);                       \
             }                                                                                   \
         }                                                                                       \
         if (profiled) {                                                                         \
@@ -173,6 +177,7 @@ namespace NActors {
 
         const char* State = nullptr;
         TInstant StateSwitchTime;
+        bool InErrorState = false;
 
         template <typename... TArgs>
         void SwitchToState(int line, const char* name, TArgs&&... args) {
@@ -192,6 +197,11 @@ namespace NActors {
                         {}, nullptr, 0));
                     PassAwayScheduled = true;
                 }
+            }
+            if (CurrentStateFunc() == &TThis::HoldByError) {
+                InErrorState = true;
+            } else if (CurrentStateFunc() == &TThis::StateWork || CurrentStateFunc() == &TThis::PendingActivation) {
+                InErrorState = false;
             }
         }
 
@@ -219,6 +229,8 @@ namespace NActors {
                 PassAwayScheduled = false;
             }
         }
+
+
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PendingActivation
@@ -392,6 +404,7 @@ namespace NActors {
         std::shared_ptr<IInterconnectMetrics> Metrics;
 
         void HandleClosePeerSocket();
+        void HandleClosePeerSocket(std::span<const char> logEntry);
         void HandleCloseInputSession();
         void HandlePoisonSession();
 
@@ -401,6 +414,7 @@ namespace NActors {
         void ScheduleCleanupEventQueue();
         void HandleCleanupEventQueue();
         void CleanupEventQueue();
+        void HandleRdmaDelayedHandshake();
 
         // hold all events before connection is established
         struct TPendingSessionEvent {
@@ -531,6 +545,7 @@ namespace NActors {
 
         THolder<TProgramInfo> RemoteProgramInfo;
         NInterconnect::TSecureSocketContext::TPtr SecureContext;
+        TDuration DelayedRdmaHandshakeTimeout;
 
         void Handle(TEvGetSecureSocket::TPtr ev) {
             auto socket = MakeIntrusive<NInterconnect::TSecureSocket>(*ev->Get()->Socket, SecureContext);

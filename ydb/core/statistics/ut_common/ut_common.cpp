@@ -41,6 +41,10 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
     Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsSendIntervalSecondsServerless(6);
     Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsPropagateIntervalSecondsServerless(6);
 
+    // With LLVM enabled, scan queries calculating column statistics are very slow for some reason
+    // (10s of seconds), so we disable it.
+    Settings->AppConfig->MutableTableServiceConfig()->SetEnableKqpScanQueryUseLlvm(false);
+
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableStatistics(true);
     featureFlags.SetEnableColumnStatistics(true);
@@ -70,6 +74,12 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
 
 TTestEnv::~TTestEnv() {
     Driver->Stop(true);
+
+    if (ThreadPoolStarted) {
+        ThreadPool.Stop();
+    }
+
+    Server->ShutdownGRpc();
 }
 
 TString CreateDatabase(TTestEnv& env, const TString& databaseName,
@@ -533,7 +543,7 @@ std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(
     return ev;
 }
 
-void Analyze(
+NKikimrStat::TEvAnalyzeResponse Analyze(
         TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& tables,
         const TString operationId, TString databaseName,
         NKikimrStat::TEvAnalyzeResponse::EStatus expectedStatus) {
@@ -546,6 +556,7 @@ void Analyze(
     const auto& record = evResponse->Get()->Record;
     UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), operationId);
     UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), expectedStatus);
+    return record;
 }
 
 void AnalyzeShard(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {

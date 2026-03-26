@@ -62,6 +62,8 @@ namespace {
         { EMessagingFormat::Concatenated, "Concatenated output stream of messages."}, // TODO(shmel1k@): improve,
         { EMessagingFormat::JsonStreamConcat, "Concatenated Json stream of envelopes with metadata and messages in the ""body"" attribute." }, // TODO(shmel1k@): improve,
         { EMessagingFormat::JsonArray, "Json array of envelopes with metadata and messages in the ""body"" attribute." }, // TODO(shmel1k@): improve,
+        { EMessagingFormat::Csv, "CSV format with header row containing metadata field names." },
+        { EMessagingFormat::Tsv, "TSV format with header row containing metadata field names." },
     };
 } // anonymous namespace
 
@@ -156,7 +158,7 @@ void TCommandWithInput::AddInputFramingFormats(TClientCommand::TConfig &config,
 void TCommandWithInput::AddInputBinaryStringEncodingFormats(TClientCommand::TConfig& config,
         const TVector<EBinaryStringEncodingFormat>& allowedFormats, EBinaryStringEncodingFormat defaultFormat) {
     TStringStream description;
-    description << "Input binary strings encoding format. Sets how binary strings in the input should be interterpreted. Available options: ";
+    description << "Input binary strings encoding format. Sets how binary strings in the input should be interpreted. Available options: ";
     NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
         "Couldn't find default binary string format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());

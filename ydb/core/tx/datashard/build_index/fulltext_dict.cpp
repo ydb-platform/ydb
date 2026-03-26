@@ -424,9 +424,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
             if (!NKikimr::NFulltext::ValidateSettings(request.GetSettings(), error)) {
                 badRequest(error);
             }
-            if (request.GetSettings().layout() != Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-                badRequest(TStringBuilder() << "FLAT_RELEVANCE index layout is required");
-            }
         }
 
         if (trySendBadRequest()) {

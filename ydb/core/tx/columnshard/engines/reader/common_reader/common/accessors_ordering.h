@@ -145,6 +145,16 @@ public:
         return Sorting;
     }
 
+    template <typename F>
+    void ForEachObject(F&& f) const {
+        for (const auto& obj : AlreadySorted) {
+            f(obj);
+        }
+        for (const auto& obj : HeapObjects) {
+            f(obj);
+        }
+    }
+
     const std::deque<TObject>& GetObjects() const {
         if (AlreadySorted.size()) {
             AFL_VERIFY(!HeapObjects.size());
@@ -235,6 +245,15 @@ public:
         if (Finished) {
             return;
         }
+
+        if (accessors.HasErrors()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + accessors.GetErrorMessage());
+        }
+
+        if (accessors.HasRemovedData()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size());
+        }
+
         AFL_VERIFY(InFlightRequests);
         if (Accessors.empty()) {
             Accessors = std::move(accessors.ExtractPortions());
@@ -317,6 +336,11 @@ private:
     }
 
 public:
+    template <typename F>
+    void ForEachConstructor(F&& f) const {
+        Constructors.ForEachObject(std::forward<F>(f));
+    }
+
     const std::deque<TConstructor>& GetConstructors() const {
         return Constructors.GetObjects();
     }

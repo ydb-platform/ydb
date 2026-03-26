@@ -11,7 +11,7 @@ IF (SANITIZER_TYPE)
     )
 ELSE()
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     SPLIT_FACTOR(20)
 ENDIF()
 

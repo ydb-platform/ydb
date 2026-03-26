@@ -259,7 +259,7 @@ struct TCustomGreaterOrEqual: public TAggrGreaterOrEqual {
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto res = CallBinaryUnboxedValueFunction<&CompareCustoms<Slot>>(Type::getInt32Ty(context), left, right, ctx.Codegen, block);
+        const auto res = EmitFunctionCall<&CompareCustoms<Slot>>(Type::getInt32Ty(context), {left, right}, ctx, block);
         const auto comp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGE, res,
                                           ConstantInt::get(res->getType(), 0), "greater_or_equal", block);
         ValueCleanup(EValueRepresentation::String, left, ctx, block);

@@ -309,6 +309,27 @@ TFuture<IPrerequisitePtr> TClient::StartChaosLease(const TChaosLeaseStartOptions
     }));
 }
 
+TFuture<void> TClient::SetUserBanned(
+    const std::string&,
+    bool,
+    const TSetUserBannedOptions&)
+{
+    ThrowUnimplemented("SetUserBanned");
+}
+
+TFuture<bool> TClient::GetUserBanned(
+    const std::string&,
+    const TGetUserBannedOptions&)
+{
+    ThrowUnimplemented("GetUserBanned");
+}
+
+TFuture<std::vector<std::string>> TClient::ListBannedUsers(
+    const TListBannedUsersOptions&)
+{
+    ThrowUnimplemented("ListBannedUsers");
+}
+
 IPrerequisitePtr TClient::AttachPrerequisite(
     NPrerequisiteClient::TPrerequisiteId prerequisiteId,
     const TPrerequisiteAttachOptions& options)
@@ -2146,6 +2167,7 @@ TFuture<int> TClient::BuildSnapshot(const TBuildSnapshotOptions& options)
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.BuildSnapshot();
+    SetTimeoutOptions(*req, options);
     if (options.CellId) {
         ToProto(req->mutable_cell_id(), options.CellId);
     }
@@ -2171,11 +2193,12 @@ TFuture<TCellIdToConsistentStateMap> TClient::GetMasterConsistentState(const TGe
 
 TFuture<void> TClient::ExitReadOnly(
     NHydra::TCellId cellId,
-    const TExitReadOnlyOptions& /*options*/)
+    const TExitReadOnlyOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.ExitReadOnly();
+    SetTimeoutOptions(*req, options);
     ToProto(req->mutable_cell_id(), cellId);
 
     return req->Invoke().As<void>();
@@ -2186,18 +2209,31 @@ TFuture<void> TClient::MasterExitReadOnly(const TMasterExitReadOnlyOptions& opti
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.MasterExitReadOnly();
+    SetTimeoutOptions(*req, options);
     req->set_retry(options.Retry);
+
+    return req->Invoke().As<void>();
+}
+
+TFuture<void> TClient::ResetDynamicallyPropagatedMasterCells(
+    const TResetDynamicallyPropagatedMasterCellsOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.ResetDynamicallyPropagatedMasterCells();
+    SetTimeoutOptions(*req, options);
 
     return req->Invoke().As<void>();
 }
 
 TFuture<void> TClient::DiscombobulateNonvotingPeers(
     NHydra::TCellId cellId,
-    const TDiscombobulateNonvotingPeersOptions& /*options*/)
+    const TDiscombobulateNonvotingPeersOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.DiscombobulateNonvotingPeers();
+    SetTimeoutOptions(*req, options);
     ToProto(req->mutable_cell_id(), cellId);
 
     return req->Invoke().As<void>();

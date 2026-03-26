@@ -39,6 +39,7 @@ namespace NActors {
         ui64 OutputBuffersTotalSizeLimitInMB = 0;
         ui32 TotalInflightAmountOfData = 0;
         bool MergePerPeerCounters = false;
+        bool MergePerHostCounters = false;
         bool MergePerDataCenterCounters = false;
         ui32 TCPSocketBufferSize = 0;
         TDuration PingPeriod = TDuration::Seconds(3);
@@ -59,6 +60,14 @@ namespace NActors {
         ui32 PreallocatedBufferSize = 8 << 10; // 8 KB
         ui32 NumPreallocatedBuffers = 16;
         bool EnableExternalDataChannel = true;
+        bool EnableKernelLiveness = false;
+        TDuration KernelKeepAliveIdle = TDuration::Seconds(5);
+        TDuration KernelKeepAliveInterval = TDuration::Seconds(1);
+        ui32 KernelKeepAliveProbes = 5;
+        TDuration KernelUserTimeout = TDuration::Seconds(10);
+        // Period for user-space ping/clock probes that keep clock-skew metrics up to date
+        // when kernel keepalive mode disables user-space dead-peer logic.
+        TDuration ClockSkewPingTimeout = TDuration::Minutes(1);
         bool ValidateIncomingPeerViaDirectLookup = false;
         ui32 SocketBacklogSize = 0; // SOMAXCONN if zero
         TDuration FirstErrorSleep = TDuration::MilliSeconds(10);
@@ -67,6 +76,7 @@ namespace NActors {
         TDuration EventDelay = TDuration::Zero();
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
         bool RdmaChecksum = true;
+        bool CollectSubscriptionStackTrace = false;
     };
 
     struct TWhiteboardSessionStatus {
@@ -143,6 +153,7 @@ namespace NActors {
         double CalculateNetworkUtilization();
         void AddSessionWithDataInQueue();
         void RemoveSessionWithDataInQueue();
+        TActorId HostMetricsAggregatorId;
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

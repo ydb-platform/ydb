@@ -667,7 +667,6 @@ void BackupTopic(TDriver driver, const TString& dbPath, const TFsPath& fsBackupF
 
     Ydb::Topic::CreateTopicRequest creationRequest;
     topicDescription.SerializeTo(creationRequest);
-    creationRequest.clear_attributes();
 
     WriteProtoToFile(creationRequest, fsBackupFolder, NDump::NFiles::CreateTopic());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -829,12 +828,20 @@ Ydb::Table::DescribeSystemViewResult DescribeSystemView(TDriver driver, const TS
 
 }
 
-void BackupExternalTable(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
-    Y_ENSURE(!dbPath.empty());
+void BackupExternalTable(
+    TDriver driver,
+    const TString& db,
+    const TString& dbBackupRoot,
+    const TString& dbPathRelativeToBackupRoot,
+    const TFsPath& fsBackupFolder)
+{
+    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
+    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
+
     LOG_I("Backup external table " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
     const auto description = DescribeExternalTable(driver, dbPath);
-    const auto creationQuery = NDump::BuildCreateExternalTableQuery(description);
+    const auto creationQuery = NDump::BuildCreateExternalTableQuery(db, dbBackupRoot, description);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalTable());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -892,6 +899,22 @@ static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
     }
 }
 
+bool SkipItem(const TVector<TRegExMatch>& exclusionPatterns, const THashSet<TString>& seenItems,
+        TDbIterator<ETraverseType::Postordering>& dbIt
+) {
+    if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
+        LOG_D("Skip " << dbIt.GetFullPath().Quote());
+        dbIt.Next();
+        return true;
+    }
+    if (!seenItems.contains(dbIt.GetFullPath())) {
+        LOG_W("Skip " << dbIt.GetFullPath().Quote() << ": it was created after the dumping had started");
+        dbIt.Next();
+        return true;
+    }
+    return false;
+}
+
 void BackupFolderImpl(TDriver driver, const TString& database, const TString& dbPrefix, const TString& backupPrefix,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
@@ -900,7 +923,10 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
     TMap<TString, TAsyncStatus> copiedTablesStatuses;
+    // Track items seen during first iteration to skip the new ones created after
+    THashSet<TString> seenItems;
     TVector<NTable::TCopyItem> tablesToCopy;
+
     // Copy all tables to temporal folder and backup other scheme objects along the way.
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
@@ -910,6 +936,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 dbIt.Next();
                 continue;
             }
+            seenItems.insert(dbIt.GetFullPath());
 
             auto childFolderPath = CreateDirectory(folderPath, dbIt.GetRelPath());
             TFile(childFolderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
@@ -932,7 +959,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
             }
-            
+
             try {
                 if (dbIt.IsView()) {
                     BackupView(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
@@ -945,7 +972,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 } else if (dbIt.IsExternalDataSource()) {
                     BackupExternalDataSource(driver, database, dbIt.GetFullPath(), childFolderPath);
                 } else if (dbIt.IsExternalTable()) {
-                    BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
+                    BackupExternalTable(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 } else if (dbIt.IsSystemView()) {
                     BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
                 } else if (dbIt.IsTransfer()) {
@@ -965,9 +992,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     if (schemaOnly) {
         TDbIterator<ETraverseType::Postordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
-                LOG_D("Skip " << dbIt.GetFullPath().Quote());
-                dbIt.Next();
+            if (SkipItem(exclusionPatterns, seenItems, dbIt)) {
                 continue;
             }
 
@@ -995,9 +1020,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     {
         TDbIterator<ETraverseType::Postordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
-                LOG_D("Skip " << dbIt.GetFullPath().Quote());
-                dbIt.Next();
+            if (SkipItem(exclusionPatterns, seenItems, dbIt)) {
                 continue;
             }
 

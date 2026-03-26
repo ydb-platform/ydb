@@ -349,7 +349,6 @@ public:
         bool needUpdateCounter = sessionImpl->NeedUpdateActiveCounter();
         // Also removes NeedUpdateActiveCounter flag
         sessionImpl->MarkIdle();
-        sessionImpl->SetTimeInterval(TDuration::Zero());
         if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter)) {
             sessionImpl->SetNeedUpdateActiveCounter(needUpdateCounter);
             return false;

@@ -211,4 +211,5 @@ enum ETxTypes {
     TXTYPE_PERSIST_SUBDOMAIN_PATH_ID = 42                   [(TxTypeOpts) = {Name: "TxPersistSubDomainPathId"}];
     TXTYPE_CLEANUP_SCHEMAS = 43                             [(TxTypeOpts) = {Name: "TxCleanupSchemasWithnoData"}];
     TXTYPE_ABORT_LOCK = 44                                  [(TxTypeOpts) = {Name: "TxAbortLock"}];
+    TXTYPE_TX_ABORT = 45                                    [(TxTypeOpts) = {Name: "TxTxAbort"}];
 }

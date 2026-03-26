@@ -8,6 +8,7 @@
 
 #include <library/cpp/yt/malloc/malloc.h>
 
+#include <library/cpp/yt/memory/free_list.h>
 #include <library/cpp/yt/memory/poison.h>
 
 namespace NYT {
@@ -447,7 +448,7 @@ TSlabAllocator::TSlabAllocator(
     LargeArena_.reset(new TLargeArena(memoryTracker, profiler));
 }
 
-void TSlabAllocator::TLargeArenaDeleter::operator() (TLargeArena* arena)
+void TSlabAllocator::TLargeArenaDeleter::operator()(TLargeArena* arena)
 {
     arena->Unref();
 }

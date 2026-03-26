@@ -65,12 +65,15 @@ namespace NKikimr::NBsController {
         }
 
         auto& pool = pools.at(storagePoolId);
+        if (pool.DDisk) {
+            throw TExError() << "can't invoke AllocateVirtualGroup against DDisk pool";
+        }
 
         // create entry in group table
         auto *group = Groups.ConstructInplaceNewEntry(TGroupId::FromValue(groupId.GetRaw()), TGroupId::FromValue(groupId.GetRaw()), 0u, 0u,
             TBlobStorageGroupType::ErasureNone, 0u, NKikimrBlobStorage::TVDiskKind::Default,
             pool.EncryptionMode.GetOrElse(TBlobStorageGroupInfo::EEM_NONE), TBlobStorageGroupInfo::ELCP_INITIAL,
-            TString(), TString(), 0u, 0u, false, false, 0u, TBridgePileId(), storagePoolId, 0u, 0u, 0u);
+            TString(), TString(), 0u, 0u, false, false, 0u, TBridgePileId(), storagePoolId, 0u, 0u, 0u, false);
 
         // bind group to storage pool
         ++pool.NumGroups;
@@ -385,11 +388,8 @@ namespace NKikimr::NBsController {
                     Y_DEBUG_ABORT();
                     return TGroupGeometryInfo();
                 });
-                TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update", (VirtualGroupId, GroupId), (Error, error));
-                    State->Rollback();
-                    State.reset();
+                if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update", (VirtualGroupId, GroupId), (Error, *error));
                 }
                 return true;
             }
@@ -427,11 +427,8 @@ namespace NKikimr::NBsController {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 const size_t n = State->BlobDepotDeleteQueue.Unshare().erase(GroupId);
                 Y_ABORT_UNLESS(n == 1);
-                TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG17, "failed to commit update", (VirtualGroupId, GroupId), (Error, error));
-                    State->Rollback();
-                    State.reset();
+                if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG17, "failed to commit update", (VirtualGroupId, GroupId), (Error, *error));
                 }
                 return true;
             }
@@ -491,7 +488,7 @@ namespace NKikimr::NBsController {
                     break;
 
                 case NKikimrBlobStorage::EVirtualGroupState::WORKING:
-                    if (group->NeedAlter.GetOrElse(false)) {
+                    if (group->NeedAlter.GetOrElse(false) || group->AppliedGroupGeneration != group->Generation) {
                         return ConfigureBlobDepot();
                     }
                     [[fallthrough]];
@@ -545,6 +542,7 @@ namespace NKikimr::NBsController {
         bool TenantHiveInvalidated = false;
         bool TenantHiveInvalidateInProgress = false;
         bool IsDecommittingGroup = false;
+        ui32 AppliedGroupGeneration = 0;
 
         void HiveCreate(TGroupInfo *group) {
             auto& config = GetConfig(group);
@@ -852,6 +850,8 @@ namespace NKikimr::NBsController {
                 NTabletPipe::TClientRetryPolicy::WithRetries()));
             auto ev = std::make_unique<TEvBlobDepot::TEvApplyConfig>();
             ev->Record.MutableConfig()->CopyFrom(config);
+            SerializeGroupInfo(ev->Record.MutableGroupInfo(), *group, Self->StoragePools);
+            AppliedGroupGeneration = group->Generation;
             NTabletPipe::SendData(SelfId(), BlobDepotPipeId, ev.release());
         }
 
@@ -888,6 +888,7 @@ namespace NKikimr::NBsController {
                 Y_ABORT_UNLESS(config.HasTabletId());
                 group.BlobDepotId = config.GetTabletId();
                 group.NeedAlter = false;
+                group.AppliedGroupGeneration = AppliedGroupGeneration;
                 if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING) {
                     group.DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS;
                     state.GroupContentChanged.insert(GroupId);
@@ -1038,11 +1039,8 @@ namespace NKikimr::NBsController {
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 Action(*State);
-                TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-                    STLOG(PRI_INFO, BS_CONTROLLER, BSCVG09, "failed to commit update", (Error, error));
-                    State->Rollback();
-                    State.reset();
+                if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+                    STLOG(PRI_INFO, BS_CONTROLLER, BSCVG09, "failed to commit update", (Error, *error));
                 }
                 return true;
             }

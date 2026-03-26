@@ -358,6 +358,14 @@ class TExecutor
         LowPriority,
     };
 
+    enum class EBrokenReason {
+        Storage,
+        Exception,
+        Transaction,
+    };
+
+    static const TString& BrokenAlertName(EBrokenReason);
+
     const TIntrusivePtr<ITimeProvider> Time = nullptr;
     NFlatExecutorSetup::ITablet * Owner;
     const TActorId OwnerActorId;
@@ -477,7 +485,7 @@ class TExecutor
     ui64 TransactionUniqCounter = 0;
 
     bool LogBatchFlushScheduled = false;
-    bool NeedFollowerSnapshot = false;
+    bool NeedLogSnapshot = false;
 
     mutable bool HadRejectProbabilityByTxInFly = false;
     mutable bool HadRejectProbabilityByOverload = false;
@@ -505,7 +513,7 @@ class TExecutor
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
     void PassAway() override;
-    void Broken();
+    void Broken(EBrokenReason reason);
     void Active(const TActorContext &ctx);
     void ActivateFollower(const TActorContext &ctx);
     void RecreatePrivateCache();
@@ -576,6 +584,7 @@ class TExecutor
     void Handle(TEvPrivate::TEvLeaseExtend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTablet::TEvConfirmLeaderResult::TPtr &ev);
     void Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateLowExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorContext &ctx);

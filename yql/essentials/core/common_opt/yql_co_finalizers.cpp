@@ -179,8 +179,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
     TExprNode::TPtr mapBody = mapArg;
     TExprNode::TPtr filterArg = ctx.NewArgument(node->Pos(), "row");
     TExprNodeList filterPreds;
-    for (size_t i = 0; i < consumers.size(); ++i) {
-        const TConsumerInfo& consumer = consumers[i];
+    for (const auto& consumer : consumers) {
         if (consumer.PushdownLambda) {
             mapBody = ctx.Builder(mapBody->Pos())
                 .Callable("AddMember")

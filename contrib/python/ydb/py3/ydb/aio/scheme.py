@@ -1,8 +1,13 @@
+from typing import TYPE_CHECKING
+
 from ydb import scheme
 
+if TYPE_CHECKING:
+    from .driver import Driver as AsyncDriver
 
-class SchemeClient(scheme.BaseSchemeClient):
-    def __init__(self, driver):
+
+class SchemeClient(scheme.BaseSchemeClient["AsyncDriver"]):
+    def __init__(self, driver: "AsyncDriver") -> None:
         super(SchemeClient, self).__init__(driver)
 
     async def make_directory(self, path, settings=None):

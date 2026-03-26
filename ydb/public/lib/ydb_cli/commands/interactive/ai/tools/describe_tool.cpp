@@ -4,10 +4,11 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/common/describe.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_path.h>
 
-#include <util/string/strip.h>
 #include <util/stream/str.h>
+#include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -47,8 +48,8 @@ NEVER guess column names, types or keys without verifying them with this tool fi
     static constexpr char PARTITION_STATS_PROPERTY[] = "partition_stats";
 
 public:
-    TDescribeTool(const TDescribeToolSettings& settings, const TInteractiveLogger& log)
-        : TBase(CreateParametersSchema(), DESCRIPTION, log)
+    explicit TDescribeTool(const TDescribeToolSettings& settings)
+        : TBase(CreateParametersSchema(), DESCRIPTION)
         , Database(CanonizeYdbPath(settings.Database))
         , Driver(settings.Driver)
     {}
@@ -87,7 +88,7 @@ protected:
 
         int status = describeLogic.Describe(Path, Options, EDataFormat::ProtoJsonBase64);
 
-        if (Log.IsVerbose()) {
+        if (GetGlobalLogger().IsVerbose()) {
             if (status == EXIT_SUCCESS) {
                 TStringStream prettyStream;
                 TDescribeLogic prettyLogic(Driver, prettyStream);
@@ -146,8 +147,8 @@ private:
 
 } // anonymous namespace
 
-ITool::TPtr CreateDescribeTool(const TDescribeToolSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<TDescribeTool>(settings, log);
+ITool::TPtr CreateDescribeTool(const TDescribeToolSettings& settings) {
+    return std::make_shared<TDescribeTool>(settings);
 }
 
 } // namespace NYdb::NConsoleClient::NAi

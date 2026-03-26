@@ -33,10 +33,10 @@ public:
     ~TPropagatingStorage();
 
     TPropagatingStorage(const TPropagatingStorage& other);
-    TPropagatingStorage(TPropagatingStorage&& other);
+    TPropagatingStorage(TPropagatingStorage&& other) noexcept;
 
     TPropagatingStorage& operator=(const TPropagatingStorage& other);
-    TPropagatingStorage& operator=(TPropagatingStorage&& other);
+    TPropagatingStorage& operator=(TPropagatingStorage&& other) noexcept;
 
     //! Returns true if the storage is null.
     //!

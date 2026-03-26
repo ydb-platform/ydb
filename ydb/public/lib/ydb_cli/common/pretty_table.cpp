@@ -1,6 +1,5 @@
 #include "pretty_table.h"
 
-#include <library/cpp/colorizer/colors.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>

@@ -54,6 +54,7 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/kqp
     ydb/core/kqp/federated_query
+    ydb/core/kqp/federated_query/actors
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/proxy_service
     ydb/core/metering
@@ -87,6 +88,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/security
     yql/essentials/minikql/comp_nodes/llvm16
+    ydb/library/yql/providers/pq/gateway/dummy
     ydb/library/yql/providers/s3/actors_factory
     yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/llvm16

@@ -251,7 +251,7 @@ def gen_build_script(args):
         maven_repos=maven_repos,
         proguard_rules=args.proguard_rules,
         res_dirs=wrap(args.res_dirs),
-        package_name=args.package_name
+        package_name=args.package_name,
     )
 
 

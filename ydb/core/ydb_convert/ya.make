@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     column_families.cpp
     compression.cpp
+    kesus_description.cpp
     table_settings.cpp
     table_description.cpp
     table_profiles.cpp
@@ -30,6 +31,8 @@ PEERDIR(
     yql/essentials/public/udf
     ydb/public/api/protos
 )
+
+GENERATE_ENUM_SERIALIZATION(table_description.h)
 
 YQL_LAST_ABI_VERSION()
 

@@ -135,7 +135,7 @@ public:
         TBaseColumn& operator=(const TBaseColumn& other);
 
         NDq::TJoinColumn ToJoinColumn();
-        operator bool();
+        explicit operator bool();
 
         TString Relation;
         TString Column;
@@ -181,13 +181,7 @@ struct TShuffling {
     {
     }
 
-    TShuffling& SetNatural() {
-        IsNatural = true;
-        return *this;
-    }
-
     std::vector<TJoinColumn> Ordering;
-    bool IsNatural = false; // look at the IsNatural field at the Ordering struct
 };
 
 /*
@@ -348,7 +342,7 @@ public:
         TLogicalOrderings(const TLogicalOrderings&) = default;
         TLogicalOrderings& operator=(const TLogicalOrderings&) = default;
 
-        TLogicalOrderings(TDFSM* dfsm)
+        explicit TLogicalOrderings(TDFSM* dfsm)
             : Dfsm_(dfsm)
         {
         }
@@ -393,7 +387,7 @@ public:
 public:
     TOrderingsStateMachine() = default;
 
-    TOrderingsStateMachine(
+    explicit TOrderingsStateMachine(
         TFDStorage fdStorage,
         TOrdering::EType machineType = TOrdering::EShuffle)
         : FDStorage(std::move(fdStorage))

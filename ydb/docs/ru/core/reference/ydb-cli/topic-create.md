@@ -39,7 +39,7 @@
 {{ ydb-cli }} -p quickstart topic create \
   --partitions-count 2 \
   --supported-codecs raw,gzip \
-  --retention-period-hours 2 \
+  --retention-period 2h \
   my-topic
 ```
 
@@ -52,7 +52,7 @@
 Результат:
 
 ```text
-RetentionPeriod: 2 hours
+RetentionPeriod: 2h
 PartitionsCount: 2
 SupportedCodecs: RAW, GZIP
 ```

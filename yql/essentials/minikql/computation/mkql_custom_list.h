@@ -2,12 +2,11 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TCustomListValue: public TComputationValue<TCustomListValue> {
 public:
-    TCustomListValue(TMemoryUsageInfo* memInfo)
+    explicit TCustomListValue(TMemoryUsageInfo* memInfo)
         : TComputationValue(memInfo)
         , Length(Length_)
         , HasItems(HasItems_)
@@ -89,7 +88,7 @@ public:
     class TIterator: public TComputationValue<TIterator> {
     public:
         TIterator(TMemoryUsageInfo* memInfo, TUnboxedValueVector&& iters);
-        ~TIterator();
+        ~TIterator() override;
 
     private:
         bool Next(NUdf::TUnboxedValue& value) override;
@@ -101,7 +100,7 @@ public:
 
     TExtendListValue(TMemoryUsageInfo* memInfo, TUnboxedValueVector&& lists);
 
-    ~TExtendListValue();
+    ~TExtendListValue() override;
 
 private:
     NUdf::TUnboxedValue GetListIterator() const override;
@@ -117,14 +116,13 @@ public:
 
     TExtendStreamValue(TMemoryUsageInfo* memInfo, TUnboxedValueVector&& lists);
 
-    ~TExtendStreamValue();
+    ~TExtendStreamValue() override;
 
 private:
-    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& value);
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& value) override;
 
     const TUnboxedValueVector Lists_;
     ui32 Index_ = 0;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

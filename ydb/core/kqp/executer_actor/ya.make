@@ -11,10 +11,12 @@ SRCS(
     kqp_partition_helper.cpp
     kqp_planner.cpp
     kqp_planner_strategy.cpp
+    kqp_streaming_helper.cpp
     kqp_table_resolver.cpp
     kqp_tasks_graph.cpp
     kqp_tasks_validate.cpp
     kqp_partitioned_executer.cpp
+    shard_key_ranges.cpp
 )
 
 PEERDIR(
@@ -27,7 +29,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/compute_actor
     ydb/core/kqp/executer_actor/shards_resolver
-    ydb/core/kqp/federated_query
+    ydb/core/kqp/federated_query/actors
     ydb/core/kqp/gateway/local_rpc
     ydb/core/kqp/query_compiler
     ydb/core/kqp/rm_service
@@ -45,6 +47,7 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/tasks
     ydb/library/yql/providers/common/http_gateway
+    ydb/library/yql/providers/pq/proto
     ydb/services/metadata/abstract
 )
 

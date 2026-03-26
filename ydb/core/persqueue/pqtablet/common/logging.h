@@ -24,5 +24,6 @@ inline TString LogPrefix() { return {}; }
 #define PQ_LOG_TX_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << stream)
 
 #define PQ_INIT_LOG_D(stream) if (NActors::TlsActivationContext) { LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << stream); }
+#define PQ_INIT_LOG_E(stream) if (NActors::TlsActivationContext) { LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << stream); }
 
 } // namespace NKikimr::NPQ

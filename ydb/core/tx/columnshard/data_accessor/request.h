@@ -17,6 +17,7 @@ private:
     using TErrorsByPathId = THashMap<TInternalPathId, TString>;
     TErrorsByPathId ErrorsByPathId;
     THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> PortionsById;
+    THashSet<NGeneralCache::TGlobalPortionAddress> RemovedAddresses;
 
 public:
     TDataAccessorsResult() = default;
@@ -53,6 +54,9 @@ public:
         for (auto&& i : result.PortionsById) {
             AFL_VERIFY(PortionsById.emplace(i.first, std::move(i.second)).second);
         }
+        for (auto&& i : result.RemovedAddresses) {
+            AFL_VERIFY(RemovedAddresses.emplace(i).second);
+        }
     }
 
     const TPortionDataAccessor& GetPortionAccessorVerified(const ui64 portionId) const {
@@ -80,12 +84,24 @@ public:
         }
     }
 
+    void AddRemovedData(THashSet<NGeneralCache::TGlobalPortionAddress>&& removedAddresses) {
+        RemovedAddresses = std::move(removedAddresses);
+    }
+
+    bool HasRemovedData() const {
+        return !RemovedAddresses.empty();
+    }
+    
+    const THashSet<NGeneralCache::TGlobalPortionAddress>& GetRemovedData() const {
+        return RemovedAddresses;
+    }
+
     void AddError(const TInternalPathId pathId, const TString& errorMessage) {
         ErrorsByPathId.emplace(pathId, errorMessage);
     }
 
     bool HasErrors() const {
-        return ErrorsByPathId.size();
+        return !ErrorsByPathId.empty();
     }
 
     TString GetErrorMessage() const {

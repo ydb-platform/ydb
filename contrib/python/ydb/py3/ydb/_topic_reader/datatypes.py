@@ -195,7 +195,7 @@ class PublicBatch(ICommittable, ISessionAlive):
         self.messages.extend(batch.messages)
         self._bytes_size += batch._bytes_size
 
-    def _pop(self) -> Tuple[List[PublicMessage], bool]:
+    def _pop(self) -> Tuple[PublicMessage, bool]:
         msgs_left = True if len(self.messages) > 1 else False
         return self.messages.pop(0), msgs_left
 

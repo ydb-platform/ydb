@@ -889,10 +889,12 @@ IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNo
 
     auto stateType = hasSaveLoad ? callable.GetInput(12).GetStaticType() : nullptr;
 
-    IComputationNode* farFutureSizeLimit = (callable.GetInputsCount() > 21) ? LocateNode(ctx.NodeLocator, callable, 21) : nullptr;
-    IComputationNode* farFutureTimeLimitUs = (callable.GetInputsCount() > 22) ? LocateNode(ctx.NodeLocator, callable, 22) : nullptr;
-    IComputationNode* earlyPolicy = (callable.GetInputsCount() > 23) ? LocateNode(ctx.NodeLocator, callable, 23) : nullptr;
-    IComputationNode* latePolicy = (callable.GetInputsCount() > 24) ? LocateNode(ctx.NodeLocator, callable, 24) : nullptr;
+#define GET_OPTIONAL_NODE(idx) ((callable.GetInputsCount() > idx && !callable.GetInput(idx).GetStaticType()->IsVoid()) ? LocateNode(ctx.NodeLocator, callable, idx) : nullptr)
+    IComputationNode* farFutureSizeLimit = GET_OPTIONAL_NODE(21);
+    IComputationNode* farFutureTimeLimitUs = GET_OPTIONAL_NODE(22);
+    IComputationNode* earlyPolicy = GET_OPTIONAL_NODE(23);
+    IComputationNode* latePolicy = GET_OPTIONAL_NODE(24);
+#undef GET_OPTIONAL_NODE
 
     return new TMultiHoppingCoreWrapper(ctx.Mutables,
                                         stream, item, key, state, state2, time, inSave, inLoad, keyExtract,

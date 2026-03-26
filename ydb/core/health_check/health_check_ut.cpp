@@ -5,11 +5,13 @@
 
 #include <ydb/core/mind/hive/hive_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include "health_check.cpp"
+#include <ydb/core/cms/console/console.h>
+#include "health_check.h"
 
 #include <util/stream/null.h>
 
@@ -158,7 +160,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto group = pbConfig->add_group();
             group->CopyFrom(groupSample);
             group->set_groupid(groupId);
-            group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            group->set_erasurespecies(NHealthCheck::BLOCK_4_2);
             group->set_operatingstatus(NKikimrBlobStorage::TGroupStatus::DEGRADED);
 
             group->clear_vslotid();
@@ -191,7 +193,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto* entry = record.add_entries();
             entry->CopyFrom(entrySample);
             entry->mutable_key()->set_groupid(groupId);
-            entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::BLOCK_4_2);
             entry->mutable_info()->set_storagepoolid(poolId);
             entry->mutable_info()->set_generation(DEFAULT_GROUP_GENERATION);
         };
@@ -216,9 +218,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             entry->CopyFrom(entrySample);
             entry->mutable_key()->set_groupid(groupId);
             if (proxyGroup) {
-                entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+                entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::BLOCK_4_2);
             } else {
-                entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::TSelfCheckRequest::NONE);
+                entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::NONE);
             }
             entry->mutable_info()->set_storagepoolid(poolId);
             entry->mutable_info()->set_generation(DEFAULT_GROUP_GENERATION);
@@ -336,7 +338,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         staticGroup->set_groupid(0);
         staticGroup->set_storagepoolid(0);
         staticGroup->set_operatingstatus(groupStatus);
-        staticGroup->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+        staticGroup->set_erasurespecies(NHealthCheck::BLOCK_4_2);
         staticGroup->set_groupgeneration(DEFAULT_GROUP_GENERATION);
 
         auto group = pbConfig->add_group();
@@ -344,7 +346,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         group->set_groupid(GROUP_START_ID);
         group->set_storagepoolid(1);
         group->set_operatingstatus(groupStatus);
-        group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+        group->set_erasurespecies(NHealthCheck::BLOCK_4_2);
         group->set_groupgeneration(DEFAULT_GROUP_GENERATION);
 
         group->clear_vslotid();
@@ -401,7 +403,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     void ChangeGroupStateResponse(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev) {
         for (auto& groupInfo : *(*ev)->Get()->Record.mutable_bsgroupstateinfo()) {
-            groupInfo.set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            groupInfo.set_erasurespecies(NHealthCheck::BLOCK_4_2);
         }
     }
 

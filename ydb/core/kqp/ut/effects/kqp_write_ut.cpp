@@ -13,11 +13,7 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpWrite) {
     Y_UNIT_TEST(UpsertNullKey) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-
-        auto kikimr = DefaultKikimrRunner({setting});
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -326,10 +322,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         CompareYson(R"([[[1u]];[[2u]];[[3u]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    Y_UNIT_TEST_TWIN(ProjectReplace, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, app);
+    Y_UNIT_TEST(ProjectReplace) {
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -373,7 +367,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
     }
 
     Y_UNIT_TEST(CastValues) {
@@ -449,12 +443,11 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
     Y_UNIT_TEST(OutOfSpace) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
-        
+
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         Y_UNUSED(runtime);
 

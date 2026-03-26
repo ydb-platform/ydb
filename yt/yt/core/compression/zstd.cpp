@@ -390,13 +390,13 @@ public:
         : Context_(ZSTD_createCCtx())
     { }
 
-    TDictionaryCompressionContextGuard(TDictionaryCompressionContextGuard&& other)
+    TDictionaryCompressionContextGuard(TDictionaryCompressionContextGuard&& other) noexcept
         : Context_(other.Context_)
     {
         other.Context_ = nullptr;
     }
 
-    TDictionaryCompressionContextGuard& operator = (TDictionaryCompressionContextGuard&& other) = delete;
+    TDictionaryCompressionContextGuard& operator=(TDictionaryCompressionContextGuard&& other) = delete;
 
     ~TDictionaryCompressionContextGuard()
     {
@@ -424,13 +424,13 @@ public:
         : Context_(ZSTD_createDCtx())
     { }
 
-    TDictionaryDecompressionContextGuard(TDictionaryDecompressionContextGuard&& other)
+    TDictionaryDecompressionContextGuard(TDictionaryDecompressionContextGuard&& other) noexcept
         : Context_(other.Context_)
     {
         other.Context_ = nullptr;
     }
 
-    TDictionaryDecompressionContextGuard& operator = (TDictionaryDecompressionContextGuard&& other) = delete;
+    TDictionaryDecompressionContextGuard& operator=(TDictionaryDecompressionContextGuard&& other) = delete;
 
     ~TDictionaryDecompressionContextGuard()
     {

@@ -4,10 +4,9 @@ import os
 import logging
 import pytest
 import yatest
-import time
+import yaml
 
 from io import StringIO
-from hamcrest import is_
 from unittest.mock import patch
 from google.protobuf import text_format
 from ydb.tests.oss.canonical import set_canondata_root
@@ -16,18 +15,31 @@ from ydb.apps.dstool.main import main as dstool_main
 from ydb.apps.dstool.lib import common
 from ydb.apps.dstool.lib import table
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.common.wait_for import wait_for_and_assert
+from ydb.tests.library.common.wait_for import retry_assertions
 from ydb.tests.library.harness.kikimr_cluster import KiKiMR
+from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
+from ydb.core.protos.whiteboard_disk_states_pb2 import EVDiskState
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
 
 logger = logging.getLogger(__name__)
 C_4GB = 4 * 2**30
 
 # local configuration for the ydb cluster (fetched by ydb_cluster_configuration fixture)
+NODES_COUNT = 8
 CLUSTER_CONFIG = dict(
     erasure=Erasure.BLOCK_4_2,
-    nodes=8,
+    nodes=NODES_COUNT,
     dynamic_pdisks=[{'user_kind': 0}],
     dynamic_pdisk_size=C_4GB,
+    static_pdisk_config={'expected_slot_count': 9},
+    dynamic_pdisks_config={'expected_slot_count': 9},
+    dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0, num_groups=1)],
+    additional_log_configs={
+        'BS_NODE': LogLevels.DEBUG,
+        'BS_CONTROLLER': LogLevels.DEBUG,
+    },
 )
 
 
@@ -41,7 +53,7 @@ def ydb_cluster(ydb_configurator, request):
         configurator=ydb_configurator,
     )
     cluster.is_local_test = True
-    cluster.start()
+    cluster.start(timeout_seconds=20)
 
     yield cluster
 
@@ -72,20 +84,31 @@ class TestBase:
                 if cmd.HasField('HostKey'):
                     cmd.HostKey.IcPort = 999999
 
-    def _canonize_table_output(self, rows):
+    def _canonize_table_output(self, rows, canonize_columns=None):
         for row in rows:
             if 'Guid' in row and row['Guid'] > 1000:
                 row['Guid'] = '<Guid>'
             if 'IcPort' in row:
                 row['IcPort'] = '<IcPort>'
+            if canonize_columns:
+                for column in canonize_columns:
+                    if column in row:
+                        row[column] = f'<{column}>'
 
-    def _wait_pdisk_metrics_collected(self):
-        def all_pdisk_metrics_collected():
-            base_config = self.cluster.client.query_base_config().BaseConfig
-            return all(pdisk.PDiskMetrics.HasField('UpdateTimestamp') for pdisk in base_config.PDisk)
-        wait_for_and_assert(all_pdisk_metrics_collected, is_(True), message='All pdisk metrics collected')
+    def check_pdisk_metrics_collected(self):
+        base_config = self.cluster.client.query_base_config().BaseConfig
+        assert len(base_config.PDisk) == 2 * NODES_COUNT
+        for pdisk in base_config.PDisk:
+            assert pdisk.PDiskMetrics.HasField('UpdateTimestamp')
+        return base_config
 
-    def _trace(self, *args, with_grpc_calls=False, with_response=False):
+    def check_vdisks_state_ok(self):
+        base_config = self.cluster.client.query_base_config().BaseConfig
+        assert len(base_config.VSlot) == 16  # 1 static + 1 dynamic group
+        for vslot in base_config.VSlot:
+            assert vslot.VDiskMetrics.State == EVDiskState.OK
+
+    def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=None):
         common.cache.clear()
         common.name_cache.clear()
         results = []
@@ -116,7 +139,7 @@ class TestBase:
         original_table_dump = table.TableOutput.dump
 
         def mock_table_dump(table_self, rows, args):
-            self._canonize_table_output(rows)
+            self._canonize_table_output(rows, canonize_columns=canonize_columns)
             return original_table_dump(table_self, rows, args)
 
         exit_status = 0
@@ -149,12 +172,13 @@ class TestBase:
 
 class Test(TestBase):
     def test_essential(self):
-        self._wait_pdisk_metrics_collected()
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
         return [
             self._trace('--help'),
             self._trace('--unknown-arg'),
             self._trace('device', 'list', '-AH'),
-            self._trace('vdisk', 'list', '-AH'),
+            self._trace('vdisk', 'list', '-AH', canonize_columns=['NodeId:PDiskId', 'NodeId']),
             self._trace('group', 'list', '-AH'),
             self._trace('pdisk', 'list', '-AH'),
             self._trace('pool', 'list', '-AH'),
@@ -168,13 +192,6 @@ class Test(TestBase):
             self._trace('--dry-run', 'pdisk', 'set', '--status=INACTIVE', '--pdisk-ids', '[1:1]', with_grpc_calls=True),
             self._trace('pdisk', 'set', '--status=INACTIVE', '--pdisk-ids', '[1:1000]', '[2:1]', with_grpc_calls=True),
             self._trace('pdisk', 'list', '--columns', 'NodeId:PDiskId', 'Status', with_grpc_calls=True),
-        ]
-
-    def test_vdisk_ready_stable_period(self):
-        return [
-            self._trace('group', 'list'),
-            time.sleep(16),  # ReadyStablePeriod + 1 for sure
-            self._trace('group', 'list'),
         ]
 
     def test_cluster_get_set(self):
@@ -196,3 +213,127 @@ class Test(TestBase):
             self._trace('cluster', 'set', '--pdisk-space-color-border', 'UNKNOWN'),
             self._trace('--dry-run', 'cluster', 'set', '--disable-self-heal'),
         ]
+
+    def test_group_take_snapshot(self):
+        retry_assertions(self.check_vdisks_state_ok)
+
+        def check_vdisk_state_error():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            vslots = [vslot for vslot in base_config.VSlot if vslot.VSlotId.NodeId == 1 and vslot.VSlotId.PDiskId == 1]
+            assert len(vslots) == 1
+            vslot = vslots[0]
+            assert vslot.GroupId == 0
+            assert vslot.VDiskMetrics.State == EVDiskState.PDiskError
+
+        return [
+            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_1.bin'),
+            self._trace('pdisk', 'stop', '--node-id=1', '--pdisk-id=1'),
+            retry_assertions(check_vdisk_state_error, timeout_seconds=20),
+            self._trace('group', 'take-snapshot', '--group-ids=0', '--output=group0_2.bin'),
+        ]
+
+    def test_capacity_metrics(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
+
+        vdisk_columns = [
+            'VDiskId',
+            'NodeId:PDiskId',
+            'VDiskSlotUsage',
+            'VDiskRawUsage',
+            'NormalizedOccupancy',
+            'UsedSize',
+            'TotalSize',
+            'CapacityAlert',
+            'GroupSizeInUnits',
+        ]
+        group_columns = [
+            'GroupId',
+            'SizeInUnits',
+            'VDiskSlotUsage',
+            'VDiskRawUsage',
+            'NormalizedOccupancy',
+            'UsedSize',
+            'TotalSize',
+            'CapacityAlert',
+        ]
+
+        return [
+            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
+            self._trace('group', 'list', '-H', '--columns', *group_columns),
+        ]
+
+    def test_group_resize(self):
+        group_id = 2181038080
+        return [
+            self._trace('group', 'resize', '--size-in-units', '2', '--group-ids', str(group_id), with_grpc_calls=True),
+            self._trace('vdisk', 'list', '-H', '--columns', 'VDiskId', 'GroupSizeInUnits'),
+            self._trace('group', 'list', '-H', '--columns', 'GroupId', 'SizeInUnits'),
+            # Errors:
+            self._trace('group', 'resize', '--size-in-units', '1', '--group-ids', str(group_id+1), '--format', 'json'),
+        ]
+
+    def test_infer_pdisk_slot_count(self):
+        dynconfig_client = DynConfigClient(self.host, self.grpc_port)
+
+        def generate_config():
+            generate_config_response = dynconfig_client.fetch_startup_config()
+            logger.info(f"{generate_config_response=}")
+            assert generate_config_response.operation.status == StatusIds.SUCCESS
+
+            result = dynconfig.FetchStartupConfigResult()
+            generate_config_response.operation.result.Unpack(result)
+
+            return {
+                "metadata": {
+                    "kind": "MainConfig",
+                    "version": 0,
+                    "cluster": "",
+                },
+                "config": yaml.safe_load(result.config)
+            }
+
+        def replace_config(full_config):
+            replace_config_response = dynconfig_client.replace_config(yaml.dump(full_config))
+            logger.info(f"{replace_config_response=}")
+            assert replace_config_response.operation.status == StatusIds.SUCCESS
+
+        full_config = generate_config()
+        full_config["config"]["blob_storage_config"]["infer_pdisk_slot_count_settings"] = {
+            "rot": {
+                "prefer_inferred_settings_over_explicit": True,
+                "unit_size": C_4GB,
+                "max_slots": 12,
+            }
+        }
+        replace_config(full_config)
+
+        def check_pdisk_metrics_updated():
+            base_config = self.check_pdisk_metrics_collected()
+            for pdisk in base_config.PDisk:
+                assert pdisk.PDiskMetrics.SlotSizeInUnits > 0
+        retry_assertions(check_pdisk_metrics_updated)
+
+        pdisk_columns = [
+            'NodeId:PDiskId',
+            'Path',
+            'TotalSize',
+            'ExpectedSlotCount',
+            'SlotSizeInUnits',
+        ]
+
+        trace1 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
+
+        del full_config["config"]["blob_storage_config"]["infer_pdisk_slot_count_settings"]
+        full_config["metadata"]["version"] = 1
+        replace_config(full_config)
+
+        def check_pdisk_metrics_updated():
+            base_config = self.check_pdisk_metrics_collected()
+            for pdisk in base_config.PDisk:
+                assert pdisk.PDiskMetrics.SlotSizeInUnits == 0
+        retry_assertions(check_pdisk_metrics_updated)
+
+        trace2 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
+
+        return [trace1, trace2]

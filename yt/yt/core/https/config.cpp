@@ -32,7 +32,7 @@ void TClientConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("credentials", &TThis::Credentials)
         .Optional();
-    registrar.Parameter("allow_http", &TThis::AllowHTTP)
+    registrar.Parameter("allow_http", &TThis::AllowHttp)
         .Default(false);
 }
 

@@ -1,5 +1,7 @@
 #include "config.h"
+#include "constants.h"
 
+#include <ydb/core/base/appdata.h>
 #include <util/generic/hash_set.h>
 #include <util/string/printf.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -59,6 +61,18 @@ bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig, bool isLocalDC) {
     return isLocalDC && quotingConfig.GetEnableQuoting() && !pqConfig.GetTopicsAreFirstClassCitizen();
 }
 
+bool DetailedMetricsAreEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && config.HasMetricsLevel() && config.GetMetricsLevel() == METRICS_LEVEL_DETAILED;
+}
+
+const NKikimrPQ::TPQTabletConfig_TPartition* GetPartitionConfigFromAllPartitions(const NKikimrPQ::TPQTabletConfig& config Y_LIFETIME_BOUND, const ui32 partitionId) noexcept {
+    for (const auto& partition : config.GetAllPartitions()) {
+        if (partition.GetPartitionId() == partitionId) {
+            return &partition;
+        }
+    }
+    return nullptr;
+}
 }
 
 } // NKikimr

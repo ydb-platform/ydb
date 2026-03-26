@@ -29,17 +29,25 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort",
+                                        "Node Type": "TopSort-InnerJoin (Lookup)",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "[Arg.t1.i,Arg.t2.k]"
+                                            },
                                             {
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "[Arg.t1.i,Arg.t2.k]"
+                                                "Name": "InnerJoin (Lookup)"
                                             }
                                         ],
                                         "PlanNodeId": 6,

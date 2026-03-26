@@ -369,6 +369,7 @@ private:
     void ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx);
 
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
+    const TString UserSID;
 
     void Die(const TActorContext &ctx) override {
         --*TxProxyMon->DataReqInFly;
@@ -462,7 +463,8 @@ public:
     }
 
     TDataReq(const TTxProxyServices &services, ui64 txid, const TIntrusivePtr<TTxProxyMon> mon,
-             const TRequestControls& requestControls)
+             const TRequestControls& requestControls,
+             const TString& userSID)
         : TActor(&TThis::StateWaitInit)
         , Services(services)
         , TxId(txid)
@@ -484,6 +486,7 @@ public:
         , WallClockPrepared(TInstant::MicroSeconds(0))
         , WallClockPlanned(TInstant::MicroSeconds(0))
         , TxProxyMon(mon)
+        , UserSID(userSID)
     {
         ++*TxProxyMon->DataReqInFly;
     }
@@ -1123,6 +1126,7 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
             ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
                 ctx.SelfID, TxId, transactionBuffer, TxFlags | (shardData.Immediate ? NTxDataShard::TTxFlags::Immediate : 0));
         }
+        ev->Record.SetUserSID(UserSID);
 
         Send(pipeCache, new TEvPipeCache::TEvForward(ev, shardData.ShardId, true));
 
@@ -1205,11 +1209,11 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
 
         const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
 
-        Send(pipeCache, new TEvPipeCache::TEvForward(
-                new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
-                    ctx.SelfID, TxId, transactionBuffer,
-                    TxFlags | (immediate ? NTxDataShard::TTxFlags::Immediate : 0)),
-                partition.ShardId, true));
+        auto ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
+            ctx.SelfID, TxId, transactionBuffer,
+            TxFlags | (immediate ? NTxDataShard::TTxFlags::Immediate : 0));
+        ev->Record.SetUserSID(UserSID);
+        Send(pipeCache, new TEvPipeCache::TEvForward(ev, partition.ShardId, true));
     }
 
     Become(&TThis::StateWaitPrepare);
@@ -1373,6 +1377,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
                 FlatMKQLRequest->Snapshot = TRowVersion(mkqlTxBody.GetSnapshotStep(), mkqlTxBody.GetSnapshotTxId());
             NMiniKQL::TEngineFlatSettings settings(NMiniKQL::IEngineFlat::EProtocol::V1, functionRegistry,
                                                    *TAppData::RandomProvider, *TAppData::TimeProvider,
+                                                   UserSID,
                                                    nullptr, TxProxyMon->AllocPoolCounters);
             settings.EvaluateResultType = mkqlTxBody.GetEvaluateResultType();
             settings.EvaluateResultValue = mkqlTxBody.GetEvaluateResultValue();
@@ -3057,8 +3062,8 @@ bool TDataReq::IsReadOnlyRequest() const {
 }
 
 IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<NKikimr::NTxProxy::TTxProxyMon>& mon,
-                             const TRequestControls& requestControls) {
-    return new NTxProxy::TDataReq(services, txid, mon, requestControls);
+                             const TRequestControls& requestControls, const TString& userSID) {
+    return new NTxProxy::TDataReq(services, txid, mon, requestControls, userSID);
 }
 
 }}

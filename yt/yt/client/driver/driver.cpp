@@ -2,6 +2,7 @@
 
 #include "admin_commands.h"
 #include "authentication_commands.h"
+#include "ban_commands.h"
 #include "bundle_controller_commands.h"
 #include "chaos_commands.h"
 #include "command.h"
@@ -343,6 +344,7 @@ public:
         REGISTER_ALL(TGetMasterConsistentStateCommand,     "get_master_consistent_state",     Null,       Structured, true,  false);
         REGISTER_ALL(TExitReadOnlyCommand,                 "exit_read_only",                  Null,       Structured, true,  false);
         REGISTER_ALL(TMasterExitReadOnlyCommand,           "master_exit_read_only",           Null,       Structured, true,  false);
+        REGISTER_ALL(TResetDynamicallyPropagatedMasterCellsCommand,          "reset_dynamically_propagated_master_cells",          Null,       Structured, true,  false);
         REGISTER_ALL(TDiscombobulateNonvotingPeersCommand, "discombobulate_nonvoting_peers",  Null,       Structured, true,  false);
         REGISTER_ALL(TSwitchLeaderCommand,                 "switch_leader",                   Null,       Structured, true,  false);
         REGISTER_ALL(TResetStateHashCommand,               "reset_state_hash",                Null,       Structured, true,  false);
@@ -426,6 +428,10 @@ public:
         REGISTER    (TFinishDistributedWriteFileSessionCommand, "finish_distributed_write_file_session",Null,Null,    true,  false, ApiVersion4);
         REGISTER    (TWriteFileFragmentCommand,            "write_file_fragment",             Binary,     Structured, true,   true, ApiVersion4);
 
+        REGISTER    (TGetUserBannedCommand,                "get_user_banned",                 Null,       Structured, false, true,  ApiVersion4);
+        REGISTER    (TSetUserBannedCommand,                "set_user_banned",                 Null,       Null,       true,  true,  ApiVersion4);
+        REGISTER    (TListBannedUsersCommand,              "list_banned_users",               Null,       Structured, false, false, ApiVersion4);
+
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                 "read_hunks",                             Null,       Structured, false, true );
             REGISTER_ALL(TWriteHunksCommand,                "write_hunks",                            Null,       Structured, true,  true );
@@ -438,6 +444,7 @@ public:
             REGISTER_ALL(TUnreferenceLeaseCommand,          "unreference_lease",                      Null,       Structured, true,  false);
             REGISTER_ALL(TForsakeChaosCoordinator,          "forsake_chaos_coordinator",              Null,       Null,       true,  true );
             REGISTER_ALL(TGetOrderedTabletSafeTrimRowCount, "get_ordered_tablet_safe_trim_row_count", Null,       Structured, false, false);
+            REGISTER_ALL(TGetConnectionOrchidValue,         "get_connection_orchid_value",            Null,       Structured, false, false);
         }
 
 #undef REGISTER
@@ -457,9 +464,10 @@ public:
         }
 
         const auto& entry = it->second;
-        TAuthenticationIdentity identity(
+        TClientAuthenticationIdentity identity(
             request.AuthenticatedUser,
-            request.UserTag.value_or(""));
+            request.UserTag.value_or(""),
+            request.ServiceTicket.value_or(""));
 
         YT_VERIFY(entry.Descriptor.InputType == EDataType::Null || request.InputStream);
         YT_VERIFY(entry.Descriptor.OutputType == EDataType::Null || request.OutputStream);

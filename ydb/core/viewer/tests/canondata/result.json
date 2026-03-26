@@ -186,6 +186,15 @@
                     "name": "table1",
                     "owner": "root@builtin",
                     "type": "TABLE"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
                 }
             ],
             "self": {
@@ -260,7 +269,7 @@
                     }
                 ],
                 "name": "Root/dedicated_db",
-                "owner": "root",
+                "owner": "user1",
                 "permissions": [
                     {
                         "permission_names": [
@@ -325,6 +334,15 @@
                     "name": "test_dir",
                     "owner": "root@builtin",
                     "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
                 }
             ],
             "self": {
@@ -399,7 +417,7 @@
                     }
                 ],
                 "name": "Root/dedicated_db",
-                "owner": "root",
+                "owner": "user1",
                 "permissions": [
                     {
                         "permission_names": [
@@ -455,6 +473,15 @@
                     "name": "table1",
                     "owner": "root@builtin",
                     "type": "TABLE"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
                 }
             ],
             "self": {
@@ -529,7 +556,7 @@
                     }
                 ],
                 "name": "Root/dedicated_db",
-                "owner": "root",
+                "owner": "user1",
                 "permissions": [
                     {
                         "permission_names": [
@@ -765,7 +792,6 @@
         "FoundGroups": 5,
         "StorageGroups": [
             {
-                "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -867,7 +893,6 @@
                 ]
             },
             {
-                "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -971,7 +996,6 @@
                 ]
             },
             {
-                "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
                 "CapacityAlert": "GREEN",
                 "DiskSpace": "Green",
@@ -3061,115 +3085,612 @@
             }
         }
     ],
+    "test.TestViewer.test_viewer_acl_write_invalid": {
+        "status_code": 403,
+        "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: Token is not in correct format\n</p></body></html>"
+    },
     "test.TestViewer.test_viewer_autocomplete": {
-        "/Root": {
-            "Result": {
-                "Entities": [
-                    {
-                        "Name": ".sys",
-                        "Type": "dir"
-                    },
-                    {
-                        "Name": ".metadata",
-                        "Type": "dir"
-                    },
-                    {
-                        "Name": "shared_db",
-                        "Type": "ext_sub_domain"
-                    },
-                    {
-                        "Name": "dedicated_db",
-                        "Type": "ext_sub_domain"
-                    },
-                    {
-                        "Name": "serverless_db",
-                        "Type": "ext_sub_domain"
-                    }
-                ],
-                "Total": 5
+        "dedicated_db": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true,
+                "Version": 2
             },
-            "Success": true,
-            "Version": 2
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            }
         },
-        "/Root/dedicated_db": {
-            "Result": {
-                "Entities": [
-                    {
-                        "Name": ".sys",
-                        "Type": "dir"
-                    },
-                    {
-                        "Name": "table1",
-                        "Type": "table"
-                    },
-                    {
-                        "Name": ".metadata",
-                        "Type": "dir"
-                    }
-                ],
-                "Total": 3
+        "empty": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true,
+                "Version": 2
             },
-            "Success": true,
-            "Version": 2
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            }
         },
-        "/Root/serverless_db": {
-            "Result": {
-                "Entities": [
-                    {
-                        "Name": ".sys",
-                        "Type": "dir"
-                    },
-                    {
-                        "Name": "table1",
-                        "Type": "table"
-                    }
-                ],
-                "Total": 2
+        "root": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true,
+                "Version": 2
             },
-            "Success": true,
-            "Version": 2
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            }
         },
-        "/Root/shared_db": {
-            "Result": {
-                "Entities": [
-                    {
-                        "Name": ".sys",
-                        "Type": "dir"
-                    },
-                    {
-                        "Name": "table1",
-                        "Type": "table"
-                    },
-                    {
-                        "Name": ".metadata",
-                        "Type": "dir"
-                    }
+        "root_dedicated_db": {
+            "/Root": {
+                "Error": [
+                    "Failed to collect information from CacheResult"
                 ],
-                "Total": 3
+                "Version": 2
             },
-            "Success": true,
-            "Version": 2
+            "/Root/dedicated_db": {
+                "Error": [
+                    "Failed to collect information from CacheResult"
+                ],
+                "Version": 2
+            },
+            "/Root/serverless_db": {
+                "Error": [
+                    "Failed to collect information from CacheResult"
+                ],
+                "Version": 2
+            },
+            "/Root/shared_db": {
+                "Error": [
+                    "Failed to collect information from CacheResult"
+                ],
+                "Version": 2
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            }
         },
-        "no-database": {
-            "Result": {
-                "Entities": [
-                    {
-                        "Name": "/Root/shared_db",
-                        "Type": "ext_sub_domain"
-                    },
-                    {
-                        "Name": "/Root/dedicated_db",
-                        "Type": "ext_sub_domain"
-                    },
-                    {
-                        "Name": "/Root/serverless_db",
-                        "Type": "ext_sub_domain"
-                    }
-                ],
-                "Total": 3
+        "tab": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true,
+                "Version": 2
             },
-            "Success": true,
-            "Version": 2
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            }
+        },
+        "table1": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true,
+                "Version": 2
+            }
         }
     },
     "test.TestViewer.test_viewer_bsgroupinfo": {
@@ -3393,7 +3914,7 @@
                         "Owner": "metadata@system",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
-                        "PathState": 2,
+                        "PathState": 3,
                         "PathType": 1,
                         "SchemeshardId": "72057594046678944"
                     },
@@ -3433,7 +3954,7 @@
                         "Owner": "root",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
-                        "PathState": 3,
+                        "PathState": 2,
                         "PathType": 10,
                         "SchemeshardId": "72057594046678944"
                     },
@@ -3502,10 +4023,12 @@
                         "PublicKeys": "not-empty-array",
                         "Sids": [
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "monitoring",
                                 "Type": 1
                             },
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "viewer",
                                 "Type": 1
                             },
@@ -3527,6 +4050,7 @@
                                 "Type": 2
                             },
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "database",
                                 "Type": 1
                             },
@@ -3581,6 +4105,7 @@
                                 "Type": 2
                             },
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "root",
                                 "Type": 1
                             }
@@ -3674,7 +4199,7 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "42",
+                    "PathId_Depricated": "38",
                     "PathsInside": "35",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
@@ -3796,7 +4321,7 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "44",
+                    "PathId_Depricated": "40",
                     "PathsInside": "31",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
@@ -3930,7 +4455,7 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "43",
+                    "PathId_Depricated": "39",
                     "PathsInside": "35",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
@@ -4111,6 +4636,10 @@
             "TotalGroups": 5
         }
     ],
+    "test.TestViewer.test_viewer_groups_with_invalid_database": {
+        "status_code": 403,
+        "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: Unknown database\n</p></body></html>"
+    },
     "test.TestViewer.test_viewer_healthcheck": {
         "/Root": {
             "location": {
@@ -4857,7 +5386,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -4874,7 +5403,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -5248,7 +5777,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -5272,7 +5801,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -5289,7 +5818,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         }
@@ -5460,7 +5989,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         }
@@ -5484,7 +6013,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         },
@@ -5501,7 +6030,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -5662,7 +6191,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         }
@@ -5686,7 +6215,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         },
@@ -5703,7 +6232,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -5879,7 +6408,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -5896,7 +6425,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -6312,7 +6841,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         }
@@ -6336,7 +6865,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         },
@@ -6353,7 +6882,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -6514,7 +7043,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -6538,7 +7067,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -6555,7 +7084,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         }
@@ -8561,7 +9090,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -8578,7 +9107,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -8957,7 +9486,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -8974,7 +9503,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -9353,7 +9882,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -9370,7 +9899,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -9749,7 +10278,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -9766,7 +10295,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -10145,7 +10674,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "38"
                             },
                             "Utilization": "number"
                         },
@@ -10162,7 +10691,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "43"
+                                "X2": "39"
                             },
                             "Utilization": "number"
                         }
@@ -12330,7 +12859,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "6",
+                "Id": "38",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -12397,12 +12926,12 @@
             {
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "8",
+                "Id": "40",
                 "Metrics": "not-empty-object",
                 "Name": "/Root/serverless_db",
                 "Overall": "Green",
                 "Owner": "root",
-                "ResourceId": "7",
+                "ResourceId": "39",
                 "State": "RUNNING",
                 "StateStats": [
                     {
@@ -12417,7 +12946,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "7",
+                "Id": "39",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -12535,7 +13064,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "6",
+                    "Id": "38",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -12606,11 +13135,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "8",
+                    "Id": "40",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root",
-                    "ResourceId": "7",
+                    "ResourceId": "39",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -12629,7 +13158,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "7",
+                    "Id": "39",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -12742,7 +13271,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "6",
+                    "Id": "38",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -12809,12 +13338,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "8",
+                    "Id": "40",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "7",
+                    "ResourceId": "39",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -12829,7 +13358,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "7",
+                    "Id": "39",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -13070,6 +13599,7 @@
             }
         ]
     },
+    "test.TestViewer.test_waiting_for_cluster_ready": {},
     "test.TestViewer.test_whoami_database": {
         "status_code": 403,
         "text": "<html><body><h1>403 Forbidden</h1></body></html>"
@@ -13085,7 +13615,6 @@
         "IsMonitoringAllowed": true,
         "IsTokenRequired": false,
         "IsViewerAllowed": true,
-        "OriginalUserToken": "text",
         "UserSID": "monitoring"
     },
     "test.TestViewer.test_whoami_root": {
@@ -13106,7 +13635,6 @@
         "IsMonitoringAllowed": true,
         "IsTokenRequired": false,
         "IsViewerAllowed": true,
-        "OriginalUserToken": "text",
         "UserSID": "root"
     },
     "test.TestViewer.test_whoami_viewer": {
@@ -13120,7 +13648,6 @@
         "IsMonitoringAllowed": false,
         "IsTokenRequired": false,
         "IsViewerAllowed": true,
-        "OriginalUserToken": "text",
         "UserSID": "viewer"
     }
 }

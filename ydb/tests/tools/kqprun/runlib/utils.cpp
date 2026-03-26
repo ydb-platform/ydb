@@ -16,49 +16,6 @@
 
 namespace NKikimrRun {
 
-namespace {
-
-std::terminate_handler DefaultTerminateHandler;
-
-void TerminateHandler() {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
-        Cerr << colors.Red() << "======== exception call stack =========" << colors.Default() << Endl;
-        backtrace.PrintTo(Cerr);
-    }
-    Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
-
-    if (DefaultTerminateHandler) {
-        DefaultTerminateHandler();
-    } else {
-        abort();
-    }
-}
-
-TString SignalToString(int signal) {
-#ifndef _unix_
-    return TStringBuilder() << "signal " << signal;
-#else
-    return strsignal(signal);
-#endif
-}
-
-void BackTraceSignalHandler(int signal) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= " << SignalToString(signal) << " call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-}  // anonymous namespace
-
-
 TRequestResult::TRequestResult()
     : Status(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
 {}
@@ -274,14 +231,6 @@ TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName
         {"debug", NActors::NLog::EPriority::PRI_DEBUG},
         {"trace", NActors::NLog::EPriority::PRI_TRACE},
     }, optionName, false);
-}
-
-void SetupSignalActions() {
-    DefaultTerminateHandler = std::set_terminate(&TerminateHandler);
-
-    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
-        signal(sig, &BackTraceSignalHandler);
-    }
 }
 
 void PrintResultSet(EResultOutputFormat format, IOutputStream& output, const Ydb::ResultSet& resultSet) {

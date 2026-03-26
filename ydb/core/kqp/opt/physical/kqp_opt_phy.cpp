@@ -145,6 +145,7 @@ public:
         AddHandler(1, &TKqpReadOlapTableRanges::Match, HNDL(AddColumnForEmptyColumnsOlapRead));
 
 
+        AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTableSysView));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTableFullText));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpLookupTable));
@@ -208,7 +209,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildStreamIdxLookupJoinStagesKeepSorted(TExprBase node, TExprContext& ctx) {
-        bool useFSM = KqpCtx.Config->EnableOrderOptimizaionFSM;
+        bool useFSM = KqpCtx.Config->GetEnableOrderOptimizaionFSM();
         if (useFSM) {
             TExprBase output = KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(node, ctx, TypesCtx, true);
             DumpAppliedRule("BuildStreamIdxLookupJoinStagesKeepSortedFSM", node.Ptr(), output.Ptr(), ctx);
@@ -234,7 +235,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx) {
-        bool useFSM = KqpCtx.Config->EnableOrderOptimizaionFSM;
+        bool useFSM = KqpCtx.Config->GetEnableOrderOptimizaionFSM();
         if (useFSM) {
             TExprBase output = KqpRemoveRedundantSortOverReadTableFSM(node, ctx, KqpCtx, TypesCtx);
             DumpAppliedRule("RemoveRedundantSortOverReadTableFSM", node.Ptr(), output.Ptr(), ctx);
@@ -245,6 +246,12 @@ protected:
             DumpAppliedRule("RemoveRedundantSortOverReadTable", node.Ptr(), output.Ptr(), ctx);
             return output;
         }
+    }
+
+    TMaybeNode<TExprBase> RewriteKqpReadTableSysView(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRewriteReadTableSysView(node, ctx, KqpCtx);
+        DumpAppliedRule("RewriteKqpReadTableSysView", node.Ptr(), output.Ptr(), ctx);
+        return output;
     }
 
     TMaybeNode<TExprBase> RewriteKqpReadTableFullText(TExprBase node, TExprContext& ctx) {
@@ -404,7 +411,8 @@ protected:
     TMaybeNode<TExprBase> PushCombineToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqPushCombineToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        const bool createStageForAggregation = KqpCtx.Config->OptCreateStageForAggregation.Get().GetOrElse(false);
+        TExprBase output = DqPushCombineToStage(node, ctx, optCtx, *getParents(), IsGlobal, createStageForAggregation);
         DumpAppliedRule("PushCombineToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -422,7 +430,7 @@ protected:
     TMaybeNode<TExprBase> BuildShuffleStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleEliminationForAggregation);
+        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
         TExprBase output = DqBuildShuffleStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination);
         DumpAppliedRule("BuildShuffleStage", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -439,7 +447,7 @@ protected:
     TMaybeNode<TExprBase> BuildPartitionsStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleEliminationForAggregation);
+        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
         TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination);
         DumpAppliedRule("BuildPartitionsStage", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -449,7 +457,7 @@ protected:
     TMaybeNode<TExprBase> BuildPartitionStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleEliminationForAggregation);
+        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
         TExprBase output = DqBuildPartitionStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination);
         DumpAppliedRule("BuildPartitionStage", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -459,7 +467,7 @@ protected:
     TMaybeNode<TExprBase> BuildTopStageRemoveSort(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        bool useFSM = KqpCtx.Config->EnableOrderOptimizaionFSM;
+        bool useFSM = KqpCtx.Config->GetEnableOrderOptimizaionFSM();
         if (useFSM)
         {
             TExprBase output = KqpBuildTopStageRemoveSortFSM(node, ctx, optCtx, TypesCtx, *getParents(), IsGlobal, true);
@@ -561,12 +569,13 @@ protected:
     {
         // TODO: Allow push to left stage for data queries.
         // It is now possible as we don't use datashard transactions for reads in data queries.
-        bool pushLeftStage = AllowFuseJoinInputs(node);
+        bool pushLeftStage = AllowFuseJoinInputs(node) && !KqpCtx.Config->OptDisallowFuseJoins.Get().GetOrElse(false);
         bool shuffleEliminationWithMap = KqpCtx.Config->OptShuffleEliminationWithMap.Get().GetOrElse(true);
-        bool rightCollectStage = !KqpCtx.Config->AllowMultiBroadcasts;
+        bool rightCollectStage = !KqpCtx.Config->GetAllowMultiBroadcasts();
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
-            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->UseBlockHashJoin.Get().GetOrElse(false), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleElimination), shuffleEliminationWithMap,
-            rightCollectStage
+            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->GetUseBlockHashJoin(), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
+            rightCollectStage,
+            KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false)
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -680,7 +689,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
-        TBuildAggregationResultStageOptions options{KqpCtx.Config->EnableBuildAggregationResultStages, false};
+        TBuildAggregationResultStageOptions options{KqpCtx.Config->GetEnableBuildAggregationResultStages(), false};
         TExprBase output = DqBuildAggregationResultStage(node, ctx, optCtx, options);
         DumpAppliedRule("BuildAggregationResultStage", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -690,7 +699,7 @@ protected:
     TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TBuildAggregationResultStageOptions options{KqpCtx.Config->EnableBuildAggregationResultStages, false};
+        TBuildAggregationResultStageOptions options{KqpCtx.Config->GetEnableBuildAggregationResultStages(), false};
         TExprBase output = DqBuildScalarPrecompute(node, ctx, optCtx, *getParents(), IsGlobal, options);
         DumpAppliedRule("BuildScalarPrecompute", node.Ptr(), output.Ptr(), ctx);
         return output;

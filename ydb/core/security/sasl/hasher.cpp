@@ -9,7 +9,9 @@
 #include <ydb/core/security/sasl/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/login/hashes_checker/hash_types.h>
 #include <ydb/library/login/hashes_checker/hashes_checker.h>
+#include <ydb/library/login/sasl/saslprep.h>
 #include <ydb/library/login/sasl/scram.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -18,12 +20,12 @@ namespace NKikimr::NSasl {
 
 using namespace NActors;
 using namespace NLogin;
+using namespace NLoginProto;
 
 class THasher : public TActorBootstrapped<THasher> {
 public:
-
     THasher(TActorId sender, const TStaticCredentials& creds,
-        const std::vector<EHashType>& hashTypes, const TPasswordComplexity& passwordComplexity)
+        const std::vector<EHashType::HashType>& hashTypes, const TPasswordComplexity& passwordComplexity)
         : Sender(sender)
         , StaticCreds(creds)
         , HashTypes(hashTypes)
@@ -33,6 +35,28 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         auto response = std::make_unique<TEvSasl::TEvComputedHashes>();
+
+        std::string prepUsername;
+        auto saslPrepRC = NLogin::NSasl::SaslPrep(StaticCreds.Username, prepUsername);
+        if (saslPrepRC != NLogin::NSasl::ESaslPrepReturnCodes::Success) {
+            response->Error = "Unsupported characters in username";
+            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
+                "Hasher# " << ctx.SelfID.ToString() <<
+                ", username check failed" <<
+                ", reason: " << response->Error
+            );
+
+            LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
+                "Hasher# " << ctx.SelfID.ToString() <<
+                ", Send TEvComputedHashes: " <<
+                "{ error: " << response->Error << " }"
+            );
+
+            Send(Sender, response.release());
+            return Die(ctx);
+        }
+
+        response->PreparedUsername = std::move(prepUsername);
 
         auto passwordCheckResult = PasswordChecker.Check(StaticCreds.Username, StaticCreds.Password);
         if (!passwordCheckResult.Success) {
@@ -47,9 +71,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
                 "Hasher# " << ctx.SelfID.ToString() <<
                 ", Send TEvComputedHashes: " <<
-                "{ error: " << response->Error <<
-                ", hashes: " << Base64StrictDecode(response->Hashes) <<
-                ", argon hash: " << response->ArgonHash << " }"
+                "{ error: " << response->Error << " }"
             );
 
             Send(Sender, response.release());
@@ -80,8 +102,6 @@ public:
                     hashes[hashTypeDescription.Name] = std::move(scramHash);
                     break;
                 }
-                default:
-                    break;
                 }
 
                 if (!response->Error.empty()) {
@@ -113,6 +133,7 @@ public:
             "Hasher# " << ctx.SelfID.ToString() <<
             ", Send TEvComputedHashes: " <<
             "{ error: " << response->Error <<
+            ", username: " << response->PreparedUsername <<
             ", hashes: " << Base64StrictDecode(response->Hashes) <<
             ", argon hash: " << response->ArgonHash << " }"
         );
@@ -162,7 +183,7 @@ public:
 private:
     const TActorId Sender;
     const TStaticCredentials StaticCreds;
-    const std::vector<EHashType> HashTypes;
+    const std::vector<EHashType::HashType> HashTypes;
 
     const TPasswordChecker PasswordChecker;
     static const std::unique_ptr<const NArgonish::IArgon2Base> ArgonHasher;
@@ -175,9 +196,9 @@ const std::unique_ptr<const NArgonish::IArgon2Base> THasher::ArgonHasher(Default
     1 // number of threads and lanes
 ).Release());
 
-std::unique_ptr<NActors::IActor> CreateHasher(
+std::unique_ptr<IActor> CreateHasher(
     TActorId sender, const TStaticCredentials& creds,
-   const std::vector<EHashType>& hashTypes, TPasswordComplexity passwordComplexity
+   const std::vector<EHashType::HashType>& hashTypes, TPasswordComplexity passwordComplexity
 ) {
     return std::make_unique<THasher>(sender, creds, hashTypes, passwordComplexity);
 }

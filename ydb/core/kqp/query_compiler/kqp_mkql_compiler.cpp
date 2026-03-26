@@ -427,7 +427,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("BlockHashJoinCore",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 5, "BlockHashJoinCore should have 5 arguments");
+            YQL_ENSURE(node.ChildrenSize() == 8, "BlockHashJoinCore should have 8 arguments");
 
             // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
@@ -479,16 +479,25 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
                     renames.emplace_back(index, EJoinSide::kLeft);
                 }
-                for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
-                    renames.emplace_back(index, EJoinSide::kRight);
+                if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
+                    for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
+                        renames.emplace_back(index, EJoinSide::kRight);       
+                    }
                 }
                 return TGraceJoinRenames::FromDq(renames);
             }();
 
 
-            // Use the specialized DqBlockHashJoin method
+            NMiniKQL::TBlockHashJoinSettings settings;
+            for (const auto& setting : node.Child(7)->Children()) {
+                if (setting->Child(0)->Content() == "BuildSide") {
+                    if (setting->Child(1)->Content() == "Left") {
+                        settings.BuildSide = NMiniKQL::EBuildSide::Left;
+                    }
+                }
+            }
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,
-                leftKeyColumns, rightKeyColumns, graceJoinRenames.Left, graceJoinRenames.Right, returnType);
+                leftKeyColumns, rightKeyColumns, graceJoinRenames.Left, graceJoinRenames.Right, returnType, settings);
         });
 
     compiler->AddCallable(TDqPhyHashCombine::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {

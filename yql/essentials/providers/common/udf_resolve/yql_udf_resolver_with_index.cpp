@@ -16,8 +16,9 @@
 #include <util/system/guard.h>
 #include <util/system/mutex.h>
 
-namespace NYql {
-namespace NCommon {
+#include <utility>
+
+namespace NYql::NCommon {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -25,7 +26,7 @@ using namespace NKikimr::NMiniKQL;
 class TUdfResolverWithIndex: public IUdfResolver {
     class TResourceFile: public TThrRefBase {
     public:
-        typedef TIntrusivePtr<TResourceFile> TPtr;
+        using TPtr = TIntrusivePtr<TResourceFile>;
 
     public:
         TResourceFile(TString alias, const TVector<TString>& modules, TFileLinkPtr link)
@@ -57,9 +58,9 @@ class TUdfResolverWithIndex: public IUdfResolver {
 
 public:
     TUdfResolverWithIndex(TUdfIndex::TPtr udfIndex, IUdfResolver::TPtr fallback, TFileStoragePtr fileStorage)
-        : UdfIndex_(udfIndex)
-        , Fallback_(fallback)
-        , FileStorage_(fileStorage)
+        : UdfIndex_(std::move(udfIndex))
+        , Fallback_(std::move(fallback))
+        , FileStorage_(std::move(fileStorage))
     {
         Y_ENSURE(UdfIndex_);
         Y_ENSURE(FileStorage_);
@@ -266,5 +267,4 @@ IUdfResolver::TPtr CreateUdfResolverWithIndex(TUdfIndex::TPtr udfIndex, IUdfReso
     return new TUdfResolverWithIndex(udfIndex, fallback, fileStorage);
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

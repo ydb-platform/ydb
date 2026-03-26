@@ -43,5 +43,18 @@ ELSEIF (OS_ANDROID AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_ANDROID AND ARC
         zoneinfo_android.go
         zoneinfo_read.go
     )
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND NOT CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        format.go
+        format_rfc3339.go
+        sleep.go
+        sys_unix.go
+        tick.go
+        time.go
+        zoneinfo.go
+        zoneinfo_goroot.go
+        zoneinfo_read.go
+        zoneinfo_wasip1.go
+    )
 ENDIF()
 END()

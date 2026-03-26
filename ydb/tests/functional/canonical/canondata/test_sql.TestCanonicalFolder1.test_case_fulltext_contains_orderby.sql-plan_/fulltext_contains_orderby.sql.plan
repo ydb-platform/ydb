@@ -1,0 +1,84 @@
+{
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 5,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 3
+                                    }
+                                ],
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 4,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 3,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort",
+                                        "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.Key"
+                                            }
+                                        ],
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "ReadFullTextIndex",
+                                                "Operators": [
+                                                    {
+                                                        "Columns": "Key, Text",
+                                                        "Index": "fulltext_idx",
+                                                        "Inputs": [],
+                                                        "Name": "ReadFullTextIndex",
+                                                        "Query": "\"cats\"",
+                                                        "QueryColumns": "Text",
+                                                        "SearchTerms": "cats",
+                                                        "Table": "/local/base_fulltext_contains_orderby_sql_plan/FullTextTable"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "Key (Asc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
+    },
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": []
+}

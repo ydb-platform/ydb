@@ -1,17 +1,18 @@
 #include "session_runner_common.h"
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
+
 #include <util/string/builder.h>
 
 namespace NYdb::NConsoleClient {
 
-TSessionRunnerBase::TSessionRunnerBase(const TLineReaderSettings& settings, const TInteractiveLogger& log)
-    : Log(log)
-    , Settings(settings)
+TSessionRunnerBase::TSessionRunnerBase(const TLineReaderSettings& settings)
+    : Settings(settings)
 {}
 
 ILineReader::TPtr TSessionRunnerBase::Setup() {
     LineReader.reset();
-    LineReader = CreateLineReader(Settings, Log);
+    LineReader = CreateLineReader(Settings);
     return LineReader;
 }
 

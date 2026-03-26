@@ -1,6 +1,24 @@
+* When a profile is explicitly specified with the `-p`/`--profile` option, the active profile is no longer used: all options are taken only from the specified profile, environment variables, and command line. This avoids confusion when the chosen profile was unexpectedly supplemented with settings from the active profile.
+* Added `--tx-mode` option to `ydb workload * run` benchmark commands, allowing to set the transaction mode (e.g. `no-tx`, `serializable-rw`, `snapshot-rw`).
+
+## 2.29.0 ##
+
+* Fixed Out Of Memory issue in the `ydb workload query run` command for queries with large result sets.
+* Improved the `ydb init` and `ydb config profile` commands with interactive menus.
+* Added download progress bar to the `ydb update` command.
+* Improved progress bars: consistent MiB/GiB units, stable speed display, dual progress bar for the `ydb import file` command showing both in-progress and confirmed bytes.
+* Interactive mode enhancements:
+  * Introduced `/help` for interactive command guidance.
+  * Introduced the `/config` command, providing an interactive dialog to view and customize CLI settings, including:
+    * Enabling/disabling autocompletion hints.
+    * Enabling/disabling color output in YDB CLI.
+    * Interactively selecting a color theme from a set of predefined options, with support for cloning and customizing your own theme.
 * Added the `Created by`, `Create time` and `End time` fields to the "build index" and the "execute script" operations in the `ydb operation` subcommands.
 * Added the `--include-index-data` option to the `ydb export s3` command, enabling index data export.
 * Added the `--index-population-mode` option to the `ydb import s3` command, allowing selection of the index population mode (e.g. build or import).
+* Added unified time interval format support across CLI commands. Options accepting time durations now support explicit time units (e.g., `5s`, `2m`, `1h`) while maintaining backward compatibility with plain numbers interpreted using their original default units.
+* Fixed static credentials parsing to avoid using a profile password when the username comes from another source.
+* Added "Cache mode" option to column families description instead of deprecated "Keep in memory" option in the `ydb scheme describe` command.
 
 ## 2.28.0 ##
 

@@ -143,6 +143,7 @@ public:
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
         config.Opts->AddLongOption("dry-run", "test changes without applying").NoArgument();
+        config.Opts->AddLongOption("print-schema", "print the resulting schema").NoArgument();
         config.SetFreeArgsNum(1, 1);
         SetFreeArgTitle(0, "<SCHEME CHANGES>", "Scheme changes json to apply");
     }
@@ -158,7 +159,19 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        return RunTabletCommon(config);
+        int status = RunTabletCommon(config);
+        if (status != 0) {
+            return status;
+        }
+
+        if (config.ParseResult->Has("print-schema")) {
+            const auto& schema = Response.schema();
+            if (!schema.empty()) {
+                Cout << schema << Endl;
+            }
+        }
+
+        return 0;
     }
 
     virtual grpc::Status Send(

@@ -68,12 +68,28 @@ struct TKikimrQueryLimits {
 };
 
 struct TIndexDescription {
+    struct TLocalBloomFilterDescription {
+        std::optional<double> FalsePositiveProbability;
+    };
+
+    struct TLocalBloomNgramFilterDescription {
+        ui32 NgramSize = 0;
+        ui32 HashesCount = 0;
+        ui32 FilterSizeBytes = 0;
+        ui32 RecordsCount = 0;
+        bool CaseSensitive = true;
+    };
+
     enum class EType : ui32 {
         GlobalSync = 0,
         GlobalAsync = 1,
         GlobalSyncUnique = 2,
         GlobalSyncVectorKMeansTree = 3,
-        GlobalFulltext = 4,
+        GlobalFulltextPlain = 4,
+        GlobalFulltextRelevance = 5,
+        LocalBloomFilter = 6,
+        LocalBloomNgramFilter = 7,
+        GlobalJson = 8,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -93,7 +109,12 @@ struct TIndexDescription {
     const ui64 LocalPathId;
     const ui64 PathOwnerId;
 
-    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription, NKikimrSchemeOp::TFulltextIndexDescription>;
+    using TSpecializedIndexDescription = std::variant<
+        std::monostate,
+        NKikimrKqp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::TFulltextIndexDescription,
+        TLocalBloomFilterDescription,
+        TLocalBloomNgramFilterDescription>;
     TSpecializedIndexDescription SpecializedIndexDescription;
 
     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
@@ -124,6 +145,7 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
+            case EType::GlobalJson:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -133,12 +155,17 @@ struct TIndexDescription {
                 SpecializedIndexDescription = std::move(vectorIndexDescription);
                 break;
             }
-            case EType::GlobalFulltext: {
+            case EType::GlobalFulltextPlain:
+            case EType::GlobalFulltextRelevance: {
                 NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
                 *fulltextIndexDescription.MutableSettings() = index.GetFulltextIndexDescription().GetSettings();
                 SpecializedIndexDescription = std::move(fulltextIndexDescription);
                 break;
             }
+            case EType::LocalBloomFilter:
+            case EType::LocalBloomNgramFilter:
+                YQL_ENSURE(false, << "Local bloom index type is not represented by NKikimrSchemeOp::TIndexDescription");
+                break;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(Type));
         }
@@ -158,14 +185,22 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
+            case EType::GlobalJson:
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
             case EType::GlobalSyncVectorKMeansTree:
                 SpecializedIndexDescription = message->GetVectorIndexKmeansTreeDescription();
                 break;
-            case EType::GlobalFulltext:
+            case EType::GlobalFulltextPlain:
+            case EType::GlobalFulltextRelevance:
                 SpecializedIndexDescription = message->GetFulltextIndexDescription();
+                break;
+            case EType::LocalBloomFilter:
+                SpecializedIndexDescription = TLocalBloomFilterDescription{};
+                break;
+            case EType::LocalBloomNgramFilter:
+                SpecializedIndexDescription = TLocalBloomNgramFilterDescription{};
                 break;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(Type));
@@ -182,8 +217,12 @@ struct TIndexDescription {
                 return TIndexDescription::EType::GlobalSyncUnique;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
                 return TIndexDescription::EType::GlobalSyncVectorKMeansTree;
-            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext:
-                return TIndexDescription::EType::GlobalFulltext;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain:
+                return TIndexDescription::EType::GlobalFulltextPlain;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance:
+                return TIndexDescription::EType::GlobalFulltextRelevance;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+                return TIndexDescription::EType::GlobalJson;
             default:
                 YQL_ENSURE(false, << NKikimr::NTableIndex::InvalidIndexType(indexType));
         }
@@ -199,8 +238,16 @@ struct TIndexDescription {
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
             case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
-            case NYql::TIndexDescription::EType::GlobalFulltext:
-                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext;
+            case NYql::TIndexDescription::EType::GlobalFulltextPlain:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain;
+            case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance;
+            case NYql::TIndexDescription::EType::GlobalJson:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson;
+            case NYql::TIndexDescription::EType::LocalBloomFilter:
+            case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
+                YQL_ENSURE(false, << "Local bloom index type can't be converted to NKikimrSchemeOp::EIndexType");
+                break;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(indexType));
         }
@@ -230,14 +277,22 @@ struct TIndexDescription {
             case EType::GlobalSync:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
+            case EType::GlobalJson:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
                 break;
             case EType::GlobalSyncVectorKMeansTree:
                 *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
                 break;
-            case EType::GlobalFulltext:
+            case EType::GlobalFulltextPlain:
+            case EType::GlobalFulltextRelevance:
                 *message->MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
+                break;
+            case EType::LocalBloomFilter:
+                Y_ASSERT(std::holds_alternative<TLocalBloomFilterDescription>(SpecializedIndexDescription));
+                break;
+            case EType::LocalBloomNgramFilter:
+                Y_ASSERT(std::holds_alternative<TLocalBloomNgramFilterDescription>(SpecializedIndexDescription));
                 break;
         }
     }
@@ -263,14 +318,12 @@ struct TIndexDescription {
                     return false;
                 }
                 return true;
-            case EType::GlobalFulltext:
-                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
-                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
-                const auto& settings = fulltextDesc->GetSettings();
-                if (settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT) {
-                    // Only FLAT fulltext index update is supported at the moment
-                    return true;
-                }
+            case EType::GlobalFulltextPlain:
+            case EType::GlobalFulltextRelevance:
+                return true;
+            case EType::GlobalJson:
+            case EType::LocalBloomFilter:
+            case EType::LocalBloomNgramFilter:
                 return false;
         }
     }
@@ -281,16 +334,23 @@ struct TIndexDescription {
             case EType::GlobalSyncUnique:
             case EType::GlobalAsync:
             case EType::GlobalSyncVectorKMeansTree:
+            case EType::GlobalFulltextPlain:
+            case EType::GlobalFulltextRelevance:
+            case EType::GlobalJson:
                 return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
-            case EType::GlobalFulltext:
-                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
-                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
-                const auto& settings = fulltextDesc->GetSettings();
-                return NKikimr::NTableIndex::GetFulltextImplTables(settings.layout());
+            case EType::LocalBloomFilter:
+            case EType::LocalBloomNgramFilter:
+                return {};
         }
         return {};
     }
 };
+
+void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription& desc,
+    const TString& name, const TString& value, TString& error);
+
+void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterDescription& desc,
+    const TString& name, const TString& value, TString& error);
 
 struct TColumnFamily {
     TString Name;
@@ -391,6 +451,11 @@ struct TKikimrPathId {
     }
 };
 
+struct TColumnCompression {
+    TMaybe<TString> Algorithm;
+    TMaybe<i64> Level;
+};
+
 struct TKikimrColumnMetadata {
 
     TString Name;
@@ -400,6 +465,7 @@ struct TKikimrColumnMetadata {
     NKikimr::NScheme::TTypeInfo TypeInfo;
     TString TypeMod;
     TVector<TString> Families;
+    TMaybe<TColumnCompression> Compression;
     NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
     TString DefaultFromSequence;
     TKikimrPathId DefaultFromSequencePathId;
@@ -441,6 +507,16 @@ struct TKikimrColumnMetadata {
             message->HasTypeInfo() ? &message->GetTypeInfo() : nullptr);
         TypeInfo = typeInfoMod.TypeInfo;
         TypeMod = typeInfoMod.TypeMod;
+
+        if (message->HasCompression()) {
+            Compression = TColumnCompression();
+            if (message->GetCompression().HasAlgorithm()) {
+                Compression->Algorithm = message->GetCompression().GetAlgorithm();
+            }
+            if (message->GetCompression().HasLevel()) {
+                Compression->Level = message->GetCompression().GetLevel();
+            }
+        }
     }
 
     void SetDefaultFromSequence() {
@@ -480,6 +556,15 @@ struct TKikimrColumnMetadata {
         }
         for(auto& family: Families) {
             message->AddFamily(family);
+        }
+        if (Compression) {
+            auto compression = message->MutableCompression();
+            if (const auto maybeAlgorithm = Compression->Algorithm) {
+                compression->SetAlgorithm(maybeAlgorithm->c_str());
+            }
+            if (const auto maybeLevel = Compression->Level) {
+                compression->SetLevel(*maybeLevel);
+            }
         }
     }
 
@@ -943,6 +1028,16 @@ struct TReplicationSettingsBase {
         EFailoverMode FailoverMode;
     };
 
+    struct TMetricsSettings {
+        enum class EMetricsLevel {
+            Default = 0,
+            Database = 1,
+            Object = 2,
+            Detailed = 3,
+        };
+        EMetricsLevel Level;
+    };
+
     TMaybe<TString> ConnectionString;
     TMaybe<TString> Endpoint;
     TMaybe<TString> Database;
@@ -951,6 +1046,7 @@ struct TReplicationSettingsBase {
     TMaybe<TIamCredentials> IamCredentials;
     TMaybe<TString> CaCert;
     TMaybe<TStateDone> StateDone;
+    TMaybe<TMetricsSettings> MetricsSettings;
     bool StatePaused = false;
     bool StateStandBy = false;
 
@@ -1173,6 +1269,7 @@ public:
     using TPtr = TIntrusivePtr<IKikimrGateway>;
 
     struct TGenericResult : public NCommon::TOperationResult {
+        TMaybe<TString> OperationId;
     };
 
     struct TListPathResult : public TGenericResult {
@@ -1245,6 +1342,11 @@ public:
             return *this;
         }
 
+        TLoadTableMetadataSettings& WithTopicsIo(bool enable) {
+            AllowTopicsIo = enable;
+            return *this;
+        }
+
         NKikimr::NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
         THashMap<TString, TString> ReadAttributes;
         bool RequestStats_ = false;
@@ -1252,6 +1354,7 @@ public:
         bool WithExternalDatasources_ = false;
         bool RequestAuthInfo_ = true;
         bool SysViewRewritten_ = false;
+        bool AllowTopicsIo = false;
     };
 
     class IKqpTableMetadataLoader : public std::enable_shared_from_this<IKqpTableMetadataLoader> {

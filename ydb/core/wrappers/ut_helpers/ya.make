@@ -8,6 +8,7 @@ PEERDIR(
 )
 
 SRCS(
+    fs_mock.cpp
     s3_mock.cpp
 )
 

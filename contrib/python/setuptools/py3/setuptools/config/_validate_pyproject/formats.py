@@ -164,12 +164,15 @@ class _TroveClassifier:
     """
 
     downloaded: typing.Union[None, "Literal[False]", typing.Set[str]]
+    """
+    None => not cached yet
+    False => unavailable
+    set => cached values
+    """
 
     def __init__(self) -> None:
         self.downloaded = None
         self._skip_download = False
-        # None => not cached yet
-        # False => cache not available
         self.__name__ = "trove_classifier"  # Emulate a public function
 
     def _disable_download(self) -> None:
@@ -351,7 +354,7 @@ def python_entrypoint_reference(value: str) -> bool:
         obj = rest
 
     module_parts = module.split(".")
-    identifiers = _chain(module_parts, obj.split(".")) if rest else module_parts
+    identifiers = _chain(module_parts, obj.split(".")) if rest else iter(module_parts)
     return all(python_identifier(i.strip()) for i in identifiers)
 
 
@@ -373,3 +376,27 @@ def uint(value: builtins.int) -> bool:
 def int(value: builtins.int) -> bool:
     r"""Signed 64-bit integer (:math:`-2^{63} \leq x < 2^{63}`)"""
     return -(2**63) <= value < 2**63
+
+
+try:
+    from packaging import licenses as _licenses
+
+    def SPDX(value: str) -> bool:
+        """See :ref:`PyPA's License-Expression specification
+        <pypa:core-metadata-license-expression>` (added in :pep:`639`).
+        """
+        try:
+            _licenses.canonicalize_license_expression(value)
+            return True
+        except _licenses.InvalidLicenseExpression:
+            return False
+
+except ImportError:  # pragma: no cover
+    _logger.warning(
+        "Could not find an up-to-date installation of `packaging`. "
+        "License expressions might not be validated. "
+        "To enforce validation, please install `packaging>=24.2`."
+    )
+
+    def SPDX(value: str) -> bool:
+        return True

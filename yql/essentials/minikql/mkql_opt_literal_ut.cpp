@@ -5,8 +5,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TRuntimeNode MakeVoidCallable(TProgramBuilder& pgmBuilder) {
     TCallableBuilder callableBuilder(pgmBuilder.GetTypeEnvironment(), "Effect", pgmBuilder.NewVoid().GetStaticType());
@@ -338,5 +337,4 @@ Y_UNIT_TEST(TestExtend) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLLPOTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

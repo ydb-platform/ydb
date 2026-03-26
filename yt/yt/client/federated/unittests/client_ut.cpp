@@ -9,6 +9,8 @@
 #include <yt/yt/client/unittests/mock/connection.h>
 #include <yt/yt/client/unittests/mock/transaction.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/net/local_address.h>
 
 #include <util/datetime/base.h>
@@ -17,11 +19,12 @@ namespace NYT::NClient::NFederated {
 namespace {
 
 using namespace NYT::NApi;
+using namespace NConcurrency;
 
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::Return;
-using ::testing::ReturnRef;
+using ::testing::ReturnRefOfCopy;
 using ::testing::StrictMock;
 
 using TStrictMockClient = StrictMock<NApi::TMockClient>;
@@ -143,7 +146,7 @@ TEST(TFederatedClientTest, Basic)
     // From `vla`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = WaitForFast(result).Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -152,13 +155,13 @@ TEST(TFederatedClientTest, Basic)
     // Error from `vla`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        ASSERT_ANY_THROW(result.Get().ValueOrThrow());
+        ASSERT_ANY_THROW(WaitForFast(result).ValueOrThrow());
     }
 
     // From `sas`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = WaitForFast(result).Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -176,7 +179,7 @@ TEST(TFederatedClientTest, CheckHealth)
     auto mockConnectionVla = New<TStrictMockConnection>();
     std::optional<std::string> clusterName("vla-cluster");
     EXPECT_CALL(*mockConnectionVla, GetClusterName())
-        .WillRepeatedly(ReturnRef(clusterName));
+        .WillRepeatedly(ReturnRefOfCopy(clusterName));
 
     auto mockClientVla = New<TStrictMockClient>();
     EXPECT_CALL(*mockClientVla, GetConnection())
@@ -228,7 +231,7 @@ TEST(TFederatedClientTest, CheckHealth)
     // From `vla`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = WaitForFast(result).Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -240,7 +243,7 @@ TEST(TFederatedClientTest, CheckHealth)
     // From `sas` because `vla` was marked as unhealthy after CheckClustersHealth.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = WaitForFast(result).Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -254,7 +257,7 @@ TEST(TFederatedClientTest, CheckHealth)
     // From `vla` because it became ok again.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = WaitForFast(result).Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -308,7 +311,7 @@ TEST(TFederatedClientTest, Transactions)
     // Wait for the first check of clusters healths.
     Sleep(TDuration::Seconds(2));
 
-    auto transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).Get().Value();
+    auto transaction = WaitForFast(federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet)).Value();
 
     // Check mock transaction doesn't work with sticky proxy address.
     {
@@ -319,7 +322,7 @@ TEST(TFederatedClientTest, Transactions)
     // From `vla`.
     {
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = WaitForFast(result).Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -328,7 +331,7 @@ TEST(TFederatedClientTest, Transactions)
     // Error from `vla`.
     {
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);
-        ASSERT_ANY_THROW(result.Get().ValueOrThrow());
+        ASSERT_ANY_THROW(WaitForFast(result).ValueOrThrow());
     }
 
     auto mockTransactionSas = New<TStrictMockTransaction>();
@@ -340,10 +343,10 @@ TEST(TFederatedClientTest, Transactions)
 
     // Creating next transaction in `sas`.
     {
-        transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).Get().Value();
+        transaction = WaitForFast(federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet)).Value();
 
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = WaitForFast(result).Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -403,7 +406,7 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
     // Go to `vla`, getting error, retry via `sas` and getting response from `sas`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = WaitForFast(result).Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -426,10 +429,10 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
 
     // Try to start transaction in `vla`, getting error, retry via `sas`, creating transaction and getting response from `sas`.
     {
-        auto transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).Get().Value();
+        auto transaction = WaitForFast(federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet)).Value();
 
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value().Rowset->GetRows();
+        auto rows = WaitForFast(result).Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -470,7 +473,7 @@ TEST(TFederatedClientTest, AttachTransaction)
         .WillRepeatedly(Return(NObjectClient::TCellTag(123)));
     std::optional<std::string> clusterNameSas = "cluster-sas";
     EXPECT_CALL(*mockConnectionSas, GetClusterName())
-        .WillRepeatedly(ReturnRef(clusterNameSas));
+        .WillRepeatedly(ReturnRefOfCopy(clusterNameSas));
     EXPECT_CALL(*mockClientSas, GetConnection())
         .WillRepeatedly(Return(mockConnectionSas));
 
@@ -479,7 +482,7 @@ TEST(TFederatedClientTest, AttachTransaction)
         .WillRepeatedly(Return(NObjectClient::TCellTag(456)));
     std::optional<std::string> clusterNameVla = "cluster-vla";
     EXPECT_CALL(*mockConnectionVla, GetClusterName())
-        .WillRepeatedly(ReturnRef(clusterNameVla));
+        .WillRepeatedly(ReturnRefOfCopy(clusterNameVla));
     EXPECT_CALL(*mockClientVla, GetConnection())
         .WillRepeatedly(Return(mockConnectionVla));
 

@@ -68,8 +68,14 @@ IGraphTransformer::TStatus YqlAggFactoryWrapper(
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!ctx.Types.Modules) {
@@ -125,6 +131,11 @@ IGraphTransformer::TStatus YqlAggWrapper(
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!input->Child(0)->IsCallable("YqlAggFactory")) {
         ctx.Expr.AddError(TIssue(
             input->Child(0)->Pos(ctx.Expr),
@@ -133,7 +144,17 @@ IGraphTransformer::TStatus YqlAggWrapper(
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     YQL_ENSURE(input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit);
+
+    if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
 
     if (!EnsureTuple(*input->Child(1), ctx.Expr)) {
         ctx.Expr.AddError(TIssue(
@@ -148,8 +169,14 @@ IGraphTransformer::TStatus YqlAggWrapper(
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureAtom(setting->Head(), ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(setting->Head(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         TStringBuf content = setting->Head().Content();
@@ -167,6 +194,11 @@ IGraphTransformer::TStatus YqlAggWrapper(
                 TStringBuilder() << "Unexpected setting " << content));
             return IGraphTransformer::TStatus::Error;
         }
+    }
+
+    if (input->Child(2)->GetTypeAnn() && input->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(2)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!input->Child(2)->IsCallable("Void")) {
@@ -191,6 +223,11 @@ IGraphTransformer::TStatus YqlAggWrapper(
     YQL_ENSURE(traitsFactory);
 
     TExprNode::TPtr body = input->Child(3);
+    if (body->GetTypeAnn() && body->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(body->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     YQL_ENSURE(input->ChildrenSize() <= 4);
 
     // clang-format off

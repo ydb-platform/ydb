@@ -1,0 +1,110 @@
+--- contrib/libs/grpc/src/core/lib/event_engine/forkable.cc
++++ contrib/libs/grpc/src/core/lib/event_engine/forkable.cc
+@@ -31,6 +31,20 @@
+ 
+ #include "src/core/lib/debug/trace.h"
+ 
++#include "absl/base/thread_annotations.h"
++#include "src/core/lib/gprpp/no_destruct.h"
++#include "src/core/lib/gprpp/sync.h"
++
++namespace {
++grpc_core::NoDestruct<grpc_core::Mutex> g_mu;
++bool g_registered ABSL_GUARDED_BY(g_mu){false};
++using ObjectGroupForkHandler = grpc_event_engine::experimental::ObjectGroupForkHandler;
++grpc_core::NoDestruct<std::vector<ObjectGroupForkHandler*>> g_forkables ABSL_GUARDED_BY(g_mu);
++void PrepareFork();
++void PostforkParent();
++void PostforkChild();
++}
++
+ namespace grpc_event_engine {
+ namespace experimental {
+ 
+@@ -72,8 +86,9 @@ void ObjectGroupForkHandler::RegisterForkable(
+   GPR_ASSERT(!is_forking_);
+   forkables_.emplace_back(forkable);
+ #ifdef GRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK
++  grpc_core::MutexLock lock(g_mu.get());
+   if (!std::exchange(registered_, true)) {
+-    pthread_atfork(prepare, parent, child);
++    g_forkables->push_back(this);
+   }
+ #endif  // GRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK
+ }
+@@ -134,3 +149,47 @@ void ObjectGroupForkHandler::PostforkChild() {
+ 
+ }  // namespace experimental
+ }  // namespace grpc_event_engine
++
++namespace grpc_event_engine {
++namespace experimental {
++void RegisterForkHandlers() {
++  if (IsForkEnabled()) {
++    grpc_core::MutexLock lock(g_mu.get());
++    if (!std::exchange(g_registered, true)) {
++#ifdef GRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK
++      pthread_atfork(PrepareFork, PostforkParent, PostforkChild);
++#endif
++    }
++  }
++}
++}
++}
++
++namespace {
++void PrepareFork() {
++  if (!grpc_event_engine::experimental::IsForkEnabled()) return;
++
++  grpc_core::MutexLock lock(g_mu.get());
++  for (auto it = g_forkables->rbegin(); it != g_forkables->rend(); ++it) {
++    (*it)->Prefork();
++  }
++}
++
++void PostforkParent() {
++  if (!grpc_event_engine::experimental::IsForkEnabled()) return;
++
++  grpc_core::MutexLock lock(g_mu.get());
++  for (auto* forkable : *g_forkables) {
++    forkable->PostforkParent();
++  }
++}
++
++void PostforkChild() {
++  if (!grpc_event_engine::experimental::IsForkEnabled()) return;
++
++  grpc_core::MutexLock lock(g_mu.get());
++  for (auto* forkable : *g_forkables) {
++    forkable->PostforkChild();
++  }
++}
++}
+--- contrib/libs/grpc/src/core/lib/event_engine/forkable.h
++++ contrib/libs/grpc/src/core/lib/event_engine/forkable.h
+@@ -23,6 +23,15 @@
+ namespace grpc_event_engine {
+ namespace experimental {
+ 
++// Register fork handlers with the system, enabling fork support.
++//
++// This provides pthread-based support for fork events. Any objects that
++// implement Forkable can register themselves with this system using
++// ManageForkable, and their respective methods will be called upon fork.
++//
++// This should be called once upon grpc_initialization.
++void RegisterForkHandlers();
++
+ // We've faced flickering crash in grpc during fork.
+ // Crash is observed in different places before 'execv' is called.
+ // It is mentioned in https://man7.org/linux/man-pages/man2/fork.2.html
+--- contrib/libs/grpc/src/core/lib/surface/init.cc
++++ contrib/libs/grpc/src/core/lib/surface/init.cc
+@@ -95,6 +95,7 @@ static void do_basic_init(void) {
+   gpr_time_init();
+   grpc_core::PrintExperimentsList();
+   grpc_core::Fork::GlobalInit();
++  grpc_event_engine::experimental::RegisterForkHandlers();
+   grpc_fork_handlers_auto_register();
+   grpc_tracer_init();
+   grpc_client_channel_global_init_backup_polling();

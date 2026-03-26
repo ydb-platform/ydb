@@ -13,7 +13,9 @@ private:
     std::shared_ptr<NOlap::NImport::TImportTask> ImportTask;
     bool TaskExists = false;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTask;
+    std::unique_ptr<NTabletFlatExecutor::ITransaction> TxRemove;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAbort;
+    THashSet<TActorId> NotifySubscribers;
     using TProposeResult = TTxController::TProposeResult;
     static inline auto Registrator = TFactory::TRegistrator<TRestoreTransactionOperator>(NKikimrTxColumnShard::TX_KIND_RESTORE);
 
@@ -25,6 +27,8 @@ private:
     virtual bool DoIsAsync() const override;
     virtual bool DoParse(TColumnShard& owner, const TString& data) override;
     virtual TString DoDebugString() const override;
+    
+    virtual void RegisterSubscriber(const TActorId &actorId) override;
 
   public:
     using TBase::TBase;

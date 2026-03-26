@@ -44,6 +44,10 @@ public:
         return &State_->Configuration->Tokens;
     }
 
+    const THashSet<TString>& GetValidClusters() override {
+        return State_->Configuration->GetValidClusters();
+    }
+
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer_;
@@ -169,6 +173,14 @@ public:
 
     IDqIntegration* GetDqIntegration() override {
         return State_->IsRtmrMode() ? nullptr : State_->DqIntegration.Get();
+    }
+
+    IYtflowIntegration* GetYtflowIntegration() override {
+        return State_->YtflowIntegration.Get();
+    }
+
+    IYtflowOptimization* GetYtflowOptimization() override {
+        return State_->YtflowOptimization.Get();
     }
 
 private:

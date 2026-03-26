@@ -10,6 +10,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
+#include <ydb/core/security/sasl/static_credentials_provider.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -182,6 +183,7 @@ private:
         // do not check connect rights for the deprecated requests without database
         // remove this along with AllowYdbRequestsWithoutDatabase flag
         bool skipCheckConnectRights = false;
+        const EEmptyDatabaseMode emptyDatabaseMode = requestBaseCtx->GetEmptyDatabaseMode();
 
         if (state.State == NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
             if (IsBootstrapClusterEvent(event)) {
@@ -195,7 +197,9 @@ private:
             } else {
                 if (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
                     Counters->IncEmptyDatabaseNameCounter();
-                    if (DynamicNode && !AllowYdbRequestsWithoutDatabase) {
+                    if (!AllowYdbRequestsWithoutDatabase &&
+                        (DynamicNode || emptyDatabaseMode == EEmptyDatabaseMode::EmptyDatabaseForbidden))
+                    {
                         requestBaseCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
                         requestBaseCtx->FinishSpan();
                         return;
@@ -549,12 +553,15 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
     }
 
     if (describeScheme.GetPathDescription().HasDomainDescription()
-        && describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()
-        && describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0) {
+        && describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState())
+    {
+        const auto& securityState = describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState();
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updating SecurityState for " << databaseName);
-        Send(MakeTicketParserID(), new TEvTicketParser::TEvUpdateLoginSecurityState(
-            describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState()
-            ));
+        NSasl::TStaticCredentialsProvider::GetInstance().UpdateDatabaseUsers(securityState);
+
+        if (securityState.PublicKeysSize() > 0) {
+            Send(MakeTicketParserID(), new TEvTicketParser::TEvUpdateLoginSecurityState(securityState));
+        }
     } else {
         if (!describeScheme.GetPathDescription().HasDomainDescription()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no DomainDescription");
@@ -597,6 +604,7 @@ void TGRpcRequestProxyImpl::ForgetDatabase(const TString& database) {
         DeferredEvents.erase(itDeferredEvents);
     }
     Databases.erase(database);
+    NSasl::TStaticCredentialsProvider::GetInstance().DeleteDatabaseUsers(database);
 }
 
 void TGRpcRequestProxyImpl::SubscribeToDatabase(const TString& database) {

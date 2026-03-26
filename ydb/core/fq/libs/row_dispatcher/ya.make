@@ -4,6 +4,7 @@ SRCS(
     actors_factory.cpp
     coordinator.cpp
     leader_election.cpp
+    local_leader_election.cpp
     probes.cpp
     row_dispatcher.cpp
     row_dispatcher_service.cpp
@@ -31,6 +32,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto
     ydb/library/yql/providers/pq/common
+    ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/provider
 
     ydb/public/sdk/cpp/adapters/issue

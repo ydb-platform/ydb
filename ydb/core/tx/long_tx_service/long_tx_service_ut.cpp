@@ -237,7 +237,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         TTenantTestRuntime runtime(MakeTenantTestConfig(true));
         runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
 
-        TLockHandle handle(123, runtime.GetActorSystem(0));
+        TInstant lockTimestamp = TInstant::MicroSeconds(123456789);
+        TLockHandle handle(123, runtime.GetActorSystem(0), lockTimestamp);
 
         auto node1 = runtime.GetNodeId(0);
         auto sender1 = runtime.AllocateEdgeActor(0);
@@ -280,6 +281,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 123u);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED);
+            UNIT_ASSERT_VALUES_EQUAL(msg->GetLockTimestamp(), lockTimestamp);
         }
 
         {
@@ -292,6 +294,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 123u);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED);
+            UNIT_ASSERT_VALUES_EQUAL(msg->GetLockTimestamp(), lockTimestamp);
         }
 
         {

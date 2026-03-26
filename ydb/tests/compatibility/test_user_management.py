@@ -10,8 +10,11 @@ class TestUserManagementRollingUpgrade(RollingUpgradeAndDowngradeFixture):
         yield from self.setup_cluster()
 
     def check_login(self, username, password):
-        driver_config = self.driver._driver_config
-        driver_config.credentials = ydb.StaticCredentials.from_user_password(username, password)
+        driver_config = ydb.DriverConfig(
+            database=self.database_path,
+            endpoint=self.endpoints[0],
+            credentials=ydb.StaticCredentials.from_user_password(username, password),
+        )
 
         with ydb.Driver(driver_config) as test_driver:
             with ydb.QuerySessionPool(test_driver) as session_pool:

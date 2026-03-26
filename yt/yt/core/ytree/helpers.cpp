@@ -23,7 +23,7 @@ constinit const auto Logger = YTreeLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const IAttributeDictionary& lhs, const IAttributeDictionary& rhs)
+bool operator==(const IAttributeDictionary& lhs, const IAttributeDictionary& rhs)
 {
     auto lhsPairs = lhs.ListPairs();
     auto rhsPairs = rhs.ListPairs();

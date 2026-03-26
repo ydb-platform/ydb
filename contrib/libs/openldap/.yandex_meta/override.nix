@@ -1,5 +1,5 @@
 pkgs: attrs: with pkgs; rec {
-  version = "2.6.10";
+  version = "2.6.13";
 
   versionWithUnderscores = "${lib.replaceStrings ["."] ["_"] version}";
 
@@ -7,7 +7,7 @@ pkgs: attrs: with pkgs; rec {
     owner = "openldap";
     repo = "openldap";
     rev = "OPENLDAP_REL_ENG_${versionWithUnderscores}";
-    hash = "sha256-KHVcSFkIyPR6LxDM+33GAWp6mAEgZhpBoUN77WFsT4Q=";
+    hash = "sha256-x+Ch0UvKSCerKKs7h2x/b4lRcq3P1b8cCcNiPQ54x6o=";
   };
 
   patches = [];

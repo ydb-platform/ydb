@@ -6,9 +6,14 @@
 #include <yql/essentials/public/purecalc/io_specs/protobuf/spec.h>
 #include <yql/essentials/public/purecalc/ut/protos/test_structs.pb.h>
 
+#include <utility>
+
 using namespace NYql::NPureCalc;
 
 namespace {
+
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 class TStatelessInputSpec: public TInputSpecBase {
 public:
     TStatelessInputSpec()
@@ -32,7 +37,7 @@ private:
 
 class TStatelessInputConsumer: public IConsumer<const NYql::NUdf::TUnboxedValue&> {
 public:
-    TStatelessInputConsumer(TWorkerHolder<IPushStreamWorker> worker)
+    explicit TStatelessInputConsumer(TWorkerHolder<IPushStreamWorker> worker)
         : Worker_(std::move(worker))
     {
     }
@@ -68,8 +73,8 @@ class TStatelessConsumer: public IConsumer<NPureCalcProto::TStringMessage*> {
     ui64 RowId_ = 0;
 
 public:
-    TStatelessConsumer(const TString& expectedData, ui64 expectedRows)
-        : ExpectedData_(expectedData)
+    TStatelessConsumer(TString expectedData, ui64 expectedRows)
+        : ExpectedData_(std::move(expectedData))
         , ExpectedRows_(expectedRows)
     {
     }

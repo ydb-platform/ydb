@@ -27,8 +27,11 @@ void UpdateValueHll(TUnversionedValue value, std::vector<TColumnarHyperLogLogDig
     if (value.Type == EValueType::Null) {
         return;
     }
+    auto valueId = value.Id;
+    value.Id = 0;
+    value.Flags = EValueFlags::None;
     auto fingerprint = TBitwiseUnversionedValueHash()(value);
-    hll->at(value.Id).Add(fingerprint);
+    hll->at(valueId).Add(fingerprint);
 }
 
 std::vector<TColumnarHyperLogLogDigest> ComputeHll(const std::vector<TUnversionedRow>& rows)

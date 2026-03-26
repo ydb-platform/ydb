@@ -78,7 +78,7 @@ TArrayAccessNode::TSubscript TAstBuilder::BuildArraySubscript(const TRule_array_
     if (node.HasBlock2()) {
         to = BuildExpr(node.GetBlock2().GetRule_expr2());
     }
-    return {from, to};
+    return {.From = from, .To = to};
 }
 
 TAstNodePtr TAstBuilder::BuildArrayAccessor(const TRule_array_accessor& node, TAstNodePtr input) {
@@ -280,13 +280,10 @@ TAstNodePtr TAstBuilder::BuildLikeRegexExpr(const TRule_like_regex_expr& node, T
         }
 
         for (char flag : flags) {
-            switch (flag) {
-                case 'i':
-                    parsedFlags |= FLAGS_CASELESS;
-                    break;
-                default:
-                    Error(GetPos(flagsToken), TStringBuilder() << "Unsupported regex flag '" << flag << "'");
-                    break;
+            if (flag == 'i') {
+                parsedFlags |= FLAGS_CASELESS;
+            } else {
+                Error(GetPos(flagsToken), TStringBuilder() << "Unsupported regex flag '" << flag << "'");
             }
         }
     }

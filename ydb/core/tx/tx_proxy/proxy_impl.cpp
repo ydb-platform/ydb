@@ -261,7 +261,8 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         if (ev->Get()->HasMakeProposal()) {
             // todo: in-fly and shutdown
             Y_DEBUG_ABORT_UNLESS(txid != 0);
-            const TActorId reqId = ctx.Register(CreateTxProxyDataReq(Services, txid, TxProxyMon, RequestControls));
+            const TActorId reqId = ctx.Register(CreateTxProxyDataReq(Services, txid, TxProxyMon, RequestControls,
+                BUILTIN_ACL_NO_USER_SID /* don't pass UserSID for DDL transcations */));
             TxProxyMon->MakeRequest->Inc();
             LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                          "actor# " << SelfId() <<
@@ -292,7 +293,8 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         if (ev->Get()->HasCommitWritesProposal()) {
             auto cookie = ev->Cookie;
             auto userReqId = tx.GetUserRequestId();
-            const TActorId reqId = ctx.Register(CreateTxProxyCommitWritesReq(Services, txid, std::move(ev), TxProxyMon));
+            const TActorId reqId = ctx.Register(CreateTxProxyCommitWritesReq(Services, txid, std::move(ev), TxProxyMon, 
+                BUILTIN_ACL_NO_USER_SID /* don't pass UserSID for DDL transcations */));
             TxProxyMon->CommitWritesRequest->Inc();
             LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                          "actor# " << SelfId() <<

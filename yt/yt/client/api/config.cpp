@@ -122,6 +122,10 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("replica_fake_timeout_delay", &TThis::ReplicaFakeTimeoutDelay)
         .Default();
 
+    registrar.Parameter("chunk_close_grace_period", &TThis::ChunkCloseGracePeriod)
+        .Default(TDuration::Seconds(15))
+        .DontSerializeDefault();
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->MaxBatchRowCount > config->MaxFlushRowCount) {
             THROW_ERROR_EXCEPTION("\"max_batch_row_count\" cannot be greater than \"max_flush_row_count\"")

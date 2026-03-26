@@ -183,6 +183,7 @@ private:
     ui64 ShardsCount_ = 0;
     ui64 PartitionsCount_ = 0;
     bool IsFifoQueue_ = false;
+    bool TopicCreated_ = false;
     TString QueueId_;
     ui64 QueueVersion_ = 0;
     ui32 TablesFormat_ = 0;

@@ -651,7 +651,7 @@ struct TEvBlobStorage {
         EvCompactionFinished,
         EvKickEmergencyPutQueue,                                /// 268 636 220
         EvWakeupEmergencyPutQueue,
-        EvTimeToUpdateWhiteboard,
+        EvTimeToUpdateStats,
         EvBulkSstsLoaded,
         EvVDiskGuidWritten,
         EvSyncerCommit,
@@ -779,6 +779,9 @@ struct TEvBlobStorage {
         EvFullSyncFinished,
         EvAddFullSyncSsts,
         EvAddFullSyncSstsResult,
+        EvChunkReadRaw,                                         // 268 636 350
+        EvChunkWriteRaw,
+        EvStartCompactionFromDefrag,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -820,7 +823,7 @@ struct TEvBlobStorage {
         EvReplResume,
         EvReplDone,
         EvFreshAppendixCompactionDone,
-        EvDeviceError,
+        EvDeviceError,                                          /// 268 636 712
         EvHugeLockChunksResult,
         EvHugeStatResult,
         EvVDiskStatResponse,
@@ -830,12 +833,26 @@ struct TEvBlobStorage {
         EvReadMetadataResult,
         EvWriteMetadataResult,
         EvShredPDiskResult,
-        EvPreShredCompactVDiskResult,
+        EvPreShredCompactVDiskResult,                           /// 268 636 722
         EvShredVDiskResult,
         EvYardResizeResult,
         EvCommitVDiskMetadata,
         EvCommitVDiskMetadataDone,
         EvChangeExpectedSlotCountResult,
+        EvChunkReadRawResult,
+        EvChunkWriteRawResult,
+        EvChunkKeeperAllocate,
+        EvChunkKeeperAllocateResult,
+        EvChunkKeeperDiscover,                                  /// 268 636 732
+        EvChunkKeeperDiscoverResult,
+        EvChunkKeeperFree,
+        EvChunkKeeperFreeResult,
+        EvChunkKeeperGetOwnedChunks,
+        EvGetSkeletonState,         // for test purposes
+        EvGetSkeletonStateResult,   // for test purposes
+        EvCompactionTokenRequest,
+        EvCompactionTokenResult,
+        EvReleaseCompactionToken,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184
@@ -899,6 +916,8 @@ struct TEvBlobStorage {
         EvControllerDistconfRequest                 = 0x1003162d,
         EvControllerDistconfResponse                = 0x1003162e,
         EvControllerUpdateSyncerState               = 0x1003162f,
+        EvControllerAllocateDDiskBlockGroup         = 0x10031630,
+        EvControllerAllocateDDiskBlockGroupResult   = 0x10031631,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -2956,6 +2975,9 @@ struct TEvBlobStorage {
     struct TEvControllerDistconfRequest;
     struct TEvControllerDistconfResponse;
     struct TEvControllerUpdateSyncerState;
+
+    struct TEvControllerAllocateDDiskBlockGroup;
+    struct TEvControllerAllocateDDiskBlockGroupResult;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

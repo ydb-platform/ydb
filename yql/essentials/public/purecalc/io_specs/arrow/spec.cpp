@@ -2,11 +2,14 @@
 
 #include <yql/essentials/public/purecalc/common/names.h>
 
+#include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 #include <yql/essentials/utils/yql_panic.h>
+
+#include <utility>
 
 using namespace NYql::NPureCalc;
 using namespace NKikimr::NUdf;
@@ -42,18 +45,18 @@ private:
     }
 
 public:
-    TArrowIStreamImpl(THolder<IArrowIStream> stream)
+    explicit TArrowIStreamImpl(THolder<IArrowIStream> stream)
         : TArrowIStreamImpl(stream.Get(), nullptr)
     {
         Owned_ = std::move(stream);
     }
 
-    TArrowIStreamImpl(IArrowIStream* stream)
+    explicit TArrowIStreamImpl(IArrowIStream* stream)
         : TArrowIStreamImpl(stream, nullptr)
     {
     }
 
-    InputItemType Fetch() {
+    InputItemType Fetch() override {
         return Underlying_->Fetch();
     }
 };
@@ -124,12 +127,21 @@ protected:
     TVector<ui32> DatumToMemberIDMap_;
     THolder<arrow::compute::ExecBatch> Batch_;
     size_t BatchLengthID_;
+    bool UntrackBatch_;
+
+    arrow::Datum& PrepareDatum(arrow::Datum& datum) {
+        if (UntrackBatch_) {
+            UntrackDatum(datum);
+        }
+        return datum;
+    }
 
 public:
     explicit TArrowOutputConverter(
         const TArrowOutputSpec& outputSpec,
         IWorker* worker)
         : Factory_(worker->GetGraph().GetHolderFactory())
+        , UntrackBatch_(outputSpec.UntrackBatches())
     {
         Batch_.Reset(new arrow::compute::ExecBatch);
 
@@ -176,8 +188,8 @@ public:
         for (size_t i = 0; i < nvalues; i++) {
             const ui32 id = DatumToMemberIDMap_[i];
             const auto& datumValue = value.GetElement(id);
-            const auto& datum = TArrowBlock::From(datumValue).GetDatum();
-            datums[i] = datum;
+            auto datum = TArrowBlock::From(datumValue).GetDatum();
+            datums[i] = PrepareDatum(datum);
             if (datum.is_scalar()) {
                 continue;
             }
@@ -186,6 +198,10 @@ public:
 
         *batch = arrow::compute::ExecBatch(std::move(datums), length);
         return batch;
+    }
+
+    void Finish() {
+        Batch_.Reset();
     }
 };
 
@@ -290,6 +306,8 @@ public:
             TUnboxedValue value;
 
             if (!WorkerHolder_->GetOutputIterator().Next(value)) {
+                Converter_.Finish();
+                WorkerHolder_->CheckState(true);
                 return TOutputSpecTraits<TArrowOutputSpec>::StreamSentinel;
             }
 
@@ -323,6 +341,8 @@ public:
             YQL_ENSURE(status != EFetchStatus::Yield, "Yield is not supported in pull mode");
 
             if (status == EFetchStatus::Finish) {
+                Converter_.Finish();
+                WorkerHolder_->CheckState(true);
                 return TOutputSpecTraits<TArrowOutputSpec>::StreamSentinel;
             }
 
@@ -456,8 +476,8 @@ void TInputSpecTraits<TArrowInputSpec>::PreparePullListWorker(
     const TArrowInputSpec& inputSpec, IPullListWorker* worker,
     const TVector<IArrowIStream*>& streams) {
     TVector<THolder<TArrowIStreamImpl>> wrappers;
-    for (ui32 i = 0; i < streams.size(); i++) {
-        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(streams[i]));
+    for (auto* stream : streams) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(stream));
     }
     PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }
@@ -473,8 +493,8 @@ void TInputSpecTraits<TArrowInputSpec>::PreparePullListWorker(
     const TArrowInputSpec& inputSpec, IPullListWorker* worker,
     TVector<THolder<IArrowIStream>>&& streams) {
     TVector<THolder<TArrowIStreamImpl>> wrappers;
-    for (ui32 i = 0; i < streams.size(); i++) {
-        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(std::move(streams[i])));
+    for (auto& stream : streams) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(std::move(stream)));
     }
     PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }
@@ -490,8 +510,8 @@ void TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
     const TArrowInputSpec& inputSpec, IPullStreamWorker* worker,
     const TVector<IArrowIStream*>& streams) {
     TVector<THolder<TArrowIStreamImpl>> wrappers;
-    for (ui32 i = 0; i < streams.size(); i++) {
-        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(streams[i]));
+    for (auto* stream : streams) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(stream));
     }
     PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }
@@ -507,8 +527,8 @@ void TInputSpecTraits<TArrowInputSpec>::PreparePullStreamWorker(
     const TArrowInputSpec& inputSpec, IPullStreamWorker* worker,
     TVector<THolder<IArrowIStream>>&& streams) {
     TVector<THolder<TArrowIStreamImpl>> wrappers;
-    for (ui32 i = 0; i < streams.size(); i++) {
-        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(std::move(streams[i])));
+    for (auto& stream : streams) {
+        wrappers.push_back(MakeHolder<TArrowIStreamImpl>(std::move(stream)));
     }
     PrepareWorkerImpl(inputSpec, worker, std::move(wrappers));
 }
@@ -518,13 +538,18 @@ ConsumerType TInputSpecTraits<TArrowInputSpec>::MakeConsumer(
     return MakeHolder<TArrowConsumerImpl>(inputSpec, std::move(worker));
 }
 
-TArrowOutputSpec::TArrowOutputSpec(const NYT::TNode& schema)
-    : Schema_(schema)
+TArrowOutputSpec::TArrowOutputSpec(NYT::TNode schema, bool untrackBatches)
+    : Schema_(std::move(schema))
+    , UntrackBatches_(untrackBatches)
 {
 }
 
 const NYT::TNode& TArrowOutputSpec::GetSchema() const {
     return Schema_;
+}
+
+bool TArrowOutputSpec::UntrackBatches() const {
+    return UntrackBatches_;
 }
 
 PullListReturnType TOutputSpecTraits<TArrowOutputSpec>::ConvertPullListWorkerToOutputType(

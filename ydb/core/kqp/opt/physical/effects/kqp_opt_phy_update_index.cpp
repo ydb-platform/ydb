@@ -19,7 +19,7 @@ TExprBase KqpBuildUpdateIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     auto effects = KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode::UpdateOn, update.Input(),
         update.Columns(), update.ReturningColumns(), empty, update.Table(), table,
-        update.Settings(), update.Pos(), ctx, kqpCtx);
+        update.IsBatch() == "true", update.Settings(), update.Pos(), ctx, kqpCtx);
 
     if (!effects) {
         return node;

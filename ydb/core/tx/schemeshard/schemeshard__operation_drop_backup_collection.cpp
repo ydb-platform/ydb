@@ -53,7 +53,11 @@ THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPat
         if (!streamPath || streamPath->Dropped()) {
             continue;
         }
-        
+
+        if (cdcStreamInfo->Format != NKikimrSchemeOp::ECdcStreamFormatProto) {
+            continue;
+        }
+
         if (streamPath->Name.EndsWith("_continuousBackupImpl")) {
             if (!context.SS->PathsById.contains(streamPath->ParentPathId)) {
                 continue;
@@ -301,7 +305,8 @@ class TDropBackupCollection : public TSubOperation {
         for (const auto& [txId, txState] : context.SS->TxInFlight) {
             if (txState.TxType == TTxState::TxBackup ||
                 txState.TxType == TTxState::TxRestore ||
-                txState.TxType == TTxState::TxCopyTable) {
+                txState.TxType == TTxState::TxCopyTable ||
+                txState.TxType == TTxState::TxReadOnlyCopyColumnTable) {
                 
                 // Check if the transaction target is this backup collection or a child path
                 const TPathId& targetPathId = txState.TargetPathId;

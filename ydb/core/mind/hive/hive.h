@@ -57,6 +57,7 @@ using TResourceNormalizedValues = std::tuple<double, double, double, double>;
 using TOwnerIdxType = NScheme::TPairUi64Ui64;
 using TSubActorId = ui64; // = LocalId part of TActorId
 using TDataCenterPriority = std::unordered_map<TDataCenterId, i32>;
+using TSegmentId = std::tuple<TSubDomainKey, TBridgePileId>;
 
 static constexpr std::size_t MAX_TABLET_CHANNELS = 256;
 
@@ -402,6 +403,26 @@ struct TMetrics {
     void ToProto(NKikimrTabletBase::TMetrics* proto) const;
 };
 
+struct TReassignOperation {
+    TTabletId TabletId;
+    TVector<ui32> TabletChannels;
+    TVector<ui32> ForcedGroups;
+    bool Async;
+
+    TReassignOperation(TTabletId tablet,
+                       const TVector<ui32>& channels = {},
+                       const TVector<ui32>& groups = {},
+                       bool async = false)
+        : TabletId(tablet)
+        , TabletChannels(channels)
+        , ForcedGroups(groups)
+        , Async(async)
+    {}
+
+    auto* ToEvent() const {
+        return new TEvHive::TEvReassignTablet(TabletId, TabletChannels, ForcedGroups, Async);
+    }
+};
 
 } // NHive
 } // NKikimr

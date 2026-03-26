@@ -389,7 +389,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
 
     const bool requiresMerge = !requiresMap && (
         AnyOf(inputPaths, [] (const TYtPathInfo::TPtr& path) {
-            return path->Ranges || path->HasColumns() || path->Table->Meta->IsDynamic || path->Table->FromNode.Maybe<TYtTable>();
+            return path->Ranges || path->HasColumns() || path->Table->Meta->IsDynamic || path->Table->Meta->HasRLS || path->Table->FromNode.Maybe<TYtTable>();
         })
         || (maybeReadSettings && NYql::HasAnySetting(maybeReadSettings.Ref(),
             EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Sample))
@@ -867,8 +867,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FillToMaterialize(TExpr
         return node;
     }
 
+    const bool keepWorld =
+        State_->Configuration->KeepWorldDepForFillOp.Get().GetOrElse(DEFAULT_KEEP_WORLD_DEP_FOR_FILL_OP);
+
+    auto materializeWorld = keepWorld ? write.World().Ptr() : ctx.NewWorld(write.Pos());
+
     content = Build<TYtMaterialize>(ctx, content.Pos())
-        .World(ctx.NewWorld(write.Pos())/*TODO: write.World()*/)
+        .World(materializeWorld)
         .DataSink(write.DataSink())
         .Input(content)
         .Settings().Build()

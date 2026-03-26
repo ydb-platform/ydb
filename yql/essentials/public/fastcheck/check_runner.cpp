@@ -1,10 +1,9 @@
 #include "check_runner.h"
 #include <yql/essentials/core/langver/yql_core_langver.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
-TCheckResponse TCheckRunnerBase::Run(const TChecksRequest& request) {
+TCheckResponse TCheckRunnerBase::Run(const TChecksRequest& request, TCheckState& state) {
     TMaybe<TIssue> verIssue;
     if (!CheckLangVersion(request.LangVer, GetMaxReleasedLangVersion(), verIssue)) {
         TCheckResponse response;
@@ -14,7 +13,7 @@ TCheckResponse TCheckRunnerBase::Run(const TChecksRequest& request) {
         return response;
     }
 
-    auto ret = DoRun(request);
+    auto ret = DoRun(request, state);
     if (!verIssue) {
         return ret;
     }
@@ -27,5 +26,4 @@ TCheckResponse TCheckRunnerBase::Run(const TChecksRequest& request) {
     return response;
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

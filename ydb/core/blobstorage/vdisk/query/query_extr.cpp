@@ -314,11 +314,14 @@ namespace NKikimr {
             if (IsRepl()) {
                 quoter = QueryCtx->HullCtx->VCtx->ReplNodeResponseQuoter;
             }
+            const TMonotonic now = TActivationContext::Monotonic();
             const TDuration duration = quoter
-                ? quoter->Take(TActivationContext::Monotonic(), Result->CalculateSerializedSizeCached())
+                ? quoter->Take(now, Result->CalculateSerializedSizeCached())
                 : TDuration::Zero();
             if (duration != TDuration::Zero()) {
                 Schedule(duration, new TEvents::TEvWakeup);
+                const auto deltaMicrosec = quoter->MergeThrottledIntervalAndGetDeltaMicrosec(now, duration);
+                QueryCtx->ReplMonGroup.ReplNodeResponseThrottledMicroseconds() += deltaMicrosec;
                 Become(&TThis::StateFunc);
             } else {
                 SendResponse(ctx);

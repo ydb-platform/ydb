@@ -8,6 +8,7 @@
 #include <library/cpp/digest/md5/md5.h>
 
 #include <util/system/hostname.h>
+#include <util/system/unaligned_mem.h>
 
 #include <format>
 
@@ -66,10 +67,18 @@ namespace NKikimr::NSqsTopic {
         const TString& method,
         TVector<std::pair<TString, TString>>&& labels
     ) {
+        TString fullDatabasePath = databasePath + "/";
+        TString adjustedTopicPath;
+        if (topicPath.StartsWith(fullDatabasePath)) {
+            adjustedTopicPath = topicPath.substr(fullDatabasePath.size());
+        } else {
+            adjustedTopicPath = topicPath;
+        }
+
         TVector<std::pair<TString, TString>> common{
             {"database", databasePath},
             {"method", method},
-            {"topic", topicPath},
+            {"topic", adjustedTopicPath},
             {"consumer", consumerName},
         };
         std::move(labels.begin(), labels.end(), std::back_inserter(common));
@@ -129,4 +138,28 @@ namespace NKikimr::NSqsTopic {
         );
     }
 
+    TVector<std::pair<TString, TString>> GetRequestSizeMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    ) {
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            {
+                {"name", "api.sqs.request.bytes"}
+            }
+        );
+    }
+
+
+    ui64 SampleIdFromRequestId(const TStringBuf requestId) {
+        if (sizeof(ui64) <= requestId.size()) [[likely]] {
+            return ReadUnaligned<ui64>(requestId.data());
+        }
+        return 0;
+    }
 } // namespace NKikimr::NSqsTopic

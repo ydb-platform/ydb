@@ -77,10 +77,17 @@ def tarball(
     try:
         req = urllib.request.urlopen(url)
         with tarfile.open(fileobj=req, mode='r|*') as tf:
-            tf.extractall(path=target_dir, filter=strip_first_component)
+            tf.extractall(path=target_dir, filter=_default_filter)
         yield target_dir
     finally:
         shutil.rmtree(target_dir)
+
+
+def _compose_tarfile_filters(*filters):
+    def compose_two(f1, f2):
+        return lambda member, path: f1(f2(member, path), path)
+
+    return functools.reduce(compose_two, filters, lambda member, path: member)
 
 
 def strip_first_component(
@@ -89,6 +96,9 @@ def strip_first_component(
 ) -> tarfile.TarInfo:
     _, member.name = member.name.split('/', 1)
     return member
+
+
+_default_filter = _compose_tarfile_filters(tarfile.data_filter, strip_first_component)
 
 
 def _compose(*cmgrs):
@@ -266,14 +276,9 @@ class ExceptionTrap:
         Wrap func and replace the result with the truth
         value of the trap (True if an exception occurred).
 
-        First, give the decorator an alias to support Python 3.8
-        Syntax.
+        Decorate a function that always fails.
 
-        >>> raises = ExceptionTrap(ValueError).raises
-
-        Now decorate a function that always fails.
-
-        >>> @raises
+        >>> @ExceptionTrap(ValueError).raises
         ... def fail():
         ...     raise ValueError('failed')
         >>> fail()
@@ -293,14 +298,9 @@ class ExceptionTrap:
         Wrap func and replace the result with the truth
         value of the trap (True if no exception).
 
-        First, give the decorator an alias to support Python 3.8
-        Syntax.
+        Decorate a function that always fails.
 
-        >>> passes = ExceptionTrap(ValueError).passes
-
-        Now decorate a function that always fails.
-
-        >>> @passes
+        >>> @ExceptionTrap(ValueError).passes
         ... def fail():
         ...     raise ValueError('failed')
 

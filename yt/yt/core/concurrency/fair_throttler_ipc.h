@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <library/cpp/yt/logging/logger.h>
+
 #include <atomic>
 
 namespace NYT::NConcurrency {
@@ -14,6 +16,7 @@ struct IFairThrottlerIpcBucket
     : public TRefCounted
 {
     // NB: This struct is shared between processes. All changes must be backward compatible.
+#pragma pack(push, 1)
     struct TState
     {
         std::atomic<double> Weight;
@@ -23,6 +26,7 @@ struct IFairThrottlerIpcBucket
         std::atomic<i64> OutFlow;
         std::atomic<i64> GuaranteedQuota;
     };
+#pragma pack(pop)
 
     virtual TState* GetState() = 0;
 };
@@ -37,10 +41,12 @@ struct IFairThrottlerIpc
     : public TRefCounted
 {
     // NB: This struct is shared between processes. All changes must be backward compatible.
+#pragma pack(push, 1)
     struct TSharedState
     {
         std::atomic<i64> Value;
     };
+#pragma pack(pop)
 
     virtual bool TryLock() = 0;
     virtual TSharedState* GetState() = 0;
@@ -52,7 +58,10 @@ DEFINE_REFCOUNTED_TYPE(IFairThrottlerIpc);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IFairThrottlerIpcPtr CreateFairThrottlerFileIpc(const std::string& path);
+IFairThrottlerIpcPtr CreateFairThrottlerFileIpc(
+    const std::string& rootPath,
+    bool useShmem,
+    NLogging::TLogger logger);
 
 ////////////////////////////////////////////////////////////////////////////////
 

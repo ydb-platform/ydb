@@ -10,6 +10,7 @@ SPLIT_FACTOR(10)
 TEST_SRCS(
     test_example.py
     test_followers.py
+    test_fulltext_index.py
     test_in_memory.py
     test_compatibility.py
     test_stress.py
@@ -25,6 +26,7 @@ TEST_SRCS(
     test_kafka_topic.py
     test_transfer.py
     test_node_broker_delta_protocol.py
+    test_system_tablet_backup.py
     test_table_schema_compatibility.py
     test_user_management.py
     test_workload_manager.py
@@ -39,6 +41,7 @@ TEST_SRCS(
 SIZE(LARGE)
 REQUIREMENTS(cpu:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+TAG(ya:manual)
 
 DEPENDS(
     ydb/tests/library/compatibility/binaries
@@ -60,4 +63,5 @@ RECURSE(
     olap
     streaming
     result_set_format
+    distconf
 )

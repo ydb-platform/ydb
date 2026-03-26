@@ -6,6 +6,7 @@
 #undef CLUSTER_DIRECTORY_INL_H_
 
 #include "private.h"
+#include "config.h"
 
 #include <yt/yt_proto/yt/client/hive/proto/cluster_directory.pb.h>
 
@@ -190,6 +191,19 @@ void TClusterDirectoryBase<TConnection>::UpdateDirectory(const NProto::TClusterD
             NYTree::ConvertToNode(NYson::TYsonString(item.config()))).second);
     }
 
+    UpdateDirectory(nameToConfig);
+}
+
+template <std::derived_from<NApi::IConnection> TConnection>
+void TClusterDirectoryBase<TConnection>::UpdateDirectory(const TClusterDirectoryConfigPtr& config)
+{
+    UpdateDirectory(config->PerClusterConnectionConfig);
+}
+
+template <std::derived_from<NApi::IConnection> TConnection>
+void TClusterDirectoryBase<TConnection>::UpdateDirectory(
+    const THashMap<std::string, NYTree::INodePtr>& nameToConfig)
+{
     for (const auto& name : GetClusterNames()) {
         if (nameToConfig.find(name) == nameToConfig.end()) {
             RemoveCluster(name);

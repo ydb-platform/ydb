@@ -36,21 +36,36 @@ void TTableWriteDistributedSession::PingThreadFunc() {
         try {
             Ping();
         } catch (...) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Error pinging distributed write table session";
+            TString errorMessage = CurrentExceptionMessage();
+            with_lock(PingError_.PingErrorMutex_) {
+                PingError_.AttemptsPassed_++;
+            }
+            if (!NeedToRetry()) {
+                with_lock(PingError_.PingErrorMutex_) {
+                    PingError_.PingErrorMessage_ = errorMessage;
+                }
+                PingState_.Stop.store(true);
+            }
         }
         Sleep(Options_.PingInterval);
     }
 }
 
+bool TTableWriteDistributedSession::NeedToRetry() const {
+    with_lock(PingError_.PingErrorMutex_) {
+        return PingError_.AttemptsPassed_ <= Options_.RetriesBeforeThrow;
+    }
+}
+
 TString TTableWriteDistributedSession::GetId() const {
-    return NYT::NodeToYsonString(static_cast<const NYT::TNode&>(Session_), NYson::EYsonFormat::Binary);
+    return NYT::NodeToYsonString(static_cast<const NYT::TNode&>(Session_), NYson::EYsonFormat::Text);
 }
 
 std::vector<TString> TTableWriteDistributedSession::GetCookies() const {
     std::vector<TString> result;
     result.reserve(Cookies_.size());
     for (const auto& cookie : Cookies_) {
-        result.push_back(NYT::NodeToYsonString(static_cast<const NYT::TNode&>(cookie), NYson::EYsonFormat::Binary));
+        result.push_back(NYT::NodeToYsonString(static_cast<const NYT::TNode&>(cookie), NYson::EYsonFormat::Text));
     }
     return result;
 }
@@ -58,6 +73,18 @@ std::vector<TString> TTableWriteDistributedSession::GetCookies() const {
 void TTableWriteDistributedSession::Ping() {
     auto client = CreateClient(ClusterConnection_);
     client->PingDistributedWriteTableSession(Session_);
+}
+
+bool TTableWriteDistributedSession::HasPingError() const {
+    with_lock(PingError_.PingErrorMutex_) {
+        return !PingError_.PingErrorMessage_.empty();
+    }
+}
+
+TString TTableWriteDistributedSession::GetPingError() const {
+    with_lock(PingError_.PingErrorMutex_) {
+        return PingError_.PingErrorMessage_;
+    }
 }
 
 void TTableWriteDistributedSession::Finish(

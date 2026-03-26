@@ -13,7 +13,7 @@ namespace NYql::NPrivate {
 
 class TUrlListerManager: public IUrlListerManager {
 public:
-    TUrlListerManager(
+    explicit TUrlListerManager(
         TVector<IUrlListerPtr> urlListers)
         : UrlListers_(std::move(urlListers))
     {
@@ -117,7 +117,7 @@ private:
     }
 
     TVector<TUrlListEntry> ListRecursive(const IUrlListerPtr& urlLister, const TString& url, const TString& token, const TString& separator, ui32 foldersLimit) const {
-        TVector<TUrlListEntry> urlsQueue = {{url, "", EUrlListEntryType::DIRECTORY}};
+        TVector<TUrlListEntry> urlsQueue = {{.Url = url, .Name = "", .Type = EUrlListEntryType::DIRECTORY}};
         THashSet<TString> visitedUrls;
         TVector<TUrlListEntry> result;
 
@@ -142,9 +142,9 @@ private:
             }
             for (auto& entry : subEntries) {
                 TUrlListEntry newEntry = {
-                    entry.Url,
-                    TStringBuilder() << currentEntry.Name << separator << entry.Name,
-                    entry.Type};
+                    .Url = entry.Url,
+                    .Name = TStringBuilder() << currentEntry.Name << separator << entry.Name,
+                    .Type = entry.Type};
                 if (entry.Type == EUrlListEntryType::DIRECTORY) {
                     urlsQueue.push_back(std::move(newEntry));
                     if (--foldersLimit == 0) {

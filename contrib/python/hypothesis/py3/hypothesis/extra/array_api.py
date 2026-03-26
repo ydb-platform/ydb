@@ -58,10 +58,10 @@ __all__ = [
 ]
 
 
-RELEASED_VERSIONS = ("2021.12", "2022.12", "2023.12", "2024.12")
+RELEASED_VERSIONS = ("2021.12", "2022.12", "2023.12", "2024.12", "2025.12")
 NOMINAL_VERSIONS = (*RELEASED_VERSIONS, "draft")
 assert sorted(NOMINAL_VERSIONS) == list(NOMINAL_VERSIONS)  # sanity check
-NominalVersion = Literal["2021.12", "2022.12", "2023.12", "2024.12", "draft"]
+NominalVersion = Literal["2021.12", "2022.12", "2023.12", "2024.12", "2025.12", "draft"]
 assert get_args(NominalVersion) == NOMINAL_VERSIONS  # sanity check
 
 
@@ -784,7 +784,7 @@ def indices(
       :func:`~hypothesis.strategies.slices` instead.
     * ``min_dims`` is the minimum dimensionality of the resulting array from use
       of the generated index.
-    * ``max_dims`` is the the maximum dimensionality of the resulting array,
+    * ``max_dims`` is the maximum dimensionality of the resulting array,
       defaulting to ``len(shape) if not allow_newaxis else
       max(len(shape), min_dims) + 2``.
     * ``allow_ellipsis`` specifies whether ``None`` is allowed in the index.

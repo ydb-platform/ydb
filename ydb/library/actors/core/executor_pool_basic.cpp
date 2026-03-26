@@ -115,6 +115,7 @@ namespace NActors {
         , HasOwnSharedThread(cfg.HasSharedThread)
         , MaxLocalQueueSize(cfg.MaxLocalQueueSize)
         , MinLocalQueueSize(cfg.MinLocalQueueSize)
+        , SharedOnly(cfg.ForcedForeignSlotCount || cfg.AdjacentPools.size() || (!cfg.Threads && !cfg.MaxThreadCount))
         , Priority(cfg.Priority)
         , Jail(jail)
         , ActorSystemProfile(cfg.ActorSystemProfile)
@@ -198,6 +199,10 @@ namespace NActors {
         MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
         MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
 
+        if (SharedOnly) {
+            MaxThreadCount = cfg.ForcedForeignSlotCount + 1;
+        }
+
         Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);
         if constexpr (DebugMode) {
             Sanitizer.reset(new TBasicExecutorPoolSanitizer(this));
@@ -207,6 +212,10 @@ namespace NActors {
 
     TBasicExecutorPool::~TBasicExecutorPool() {
         Threads.Destroy();
+    }
+
+    bool TBasicExecutorPool::IsSharedOnly() const {
+        return SharedOnly;
     }
 
     void TBasicExecutorPool::AskToGoToSleep(bool *needToWait, bool *needToBlock) {

@@ -2423,7 +2423,7 @@ IGraphTransformer::TStatus PeepHoleBlockStage(const TExprNode::TPtr& input, TExp
 
 class TStrongTypeErrorProxy : public IGraphTransformer {
 public:
-    TStrongTypeErrorProxy(IGraphTransformer& inner)
+    explicit TStrongTypeErrorProxy(IGraphTransformer& inner)
         : Inner_(inner)
     {}
 
@@ -6225,10 +6225,6 @@ private:
 
     // Rewrite if present via BlockIf + BlockExists + BlockValidUnwrap.
     TExprNode::TPtr RewriteIfPresent(TIfPresentCallableView ifPresentView, TRewritesMap& rewrites, const TNodeSet& nonStrictNodes) {
-        // Block Coalesce and block exists between two scalars are available only since 63 version.
-        if constexpr (NKikimr::NMiniKQL::RuntimeVersion < 63U) {
-            return nullptr;
-        }
         // Check that lambda return type is valid.
         if (!IsSupportedAsBlockType(ifPresentView.Lambda()->Pos(), *ifPresentView.Lambda()->GetTypeAnn(), Ctx_, Types_, true)) {
             YQL_CLOG(TRACE, CorePeepHole) << Log(ifPresentView.Lambda().Get()) << "Lambda return type is not supported";
@@ -8766,6 +8762,24 @@ TExprNode::TPtr CompareTagged(const TExprNode& node, TExprContext& ctx) {
     return ctx.ChangeChildren(node, std::move(children));
 }
 
+template<bool IsScore>
+TExprNode::TPtr ExpandFulltextBuiltin(const TExprNode::TPtr& node, TExprContext& ctx) {
+    TString type = IsScore ? "Double" : "Bool";
+    TString error = TStringBuilder() << "Fulltext " << (IsScore ? "score" : "match") << " is not implemented yet";
+    auto nullNode = ctx.NewCallable(node->Pos(), "Nothing", {
+        ctx.NewCallable(node->Pos(), "OptionalType", {
+            ctx.NewCallable(node->Pos(), "DataType", {ctx.NewAtom(node->Pos(), type, TNodeFlags::Default) }) }) });
+
+    auto message = ctx.Builder(node->Pos()).Callable("String").Atom(0, error).Seal().Build();
+
+    return ctx.Builder(node->Pos())
+        .Callable("Unwrap")
+            .Add(0, nullNode)
+            .Add(1, message)
+        .Seal()
+        .Build();
+}
+
 template <bool Equals, bool IsDistinct>
 TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto lType = node->Head().GetTypeAnn();
@@ -9269,6 +9283,8 @@ struct TPeepHoleRules {
         {"RangeFor", &ExpandRangeFor},
         {"RangeToPg", &ExpandRangeToPg},
         {"ToFlow", &DropToFlowDeps},
+        {"FulltextScore", &ExpandFulltextBuiltin<true>},
+        {"FulltextMatch", &ExpandFulltextBuiltin<false>},
         {"CheckedAdd", &ExpandCheckedAdd},
         {"CheckedSub", &ExpandCheckedSub},
         {"CheckedMul", &ExpandCheckedMul},

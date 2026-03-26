@@ -42,7 +42,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
         tableId.PathId.ToProto(request.MutablePathId());
 
         FulltextIndexSettings settings;
-        settings.set_layout(FulltextIndexSettings::FLAT_RELEVANCE);
         auto column = settings.add_columns();
         column->set_column("text");
         column->mutable_analyzers()->set_tokenizer(FulltextIndexSettings::WHITESPACE);
@@ -180,10 +179,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
             request.ClearOutputName();
         }, "{ <main>: Error: Empty output table name }");
-
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
-            request.MutableSettings()->set_layout(FulltextIndexSettings::FLAT);
-        }, "{ <main>: Error: FLAT_RELEVANCE index layout is required }");
 
         // test multiple issues:
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {

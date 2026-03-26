@@ -11,43 +11,49 @@
 
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/login_shared_func.h>
+#include <ydb/core/security/sasl/events.h>
+#include <ydb/core/security/sasl/plain_auth_actor.h>
+#include <ydb/core/security/sasl/plain_ldap_auth_proxy_actor.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/login/login.h>
+#include <ydb/library/login/sasl/plain.h>
 
 #include <ydb/public/api/protos/ydb_auth.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
+using namespace NSasl;
 using namespace NSchemeShard;
 
 using TEvLoginRequest = TGRpcRequestWrapperNoAuth<TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
 
 class TLoginRPC : public TRpcRequestActor<TLoginRPC, TEvLoginRequest, true> {
 private:
-    TAuthCredentials Credentials;
     TString PathToDatabase;
 
 public:
     using TRpcRequestActor::TRpcRequestActor;
 
     TDuration Timeout = TDuration::MilliSeconds(60000);
-    TActorId PipeClient;
 
-    NTabletPipe::TClientConfig GetPipeClientConfig() {
-        NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = {.RetryLimitCount = 3};
-        return clientConfig;
-    }
-
-    void Bootstrap() {
-        const Ydb::Auth::LoginRequest* protoRequest = GetProtoRequest();
-        Credentials = PrepareCredentials(protoRequest->user(), protoRequest->password(), AppData()->AuthConfig);
+    void Bootstrap(const TActorContext &ctx) {
         TString domainName = "/" + AppData()->DomainsInfo->GetDomain()->Name;
         PathToDatabase = AppData()->AuthConfig.GetDomainLoginOnly() ? domainName : GetDatabaseName();
-        auto sendParameters = GetSendParameters(Credentials, PathToDatabase);
-        Send(sendParameters.Recipient, sendParameters.Event.Release());
+
+        std::unique_ptr<IActor> authActor;
+        const Ydb::Auth::LoginRequest* protoRequest = GetProtoRequest();
+        if (IsUsernameFromLdapAuthDomain(protoRequest->user(), AppData()->AuthConfig)) {
+            const TString ldapUsername = PrepareLdapUsername(protoRequest->user(), AppData()->AuthConfig);
+            const TString saslPlainAuthMsg = NLogin::NSasl::BuildSaslPlainAuthMsg(ldapUsername, protoRequest->password());
+            authActor = CreatePlainLdapAuthProxyActor(ctx.SelfID, PathToDatabase, saslPlainAuthMsg, Request->GetPeerName());
+        } else {
+            const TString saslPlainAuthMsg = NLogin::NSasl::BuildSaslPlainAuthMsg(protoRequest->user(), protoRequest->password());
+            authActor = CreatePlainAuthActor(ctx.SelfID, PathToDatabase, saslPlainAuthMsg, Request->GetPeerName());
+        }
+
+        Register(authActor.release());
         Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
@@ -55,77 +61,52 @@ public:
         ReplyErrorAndPassAway(Ydb::StatusIds::TIMEOUT, "Login timeout");
     }
 
-    void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const auto& resultSet = ev->Get()->Request.Get()->ResultSet;
-        if (resultSet.size() == 1 && resultSet.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            const auto domainInfo = resultSet.front().DomainInfo;
-            if (domainInfo != nullptr) {
-                IActor* pipe = NTabletPipe::CreateClient(SelfId(), domainInfo->ExtractSchemeShard(), GetPipeClientConfig());
-                PipeClient = RegisterWithSameMailbox(pipe);
-                THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
-                request.Get()->Record = CreateLoginRequest(Credentials, AppData()->AuthConfig);
-                request.Get()->Record.SetPeerName(Request->GetPeerName());
-                NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
-                return;
-            }
-        }
-        ReplyErrorAndPassAway(Ydb::StatusIds::SCHEME_ERROR, "No database found");
-    }
-
-    void Handle(TEvLdapAuthProvider::TEvAuthenticateResponse::TPtr& ev) {
-        const TEvLdapAuthProvider::TEvAuthenticateResponse& response = *ev->Get();
-        if (response.Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(CreateNavigateKeySetRequest(PathToDatabase).Release()));
-        } else {
-            ReplyErrorAndPassAway(ConvertLdapStatus(response.Status), response.Error.Message, response.Error.LogMessage);
-        }
-    }
-
-    void HandleResult(TEvSchemeShard::TEvLoginResult::TPtr& ev) {
-        const NKikimrScheme::TEvLoginResult& loginResult = ev->Get()->Record;
-        if (loginResult.error()) {
-            // explicit error takes precedence
-            ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, loginResult.error(), /*loginResult.details()*/ TString());
-        } else if (loginResult.token().empty()) {
-            // empty token is still an error
-            ReplyErrorAndPassAway(Ydb::StatusIds::INTERNAL_ERROR, "Failed to produce a token");
-        } else {
-            // success = token + no errors
-            ReplyAndPassAway(loginResult);
+    void ProcessLoginResult(const NYql::TIssue& issue, const std::string& reason, const std::string& token,
+        const std::string& sanitizedToken, bool isAdmin)
+    {
+        switch (issue.GetCode()) {
+        case NKikimrIssues::TIssuesIds::SUCCESS:
+            return ReplyAndPassAway(token, sanitizedToken, isAdmin);
+        case NKikimrIssues::TIssuesIds::ACCESS_DENIED:
+            return ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issue.GetMessage(), TString(reason));
+        case NKikimrIssues::TIssuesIds::UNEXPECTED:
+            return ReplyErrorAndPassAway(Ydb::StatusIds::INTERNAL_ERROR, issue.GetMessage());
+        case NKikimrIssues::TIssuesIds::DATABASE_NOT_EXIST:
+            return ReplyErrorAndPassAway(Ydb::StatusIds::SCHEME_ERROR, "No database found");
+        case NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE:
+            return ReplyErrorAndPassAway(Ydb::StatusIds::UNAVAILABLE, "SchemeShard is unreachable");
+        case NKikimrIssues::TIssuesIds::DEFAULT_ERROR:
+            return ReplyErrorAndPassAway(Ydb::StatusIds::INTERNAL_ERROR, issue.GetMessage());
+        case NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE:
+            return ReplyErrorAndPassAway(Ydb::StatusIds::UNAVAILABLE, issue.GetMessage(), TString(reason));
+        case NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR:
+            return ReplyErrorAndPassAway(Ydb::StatusIds::BAD_REQUEST, issue.GetMessage(), TString(reason));
+        default:
+            return ReplyErrorAndPassAway(Ydb::StatusIds::GENERIC_ERROR, issue.GetMessage());
         }
     }
 
-    void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
-        ReplyErrorAndPassAway(Ydb::StatusIds::UNAVAILABLE, "SchemeShard is unreachable");
+    void HandleResult(TEvSasl::TEvSaslPlainLoginResponse::TPtr& ev) {
+        const auto& loginResult = *ev->Get();
+        ProcessLoginResult(loginResult.Issue, "", loginResult.Token, loginResult.SanitizedToken,
+            loginResult.IsAdmin);
     }
 
-    void HandleConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        if (ev->Get()->Status != NKikimrProto::OK) {
-            ReplyErrorAndPassAway(Ydb::StatusIds::UNAVAILABLE, "SchemeShard is unavailable");
-        }
-    }
-
-    void HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        ReplyErrorAndPassAway(Ydb::StatusIds::UNAVAILABLE, "SchemeShard is unavailable");
+    void HandleResult(TEvSasl::TEvSaslPlainLdapLoginResponse::TPtr& ev) {
+        const auto& loginResult = *ev->Get();
+        ProcessLoginResult(loginResult.Issue, loginResult.Reason, loginResult.Token, loginResult.SanitizedToken,
+            loginResult.IsAdmin);
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvUndelivered, HandleUndelivered);
-            hFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
-            hFunc(TEvTabletPipe::TEvClientDestroyed, HandleDestroyed);
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
-            hFunc(TEvSchemeShard::TEvLoginResult, HandleResult);
-            hFunc(TEvLdapAuthProvider::TEvAuthenticateResponse, Handle);
+            hFunc(TEvSasl::TEvSaslPlainLoginResponse, HandleResult);
+            hFunc(TEvSasl::TEvSaslPlainLdapLoginResponse, HandleResult);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void ReplyAndPassAway(const NKikimrScheme::TEvLoginResult& loginResult) {
-        const auto& resultToken = loginResult.GetToken();
-        const auto& sanitizedToken = loginResult.GetSanitizedToken();
-        const auto& isAdmin = loginResult.GetIsAdmin();
-
+    void ReplyAndPassAway(const std::string& token, const std::string& sanitizedToken, bool isAdmin) {
         TResponse response;
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         operation.set_ready(true);
@@ -133,13 +114,14 @@ public:
         // Pack result to google::protobuf::Any
         {
             Ydb::Auth::LoginResult result;
-            result.set_token(resultToken);
+            result.set_token(token);
             operation.mutable_result()->PackFrom(result);
         }
 
-        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, /* errorDetails */ TString(), sanitizedToken, isAdmin);
+        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response,
+            /* errorDetails */ "", TString(sanitizedToken), isAdmin);
 
-        return CleanupAndReply(response);
+        return Reply(response);
     }
 
     void ReplyErrorAndPassAway(const Ydb::StatusIds_StatusCode status, const TString& error, const TString& reason = "") {
@@ -156,30 +138,9 @@ public:
 
         AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, reason, {});
 
-        return CleanupAndReply(response);
-    }
-
-    void CleanupAndReply(const TResponse& response) {
-        if (PipeClient) {
-            NTabletPipe::CloseClient(SelfId(), PipeClient);
-        }
-
         return Reply(response);
     }
 
-private:
-    static Ydb::StatusIds::StatusCode ConvertLdapStatus(const TEvLdapAuthProvider::EStatus& status) {
-        switch (status) {
-            case NKikimr::TEvLdapAuthProvider::EStatus::SUCCESS:
-                return Ydb::StatusIds::SUCCESS;
-            case NKikimr::TEvLdapAuthProvider::EStatus::UNAUTHORIZED:
-                return Ydb::StatusIds::UNAUTHORIZED;
-            case NKikimr::TEvLdapAuthProvider::EStatus::UNAVAILABLE:
-                return Ydb::StatusIds::UNAVAILABLE;
-            case NKikimr::TEvLdapAuthProvider::EStatus::BAD_REQUEST:
-                return Ydb::StatusIds::BAD_REQUEST;
-        }
-    }
 };
 
 void DoLoginRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

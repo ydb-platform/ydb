@@ -102,7 +102,7 @@ namespace NKikimr::NSqsTopic {
         return std::unexpected{"Invalid QueueUrl: unsupported version"};
     }
 
-    static void WriteLengthDelimitedString(IOutputStream& os, TStringBuf value) {
+    void WriteLengthDelimitedString(IOutputStream& os, TStringBuf value) {
         os << '/' << value.size() << '/' << value;
     }
 

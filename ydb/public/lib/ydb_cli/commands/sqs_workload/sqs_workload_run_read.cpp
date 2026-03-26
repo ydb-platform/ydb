@@ -16,12 +16,18 @@ namespace NYdb::NConsoleClient {
         config.SetFreeArgsNum(0);
 
         // Common params
-        config.Opts->AddLongOption("queue-url", "AWS queue URL.")
+        config.Opts->AddLongOption("sqs-endpoint", "SQS HTTP endpoint of the queue.")
             .Required()
-            .StoreResult(&Scenario.QueueUrl);
-        config.Opts->AddLongOption("endpoint-override", "AWS queue endpoint.")
-            .Optional()
-            .StoreResult(&Scenario.EndpointOverride);
+            .StoreResult(&Scenario.Endpoint);
+        config.Opts->AddLongOption("queue-name", "AWS queue name.")
+            .Hidden()
+            .StoreResult(&Scenario.QueueName);
+        config.Opts->AddLongOption("topic", "YDB topic name.")
+            .DefaultValue("sqs-workload-topic")
+            .StoreResult(&Scenario.Topic);
+        config.Opts->AddLongOption("consumer", "YDB consumer name.")
+            .DefaultValue("sqs-workload-consumer")
+            .StoreResult(&Scenario.Consumer);
         config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
             .DefaultValue(60)
             .StoreResult(&Scenario.TotalSec);
@@ -45,25 +51,27 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(80.0)
             .StoreResult(&Scenario.Percentile);
         config.Opts
-            ->AddLongOption("consumers", "Number of concurrent consumers.")
+            ->AddLongOption("workers", "Number of concurrent workers.")
             .DefaultValue(1)
-            .StoreResult(&Scenario.Concurrency);
-        config.Opts->AddLongOption('a', "account", "AWS account ID.")
-            .Required()
-            .StoreResult(&Scenario.Account);
-        config.Opts->AddLongOption('t', "token", "AWS token.")
-            .Required()
-            .StoreResult(&Scenario.Token);
-        config.Opts->AddLongOption("error-messages-rate", "Error messages rate.")
-            .Optional()
-            .ManualDefaultValueDescription(
-                "This parameter means that every Nth will not be removed from the queue.")
+            .StoreResult(&Scenario.WorkersCount);
+        config.Opts->AddLongOption("aws-access-key-id", "AWS access key id.")
+            .StoreResult(&Scenario.AwsAccessKeyId);
+        config.Opts->AddLongOption("aws-session-token", "AWS session token.")
+            .StoreResult(&Scenario.AwsSessionToken);
+        config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")
+            .StoreResult(&Scenario.AwsSecretKey);
+        config.Opts->AddLongOption("keep-error-every", "Keep every Nth error message in the queue (do not delete it). 0 = delete all messages; 1 = keep all messages")
             .StoreResult(&Scenario.ErrorMessagesRate);
         config.Opts
-            ->AddLongOption("error-messages-destiny",
-                            "Error messages destiny (fatal, sucess-after-retry).")
+            ->AddLongOption("error-policy",
+                            "Error messages destiny (fatal, success-after-retry).")
+            .ManualDefaultValueDescription(
+                "How to treat errors:\n"
+                            "  - fatal - stop immediately and return non-zero exit code\n"
+                            "  - success-after-retry - retry; if retry succeeds, exit with 0 (errors are not fatal)\n"
+                            "(default: fatal)")
             .DefaultValue("fatal")
-            .StoreResult(&Scenario.ErrorMessagesDestiny);
+            .StoreResult(&Scenario.ErrorMessagesPolicy);
         config.Opts
             ->AddLongOption("visibility-timeout",
                             "Visibility timeout in milliseconds.")
@@ -77,23 +85,18 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("batch-size", "Batch size.")
             .DefaultValue(1)
             .StoreResult(&Scenario.BatchSize);
-        config.Opts->AddLongOption("validate-fifo", "Validate FIFO queue.")
+        config.Opts->AddLongOption("validate-messages-order", "Validate messages order.")
             .DefaultValue(false)
-            .StoreTrue(&Scenario.ValidateFifo);
-        config.Opts->AddLongOption("use-json-api", "Use JSON API.")
+            .StoreTrue(&Scenario.ValidateMessagesOrder);
+        config.Opts->AddLongOption("use-xml-api", "Use XML API.")
             .DefaultValue(false)
-            .StoreTrue(&Scenario.UseJsonAPI);
+            .StoreTrue(&Scenario.UseXmlAPI);
         config.Opts
             ->AddLongOption("request-timeout", "Request timeout in milliseconds.")
             .DefaultValue(2000)
             .StoreResult(&Scenario.RequestTimeoutMs);
-        config.Opts->AddLongOption("region", "AWS region.")
-            .Optional()
-            .StoreResult(&Scenario.Region);
-        config.Opts->AddLongOption("set-subject-token", "Set subject token.")
-            .DefaultValue(false)
-            .Hidden()
-            .StoreTrue(&Scenario.SetSubjectToken);
+        config.Opts->AddLongOption("aws-region", "AWS region.")
+            .StoreResult(&Scenario.AwsRegion);
     }
 
     void TCommandWorkloadSqsRunRead::Parse(TConfig& config) {

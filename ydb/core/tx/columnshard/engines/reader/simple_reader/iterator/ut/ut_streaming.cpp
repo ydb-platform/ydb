@@ -986,6 +986,78 @@ void TestStreamingWithFilterSkip() {
     UNIT_ASSERT_GT(iterationsCount, 1);
 }
 
+// Verifies the `!resultChunk && !isFinished` branch in TSyncPointResult::OnSourceReady():
+// when a non-streaming page produces no output (filtered out by the key range) the scan
+// must call ContinueCursor() and keep going until it reaches pages that do match.
+//
+// This branch is the non-streaming multi-page path: the source has multiple pages in
+// StageResult, and when a page produces no data after filtering, ContinueCursor() is
+// called to advance to the next page within the same source.
+//
+// Setup: non-streaming mode, one large portion split into many pages by a low memory
+// limit; the read range excludes the first ~70% of rows so early pages produce no
+// output, but later pages still contain matching rows.
+void TestNonStreamingWithEmptyIntermediatePageContinue() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+    // Non-streaming mode: the source processes all pages in one StageResult.
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetEnabled(false);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    // Force many small pages within a single portion so the range filter can
+    // exclude early pages while later pages still match.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // One large portion that will be split into many pages by the low memory limit.
+    const ui32 numRecords = 100000;
+    const ui32 firstIncludedRow = 70000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+    // Range covers only the tail of the portion.  Early non-streaming pages produce no
+    // output (empty resultChunk, !isFinished) and must be skipped via ContinueCursor().
+    reader.AddRange(MakeTestRange({firstIncludedRow, numRecords - 1}, true, true, table.Pk));
+
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords - firstIncludedRow);
+
+    const ui32 iterationsCount = reader.GetIterationsCount();
+
+    Cerr << "NonStreamingWithEmptyIntermediatePageContinue: iterations=" << iterationsCount
+         << ", rows=" << rb->num_rows() << Endl;
+
+    // Multiple iterations confirm the scan continued past empty pages.
+    UNIT_ASSERT_GT(iterationsCount, 1u);
+}
+
 // Verifies that a task processing error during streaming causes the scan to
 // terminate with a proper error status (TEvScanError) and does not crash or hang.
 //
@@ -1157,6 +1229,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(StreamingWithFilterSkip) {
         TestStreamingWithFilterSkip();
+    }
+
+    Y_UNIT_TEST(NonStreamingWithEmptyIntermediatePageContinue) {
+        TestNonStreamingWithEmptyIntermediatePageContinue();
     }
 
     Y_UNIT_TEST(StreamingEnabled) {

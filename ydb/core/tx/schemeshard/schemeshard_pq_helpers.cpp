@@ -1,9 +1,15 @@
 #include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_audit_log.h>
-#include <ydb/core/persqueue/public/cloud_events/actor.h>
+#include <ydb/core/persqueue/public/cloud_events/cloud_events.h>
 
 namespace NKikimr::NSchemeShard {
+
+TPath DatabasePathFromModifySchemeOperation(
+    TSchemeShard* ss,
+    const NKikimrSchemeOp::TModifyScheme& operation);
+
+std::tuple<TString, TString, TString> GetDatabaseCloudIds(const TPath& databasePath);
 
 namespace {
 
@@ -64,7 +70,7 @@ void FinishWithError(
     }
 
     auto* sys = NActors::TActivationContext::ActorSystem();
-    auto actorId = sys->Register(new NPQ::NCloudEvents::TCloudEventsActor());
+    auto actorId = sys->Register(NPQ::NCloudEvents::CreateCloudEventActor());
     sys->Send(actorId, new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
 }
 
@@ -80,7 +86,7 @@ void ScheduleSendTopicCloudEvent(
     }
 
     auto* sys = NActors::TActivationContext::ActorSystem();
-    auto actorId = sys->Register(new NPQ::NCloudEvents::TCloudEventsActor());
+    auto actorId = sys->Register(NPQ::NCloudEvents::CreateCloudEventActor());
 
     context.OnComplete.Send(
         actorId,

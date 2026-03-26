@@ -55,10 +55,4 @@ void AuditLogExportEnd(const TExportInfo& exportInfo, TSchemeShard* SS);
 void AuditLogImportStart(const NKikimrImport::TEvCreateImportRequest& request, const NKikimrImport::TEvCreateImportResponse& response, TSchemeShard* SS);
 void AuditLogImportEnd(const TImportInfo& importInfo, TSchemeShard* SS);
 
-TPath DatabasePathFromModifySchemeOperation(
-    TSchemeShard* ss,
-    const NKikimrSchemeOp::TModifyScheme& operation);
-
-std::tuple<TString, TString, TString> GetDatabaseCloudIds(const TPath& databasePath);
-
 }

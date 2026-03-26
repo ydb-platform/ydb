@@ -1,5 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/persqueue/public/cloud_events/actor.h>
+#include <ydb/core/persqueue/public/cloud_events/cloud_events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/blocking_queue/blocking_queue.h>

@@ -1,3 +1,4 @@
+#include <ydb/core/persqueue/public/cloud_events/cloud_events.h>
 #include <ydb/core/persqueue/public/cloud_events/actor.h>
 #include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
 

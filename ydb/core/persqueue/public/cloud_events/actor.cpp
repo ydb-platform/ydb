@@ -1,5 +1,7 @@
 #include "actor.h"
 
+#include <ydb/core/persqueue/public/cloud_events/proto/topics.pb.h>
+
 #include <util/generic/guid.h>
 #include <ydb/core/audit/audit_log.h>
 #include <google/protobuf/util/time_util.h>
@@ -13,6 +15,11 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NPQ::NCloudEvents {
+
+using TCreateTopicEvent = yandex::cloud::events::ydb::topics::CreateTopic;
+using TAlterTopicEvent = yandex::cloud::events::ydb::topics::AlterTopic;
+using TDeleteTopicEvent = yandex::cloud::events::ydb::topics::DeleteTopic;
+using EStatus = yandex::cloud::events::EventStatus;
 
 namespace {
 
@@ -253,7 +260,7 @@ TString SerializeEvent(const TEvent& ev) {
 
 } // anonymous namespace
 
-TString BuildTopicCloudEventData(const TCloudEventInfo& info) {
+TString BuildTopicCloudEventJson(const TCloudEventInfo& info) {
     TString json;
 
     auto type = info.ModifyScheme.GetOperationType();
@@ -304,10 +311,14 @@ void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
         return;
     }
 
-    TString data = BuildTopicCloudEventData(ev.Get()->Get()->Info);
+    TString data = BuildTopicCloudEventJson(ev.Get()->Get()->Info);
     if (EventsWriter) {
         EventsWriter->Write(data);
     }
+}
+
+NActors::IActor* CreateCloudEventActor() {
+    return new TCloudEventsActor();
 }
 
 } // namespace NKikimr::NPQ::NCloudEvents

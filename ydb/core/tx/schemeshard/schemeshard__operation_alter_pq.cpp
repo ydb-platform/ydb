@@ -75,7 +75,7 @@ class TAlterPQ: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-        return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction);
+            return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction);
         default:
             return nullptr;
         }

@@ -15,7 +15,7 @@
 
 #include <util/system/unaligned_mem.h>
 
-constexpr size_t MAX_REQS_PER_CYCLE = 200; // 200 requests take ~0.2ms in EnqueueAll function
+constexpr size_t MAX_REQS_PER_CYCLE = 200; // 200 requests take ~0.2ms in EnqueueAll function 
 
 namespace NKikimr {
 namespace NPDisk {

@@ -1524,11 +1524,9 @@ message TEvValidateRowConditionRequest {
     optional uint64 TabletId = 2;
     optional uint64 OwnerId = 3;
     optional uint64 PathId = 4;
-    optional uint64 SnapshotTxId = 5;
-    optional uint64 SnapshotStep = 6;
-    optional uint64 SeqNoGeneration = 7;
-    optional uint64 SeqNoRound = 8;
-    repeated string NotNullColumns = 9;
+    optional uint64 SeqNoGeneration = 5;
+    optional uint64 SeqNoRound = 6;
+    repeated string NotNullColumns = 7;
 }
 
 message TEvValidateRowConditionResponse {

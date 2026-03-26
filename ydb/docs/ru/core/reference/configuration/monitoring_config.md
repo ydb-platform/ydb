@@ -1,15 +1,15 @@
 # monitoring_config
 
-В разделе `monitoring_config` файла конфигурации {{ ydb-short-name }} задаются параметры [YDB Monitoring](../embedded-ui/ydb-monitoring.md). В этой статье перечислены лишь некоторые возможности конфигурации.
+Секция `monitoring_config` файла конфигурации {{ ydb-short-name }} задаёт параметры [YDB Monitoring](../embedded-ui/ydb-monitoring.md). Ниже описаны настройки, связанные с [аутентификацией](../../security/authentication.md) на отдельных страницах встроенного мониторинга.
 
 ```yaml
 monitoring_config:
-  # настройки требования аутентификации на отдельных страницах YDB Monitoring
+  # аутентификация на страницах /counters и /healthcheck
   require_counters_authentication: false
   require_healthcheck_authentication: false
 ```
 
-## Настройки требования аутентификации на отдельных страницах YDB Monitoring {#authentication}
+## Аутентификация на страницах мониторинга {#authentication}
 
 #|
 || Параметр | Описание ||
@@ -17,32 +17,31 @@ monitoring_config:
 
 Возможные значения:
 
-- `true` — аутентификация на страницах `/counters` и `/counters/hosts` обязательна, запросы к ним обязаны сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token). Запросы проходят аутентификацию и проверку прав.
+- `true` — доступ к `/counters` и `/counters/hosts` только с [аутентификационным токеном](../../concepts/glossary.md#auth-token); запросы проходят аутентификацию и проверку прав.
 
-    Значение `true` допустимо только при включенном режиме обязательной [аутентификации](../../security/authentication.md) в разделе [security_config](./security_config.md) файла конфигурации YDB.
+    Значение `true` допустимо только при включенном режиме обязательной [аутентификации](../../security/authentication.md) в секции [security_config](./security_config.md) файла конфигурации {{ ydb-short-name }}.
 
-- `false` — аутентификация на страницах `/counters` и `/counters/hosts` опциональна, запросы к ним могут не сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token).
+- `false` — запросы к `/counters` и `/counters/hosts` могут выполняться без [аутентификационного токена](../../concepts/glossary.md#auth-token).
 
 Значение по умолчанию: `false`.
+    ||
+|| `require_healthcheck_authentication` | Дополнительное требование [аутентификации](../../security/authentication.md) для эндпоинта `/healthcheck` поверх общих правил кластера.
 
-||
+Возможные значения:
 
-|| `require_healthcheck_authentication` | Режим обязательной [аутентификации](../../security/authentication.md) на странице `/healthcheck`.
+- `true` — любой ответ `/healthcheck`, включая [формат Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) (параметр `format=prometheus`), выдаётся только при запросе с [аутентификационным токеном](../../concepts/glossary.md#auth-token); запросы проходят аутентификацию и проверку прав.
 
-- `true` — аутентификация на странице `/healthcheck` обязательна, запросы к ней обязаны сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token). Запросы проходят аутентификацию и проверку прав.
+    Значение `true` допустимо только при включенном режиме обязательной [аутентификации](../../security/authentication.md) в секции [security_config](./security_config.md) файла конфигурации {{ ydb-short-name }}.
 
-    Значение `true` допустимо только при включенном режиме обязательной [аутентификации](../../security/authentication.md) в разделе [security_config](./security_config.md) файла конфигурации YDB.
-
-- `false` — аутентификация на странице `/healthcheck` обязательна для всех форматов, кроме [формата Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) (CGI параметр `format=prometheus`), для которого запросы могут не сопровождаться [аутентификационным токеном](../../concepts/glossary.md#auth-token).
+- `false` — при обязательной аутентификации в кластере запросы к `/healthcheck` без токена по-прежнему допускаются, если запрошен вывод в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) (`format=prometheus`). Для остальных форматов ответа `/healthcheck` действуют общие правила (см. примечание ниже).
 
 Значение по умолчанию: `false`.
 
 {% note info %}
 
-Для форматов страницы `/healthcheck`, отличных от [формата Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/), аутентификация обязательна при включенном режиме обязательной [аутентификации](../../security/authentication.md) независимо от значения описываемого параметра `require_healthcheck_authentication`.
+Если в [security_config](./security_config.md) включена обязательная [аутентификация](../../security/authentication.md), то для ответов `/healthcheck` в любом формате, кроме Prometheus, токен обязателен независимо от значения `require_healthcheck_authentication`.
 
 {% endnote %}
-
 
 ||
 |#

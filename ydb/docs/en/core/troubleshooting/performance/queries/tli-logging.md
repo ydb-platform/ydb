@@ -102,7 +102,7 @@ Using the `VictimQuerySpanId` from the SDK error message, you can find all relat
 
 ## find_tli_chain utility
 
-For automatic TLI log correlation, the {{ ydb-short-name }} repository includes the [`find_tli_chain.py`](https://github.com/ydb-platform/ydb/tree/main/ydb/tools/tli_analysis) utility.
+For automatic TLI log analysis, the {{ ydb-short-name }} repository includes the [`find_tli_chain.py`](https://github.com/ydb-platform/ydb/tree/main/ydb/tools/tli_analysis) utility.
 
 This utility takes the following parameters:
 

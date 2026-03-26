@@ -26,6 +26,31 @@ using namespace NKikimr::NWrappers;
 using namespace NKikimr::NWrappers::NExternalStorage;
 using namespace Aws::S3::Model;
 
+class TPermissionGuard {
+public:
+    TPermissionGuard(const TString& path, mode_t tempMode)
+        : Path_(path)
+    {
+        struct stat st;
+        Y_ABORT_UNLESS(::stat(path.c_str(), &st) == 0,
+            "stat(%s) failed: %s", path.c_str(), strerror(errno));
+        OriginalMode_ = st.st_mode & 07777;
+        Y_ABORT_UNLESS(::chmod(path.c_str(), tempMode) == 0,
+            "chmod(%s, 0%o) failed: %s", path.c_str(), tempMode, strerror(errno));
+    }
+
+    ~TPermissionGuard() {
+        ::chmod(Path_.c_str(), OriginalMode_);
+    }
+
+    TPermissionGuard(const TPermissionGuard&) = delete;
+    TPermissionGuard& operator=(const TPermissionGuard&) = delete;
+
+private:
+    TString Path_;
+    mode_t OriginalMode_;
+};
+
 class TFsStorageTestBase : public NUnitTest::TTestBase {
 protected:
     void SetUp() override {
@@ -720,14 +745,12 @@ public:
 
         UNIT_ASSERT(TFsPath(incompleteKey).Exists());
 
-        ::chmod(parentDir.c_str(), S_IRUSR | S_IXUSR);
-
         {
+            TPermissionGuard guard(parentDir, S_IRUSR | S_IXUSR);
+
             auto result = AbortMultipartUpload(key, uploadId);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
         }
-
-        ::chmod(parentDir.c_str(), S_IRWXU);
 
         UNIT_ASSERT(TFsPath(incompleteKey).Exists());
 

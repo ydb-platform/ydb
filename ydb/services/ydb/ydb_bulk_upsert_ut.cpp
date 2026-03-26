@@ -261,7 +261,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
             EPrimitiveType::Yson,
             EPrimitiveType::Json,
             EPrimitiveType::JsonDocument,
-            EPrimitiveType::DyNumber
+            EPrimitiveType::DyNumber,
+            EPrimitiveType::Uuid,
         };
 
         for (EPrimitiveType t : ydbTypes) {

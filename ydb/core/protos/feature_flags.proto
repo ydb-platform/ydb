@@ -283,4 +283,5 @@ message TFeatureFlags {
     optional bool EnableDataShardSplitKeySelection = 245 [default = false];
     optional bool EnableDataShardSplitHistogramOmission  = 246 [default = false];
     optional bool EnableOnlineAddUniqueIndex = 247 [default = false];
+    optional bool EnableExternalDataSourcesIamAuth = 248 [default = false];
 }

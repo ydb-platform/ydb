@@ -710,7 +710,7 @@ namespace NLastGetoptFork {
                         L << "disabled_options[\"-" << shortName << "\"]=\"1\"";
                     }
                     for (auto& longName: disabledOpt->GetLongNames()) {
-                        L << "disabled_options[\"-" << longName << "\"]=\"1\"";
+                        L << "disabled_options[\"--" << longName << "\"]=\"1\"";
                     }
                 } else {
                     L << "disabled_options[\"-" << disabledShortName << "\"]=\"1\"";

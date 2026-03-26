@@ -499,7 +499,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         oauth2TokenExchangeAuth
     );
 
-    opts.GetOpts().AddOption(GenerateCompletionOption("ydb", this, config));
+    ConfigureCompletionOption(opts.AddLongOption("completion"), "ydb", this, config);
 
     const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());
     TStringStream stream;

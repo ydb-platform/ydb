@@ -4,6 +4,7 @@
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb/library/workload/abstract/colors.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
@@ -367,9 +368,48 @@ public:
 
 }
 
+TWorkloadVectorDataInitializerBase::TWorkloadVectorDataInitializerBase(const TString& name, const TString& description, const TVectorWorkloadParams& params)
+    : TWorkloadDataInitializerBase(name, description, params)
+    , VectorParams(params)
+{ }
+
+int TWorkloadVectorDataInitializerBase::PostImport() {
+    if (VectorParams.IndexType == "None") {
+        return EXIT_SUCCESS;
+    }
+
+    TStringBuilder ddlQuery;
+    ddlQuery << "ALTER TABLE `" << VectorParams.GetFullTableName(VectorParams.TableOpts.Name.c_str()) << "`\n";
+    ddlQuery << "ADD INDEX `" << VectorParams.IndexName << "`\n";
+    ddlQuery << "GLOBAL USING vector_kmeans_tree\n";
+    if (VectorParams.KmeansTreePrefixed) {
+        ddlQuery << "ON (prefix, embedding)\n";
+    } else {
+        ddlQuery << "ON (embedding)\n";
+    }
+    if (VectorParams.KmeansTreeCovering) {
+        ddlQuery << "COVER (id)\n";
+    }
+    ddlQuery << "WITH (\n";
+    ddlQuery << "    " << VectorParams.Distance << ",\n";
+    ddlQuery << "    vector_type=" << VectorParams.VectorOpts.VectorType << ",\n";
+    ddlQuery << "    vector_dimension=" << VectorParams.VectorOpts.VectorDimension << ",\n";
+    ddlQuery << "    levels=" << VectorParams.KmeansTreeLevels << ",\n";
+    ddlQuery << "    clusters=" << VectorParams.KmeansTreeClusters << "\n";
+    ddlQuery << ");";
+
+    Cout << "Building vector index ..." << Endl;
+    auto result = VectorParams.QueryClient->RetryQuerySync([&ddlQuery](NYdb::NQuery::TSession session) {
+        return session.ExecuteQuery(ddlQuery, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+    });
+    NYdb::NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    Cout << "Building vector index ...Ok" << Endl;
+
+    return EXIT_SUCCESS;
+}
+
 TWorkloadVectorFilesDataInitializer::TWorkloadVectorFilesDataInitializer(const TVectorWorkloadParams& params)
-    : TWorkloadDataInitializerBase("files", "Import vectors from files", params)
-    , Params(params)
+    : TWorkloadVectorDataInitializerBase("files", "Import vectors from files and build a vector index", params)
 { }
 
 void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
@@ -402,11 +442,11 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
 TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData() {
     const auto basicDataGenerator = std::make_shared<TDataGenerator>(
         *this,
-        Params.TableOpts.Name,
+        VectorParams.TableOpts.Name,
         0,
-        Params.TableOpts.Name,
+        VectorParams.TableOpts.Name,
         DataFiles,
-        Params.GetColumns(),
+        VectorParams.GetColumns(),
         TDataGenerator::EPortionSizeUnit::Line
     );
 
@@ -416,15 +456,19 @@ TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData
 }
 
 TWorkloadVectorGenerateDataInitializer::TWorkloadVectorGenerateDataInitializer(const TVectorWorkloadParams& params)
-    : TWorkloadDataInitializerBase("generator", "Generate random vectors", params)
-    , Params(params)
+    : TWorkloadVectorDataInitializerBase("generator", "Generate random vectors and build a vector index", params)
+    , VectorOpts(params.VectorOpts)
 { }
 
 void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
-    NVector::ConfigureVectorOpts(opts, &VectorOpts);
-    opts.AddLongOption( "rows", "Number of rows to generate")
+    opts.AddLongOption("rows", "Number of rows to generate")
         .RequiredArgument("NUMBER")
-        .Required().StoreResult(&RowCount);
+        .DefaultValue(RowCount)
+        .StoreResult(&RowCount);
+    opts.AddLongOption("prefix-count", "Number of prefixes for prefix index")
+        .RequiredArgument("NUMBER")
+        .DefaultValue(PrefixCount)
+        .StoreResult(&PrefixCount);
     opts.AddLongOption("seed", "Seed for random number generator")
         .RequiredArgument("NUMBER")
         .DefaultValue(RandomSeed)
@@ -433,7 +477,7 @@ void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& o
 
 TBulkDataGeneratorList TWorkloadVectorGenerateDataInitializer::DoGetBulkInitialData() {
     Cout << "Using random seed: " << RandomSeed << Endl;
-    return {std::make_shared<TRandomDataGenerator>(Params, VectorOpts, RowCount, RandomSeed)};
+    return {std::make_shared<TRandomDataGenerator>(VectorParams, VectorOpts, RowCount, RandomSeed)};
 }
 
 } // namespace NYdbWorkload

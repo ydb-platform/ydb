@@ -3,13 +3,17 @@
 #include "vector_workload_generator.h"
 #include "vector_workload_params.h"
 
+#include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
+
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
+#include <util/random/random.h>
 
 #include <format>
 #include <string>
 
 #include <algorithm>
+#include <random>
 
 
 namespace NYdbWorkload {
@@ -20,6 +24,10 @@ TVectorWorkloadGenerator::TVectorWorkloadGenerator(const TVectorWorkloadParams* 
 }
 
 void TVectorWorkloadGenerator::Init() {
+    if (Params.RunWorkloadType == static_cast<int>(EWorkloadRunType::Upsert)) {
+        return;
+    }
+
     VectorSampler = MakeHolder<TVectorSampler>(Params);
     if (Params.QueryTableName.empty()) {
         VectorSampler->SampleExistingVectors();
@@ -36,7 +44,7 @@ void TVectorWorkloadGenerator::Init() {
 std::string TVectorWorkloadGenerator::GetDDLQueries() const {
     return std::format(R"_(--!syntax_v1
             CREATE TABLE `{0}/{1}`(
-                id Uint64,
+                id Uint64 NOT NULL,
                 embedding String,
                 PRIMARY KEY(id))
             WITH (
@@ -81,8 +89,44 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TVectorWorkloadGenerator::GetSup
 }
 
 TQueryInfoList TVectorWorkloadGenerator::Upsert() {
-    // Not implemented yet
-    return {};
+    static thread_local std::mt19937_64 rng(std::random_device{}());
+    static thread_local std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+    static thread_local std::uniform_int_distribution<ui64> idDist;
+
+    const size_t dimension = Params.VectorOpts.VectorDimension;
+    const size_t batchSize = Params.UpsertBulkSize;
+
+    TStringBuilder query;
+    query << "--!syntax_v1\n";
+    query << "DECLARE $rows AS List<Struct<id:Uint64, embedding:String";
+    if (Params.UpsertPrefixed) {
+        query << ", prefix:Uint64";
+    }
+    query << ">>;\n";
+    query << "UPSERT INTO `" << Params.TableOpts.Name << "` SELECT * FROM AS_TABLE($rows);\n";
+
+    NYdb::TParamsBuilder paramsBuilder;
+    auto& listBuilder = paramsBuilder.AddParam("$rows").BeginList();
+
+    for (size_t i = 0; i < batchSize; ++i) {
+        TStringBuilder embeddingBuffer;
+        NKnnVectorSerialization::TSerializer<float> serializer(&embeddingBuffer.Out);
+        for (size_t j = 0; j < dimension; ++j) {
+            serializer.HandleElement(dist(rng));
+        }
+        serializer.Finish();
+
+        auto& item = listBuilder.AddListItem().BeginStruct();
+        item.AddMember("id").Uint64(idDist(rng));
+        item.AddMember("embedding").String(embeddingBuffer);
+        if (Params.UpsertPrefixed) {
+            item.AddMember("prefix").Uint64(idDist(rng) % Params.UpsertPrefixCount);
+        }
+        item.EndStruct();
+    }
+    listBuilder.EndList().Build();
+
+    return TQueryInfoList(1, TQueryInfo(query, paramsBuilder.Build()));
 }
 
 TQueryInfoList TVectorWorkloadGenerator::Select() {

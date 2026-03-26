@@ -135,7 +135,6 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessio
                         return;
                     }
 
-                    Y_ABORT_UNLESS(!self->PendingToken.has_value());
                     self->PendingToken = std::move(ev.ContinuationToken);
                     self->MaybeWriteImpl();
                 }

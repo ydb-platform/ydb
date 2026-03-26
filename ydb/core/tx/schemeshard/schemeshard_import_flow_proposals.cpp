@@ -18,8 +18,6 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-using google::protobuf::util::TimeUtil;
-
 static bool FillDefaultValues(
     const NKikimr::NSchemeShard::TImportInfo::TItem& item,
     ::NKikimrSchemeOp::TIndexedTableCreationConfig& indexedTable,
@@ -433,6 +431,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     const TImportInfo& importInfo,
     TImportInfo::TItem& item
 ) {
+    using google::protobuf::util::TimeUtil;
+
     Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
 
     const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];

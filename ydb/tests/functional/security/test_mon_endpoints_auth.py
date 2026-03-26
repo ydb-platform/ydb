@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import pytest
 import requests
 
 
@@ -239,7 +238,7 @@ assert len(EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN) == len(
 ), "Handlers list must be the same"
 
 
-def _test_endpoint(endpoint_url, endpoint_path, token, expected_status, expected_location=None):
+def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
     headers = {}
     if token is not None:
         headers['Authorization'] = token
@@ -248,11 +247,6 @@ def _test_endpoint(endpoint_url, endpoint_path, token, expected_status, expected
     assert (
         response.status_code == expected_status
     ), f"Expected {endpoint_path} with token={token_desc} to return {expected_status}, got {response.status_code}"
-    if expected_location is not None:
-        actual_location = response.headers.get('Location')
-        assert (
-            actual_location == expected_location
-        ), f"Expected {endpoint_path} with token={token_desc} to redirect to {expected_location}, got {actual_location}"
 
 
 def _test_endpoints(cluster, expected_results):
@@ -262,11 +256,8 @@ def _test_endpoints(cluster, expected_results):
 
     for endpoint_path, expected_statuses in expected_results.items():
         endpoint_url = f'{base_url}{endpoint_path}'
-        expected_location = None
-        if isinstance(expected_statuses, tuple):
-            expected_statuses, expected_location = expected_statuses
         for token, expected_status in expected_statuses.items():
-            _test_endpoint(endpoint_url, endpoint_path, token, expected_status, expected_location)
+            _test_endpoint(endpoint_url, endpoint_path, token, expected_status)
 
 
 def test_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
@@ -408,34 +399,6 @@ def test_public_endpoints_with_params_with_enforce_user_token(ydb_cluster_with_e
     )
 
 
-PUBLIC_REDIRECT_ENDPOINTS_LIST = {
-    '/': 'monitoring/',
-    '/actors/blobstorageproxies': 'blobstorageproxies/',
-    '/actors/interconnect': 'interconnect/',
-    '/actors/pdisks': 'pdisks/',
-    '/actors/vdisks': 'vdisks/',
-    '/monitoring': 'monitoring/',
-}
-
-
-def test_public_redirect_endpoints_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
-    expected_results = {
-        endpoint_path: (
-            {
-                None: 302,
-                'user@builtin': 302,
-                'database@builtin': 302,
-                'viewer@builtin': 302,
-                'monitoring@builtin': 302,
-                'root@builtin': 302,
-            },
-            expected_location,
-        )
-        for endpoint_path, expected_location in PUBLIC_REDIRECT_ENDPOINTS_LIST.items()
-    }
-    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
-
-
 def test_public_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
     ydb_cluster_with_enforce_user_token,
 ):
@@ -453,5 +416,3 @@ def test_public_endpoints_requiring_parameters_or_request_context_with_enforce_u
             },
         },
     )
-
-

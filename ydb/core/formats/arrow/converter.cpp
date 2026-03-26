@@ -18,12 +18,12 @@
 namespace NKikimr::NArrow {
 
 static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryPool& memPool, TString& errorMessage, const bool allowInfDouble) {
-    if (!cell.AsBuf()) {
-        cell = TCell();
-        return true;
-    }
     switch (colType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber: {
+            if (!cell.AsBuf()) {
+                cell = TCell();
+                break;
+            }
             const auto dyNumber = NDyNumber::ParseDyNumberString(cell.AsBuf());
             if (!dyNumber.Defined()) {
                 errorMessage = "Invalid DyNumber string representation";
@@ -34,6 +34,10 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
             break;
         }
         case NScheme::NTypeIds::JsonDocument: {
+            if (!cell.AsBuf()) {
+                cell = TCell();
+                break;
+            }
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(cell.AsBuf(), allowInfDouble);
             if (std::holds_alternative<TString>(binaryJson)) {
                 errorMessage = "Invalid JSON for JsonDocument provided: " + std::get<TString>(binaryJson);
@@ -371,8 +375,10 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
                 return false;
             }
 
-            if (!ConvertData(curCell, colType, memPool, errorMessage, AllowInfDouble_)) {
-                return false;
+            if (NeedDataConversion(colType)) {
+                if (!ConvertData(curCell, colType, memPool, errorMessage, AllowInfDouble_)) {
+                    return false;
+                }
             }
             ++col;
         }

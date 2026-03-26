@@ -501,6 +501,65 @@ private:
             }
         }
 
+        return ValidateInputBatch(errorMessage);
+    }
+
+    bool ValidateInputBatch(TString& errorMessage) {
+        return ValidateNotNullColumns(errorMessage) &&
+            ValidateUtf8(errorMessage);
+    }
+
+    bool ValidateNotNullColumns(TString& errorMessage) {
+        if (!Batch || NotNullColumns.empty()) {
+            return true;
+        }
+
+        for (const std::string& columnName : NotNullColumns) {
+            auto column = Batch->GetColumnByName(columnName);
+            if (!column) {
+                errorMessage = "Missing not null column: " + TString(columnName);
+                return false;
+            }
+
+            if (column->null_count() > 0) {
+                errorMessage = "Received NULL value for not null column: " + TString(columnName);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ValidateUtf8(TString& errorMessage) {
+        if (!Batch) {
+            return true;
+        }
+
+        for (const auto& [columnName, columnType] : YdbSchema) {
+            if (columnType.GetTypeId() != NScheme::NTypeIds::Utf8) {
+                continue;
+            }
+
+            auto column = Batch->GetColumnByName(columnName);
+            if (!column) {
+                errorMessage = "Missing Utf8 column: " + columnName;
+                return false;
+            }
+
+            if (column->type_id() != arrow::Type::STRING) {
+                errorMessage = Sprintf("Unexpected Arrow type %s for Utf8 column '%s'",
+                    column->type()->ToString().c_str(), columnName.c_str());
+                return false;
+            }
+
+            const auto& typedColumn = static_cast<const arrow::StringArray&>(*column);
+            arrow::Status validationStatus = typedColumn.ValidateUTF8();
+            if (!validationStatus.ok()) {
+                errorMessage = TStringBuilder() << "Invalid UTF-8 data in column " << columnName << ": " << validationStatus.message();
+                return false;
+            }
+        }
+
         return true;
     }
 

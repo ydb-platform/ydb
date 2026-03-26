@@ -397,102 +397,107 @@ private:
 };
 
 int main(int argc, char** argv) {
-    NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
-    TString keysDistributionStr;
-    TString shapeStr = "default";
-    ui32 nIters = 100;
-    ui32 nRows = 1000000;
-    ui32 nBuckets = 16;
-    ui32 nRepeats = 10;
-    opts.AddLongOption('k', "keys", "distribution of keys (const, linear, random, few, randomfew)").StoreResult(&keysDistributionStr).Required();
-    opts.AddLongOption('s', "shape", "shape of counter (default, sqrt, log)").StoreResult(&shapeStr);
-    opts.AddLongOption('i', "iter", "# of iterations").StoreResult(&nIters);
-    opts.AddLongOption('r', "rows", "# of rows").StoreResult(&nRows);
-    opts.AddLongOption('b', "buckets", "modulo for few/randomfew").StoreResult(&nBuckets);
-    opts.AddLongOption('t', "repeats", "# of repeats").StoreResult(&nRepeats);
-    opts.SetFreeArgsMax(0);
-    NLastGetopt::TOptsParseResult res(&opts, argc, argv);
-    EDistribution keysDist;
-    EShape shape = EShape::Default;
-    if (keysDistributionStr == "const") {
-        keysDist = EDistribution::Const;
-    } else if (keysDistributionStr == "linear") {
-        keysDist = EDistribution::Linear;
-    } else if (keysDistributionStr == "random") {
-        keysDist = EDistribution::Random;
-    } else if (keysDistributionStr == "few") {
-        keysDist = EDistribution::Few;
-    } else if (keysDistributionStr == "randomfew") {
-        keysDist = EDistribution::RandomFew;
-    } else {
-        ythrow yexception() << "Unsupported distribution: " << keysDistributionStr;
-    }
-
-    if (shapeStr == "default") {
-        shape = EShape::Default;
-    } else if (shapeStr == "sqrt") {
-        shape = EShape::Sqrt;
-    } else if (shapeStr == "log") {
-        shape = EShape::Log;
-    } else {
-        ythrow yexception() << "Unsupported shape: " << shapeStr;
-    }
-
-    auto col1 = MakeIntColumn(nRows, keysDist, shape, nBuckets);
-    auto col2 = MakeIntColumn(nRows, EDistribution::Linear, EShape::Default, nBuckets);
-    Cerr << "col1.length: " << col1.length() << "\n";
-    Cerr << "col2.length: " << col2.length() << "\n";
-
-    TSumAggregator sum;
-    std::vector<IAggregator*> aggs;
-    aggs.push_back(&sum);
-    TAggregate<true, true> agg(aggs);
-    agg.AddBatch(col1, col2);
-    arrow::Datum keys, sums;
-    agg.GetResult(keys, sums);
-    ui64 total1 = 0;
-    for (ui32 i = 0; i < col2.length(); ++i) {
-        total1 += col2.array()->GetValues<i32>(1)[i];
-    }
-
-    Cerr << "total1: " << total1 << "\n";
-    ui64 total2 = 0;
-
-    Cerr << "keys.length: " << keys.length() << "\n";
-    Cerr << "sums.length: " << sums.length() << "\n";
-    for (ui32 i = 0; i < sums.length(); ++i) {
-        total2 += sums.array()->GetValues<i64>(1)[i];
-    }
-
-    Cerr << "total2: " << total2 << "\n";
-    Y_ENSURE(total1 == total2);
-    Cerr << "AverageHashChainLen: " << agg.GetAverageHashChainLen() << "\n";
-    Cerr << "MaxHashChainLen: " << agg.GetMaxHashChainLen() << "\n";
-
-    std::vector<double> durations;
-    for (ui32 j = 0; j < nRepeats; ++j) {
-        TSimpleTimer timer;
-        for (ui32 i = 0; i < nIters; ++i) {
-            TAggregate<false, true> agg(aggs);
-            agg.AddBatch(col1, col2);
-            arrow::Datum keys, sums;
-            agg.GetResult(keys, sums);
+    try {
+        NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
+        TString keysDistributionStr;
+        TString shapeStr = "default";
+        ui32 nIters = 100;
+        ui32 nRows = 1000000;
+        ui32 nBuckets = 16;
+        ui32 nRepeats = 10;
+        opts.AddLongOption('k', "keys", "distribution of keys (const, linear, random, few, randomfew)").StoreResult(&keysDistributionStr).Required();
+        opts.AddLongOption('s', "shape", "shape of counter (default, sqrt, log)").StoreResult(&shapeStr);
+        opts.AddLongOption('i', "iter", "# of iterations").StoreResult(&nIters);
+        opts.AddLongOption('r', "rows", "# of rows").StoreResult(&nRows);
+        opts.AddLongOption('b', "buckets", "modulo for few/randomfew").StoreResult(&nBuckets);
+        opts.AddLongOption('t', "repeats", "# of repeats").StoreResult(&nRepeats);
+        opts.SetFreeArgsMax(0);
+        NLastGetopt::TOptsParseResult res(&opts, argc, argv);
+        EDistribution keysDist;
+        EShape shape = EShape::Default;
+        if (keysDistributionStr == "const") {
+            keysDist = EDistribution::Const;
+        } else if (keysDistributionStr == "linear") {
+            keysDist = EDistribution::Linear;
+        } else if (keysDistributionStr == "random") {
+            keysDist = EDistribution::Random;
+        } else if (keysDistributionStr == "few") {
+            keysDist = EDistribution::Few;
+        } else if (keysDistributionStr == "randomfew") {
+            keysDist = EDistribution::RandomFew;
+        } else {
+            ythrow yexception() << "Unsupported distribution: " << keysDistributionStr;
         }
 
-        auto duration = timer.Get();
-        durations.push_back(1e-6 * duration.MicroSeconds());
-    }
+        if (shapeStr == "default") {
+            shape = EShape::Default;
+        } else if (shapeStr == "sqrt") {
+            shape = EShape::Sqrt;
+        } else if (shapeStr == "log") {
+            shape = EShape::Log;
+        } else {
+            ythrow yexception() << "Unsupported shape: " << shapeStr;
+        }
 
-    double sumDurations = 0.0, sumDurationsQ = 0.0;
-    for (auto d : durations) {
-        sumDurations += d;
-        sumDurationsQ += d * d;
-    }
+        auto col1 = MakeIntColumn(nRows, keysDist, shape, nBuckets);
+        auto col2 = MakeIntColumn(nRows, EDistribution::Linear, EShape::Default, nBuckets);
+        Cerr << "col1.length: " << col1.length() << "\n";
+        Cerr << "col2.length: " << col2.length() << "\n";
 
-    double avgDuration = sumDurations / nRepeats;
-    double dispDuration = sqrt(sumDurationsQ / nRepeats - avgDuration * avgDuration);
-    Cerr << "Elapsed: " << avgDuration << ", noise: " << 100 * dispDuration / avgDuration << "%\n";
-    Cerr << "Speed: " << 1e-6 * (ui64(nIters) * nRows / avgDuration) << " M rows/sec\n";
-    Cerr << "Speed: " << 1e-6 * (2 * sizeof(i32) * ui64(nIters) * nRows / avgDuration) << " M bytes/sec\n";
-    return 0;
+        TSumAggregator sum;
+        std::vector<IAggregator*> aggs;
+        aggs.push_back(&sum);
+        TAggregate<true, true> agg(aggs);
+        agg.AddBatch(col1, col2);
+        arrow::Datum keys, sums;
+        agg.GetResult(keys, sums);
+        ui64 total1 = 0;
+        for (ui32 i = 0; i < col2.length(); ++i) {
+            total1 += col2.array()->GetValues<i32>(1)[i];
+        }
+
+        Cerr << "total1: " << total1 << "\n";
+        ui64 total2 = 0;
+
+        Cerr << "keys.length: " << keys.length() << "\n";
+        Cerr << "sums.length: " << sums.length() << "\n";
+        for (ui32 i = 0; i < sums.length(); ++i) {
+            total2 += sums.array()->GetValues<i64>(1)[i];
+        }
+
+        Cerr << "total2: " << total2 << "\n";
+        Y_ENSURE(total1 == total2);
+        Cerr << "AverageHashChainLen: " << agg.GetAverageHashChainLen() << "\n";
+        Cerr << "MaxHashChainLen: " << agg.GetMaxHashChainLen() << "\n";
+
+        std::vector<double> durations;
+        for (ui32 j = 0; j < nRepeats; ++j) {
+            TSimpleTimer timer;
+            for (ui32 i = 0; i < nIters; ++i) {
+                TAggregate<false, true> agg(aggs);
+                agg.AddBatch(col1, col2);
+                arrow::Datum keys, sums;
+                agg.GetResult(keys, sums);
+            }
+
+            auto duration = timer.Get();
+            durations.push_back(1e-6 * duration.MicroSeconds());
+        }
+
+        double sumDurations = 0.0, sumDurationsQ = 0.0;
+        for (auto d : durations) {
+            sumDurations += d;
+            sumDurationsQ += d * d;
+        }
+
+        double avgDuration = sumDurations / nRepeats;
+        double dispDuration = sqrt(sumDurationsQ / nRepeats - avgDuration * avgDuration);
+        Cerr << "Elapsed: " << avgDuration << ", noise: " << 100 * dispDuration / avgDuration << "%\n";
+        Cerr << "Speed: " << 1e-6 * (ui64(nIters) * nRows / avgDuration) << " M rows/sec\n";
+        Cerr << "Speed: " << 1e-6 * (2 * sizeof(i32) * ui64(nIters) * nRows / avgDuration) << " M bytes/sec\n";
+        return 0;
+    } catch (...) {
+        Cerr << "Error: " << CurrentExceptionMessage() << Endl;
+        return 1;
+    }
 }

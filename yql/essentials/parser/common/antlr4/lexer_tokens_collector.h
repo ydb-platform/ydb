@@ -7,13 +7,15 @@
 
 #include <contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h>
 
+#include <utility>
+
 namespace NAST {
 
 template <typename TLexer>
 class TLexerTokensCollector4 {
 public:
-    explicit TLexerTokensCollector4(TStringBuf data, const TString& queryName = "query")
-        : QueryName(queryName)
+    explicit TLexerTokensCollector4(TStringBuf data, TString queryName = "query")
+        : QueryName(std::move(queryName))
         , InputStream(data)
         , Lexer(&InputStream)
     {

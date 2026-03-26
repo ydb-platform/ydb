@@ -7,14 +7,14 @@
    :target: https://github.com/jaraco/jaraco.text/actions?query=workflow%3A%22tests%22
    :alt: tests
 
-.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json
+.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
     :target: https://github.com/astral-sh/ruff
     :alt: Ruff
 
 .. image:: https://readthedocs.org/projects/jaracotext/badge/?version=latest
    :target: https://jaracotext.readthedocs.io/en/latest/?badge=latest
 
-.. image:: https://img.shields.io/badge/skeleton-2024-informational
+.. image:: https://img.shields.io/badge/skeleton-2025-informational
    :target: https://blog.jaraco.com/skeleton
 
 .. image:: https://tidelift.com/badges/package/pypi/jaraco.text

@@ -1204,6 +1204,9 @@ class Roaring64Map {
             ROARING_TERMINATE("ran out of bytes");
         }
         Roaring64Map result;
+        if (maxbytes < sizeof(uint64_t)) {
+            ROARING_TERMINATE("ran out of bytes");
+        }
         uint64_t map_size;
         std::memcpy(&map_size, buf, sizeof(uint64_t));
         buf += sizeof(uint64_t);
@@ -1219,11 +1222,15 @@ class Roaring64Map {
             buf += sizeof(uint32_t);
             maxbytes -= sizeof(uint32_t);
             // read map value Roaring
+            size_t needed_bytes =
+                Roaring::serializedSizeInBytesSafe(buf, maxbytes);
+            if (needed_bytes == 0) {
+                ROARING_TERMINATE("invalid serialized data");
+            }
             Roaring read_var = Roaring::readSafe(buf, maxbytes);
             // forward buffer past the last Roaring Bitmap
-            size_t tz = read_var.getSizeInBytes(true);
-            buf += tz;
-            maxbytes -= tz;
+            buf += needed_bytes;
+            maxbytes -= needed_bytes;
             result.emplaceOrInsert(key, std::move(read_var));
         }
         return result;

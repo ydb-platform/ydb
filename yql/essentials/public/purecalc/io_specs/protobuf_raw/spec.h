@@ -7,8 +7,7 @@
 
 #include <util/generic/maybe.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 /**
  * Processing mode for working with raw protobuf message inputs.
  *
@@ -41,7 +40,7 @@ public:
     explicit TProtobufRawInputSpec(
         const google::protobuf::Descriptor& descriptor,
         const TMaybe<TString>& timestampColumn = Nothing(),
-        const TProtoSchemaOptions& options = {});
+        TProtoSchemaOptions options = {});
 
 public:
     const TVector<NYT::TNode>& GetSchemas() const override;
@@ -95,7 +94,7 @@ public:
     explicit TProtobufRawOutputSpec(
         const google::protobuf::Descriptor& descriptor,
         google::protobuf::MessageFactory* = nullptr,
-        const TProtoSchemaOptions& options = {},
+        TProtoSchemaOptions options = {},
         google::protobuf::Arena* arena = nullptr);
 
 public:
@@ -156,7 +155,7 @@ public:
     explicit TProtobufRawMultiOutputSpec(
         TVector<const google::protobuf::Descriptor*>,
         TMaybe<TVector<google::protobuf::MessageFactory*>> = {},
-        const TProtoSchemaOptions& options = {},
+        TProtoSchemaOptions options = {},
         TMaybe<TVector<google::protobuf::Arena*>> arenas = {});
 
 public:
@@ -250,5 +249,4 @@ struct TOutputSpecTraits<TProtobufRawMultiOutputSpec> {
     static TPullListReturnType ConvertPullListWorkerToOutputType(const TProtobufRawMultiOutputSpec&, TWorkerHolder<IPullListWorker>);
     static void SetConsumerToWorker(const TProtobufRawMultiOutputSpec&, IPushStreamWorker*, THolder<IConsumer<TOutputItemType>>);
 };
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

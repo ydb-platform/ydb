@@ -553,6 +553,8 @@ Ydb::StatusIds::StatusCode PullStatus(const TResult &result) {
         return Ydb::StatusIds::NOT_FOUND;
     case NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION:
         return Ydb::StatusIds::PRECONDITION_FAILED;
+    case NKikimrKeyValue::Statuses::RSTATUS_BLOCKED:
+        return Ydb::StatusIds::UNAVAILABLE;
     default:
         return Ydb::StatusIds::INTERNAL_ERROR;
     }

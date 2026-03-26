@@ -2,11 +2,10 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    SPLIT_FACTOR(40)
-ENDIF()
-
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 PEERDIR(
     library/cpp/getopt

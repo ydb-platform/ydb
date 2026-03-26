@@ -53,10 +53,11 @@ private:
     TStatus ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx);
     bool IsSuitableToRequestStatistics();
     void CollectTablesAndColumnsNames(TExprContext& ctx);
-    void CollectTablesAndColumnsNames(const std::shared_ptr<IOperator>& op);
+    void CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op);
     void CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props);
-    bool IsSuitableToCollectStatistics(const std::shared_ptr<IOperator>& op) const;
+    bool IsSuitableToCollectStatistics(const TIntrusivePtr<IOperator>& op) const;
     void ApplyColumnStatistics();
+    void InitializeRBOOptimizationStages();
 
     TTypeAnnotationContext& TypeCtx;
     TKqpOptimizeContext& KqpCtx;
@@ -74,7 +75,7 @@ private:
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
 
-    std::unique_ptr<TOpRoot> OpRoot;
+    TIntrusivePtr<TOpRoot> OpRoot;
     TRuleBasedOptimizer RBO;
 };
 

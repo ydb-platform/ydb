@@ -355,8 +355,8 @@ public:
         return CancelationError_;
     }
 
-    bool Wait(TDuration timeout) const;
-    bool Wait(TInstant deadline) const;
+    bool BlockingWait(TDuration timeout) const;
+    bool BlockingWait(TInstant deadline) const;
 
 protected:
     //! Number of promises.
@@ -1110,22 +1110,48 @@ bool TFutureBase<T>::IsSet() const
 template <class T>
 const TErrorOr<T>& TFutureBase<T>::Get() const
 {
+    return BlockingGet();
+}
+
+template <class T>
+const TErrorOr<T>& TFutureBase<T>::BlockingGet() const
+{
     YT_ASSERT(Impl_);
     return Impl_->Get();
 }
 
 template <class T>
-bool TFutureBase<T>::Wait(TDuration timeout) const
+const TErrorOr<T>& TFutureBase<T>::GetOrCrash() const
 {
     YT_ASSERT(Impl_);
-    return Impl_->Wait(timeout);
+    YT_VERIFY(Impl_->IsSet(), "GetOrCrash must not be called before future is set");
+    return Impl_->Get();
+}
+
+template <class T>
+bool TFutureBase<T>::BlockingWait(TDuration timeout) const
+{
+    YT_ASSERT(Impl_);
+    return Impl_->BlockingWait(timeout);
+}
+
+template <class T>
+bool TFutureBase<T>::BlockingWait(TInstant deadline) const
+{
+    YT_ASSERT(Impl_);
+    return Impl_->BlockingWait(deadline);
+}
+
+template <class T>
+bool TFutureBase<T>::Wait(TDuration timeout) const
+{
+    return BlockingWait(timeout);
 }
 
 template <class T>
 bool TFutureBase<T>::Wait(TInstant deadline) const
 {
-    YT_ASSERT(Impl_);
-    return Impl_->Wait(deadline);
+    return BlockingWait(deadline);
 }
 
 template <class T>
@@ -1426,7 +1452,21 @@ inline TFuture<void>::TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<void>> im
 template <class T>
 TErrorOr<T> TUniqueFutureBase<T>::Get() const
 {
+    return BlockingGet();
+}
+
+template <class T>
+TErrorOr<T> TUniqueFutureBase<T>::BlockingGet() const
+{
     YT_ASSERT(this->Impl_);
+    return this->Impl_->GetUnique();
+}
+
+template <class T>
+TErrorOr<T> TUniqueFutureBase<T>::GetOrCrash() const
+{
+    YT_ASSERT(this->Impl_);
+    YT_VERIFY(this->Impl_->IsSet(), "GetOrCrash must not be called before future is set");
     return this->Impl_->GetUnique();
 }
 
@@ -1606,7 +1646,21 @@ inline void TPromiseBase<T>::TrySetFrom(const TFuture<U>& another) const
 template <class T>
 const TErrorOr<T>& TPromiseBase<T>::Get() const
 {
+    return BlockingGet();
+}
+
+template <class T>
+const TErrorOr<T>& TPromiseBase<T>::BlockingGet() const
+{
     YT_ASSERT(Impl_);
+    return Impl_->Get();
+}
+
+template <class T>
+const TErrorOr<T>& TPromiseBase<T>::GetOrCrash() const
+{
+    YT_ASSERT(Impl_);
+    YT_VERIFY(Impl_->IsSet(), "GetOrCrash must not be called before promise is set");
     return Impl_->Get();
 }
 
@@ -2193,7 +2247,7 @@ public:
             TFutureCallbackCookie cookie;
             if (future.IsSet()) {
                 cookie = NullFutureCallbackCookie;
-                OnFutureSet(future.Get());
+                OnFutureSet(future.BlockingGet());
             } else {
                 cookie = future.Subscribe(BIND_NO_PROPAGATE(&TAnyFutureCombiner::OnFutureSet, MakeStrong(this)));
             }
@@ -2282,7 +2336,7 @@ public:
         for (int index = 0; index < std::ssize(this->Futures_); ++index) {
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
-                OnFutureSet(index, future.Get());
+                OnFutureSet(index, future.BlockingGet());
             } else {
                 future.Subscribe(BIND_NO_PROPAGATE(&TAllFutureCombiner::OnFutureSet, MakeStrong(this), index));
             }
@@ -2380,7 +2434,7 @@ public:
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
                 cookie = NullFutureCallbackCookie;
-                OnFutureSet(index, future.Get());
+                OnFutureSet(index, future.BlockingGet());
             } else {
                 cookie = future.Subscribe(
                     BIND_NO_PROPAGATE(&TAnyNFutureCombiner::OnFutureSet, MakeStrong(this), index));
@@ -2556,9 +2610,11 @@ TFuture<std::vector<TErrorOr<T>>> AllSetWithTimeout(
         futures[index].Subscribe(BIND_NO_PROPAGATE([promise] (const TErrorOr<T>& value) {
             promise.TrySet(value);
         }));
-        promise.OnCanceled(BIND_NO_PROPAGATE([future = futures[index]] (const TError& error) {
-            future.Cancel(error);
-        }));
+        if (options.PropagateCancelationToInput) {
+            promise.OnCanceled(BIND_NO_PROPAGATE([future = futures[index]] (const TError& error) {
+                future.Cancel(error);
+            }));
+        }
         promises[index] = promise;
     }
 
@@ -2570,11 +2626,13 @@ TFuture<std::vector<TErrorOr<T>>> AllSetWithTimeout(
     auto combinedFuture = AllSet(wrappedFutures, options);
 
     auto cookie = NConcurrency::TDelayedExecutor::Submit(
-        BIND_NO_PROPAGATE([promises, futures] {
+        BIND_NO_PROPAGATE([promises, futures, cancelFuture = options.CancelInputOnShortcut] {
             for (int index = 0; index < std::ssize(futures); ++index) {
                 auto error = TError(NYT::EErrorCode::Timeout, "Operation timed out");
                 promises[index].TrySet(error);
-                futures[index].Cancel(error);
+                if (cancelFuture) {
+                    futures[index].Cancel(error);
+                }
             }
         }),
         timeout,
@@ -2693,7 +2751,7 @@ private:
                 break;
             }
 
-            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, std::move(future.Get()));
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, std::move(future.BlockingGet()));
             if (!suggestedIndex) {
                 break;
             }
@@ -2813,7 +2871,7 @@ private:
                         break;
             }
 
-            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, future.Get());
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, future.BlockingGet());
             if (!suggestedIndex) {
                 break;
             }

@@ -12,15 +12,15 @@
 
 namespace NYql {
 
-extern const char IssueMapResource[14];
+extern const std::array<char, 14> IssueMapResource;
 using EYqlIssueCode = TIssuesIds::EIssueCode;
 
 inline ESeverity GetSeverity(EYqlIssueCode id) {
-    return GetSeverity<TIssuesIds, IssueMapResource>(id);
+    return GetSeverity<TIssuesIds, IssueMapResource.data()>(id);
 }
 
 inline TString GetMessage(EYqlIssueCode id) {
-    return GetMessage<TIssuesIds, IssueMapResource>(id);
+    return GetMessage<TIssuesIds, IssueMapResource.data()>(id);
 }
 
 inline TIssue& SetIssueCode(EYqlIssueCode id, TIssue& issue) {

@@ -32,6 +32,26 @@ void TFmrUserJobSettings::Load(IInputStream* buffer) {
     );
 }
 
+void TFmrTvmJobSettings::Save(IOutputStream* buffer) const {
+    ::SaveMany(
+        buffer,
+        WorkerTvmAlias,
+        TableDataServiceTvmId,
+        TvmPort,
+        TvmSecret
+    );
+}
+
+void TFmrTvmJobSettings::Load(IInputStream* buffer) {
+    ::LoadMany(
+        buffer,
+        WorkerTvmAlias,
+        TableDataServiceTvmId,
+        TvmPort,
+        TvmSecret
+    );
+}
+
 TYtTableRef::TYtTableRef()
 {
 }

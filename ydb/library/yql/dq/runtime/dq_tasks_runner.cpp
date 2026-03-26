@@ -760,14 +760,28 @@ public:
                 YQL_ENSURE(outputTypeNode, "Failed to deserialize transform output type");
                 transform->TransformOutputType = static_cast<TType*>(outputTypeNode);
 
-                TStringBuf inputTypeNodeRaw(transformDesc.GetInputType());
-                auto inputTypeNode = NMiniKQL::DeserializeNode(inputTypeNodeRaw, typeEnv);
-                YQL_ENSURE(inputTypeNode, "Failed to deserialize transform input type");
-                TType* inputType = static_cast<TType*>(inputTypeNode);
-                YQL_ENSURE(inputTypeNodeRaw == entry->OutputItemTypesRaw[i]);
-                LOG(TStringBuilder() << "Task: " << TaskId << " has transform by "
-                    << transformDesc.GetType() << " with input type: " << *inputType
-                    << " , output type: " << *transform->TransformOutputType);
+                {
+                    TStringBuf inputTypeNodeRaw(transformDesc.GetInputType());
+                    auto inputTypeNode = NMiniKQL::DeserializeNode(inputTypeNodeRaw, typeEnv);
+                    YQL_ENSURE(inputTypeNode, "Failed to deserialize transform input type");
+                    TType* inputType = static_cast<TType*>(inputTypeNode);
+                    auto localOutputTypeNode = NMiniKQL::DeserializeNode(entry->OutputItemTypesRaw[i], typeEnv);
+                    YQL_ENSURE(localOutputTypeNode, "Failed to deserialize transform output type");
+                    TType* localOutputType = static_cast<TType*>(localOutputTypeNode);
+
+                    auto typeCheckLog = [&] () {
+                        TStringStream out;
+                        out << *inputType << " != " << *entry->OutputItemTypes[i];
+                        LOG(TStringBuilder() << "Task: " << TaskId << " types is not the same: " << out.Str() << " has NOT been transformed by "
+                            << transformDesc.GetType() << " with output type: " << *transform->TransformOutputType
+                            << " , input type: " << *inputType);
+                        return out.Str();
+                    };
+                    YQL_ENSURE(inputType->IsSameType(*localOutputType),  "" << typeCheckLog());
+                    LOG(TStringBuilder() << "Task: " << TaskId << " has transform by "
+                        << transformDesc.GetType() << " with input type: " << *inputType
+                        << " , output type: " << *transform->TransformOutputType);
+                }
 
                 transform->TransformInput = CreateDqAsyncOutputBuffer(i, transformDesc.GetType(), entry->OutputItemTypes[i], memoryLimits.ChannelBufferSize,
                     StatsModeToCollectStatsLevel(Settings.StatsMode));
@@ -922,8 +936,8 @@ public:
                     // output is checked first => not waiting for output
                     Stats->CurrentWaitOutputStartTime = TInstant::Zero();
                     if (Y_LIKELY(InputConsumed)) {
-                        // did smth => waiting for nothing
-                        Stats->CurrentWaitInputStartTime = TInstant::Zero();
+                        // reset waiting start time after each consumed value
+                        Stats->CurrentWaitInputStartTime = now;
                     } else {
                         StartWaitingInput();
                         if (Y_LIKELY(!Stats->CurrentWaitInputStartTime)) {

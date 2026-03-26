@@ -64,8 +64,10 @@ const google::protobuf::Message* GetCommandFromRequest(const TEvLoadTestRequest&
         return &request.GetStorageLoad();
     case TEvLoadTestRequest::CommandCase::kPDiskWriteLoad:
         return &request.GetPDiskWriteLoad();
-    case TEvLoadTestRequest::CommandCase::kDDiskWriteLoad:
-        return &request.GetDDiskWriteLoad();
+    case TEvLoadTestRequest::CommandCase::kDDiskLoad:
+        return &request.GetDDiskLoad();
+    case TEvLoadTestRequest::CommandCase::kPersistentBufferWriteLoad:
+        return &request.GetPersistentBufferWriteLoad();
     case TEvLoadTestRequest::CommandCase::kVDiskLoad:
         return &request.GetVDiskLoad();
     case TEvLoadTestRequest::CommandCase::kPDiskReadLoad:
@@ -99,8 +101,10 @@ ui64 ExtractTagFromCommand(const TEvLoadTestRequest& request) {
         return request.GetStorageLoad().GetTag();
     case TEvLoadTestRequest::CommandCase::kPDiskWriteLoad:
         return request.GetPDiskWriteLoad().GetTag();
-    case TEvLoadTestRequest::CommandCase::kDDiskWriteLoad:
-        return request.GetDDiskWriteLoad().GetTag();
+    case TEvLoadTestRequest::CommandCase::kDDiskLoad:
+        return request.GetDDiskLoad().GetTag();
+    case TEvLoadTestRequest::CommandCase::kPersistentBufferWriteLoad:
+        return request.GetPersistentBufferWriteLoad().GetTag();
     case TEvLoadTestRequest::CommandCase::kVDiskLoad:
         return request.GetVDiskLoad().GetTag();
     case TEvLoadTestRequest::CommandCase::kPDiskReadLoad:
@@ -536,13 +540,24 @@ public:
                 break;
             }
 
-            case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskWriteLoad: {
-                const auto& cmd = record.GetDDiskWriteLoad();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad: {
+                const auto& cmd = record.GetDDiskLoad();
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
                 LOG_D("Create new load actor with tag# " << tag);
-                LoadActors.emplace(tag, TlsActivationContext->Register(CreateDDiskWriterLoadTest(
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreateDDiskLoadTest(
+                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                break;
+            }
+
+            case NKikimr::TEvLoadTestRequest::CommandCase::kPersistentBufferWriteLoad: {
+                const auto& cmd = record.GetPersistentBufferWriteLoad();
+                if (LoadActors.count(tag) != 0) {
+                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
+                }
+                LOG_D("Create new load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreatePersistentBufferWriterLoadTest(
                                 cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }

@@ -14,16 +14,16 @@ namespace NKikimr::NOlap::PortionIntervalTree {
 struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::shared_ptr<TPortionInfo>> {
     struct TValueHash {
         ui64 operator()(const std::shared_ptr<TPortionInfo>& value) const {
-            return THash<TPortionAddress>()(value->GetAddress());
+            return value->GetPortionId();
         }
     };
 
     static bool Less(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {
-        return a->GetAddress() < b->GetAddress();
+        return a->GetPortionId() < b->GetPortionId();
     }
 
     static bool Equal(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {
-        return a->GetAddress() == b->GetAddress();
+        return a->GetPortionId() == b->GetPortionId();
     }
 };
 

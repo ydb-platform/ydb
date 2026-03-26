@@ -2,12 +2,8 @@
 
 #include "hints.h"
 
-namespace NSQLTranslation {
-
-namespace NDetail {
+namespace NSQLTranslation::NDetail {
 
 TVector<TSQLHint> ParseSqlHints(NYql::TPosition commentPos, const TStringBuf& comment, bool utf8Aware);
 
-} // namespace NDetail
-
-} // namespace NSQLTranslation
+} // namespace NSQLTranslation::NDetail

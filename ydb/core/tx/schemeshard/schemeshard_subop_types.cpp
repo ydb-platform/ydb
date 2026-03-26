@@ -55,6 +55,7 @@ bool IsCreate(ETxType t) {
         case TxMkDir:
         case TxCreateTable:
         case TxCopyTable:
+        case TxReadOnlyCopyColumnTable:
         case TxCreateOlapStore:
         case TxCreateColumnTable:
         case TxCreatePQGroup:
@@ -88,6 +89,7 @@ bool IsCreate(ETxType t) {
         case TxIncrementalRestoreFinalize:
             return false; // IsCreate
         case TxInitializeBuildIndex: //this is more like alter
+        case TxPrepareIndexValidation:
         case TxCreateCdcStreamAtTable:
         case TxCreateCdcStreamAtTableWithInitialScan:
             return false; // IsCreate
@@ -224,6 +226,7 @@ bool IsDrop(ETxType t) {
         case TxMkDir:
         case TxCreateTable:
         case TxCopyTable:
+        case TxReadOnlyCopyColumnTable:
         case TxCreateOlapStore:
         case TxCreateColumnTable:
         case TxCreatePQGroup:
@@ -244,6 +247,7 @@ bool IsDrop(ETxType t) {
         case TxCreateTransfer:
         case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
+        case TxPrepareIndexValidation:
         case TxCreateLock:
         case TxDropLock:
         case TxFinalizeBuildIndex:
@@ -363,6 +367,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateOlapStore:
         case TxCreateColumnTable:
         case TxCopyTable:
+        case TxReadOnlyCopyColumnTable:
         case TxCreatePQGroup:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
@@ -381,6 +386,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateTransfer:
         case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
+        case TxPrepareIndexValidation:
         case TxCreateLock:
         case TxDropLock:
         case TxDropTableIndexAtMainTable:
@@ -578,6 +584,7 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery: return TxAlterStreamingQuery;
         case NKikimrSchemeOp::ESchemeOpDropStreamingQuery: return TxDropStreamingQuery;
         case NKikimrSchemeOp::ESchemeOpTruncateTable: return TxTruncateTable;
+        case NKikimrSchemeOp::ESchemeOpPrepareIndexValidation: return TxPrepareIndexValidation;
 
         // no matching tx-type
         case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:
@@ -586,7 +593,6 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
         case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
-        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate: // TODO flown4qqqq
             return TxInvalid;
 
         //NOTE: intentionally no default: case

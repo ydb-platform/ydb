@@ -26,15 +26,15 @@ namespace NKqp {
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
 
-    THashMap<int, TExprNode::TPtr> stages;
-    THashMap<int, TVector<TExprNode::TPtr>> stageArgs;
-    THashMap<int, TPositionHandle> stagePos;
-    auto &graph = root.PlanProps.StageGraph;
+    THashMap<ui32, TExprNode::TPtr> stages;
+    THashMap<ui32, TVector<TExprNode::TPtr>> stageArgs;
+    THashMap<ui32, TPositionHandle> stagePos;
+    auto& graph = root.PlanProps.StageGraph;
     for (auto id : graph.StageIds) {
         stageArgs[id] = TVector<TExprNode::TPtr>();
     }
 
-    int stageInputCounter = 0;
+    ui32 stageInputCounter = 0;
     for (const auto& iter : root) {
         auto op = iter.Current;
         auto opStageId = *(op->Props.StageId);
@@ -138,7 +138,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *join->GetRightInput()->Props.StageId);
             stageArgs[opStageId].push_back(rightArg);
 
-            currentStageBody = Build<TPhysicalJoinBuilder>(join, ctx, op->Pos, leftInput, rightInput);
+            currentStageBody = Build<TPhysicalJoinBuilder>(join, ctx, op->Pos, leftInput, rightInput, join->Props);
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;

@@ -571,7 +571,7 @@ TTranslationSpec BuildTranslationSpec(
 
     THROW_ERROR_EXCEPTION_UNLESS(
         sourceMetatype == targetMetatype,
-        "Cannot create translator from %Qlv at %Qv to %Qlv at %Qv: types are incomatible",
+        "Cannot create translator from %Qlv at %Qv to %Qlv at %Qv: types are incompatible",
         sourceMetatype,
         sourceDescriptor.GetDescription(),
         targetMetatype,

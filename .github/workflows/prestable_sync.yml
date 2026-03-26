@@ -15,8 +15,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - base_branch: prestable-26-1
-            head_branch: main
+          - base_branch: prestable-26-2
+            head_branch: stable-26-1
             label: sync-prestable
     steps:
       - name: checkout

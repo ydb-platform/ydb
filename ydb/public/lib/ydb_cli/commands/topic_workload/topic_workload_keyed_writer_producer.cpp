@@ -25,9 +25,9 @@ TTopicWorkloadKeyedWriterProducer::TTopicWorkloadKeyedWriterProducer(
               TStringBuilder() << "Created keyed producer with id " << ProducerId_);
 }
 
-void TTopicWorkloadKeyedWriterProducer::SetWriteSession(std::shared_ptr<NYdb::NTopic::IKeyedWriteSession> writeSession)
+void TTopicWorkloadKeyedWriterProducer::SetProducer(std::shared_ptr<NYdb::NTopic::IProducer> producer)
 {
-    WriteSession_ = std::move(writeSession);
+    Producer_ = producer;
     InflightMessagesCount_.store(0);
 }
 
@@ -43,20 +43,16 @@ std::string TTopicWorkloadKeyedWriterProducer::GetKey() const
 void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
                                              std::optional<NYdb::NTable::TTransaction> transaction)
 {
-    Y_ASSERT(WriteSession_);
+    Y_ASSERT(Producer_);
 
     const TString data = NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GetGeneratedMessage(Params_, MessageId_);
     const std::string key = GetKey();
 
-    // Для внутренних метрик задержки записи нам важно измерять время от фактической
-    // постановки сообщения в клиенскую очередь до прихода ack, а не "идеальное"
-    // время генерации нагрузки. Поэтому для CreateTimestamp и внутренних метрик
-    // используем текущее время, а не ожидаемое время генерации из workload-а.
     const TInstant enqueueTimestamp = Clock_.Now();
     InflightMessagesCreateTs_.Insert(MessageId_, enqueueTimestamp);
     InflightMessagesCount_.fetch_add(1, std::memory_order_relaxed);
 
-    NYdb::NTopic::TWriteMessage writeMessage(data);
+    NYdb::NTopic::TWriteMessage writeMessage(key, data);
     writeMessage.SeqNo(MessageId_);
     writeMessage.CreateTimestamp(enqueueTimestamp);
     writeMessage.MessageMeta(NYdb::NConsoleClient::NTopicWorkloadWriterInternal::MakeKeyMeta(key));
@@ -65,9 +61,22 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
         writeMessage.Tx(transaction.value());
     }
 
-    TTransactionBase* txPtr = writeMessage.GetTxPtr();
-    auto continuationToken = GetContinuationToken();
-    WriteSession_->Write(std::move(continuationToken), key, std::move(writeMessage), txPtr);
+    auto result = Producer_->Write(std::move(writeMessage));
+    if (!result.IsQueued()) {
+        TStringBuilder errorMessage;
+        errorMessage << "Failed to write message with id " << MessageId_
+                     << " for producer " << ProducerId_
+                     << " in writer " << Params_.WriterIdx;
+
+        if (result.ErrorMessage) {
+            errorMessage << " error message: " << *result.ErrorMessage;
+        }
+        if (result.ClosedDescription) {
+            errorMessage << " closed description: " << result.ClosedDescription->DebugString();
+        }
+        WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR, errorMessage);
+    }
+    Y_ASSERT(result.IsQueued());
 
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
               TStringBuilder() << "Sent keyed message with id " << MessageId_
@@ -83,29 +92,8 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
 
 void TTopicWorkloadKeyedWriterProducer::Close()
 {
-    if (WriteSession_) {
-        WriteSession_->Close(TDuration::Zero());
-    }
-}
-
-void TTopicWorkloadKeyedWriterProducer::WaitForContinuationToken(const TDuration& timeout)
-{
-    auto deadline = Clock_.Now() + timeout;
-    while (!HasContinuationTokens()) {
-        WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-            << "WriterId " << Params_.WriterIdx
-            << " keyed producer id " << ProducerId_
-            << ": WaitEvent for timeToNextMessage " << timeout);
-
-        const bool foundEvent = WriteSession_->WaitEvent().Wait(deadline);
-        WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-            << "Keyed producer " << ProducerId_
-            << " in writer " << Params_.WriterIdx
-            << ": foundEvent - " << foundEvent);
-
-        if (!foundEvent) {
-            return;
-        }
+    if (Producer_) {
+        Y_ASSERT(Producer_->Close(TDuration::Seconds(5)).IsSuccess());
     }
 }
 
@@ -128,22 +116,7 @@ void TTopicWorkloadKeyedWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessi
         const auto inflightTime = (now - createTimestamp);
         StatsCollector_->AddWriterEvent(Params_.WriterIdx,
                                         {Params_.MessageSize, inflightTime.MilliSeconds(), InflightMessagesCnt()});
-
-        WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR,
-                  TStringBuilder() << "Ack PartitionId " << ack.Details->PartitionId << " Offset "
-                                   << ack.Details->Offset << " InflightTime " << inflightTime << " WriteTime "
-                                   << ack.Stat->WriteTime << " SessionId " << SessionId_ << " ack SeqNo " << ack.SeqNo);
     }
-}
-
-void TTopicWorkloadKeyedWriterProducer::HandleReadyToAcceptEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event)
-{
-    std::lock_guard lk(Lock_);
-    ContinuationTokens_.push(std::move(event.ContinuationToken));
-    WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-        << "Producer " << ProducerId_
-        << " in writer " << Params_.WriterIdx
-        << ": Got new ContinuationToken token");
 }
 
 void TTopicWorkloadKeyedWriterProducer::HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event)
@@ -151,20 +124,6 @@ void TTopicWorkloadKeyedWriterProducer::HandleSessionClosed(const NYdb::NTopic::
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
         << "Keyed producer " << ProducerId_
         << ": got close event: " << event.DebugString());
-}
-
-bool TTopicWorkloadKeyedWriterProducer::HasContinuationTokens()
-{
-    std::lock_guard lk(Lock_);
-    return !ContinuationTokens_.empty();
-}
-
-NYdb::NTopic::TContinuationToken TTopicWorkloadKeyedWriterProducer::GetContinuationToken()
-{
-    std::lock_guard lk(Lock_);
-    auto token = std::move(ContinuationTokens_.front());    
-    ContinuationTokens_.pop();
-    return token;
 }
 
 ui64 TTopicWorkloadKeyedWriterProducer::GetCurrentMessageId() const
@@ -175,4 +134,9 @@ ui64 TTopicWorkloadKeyedWriterProducer::GetCurrentMessageId() const
 size_t TTopicWorkloadKeyedWriterProducer::InflightMessagesCnt() const
 {
     return InflightMessagesCount_.load(std::memory_order_relaxed);
+}
+
+void TTopicWorkloadKeyedWriterProducer::WaitForContinuationToken(const TDuration&)
+{
+    // IProducer doesn't use WriteSession/ContinuationToken - no-op for keyed writer
 }

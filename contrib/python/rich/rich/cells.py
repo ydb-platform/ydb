@@ -55,23 +55,26 @@ def get_character_cell_size(character: str, unicode_version: str = "auto") -> in
         int: Number of cells (0, 1 or 2) occupied by that character.
     """
     codepoint = ord(character)
+    if codepoint and codepoint < 32 or 0x07F <= codepoint < 0x0A0:
+        return 0
     table = load_cell_table(unicode_version).widths
-    if codepoint > table[-1][1]:
+
+    last_entry = table[-1]
+    if codepoint > last_entry[1]:
         return 1
+
     lower_bound = 0
     upper_bound = len(table) - 1
-    index = (lower_bound + upper_bound) // 2
-    while True:
+
+    while lower_bound <= upper_bound:
+        index = (lower_bound + upper_bound) >> 1
         start, end, width = table[index]
         if codepoint < start:
             upper_bound = index - 1
         elif codepoint > end:
             lower_bound = index + 1
         else:
-            return 0 if width == -1 else width
-        if upper_bound < lower_bound:
-            break
-        index = (lower_bound + upper_bound) // 2
+            return width
     return 1
 
 
@@ -135,12 +138,14 @@ def _cell_len(text: str, unicode_version: str) -> int:
 
     SPECIAL = {"\u200d", "\ufe0f"}
 
-    iter_characters = iter(text)
+    index = 0
+    character_count = len(text)
 
-    for character in iter_characters:
+    while index < character_count:
+        character = text[index]
         if character in SPECIAL:
             if character == "\u200d":
-                next(iter_characters)
+                index += 1
             elif last_measured_character:
                 total_width += last_measured_character in cell_table.narrow_to_wide
                 last_measured_character = None
@@ -148,6 +153,7 @@ def _cell_len(text: str, unicode_version: str) -> int:
             if character_width := get_character_cell_size(character, unicode_version):
                 last_measured_character = character
                 total_width += character_width
+        index += 1
 
     return total_width
 
@@ -155,14 +161,19 @@ def _cell_len(text: str, unicode_version: str) -> int:
 def split_graphemes(
     text: str, unicode_version: str = "auto"
 ) -> "tuple[list[CellSpan], int]":
-    """Divide text into spans that define a single grapheme.
+    """Divide text into spans that define a single grapheme, and additionally return the cell length of the whole string.
+
+    The returned spans will cover every index in the string, with no gaps. It is possible for some graphemes to have a cell length of zero.
+    This can occur for nonsense strings like two zero width joiners, or for control codes that don't contribute to the grapheme size.
 
     Args:
         text: String to split.
         unicode_version: Unicode version, `"auto"` to auto detect, `"latest"` for the latest unicode version.
 
     Returns:
-        List of spans.
+        A tuple of a list of *spans* and the cell length of the entire string. A span is a list of tuples
+            of three values consisting of (<START>, <END>, <CELL LENGTH>), where START and END are string indices,
+            and CELL LENGTH is the cell length of the single grapheme.
     """
 
     cell_table = load_cell_table(unicode_version)
@@ -175,21 +186,32 @@ def split_graphemes(
     SPECIAL = {"\u200d", "\ufe0f"}
     while index < codepoint_count:
         if (character := text[index]) in SPECIAL:
+            if not spans:
+                # ZWJ or variation selector at the beginning of the string doesn't really make sense.
+                # But handle it, we must.
+                spans.append((index, index := index + 1, 0))
+                continue
             if character == "\u200d":
                 # zero width joiner
-                index += 2
-                if spans:
-                    start, _end, cell_length = spans[-1]
-                    spans[-1] = (start, index, cell_length)
-            elif last_measured_character:
+                # The condition handles the case where a ZWJ is at the end of the string, and has nothing to join
+                index += 2 if index < (codepoint_count - 1) else 1
+                start, _end, cell_length = spans[-1]
+                spans[-1] = (start, index, cell_length)
+            else:
                 # variation selector 16
                 index += 1
-                if spans:
+                if last_measured_character:
                     start, _end, cell_length = spans[-1]
                     if last_measured_character in cell_table.narrow_to_wide:
                         last_measured_character = None
                         cell_length += 1
                         total_width += 1
+                    spans[-1] = (start, index, cell_length)
+                else:
+                    # No previous character to change the size of.
+                    # Shouldn't occur in practice.
+                    # But handle it, we must.
+                    start, _end, cell_length = spans[-1]
                     spans[-1] = (start, index, cell_length)
             continue
 
@@ -197,10 +219,15 @@ def split_graphemes(
             last_measured_character = character
             spans.append((index, index := index + 1, character_width))
             total_width += character_width
-        elif spans:
-            # zero width characters are associated with the previous character
-            start, _end, cell_length = spans[-1]
-            spans[-1] = (start, index := index + 1, cell_length)
+        else:
+            # Character has zero width
+            if spans:
+                # zero width characters are associated with the previous character
+                start, _end, cell_length = spans[-1]
+                spans[-1] = (start, index := index + 1, cell_length)
+            else:
+                # A zero width character with no prior spans
+                spans.append((index, index := index + 1, 0))
 
     return (spans, total_width)
 

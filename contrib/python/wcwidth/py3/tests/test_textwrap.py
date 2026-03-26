@@ -26,7 +26,6 @@ def mock_hyperlink_ids(monkeypatch):
 
 
 SGR_RED = '\x1b[31m'
-SGR_BLUE = '\x1b[34m'
 SGR_BOLD = '\x1b[1m'
 SGR_RESET = '\x1b[0m'
 ATTRS = ('\x1b[31m', '\x1b[34m', '\x1b[4m', '\x1b[7m', '\x1b[41m', '\x1b[37m', '\x1b[107m')
@@ -59,7 +58,7 @@ def _adjust_stdlib_result(expected, kwargs):
     """
     if not expected:
         return expected
-    if kwargs.get('drop_whitespace'):
+    if kwargs.get('drop_whitespace', True):
         # Strip trailing whitespace from each line (old Python bug)
         expected = [line.rstrip() for line in expected]
         # Remove leading all-whitespace lines (old Python bug)
@@ -77,27 +76,23 @@ def _colorize(text):
     )
 
 
-# Edge cases not covered by stdlib comparison
-BASIC_EDGE_CASES = [
+EDGE_CASES = [
     ('', 10, []),
     ('   ', 10, []),
     ('\u5973', 0, ['\u5973']),
+    ('\u5973', 1, ['\u5973']),
+    (ZWJ_FAMILY, 1, [ZWJ_FAMILY]),
+    (HANGUL_GA, 1, [HANGUL_GA]),
 ]
 
 
-@pytest.mark.parametrize('text,w,expected', BASIC_EDGE_CASES)
+@pytest.mark.parametrize('text,w,expected', EDGE_CASES)
 def test_wrap_edge_cases(text, w, expected):
     assert wrap(text, w) == expected
 
 
 def test_wrap_initial_indent():
     assert wrap('hello world', 10, initial_indent='> ') == ['> hello', 'world']
-
-
-def test_wrap_drops_trailing_whitespace():
-    """Trailing whitespace stripped when drop_whitespace=True (CPython #140627)."""
-    result = wrap(' Z! a bc defghij', 3)
-    assert result[:3] == [' Z!', 'a', 'bc']
 
 
 LONG_WORD_CASES = [
@@ -111,30 +106,19 @@ def test_wrap_long_words(text, w, break_long, expected):
     assert wrap(text, w, break_long_words=break_long) == expected
 
 
-# Hyphen edge cases for long word breaking
 HYPHEN_LONG_WORD_CASES = [
-    ('a-b-c-d', 3, True, ['a-', 'b-', 'c-d']),
-    ('a-b-c-d', 3, False, ['a-b', '-c-', 'd']),
-    ('---', 2, True, ['--', '-']),
-    ('a---b', 2, True, ['a-', '--', 'b']),
-    # With propagate_sgr=True, SGR continues to next line
-    ('a-\x1b[31mb', 2, True, ['a-\x1b[31m\x1b[0m', '\x1b[31mb\x1b[0m']),
-]
-
-HYPHEN_LONG_WORD_CASES_NO_PROPAGATE = [
-    # With propagate_sgr=False, SGR stays where it is
-    ('a-\x1b[31mb', 2, True, ['a-\x1b[31m', 'b']),
+    ('a-b-c-d', 3, True, True, ['a-', 'b-', 'c-d']),
+    ('a-b-c-d', 3, False, True, ['a-b', '-c-', 'd']),
+    ('---', 2, True, True, ['--', '-']),
+    ('a---b', 2, True, True, ['a-', '--', 'b']),
+    ('a-\x1b[31mb', 2, True, True, ['a-\x1b[31m\x1b[0m', '\x1b[31mb\x1b[0m']),
+    ('a-\x1b[31mb', 2, True, False, ['a-\x1b[31m', 'b']),
 ]
 
 
-@pytest.mark.parametrize('text,w,break_hyphens,expected', HYPHEN_LONG_WORD_CASES)
-def test_wrap_hyphen_long_words(text, w, break_hyphens, expected):
-    assert wrap(text, w, break_on_hyphens=break_hyphens) == expected
-
-
-@pytest.mark.parametrize('text,w,break_hyphens,expected', HYPHEN_LONG_WORD_CASES_NO_PROPAGATE)
-def test_wrap_hyphen_long_words_no_propagate(text, w, break_hyphens, expected):
-    assert wrap(text, w, break_on_hyphens=break_hyphens, propagate_sgr=False) == expected
+@pytest.mark.parametrize('text,w,break_hyphens,propagate,expected', HYPHEN_LONG_WORD_CASES)
+def test_wrap_hyphen_long_words(text, w, break_hyphens, propagate, expected):
+    assert wrap(text, w, break_on_hyphens=break_hyphens, propagate_sgr=propagate) == expected
 
 
 # Comprehensive stdlib compatibility
@@ -147,6 +131,17 @@ TEXTWRAP_KWARGS = [
     {'break_long_words': True, 'drop_whitespace': True, 'subsequent_indent': ' '},
     {'break_long_words': True, 'drop_whitespace': True, 'break_on_hyphens': True},
     {'break_long_words': True, 'drop_whitespace': True, 'break_on_hyphens': False},
+    {'break_long_words': True, 'drop_whitespace': False,
+     'subsequent_indent': '', 'max_lines': 4, 'placeholder': '~'},
+    {'break_long_words': True, 'drop_whitespace': True,
+     'max_lines': 3, 'placeholder': '...'},
+    {'break_long_words': True, 'drop_whitespace': True,
+     'max_lines': 1, 'placeholder': '...'},
+    {'expand_tabs': False, 'break_long_words': True, 'drop_whitespace': True},
+    {'replace_whitespace': False, 'break_long_words': True,
+     'drop_whitespace': True},
+    {'fix_sentence_endings': True, 'break_long_words': True,
+     'drop_whitespace': True},
 ]
 
 
@@ -187,20 +182,6 @@ def test_wrap_multiline_matches_stdlib():
     assert wrap(given, 30) == textwrap.wrap(given, 30)
 
 
-# Wide characters that exceed width=1 (tests force-grapheme logic)
-WIDE_CHAR_WIDTH_1_CASES = [
-    ('\u5973', 1, ['\u5973']),
-    (ZWJ_FAMILY, 1, [ZWJ_FAMILY]),
-    (HANGUL_GA, 1, [HANGUL_GA]),
-]
-
-
-@pytest.mark.parametrize('text,w,expected', WIDE_CHAR_WIDTH_1_CASES)
-def test_wrap_wide_char_width_1(text, w, expected):
-    assert wrap(text, w) == expected
-
-
-# Unicode width-aware wrapping
 UNICODE_CASES = [
     # CJK (2 cells each)
     ('\u4e2d\u6587\u5b57\u7b26', 4, ['\u4e2d\u6587', '\u5b57\u7b26']),
@@ -244,24 +225,15 @@ SEQUENCE_CASES = [
     ('abc\x1bdefghij', 3, ['abc\x1b', 'def', 'ghi', 'j']),
 ]
 
-# Old behavior tests (propagate_sgr=False)
 SEQUENCE_CASES_NO_PROPAGATE = [
-    (f'{SGR_RED}red{SGR_RESET} blue', 4, [f'{SGR_RED}red{SGR_RESET}', 'blue']),
     (f'hello{SGR_RED} world', 6, [f'hello{SGR_RED}', 'world']),
-    (f'{SGR_RED}{SGR_RESET}', 10, [f'{SGR_RED}{SGR_RESET}']),
-    (f'hello {SGR_RED}{SGR_RESET}world', 6, ['hello', f'{SGR_RED}{SGR_RESET}world']),
-    # Sequences preserved where they are, not propagated
     ('x\x1b[31mabcdefghij\x1b[0m', 3, ['x\x1b[31mab', 'cde', 'fgh', 'ij\x1b[0m']),
 ]
 
 
 @pytest.mark.parametrize('text,w,expected', SEQUENCE_CASES)
 def test_wrap_sequences(benchmark, text, w, expected):
-    result = benchmark(wrap, text, w)
-    if any('\x1b' in e or '\x00' <= e[0] < '\x20' for e in expected if e):
-        assert result == expected
-    else:
-        assert result == expected
+    assert benchmark(wrap, text, w) == expected
 
 
 @pytest.mark.parametrize('text,w,expected', SEQUENCE_CASES_NO_PROPAGATE)
@@ -445,3 +417,107 @@ def test_wrap_hyperlink_word_boundary(text, w, expected):
     """OSC hyperlink sequences should act as word boundaries."""
     result = wrap(text, w)
     assert result == expected
+
+
+PLACEHOLDER_STDLIB_CASES = [
+    ('The quick brown fox jumps over the lazy dog',
+     {'width': 10, 'max_lines': 3, 'placeholder': '...'}),
+    ('1234567890 1234567890 extra',
+     {'width': 10, 'max_lines': 2, 'placeholder': '...'}),
+    ('1234567890 1234567890',
+     {'width': 10, 'max_lines': 1, 'placeholder': '...'}),
+    ('short 1234567890 extra',
+     {'width': 10, 'max_lines': 2, 'placeholder': '...'}),
+    ('hello world',
+     {'width': 10, 'max_lines': 5, 'placeholder': '...'}),
+    ('hello world foo bar baz',
+     {'width': 8, 'max_lines': 2, 'placeholder': ' [...]'}),
+    ('a bb ccc',
+     {'width': 3, 'max_lines': 2, 'placeholder': '.'}),
+    ('a bb ccc dddd',
+     {'width': 4, 'max_lines': 3, 'placeholder': '~'}),
+    (' a ', {'width': 1, 'max_lines': 2, 'drop_whitespace': False, 'placeholder': '~'}),
+    ('hello world', {'width': 20, 'max_lines': 5}),
+    ('ab cd', {'width': 5, 'max_lines': 1}),
+    ('aaa bbb ccc', {'width': 3, 'max_lines': 2, 'placeholder': '...'}),
+    ('hello world foo bar',
+     {'width': 10, 'subsequent_indent': '  ', 'max_lines': 2, 'placeholder': '...'}),
+    ('hello world foo bar',
+     {'width': 10, 'initial_indent': '> ', 'max_lines': 2, 'placeholder': '...'}),
+]
+
+
+@pytest.mark.parametrize('text,kwargs', PLACEHOLDER_STDLIB_CASES)
+def test_wrap_max_lines_matches_stdlib(text, kwargs):
+    expected = _adjust_stdlib_result(textwrap.wrap(text, **kwargs), kwargs)
+    assert wrap(text, **kwargs) == expected
+
+
+def test_wrap_placeholder_too_large():
+    with pytest.raises(ValueError, match="placeholder too large"):
+        wrap('hello', width=3, max_lines=1, placeholder='.....')
+    with pytest.raises(ValueError):
+        textwrap.wrap('fox', width=1, max_lines=3, placeholder='...')
+
+
+MAX_LINES_SEQUENCE_CASES = [
+    (f'{SGR_RED}hello world foo bar{SGR_RESET}',
+     8, 2, '...', [f'{SGR_RED}hello{SGR_RESET}', f'{SGR_RED}world...{SGR_RESET}']),
+    (f'{SGR_RED}hello{SGR_RESET} world foo',
+     8, 2, '...', [f'{SGR_RED}hello{SGR_RESET}', 'world...']),
+    (f'{SGR_RED}hello{SGR_RESET} world',
+     6, 1, '.', [f'{SGR_RED}hello{SGR_RESET}.']),
+    ('\u4e2d\u6587 \u5b57\u7b26 hello', 5, 1, '~', ['\u4e2d\u6587~']),
+    ('\u4e2d\u6587 \u5b57\u7b26 hello world', 5, 2, '~', ['\u4e2d\u6587', '\u5b57\u7b26~']),
+    ('\u4e2d\u6587\u5b57\u7b26 hello', 12, 1, '...', ['\u4e2d\u6587\u5b57\u7b26...']),
+]
+
+
+@pytest.mark.parametrize('text,w,ml,ph,expected', MAX_LINES_SEQUENCE_CASES)
+def test_wrap_max_lines_sequences(text, w, ml, ph, expected):
+    assert wrap(text, w, max_lines=ml, placeholder=ph) == expected
+
+
+def test_wrap_max_lines_hyperlink_closed():
+    """Truncation inside a hyperlink closes it before the placeholder."""
+    text = f'{OSC_START_ST}Click here please{OSC_END_ST}'
+    result = wrap(text, 10, max_lines=1, placeholder='...')
+    assert len(result) == 1
+    assert result[0].endswith(f'{OSC_END_ST}...')
+    assert OSC_START_ST in result[0]
+
+
+def test_wrap_max_lines_hyperlink_close_on_prev_line():
+    """Fallback to previous line preserves hyperlink close sequence."""
+    text = f'{OSC_START_ST}ab{OSC_END_ST} cccccccccc ddddd'
+    result = wrap(text, 10, max_lines=2, placeholder='...')
+    assert result == [f'{OSC_START_ST}ab{OSC_END_ST}...']
+
+
+# -- expand_tabs, replace_whitespace, fix_sentence_endings --
+
+STDLIB_PARAM_CASES = [
+    ('hello\tworld', {'width': 20, 'expand_tabs': False, 'replace_whitespace': False}),
+    ('hello\tworld foo\tbar baz', {'width': 12, 'expand_tabs': False, 'tabsize': 8}),
+    ('hello\nworld', {'width': 20, 'replace_whitespace': False}),
+    ('a\t b\n c', {'width': 20, 'replace_whitespace': False}),
+    ('Hello world. This is a test.  More text.', {'width': 20, 'fix_sentence_endings': True}),
+    ('Dr. Smith went to Washington. He left.', {'width': 20, 'fix_sentence_endings': True}),
+]
+
+
+@pytest.mark.parametrize('text,kwargs', STDLIB_PARAM_CASES)
+def test_wrap_stdlib_params(text, kwargs):
+    assert wrap(text, **kwargs) == textwrap.wrap(text, **kwargs)
+
+
+def test_wrap_expand_tabs_false_with_sequences():
+    text = f'{SGR_RED}a\tb{SGR_RESET}'
+    result = wrap(text, 20, expand_tabs=False, replace_whitespace=False)
+    assert '\t' in _strip(result[0])
+
+
+def test_wrap_replace_whitespace_false_newlines_zero_width():
+    """Newlines have zero display width, so more text fits per line than stdlib."""
+    assert wrap('hello\nworld foo\nbar', 10, replace_whitespace=False) == [
+        'hello\nworld', 'foo\nbar']

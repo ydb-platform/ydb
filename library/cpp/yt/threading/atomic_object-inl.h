@@ -66,7 +66,7 @@ template <std::invocable<const T&> F>
 std::invoke_result_t<F, const T&> TAtomicObject<T>::Read(const F& func) const
 {
     auto guard = ReaderGuard(Spinlock_);
-    return func(Object_);
+    return std::invoke(func, Object_);
 }
 
 template <class T>

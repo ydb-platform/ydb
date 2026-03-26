@@ -399,7 +399,7 @@ public:
     }
 
     bool IsExpectedFormat(const TArrayRef<const char>& data) override {
-        if (FormatByte != data.back()) {
+        if (!data.size() || FormatByte != data.back()) {
             return false;
         }
 

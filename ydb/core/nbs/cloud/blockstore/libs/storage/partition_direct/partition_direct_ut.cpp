@@ -1,267 +1,558 @@
-// #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
-// #include <ydb/core/util/actorsys_test/testactorsys.h>
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 
-// #include <ydb/core/mon/mon.h>
-// #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
-// #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
+#include <ydb/core/blobstorage/ddisk/ddisk.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 
+#include <library/cpp/testing/unittest/registar.h>
 
-// using namespace NKikimr;
-// using namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect;
-// using namespace NYdb::NBS::NBlockStore;
-// using namespace NYdb::NBS;
-// using namespace NMonitoring;
+using namespace NKikimr;
 
-// namespace {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-// ////////////////////////////////////////////////////////////////////////////////
+namespace {
 
-// const TString DDiskPoolName = "ddp1";
-// const TString PersistentBufferDDiskPoolName = "ddp1";
+////////////////////////////////////////////////////////////////////////////////
 
-// void SetupStorage(TEnvironmentSetup& env) {
-//     env.CreateBoxAndPool();
-//     env.Sim(TDuration::Seconds(30));
+const TString DDiskPoolName = "ddp1";
+const TString PersistentBufferDDiskPoolName = "ddp1";
+const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
 
-//     {
-//         NKikimrBlobStorage::TConfigRequest request;
-//         auto *cmd = request.AddCommand()->MutableDefineDDiskPool();
-//         cmd->SetBoxId(1);
-//         cmd->SetName(DDiskPoolName);
-//         auto *g = cmd->MutableGeometry();
-//         g->SetRealmLevelBegin(10);
-//         g->SetRealmLevelEnd(20);
-//         g->SetDomainLevelBegin(10);
-//         g->SetDomainLevelEnd(40);
-//         g->SetNumFailRealms(1);
-//         g->SetNumFailDomainsPerFailRealm(5);
-//         g->SetNumVDisksPerFailDomain(1);
-//         cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
-//         cmd->SetNumDDiskGroups(3);
-//         auto res = env.Invoke(request);
-//         UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
-//     }
-// }
+////////////////////////////////////////////////////////////////////////////////
 
-// NYdb::NBS::NProto::TStorageConfig CreateStorageConfig() {
-//     NYdb::NBS::NProto::TStorageConfig storageConfig;
-//     storageConfig.SetDDiskPoolName(DDiskPoolName);
-//     storageConfig.SetPersistentBufferDDiskPoolName(PersistentBufferDDiskPoolName);
-//     return storageConfig;
-// }
+struct TScopedNbsService: TDisableCopyMove
+{
+    explicit TScopedNbsService(const NKikimrConfig::TNbsConfig& nbsConfig)
+    {
+        CreateNbsService(nbsConfig);
+        StartNbsService();
+    }
 
-// NKikimrBlockStore::TVolumeConfig CreateVolumeConfig() {
-//     NKikimrBlockStore::TVolumeConfig volumeConfig;
-//     volumeConfig.SetBlockSize(4096);
-//     auto* partition = volumeConfig.AddPartitions();
-//     partition->SetBlockCount(32768);
-//     return volumeConfig;
-// }
+    ~TScopedNbsService()
+    {
+        StopNbsService();
+    }
+};
 
-// TActorId CreatePartitionActor(TEnvironmentSetup& env) {
-//     TDynamicCounterPtr counters = MakeIntrusive<TDynamicCounters>();
-//     auto partition = env.Runtime->Register(
-//         new TPartitionActor(CreateStorageConfig(), CreateVolumeConfig(), counters),
-//         1 // nodeId
-//     );
+////////////////////////////////////////////////////////////////////////////////
 
-//     // Wait for partition and direct block group to be ready
-//     env.Sim(TDuration::Seconds(5));
+[[nodiscard]] TScopedNbsService SetupStorage(
+    TEnvironmentSetup& env,
+    ui32 syncRequestsBatchSize = 3)
+{
+    env.CreateBoxAndPool();
+    env.Sim(TDuration::Seconds(30));
 
-//     return partition;
-// }
+    {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto* cmd = request.AddCommand()->MutableDefineDDiskPool();
+        cmd->SetBoxId(1);
+        cmd->SetName(DDiskPoolName);
+        auto* g = cmd->MutableGeometry();
+        g->SetRealmLevelBegin(10);
+        g->SetRealmLevelEnd(20);
+        g->SetDomainLevelBegin(10);
+        g->SetDomainLevelEnd(40);
+        g->SetNumFailRealms(1);
+        g->SetNumFailDomainsPerFailRealm(5);
+        g->SetNumVDisksPerFailDomain(1);
+        cmd->AddPDiskFilter()->AddProperty()->SetType(
+            NKikimrBlobStorage::EPDiskType::ROT);
+        cmd->SetNumDDiskGroups(3);
+        auto res = env.Invoke(request);
+        UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
+    }
 
-// } // namespace
+    // Setup NBS service with storage config
+    NKikimrConfig::TNbsConfig nbsConfig;
+    auto* storageConfig = nbsConfig.MutableNbsStorageConfig();
+    storageConfig->SetDDiskPoolName(DDiskPoolName);
+    storageConfig->SetPersistentBufferDDiskPoolName(
+        PersistentBufferDDiskPoolName);
+    storageConfig->SetSyncRequestsBatchSize(syncRequestsBatchSize);
 
-// ////////////////////////////////////////////////////////////////////////////////
+    return TScopedNbsService(nbsConfig);
+}
 
-// Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
+NKikimrBlockStore::TVolumeConfig CreateVolumeConfig(ui64 blockCount)
+{
+    NKikimrBlockStore::TVolumeConfig volumeConfig;
+    volumeConfig.SetDiskId("test-volume");
+    volumeConfig.SetBlockSize(4096);
+    volumeConfig.SetStoragePoolName(DDiskPoolName);
+    auto* partition = volumeConfig.AddPartitions();
+    partition->SetBlockCount(blockCount);
+    return volumeConfig;
+}
 
-//     Y_UNIT_TEST(BasicWriteRead) {
-//         TEnvironmentSetup env{{
-//             .NodeCount = 8,
-//             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-//         }};
-//         auto& runtime = env.Runtime;
-//         runtime->SetLogPriority(NKikimrServices::NBS_PARTITION, NActors::NLog::PRI_DEBUG);
+ui64 CreatePartitionTablet(TEnvironmentSetup& env, ui64 blockCount = 32768)
+{
+    // Create tablet like in SetupTablet()
+    env.Runtime->CreateTestBootstrapper(
+        TTestActorSystem::CreateTestTabletInfo(
+            PartitionTabletId,
+            TTabletTypes::Unknown,
+            env.Settings.Erasure.GetErasure(),
+            env.GroupId,
+            3),   // NumChannels
+        [](const TActorId& tablet, TTabletStorageInfo* info) -> IActor*
+        { return new TPartitionActor(tablet, info); },
+        env.Settings.ControllerNodeId);
 
-//         SetupStorage(env);
+    // Wait for tablet to boot
+    bool working = true;
+    env.Runtime->Sim(
+        [&] { return working; },
+        [&](IEventHandle& event)
+        { working = event.GetTypeRewrite() != TEvTablet::EvBoot; });
 
-//         auto partition = CreatePartitionActor(env);
+    // Send volume config update
+    auto volumeConfig = CreateVolumeConfig(blockCount);
+    auto updateEvent =
+        std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
+    updateEvent->Record.MutableVolumeConfig()->CopyFrom(volumeConfig);
+    updateEvent->Record.SetTxId(1);
 
-//         const TActorId& edge = runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+    const TActorId& edge = env.Runtime->AllocateEdgeActor(
+        env.Settings.ControllerNodeId,
+        __FILE__,
+        __LINE__);
 
-//         // Read not writed block
-//         {
-//             auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
-//             request->Record.SetStartIndex(0);
-//             request->Record.SetBlocksCount(1);
+    env.Runtime->SendToPipe(
+        PartitionTabletId,
+        edge,
+        updateEvent.release(),
+        0,
+        TTestActorSystem::GetPipeConfigWithRetries());
 
-//             runtime->Send(new IEventHandle(partition, edge, request.release()), edge.NodeId());
+    // Wait for response
+    auto response = env.WaitForEdgeActorEvent<
+        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>(edge);
+    UNIT_ASSERT(response->Get()->Record.GetStatus() == NKikimrBlockStore::OK);
 
-//             auto res = env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(edge, false);
-//             UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
-//             UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
-//             UNIT_ASSERT(res->Get()->Record.MutableBlocks()->GetBuffers(0) == TString(4096, 0));
-//         }
+    // Wait for partition to allocate DDisk group
+    env.Sim(TDuration::Seconds(10));
 
-//         auto flushRequestsCount = 0;
-//         runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-//             if (ev->GetTypeRewrite() == NDDisk::TEvFlushPersistentBuffer::EventType) {
-//                 if (flushRequestsCount++ < 3) {
-//                     runtime->Schedule(
-//                         TDuration::Seconds(10),
-//                         ev.release(),
-//                         nullptr,
-//                         nodeId);
+    return PartitionTabletId;
+}
 
-//                     return false;
-//                 }
-//             }
+TActorId GetLoadActorAdapterActorId(
+    TEnvironmentSetup& env,
+    ui64 partitionTabletId,
+    const TActorId& edge)
+{
+    auto request =
+        std::make_unique<TEvService::TEvGetLoadActorAdapterActorIdRequest>();
+    env.Runtime->SendToPipe(
+        partitionTabletId,
+        edge,
+        request.release(),
+        0,
+        TTestActorSystem::GetPipeConfigWithRetries());
 
-//             return true;
-//         };
+    auto res = env.WaitForEdgeActorEvent<
+        TEvService::TEvGetLoadActorAdapterActorIdResponse>(edge, false);
+    UNIT_ASSERT(res);
+    UNIT_ASSERT(!res->Get()->Record.GetActorId().empty());
+    NActors::TActorId loadActorAdapter;
+    loadActorAdapter.Parse(
+        res->Get()->Record.GetActorId().data(),
+        res->Get()->Record.GetActorId().size());
+    return loadActorAdapter;
+}
 
-//         auto expectedData = TString(1024, 'A') + TString(1024, 'B') + TString(1024, 'C') + TString(1024, 'D');
-//         {
-//             auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
-//             request->Record.SetStartIndex(1);
-//             request->Record.MutableBlocks()->AddBuffers(expectedData);
+}   // namespace
 
-//             runtime->Send(new IEventHandle(partition, edge, request.release()), edge.NodeId());
+////////////////////////////////////////////////////////////////////////////////
 
-//             auto res = env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(edge, false);
-//             UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
-//         }
+Y_UNIT_TEST_SUITE(TPartitionDirectTest)
+{
+    Y_UNIT_TEST(BasicWriteRead)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
 
-//         // Read writed block from persistent buffer
-//         {
-//             auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
-//             request->Record.SetStartIndex(1);
-//             request->Record.SetBlocksCount(1);
+        auto scopedService = SetupStorage(env);
 
-//             runtime->Send(new IEventHandle(partition, edge, request.release()), edge.NodeId());
+        auto partition = CreatePartitionTablet(env);
 
-//             auto res = env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(edge, false);
-//             UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
-//             UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
-//             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.MutableBlocks()->GetBuffers(0), expectedData);
-//         }
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
 
-//         // Read not writed block
-//         {
-//             auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
-//             request->Record.SetStartIndex(0);
-//             request->Record.SetBlocksCount(1);
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
 
-//             runtime->Send(new IEventHandle(partition, edge, request.release()), edge.NodeId());
+        // Read not written block
+        {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(0);
+            request->Record.SetBlocksCount(1);
 
-//             auto res = env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(edge, false);
-//             UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
-//             UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
-//             UNIT_ASSERT(res->Get()->Record.MutableBlocks()->GetBuffers(0) == TString(4096, 0));
-//         }
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
 
-//         env.Sim(TDuration::Seconds(12));
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
+            UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
+            UNIT_ASSERT(
+                res->Get()->Record.MutableBlocks()->GetBuffers(0) ==
+                TString(4096, 0));
+        }
 
-//         // Read writed block from ddisk
-//         {
-//             auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
-//             request->Record.SetStartIndex(1);
-//             request->Record.SetBlocksCount(1);
+        auto syncRequestsCount = 0;
+        runtime->FilterFunction =
+            [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                NDDisk::TEvSyncWithPersistentBuffer::EventType)
+            {
+                if (syncRequestsCount++ < 3) {
+                    runtime->Schedule(
+                        TDuration::Seconds(10),
+                        ev.release(),
+                        nullptr,
+                        nodeId);
 
-//             runtime->Send(new IEventHandle(partition, edge, request.release()), edge.NodeId());
+                    return false;
+                }
+            }
 
-//             auto res = env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(edge, false);
-//             UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
-//             UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
-//             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.MutableBlocks()->GetBuffers(0), expectedData);
-//         }
-//     }
+            return true;
+        };
 
-//     Y_UNIT_TEST(ShouldEraseBlockWithOutdatedLsnFromPersistentBuffer) {
-//         TEnvironmentSetup env{{
-//             .NodeCount = 8,
-//             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-//         }};
-//         auto& runtime = env.Runtime;
-//         runtime->SetLogPriority(NKikimrServices::NBS_PARTITION, NActors::NLog::PRI_DEBUG);
+        auto expectedData = TString(1024, 'A') + TString(1024, 'B') +
+                            TString(1024, 'C') + TString(1024, 'D');
+        {
+            auto request =
+                std::make_unique<TEvService::TEvWriteBlocksRequest>();
+            request->Record.SetStartIndex(1);
+            request->Record.MutableBlocks()->AddBuffers(expectedData);
 
-//         SetupStorage(env);
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
 
-//         auto partition = CreatePartitionActor(env);
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+        }
 
-//         const TActorId& edge = runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        // Read written block from persistent buffer
+        {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(1);
+            request->Record.SetBlocksCount(1);
 
-//         auto writeResponsesCount = 0;
-//         auto eraseRequestsCount = 0;
-//         runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-//             switch (ev->GetTypeRewrite()) {
-//                 case NDDisk::TEvWritePersistentBufferResult::EventType: {
-//                     if (writeResponsesCount++ < 3) {
-//                         runtime->Schedule(
-//                             TDuration::Seconds(10),
-//                             ev.release(),
-//                             nullptr,
-//                             nodeId);
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
 
-//                         return false;
-//                     }
-//                     break;
-//                 }
-//                 case NDDisk::TEvErasePersistentBuffer::EventType: {
-//                     ++eraseRequestsCount;
-//                     break;
-//                 }
-//             }
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                res->Get()->Record.GetBlocks().BuffersSize());
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.GetBlocks().GetBuffers(0),
+                expectedData);
+        }
 
-//             return true;
-//         };
+        // Read not written block
+        {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(0);
+            request->Record.SetBlocksCount(1);
 
-//         auto firstWriteData = TString(4096, 'A');
-//         {
-//             auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
-//             request->Record.SetStartIndex(1);
-//             request->Record.MutableBlocks()->AddBuffers(firstWriteData);
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
 
-//             runtime->Send(new IEventHandle(partition, edge, request.release()), edge.NodeId());
-//         }
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+            UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
+            UNIT_ASSERT(
+                res->Get()->Record.MutableBlocks()->GetBuffers(0) ==
+                TString(4096, 0));
+        }
 
-//         auto secondWriteData = TString(4096, 'B');
-//         {
-//             auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
-//             request->Record.SetStartIndex(1);
-//             request->Record.MutableBlocks()->AddBuffers(secondWriteData);
+        env.Sim(TDuration::Seconds(60));
 
-//             runtime->Send(new IEventHandle(partition, edge, request.release()), edge.NodeId());
-//         }
+        // Read written block from ddisk
+        {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(1);
+            request->Record.SetBlocksCount(1);
 
-//         {
-//             auto res = env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(edge, false);
-//             UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
-//         }
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
 
-//         {
-//             auto res = env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(edge, false);
-//             UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
-//         }
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+            UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.MutableBlocks()->GetBuffers(0),
+                expectedData);
+        }
+    }
 
-//         env.Sim(TDuration::Seconds(15));
+    Y_UNIT_TEST(ShouldWriteAndReadBlocksInDifferentRegions)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
 
-//         UNIT_ASSERT_VALUES_EQUAL(eraseRequestsCount, 3);
+        auto scopedService = SetupStorage(
+            env,
+            1   // syncRequestsBatchSize
+        );
 
-//         // Read writed block from ddisk
-//         {
-//             auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
-//             request->Record.SetStartIndex(1);
-//             request->Record.SetBlocksCount(1);
+        const ui64 blockCount = 3 * BlocksPerRegion;
+        auto partition = CreatePartitionTablet(env, blockCount);
 
-//             runtime->Send(new IEventHandle(partition, edge, request.release()), edge.NodeId());
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
 
-//             auto res = env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(edge, false);
-//             UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
-//             UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
-//             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.MutableBlocks()->GetBuffers(0), secondWriteData);
-//         }
-//     }
-// }
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        // Write one block at the start of each of 3 regions
+        const ui64 regionBlockIndices[] = {
+            0,
+            BlocksPerRegion,
+            2 * BlocksPerRegion,
+        };
+        TString expectedData[4] = {
+            TString(1024, 'A') + TString(1024, 'B') + TString(1024, 'C') +
+                TString(1024, 'D'),
+            TString(1024, 'E') + TString(1024, 'F') + TString(1024, 'G') +
+                TString(1024, 'H'),
+            TString(1024, 'I') + TString(1024, 'J') + TString(1024, 'K') +
+                TString(1024, 'L'),
+        };
+
+        for (int i = 0; i < 3; ++i) {
+            auto request =
+                std::make_unique<TEvService::TEvWriteBlocksRequest>();
+            request->Record.SetStartIndex(regionBlockIndices[i]);
+            request->Record.MutableBlocks()->AddBuffers(expectedData[i]);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+        }
+
+        // Wait for sync and erase
+        env.Sim(TDuration::Seconds(10));
+
+        // Read back each block and verify
+        for (int i = 0; i < 3; ++i) {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(regionBlockIndices[i]);
+            request->Record.SetBlocksCount(1);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+            UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.MutableBlocks()->GetBuffers(0),
+                expectedData[i]);
+        }
+    }
+
+    Y_UNIT_TEST(RandomWrites)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env);
+
+        const ui64 blockCount = 3 * BlocksPerRegion;
+        auto partition = CreatePartitionTablet(env, blockCount);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        const ui32 numRandomWrites = 200;
+        THashMap<ui64, TString> expectedDataByBlockIndex;
+        for (ui32 i = 0; i < numRandomWrites; ++i) {
+            const ui64 blockIndex = RandomNumber<ui64>(blockCount);
+            TString data =
+                NUnitTest::RandomString(DefaultBlockSize, RandomNumber<ui32>());
+            expectedDataByBlockIndex[blockIndex] = data;
+
+            auto request =
+                std::make_unique<TEvService::TEvWriteBlocksRequest>();
+            request->Record.SetStartIndex(blockIndex);
+            request->Record.MutableBlocks()->AddBuffers(std::move(data));
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+        }
+
+        env.Sim(TDuration::Seconds(10));
+
+        for (const auto& [blockIndex, expectedData]: expectedDataByBlockIndex) {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(blockIndex);
+            request->Record.SetBlocksCount(1);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+            UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.MutableBlocks()->GetBuffers(0),
+                expectedData);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldWriteAndReadMultipleBlocks)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env);
+
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        TString expectedData = NUnitTest::RandomString(
+            DefaultBlockSize * 128,
+            RandomNumber<ui32>());
+
+        {
+            auto request =
+                std::make_unique<TEvService::TEvWriteBlocksRequest>();
+            request->Record.SetStartIndex(100);
+            request->Record.MutableBlocks()->AddBuffers(expectedData);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+        }
+
+        env.Sim(TDuration::Seconds(10));
+
+        {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(100);
+            request->Record.SetBlocksCount(128);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+            UNIT_ASSERT(res->Get()->Record.MutableBlocks()->BuffersSize() == 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.MutableBlocks()->GetBuffers(0),
+                expectedData);
+        }
+    }
+}
+
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

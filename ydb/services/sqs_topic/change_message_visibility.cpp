@@ -136,8 +136,6 @@ namespace NKikimr::NSqsTopic::V1 {
                         TDerived::Method)
                 });
 
-            TString serializedToken = this->Request_->GetSerializedToken();
-
             TVector<NPQ::NMLP::TMessageId> messages(Reserve(requestList.size()));
             TVector<TInstant> deadlines(Reserve(requestList.size()));
             for (const auto& [messageId, deadline] : requestList) {
@@ -151,7 +149,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 .Consumer = this->QueueUrl_->Consumer,
                 .Messages = std::move(messages),
                 .Deadlines = std::move(deadlines),
-                .UserToken = MakeIntrusive<NACLib::TUserToken>(serializedToken),
+                .UserToken = this->Request_->GetInternalToken(),
             };
 
             std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreateMessageDeadlineChanger(this->SelfId(), std::move(changerSettings))};

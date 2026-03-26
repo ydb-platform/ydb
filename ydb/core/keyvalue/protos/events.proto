@@ -29,6 +29,7 @@ message Statuses {
         RSTATUS_NOT_FOUND = 5;
         RSTATUS_OVERRUN = 6;
         RSTATUS_WRONG_LOCK_GENERATION = 7;
+        RSTATUS_BLOCKED = 8;
     }
 }
 

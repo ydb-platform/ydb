@@ -4,6 +4,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 

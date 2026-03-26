@@ -6,6 +6,7 @@
 #include "util.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/util/backoff.h>
@@ -182,11 +183,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             LOG_D("Describe topic succeeded"
                 << ": path# " << path.first);
 
-            const auto& targetConf = Config.GetTransferSpecific().GetTarget();
-
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
-                std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, targetConf.GetTransformLambda(),
-                    Config.GetTransferSpecific().GetRunAsUser(), targetConf.GetDirectoryPath()));
+                std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, Config));
             LOG_I("Add target"
                 << ": srcPath# " << target.Config->GetSrcPath()
                 << ", dstPath# " << target.Config->GetDstPath()

@@ -1403,18 +1403,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TVector<THolder<IEventHandle>> BlockedApplyRecords;
     };
 
-    Y_UNIT_TEST_TWIN(MvccSnapshotLockedWrites, UseSink) {
+    Y_UNIT_TEST(MvccSnapshotLockedWrites) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -1498,18 +1495,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
     }
 
-    Y_UNIT_TEST_TWIN(MvccSnapshotLockedWritesRestart, UseSink) {
+    Y_UNIT_TEST(MvccSnapshotLockedWritesRestart) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -1600,18 +1594,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
     }
 
-    Y_UNIT_TEST_TWIN(MvccSnapshotLockedWritesWithoutConflicts, UseSink) {
+    Y_UNIT_TEST(MvccSnapshotLockedWritesWithoutConflicts) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -1730,18 +1721,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "ERROR: ABORTED");
     }
 
-    Y_UNIT_TEST_TWIN(MvccSnapshotLockedWritesWithConflicts, UseSink) {
+    Y_UNIT_TEST(MvccSnapshotLockedWritesWithConflicts) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -1896,18 +1884,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         return builder;
     }
 
-    Y_UNIT_TEST_TWIN(MvccSnapshotReadLockedWrites, UseSink) {
+    Y_UNIT_TEST(MvccSnapshotReadLockedWrites) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2199,18 +2184,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.Inject = {};
     }
 
-    Y_UNIT_TEST_TWIN(LockedWriteBulkUpsertConflict, UseSink) {
+    Y_UNIT_TEST(LockedWriteBulkUpsertConflict) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2298,18 +2280,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.InjectLocks.reset();
     }
 
-    Y_UNIT_TEST_TWIN(LockedWriteReuseAfterCommit, UseSink) {
+    Y_UNIT_TEST(LockedWriteReuseAfterCommit) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2384,18 +2363,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.Inject = {};
     }
 
-    Y_UNIT_TEST_TWIN(LockedWriteDistributedCommitSuccess, UseSink) {
+    Y_UNIT_TEST(LockedWriteDistributedCommitSuccess) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2492,18 +2468,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
     }
 
-    Y_UNIT_TEST_TWIN(LockedWriteDistributedCommitAborted, UseSink) {
+    Y_UNIT_TEST(LockedWriteDistributedCommitAborted) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2605,18 +2578,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 20 } items { uint32_value: 22 } }");
     }
 
-    Y_UNIT_TEST_TWIN(LockedWriteDistributedCommitFreeze, UseSink) {
+    Y_UNIT_TEST(LockedWriteDistributedCommitFreeze) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2734,18 +2704,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(LockedWriteDistributedCommitCrossConflict, UseSink) {
+    Y_UNIT_TEST(LockedWriteDistributedCommitCrossConflict) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2918,18 +2885,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 30 } items { uint32_value: 21 } }");
     }
 
-    Y_UNIT_TEST_TWIN(LockedWriteCleanupOnSplit, UseSink) {
+    Y_UNIT_TEST(LockedWriteCleanupOnSplit) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3016,18 +2980,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(LockedWriteCleanupOnCopyTable, UseSink) {
+    Y_UNIT_TEST(LockedWriteCleanupOnCopyTable) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3139,18 +3100,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
     }
 
-    Y_UNIT_TEST_QUAD(LockedWriteWithAsyncIndex, WithRestart, UseSink) {
+    Y_UNIT_TEST_TWIN(LockedWriteWithAsyncIndex, WithRestart) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3275,19 +3233,16 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         observer.InjectLocks.reset();
     }
 
-    Y_UNIT_TEST_TWIN(LockedWritesLimitedPerKey, UseSink) {
+    Y_UNIT_TEST(LockedWritesLimitedPerKey) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
         controls.MutableDataShardControls()->SetMaxLockedWritesPerKey(2);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3358,7 +3313,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             KqpSimpleExec(runtime, Q_(R"(
                 UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 13), (2, 23)
                 )")),
-            UseSink ? "ERROR: INTERNAL_ERROR" : "ERROR: GENERIC_ERROR");
+            "ERROR: INTERNAL_ERROR");
         observer.Inject = {};
 
         // Abort tx 234, this would allow adding one more change to key 2
@@ -3472,18 +3427,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "ERROR: WrongRequest\n");
     }
 
-    Y_UNIT_TEST_TWIN(LockedWriteWithAsyncIndexAndVolatileCommit, UseSink) {
+    Y_UNIT_TEST(LockedWriteWithAsyncIndexAndVolatileCommit) {
         TPortManager pm;
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3609,18 +3561,15 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 20 } items { uint32_value: 210 } }");
     }
 
-    Y_UNIT_TEST_TWIN(LockedWriteWithPendingVolatileCommit, UseSink) {
+    Y_UNIT_TEST(LockedWriteWithPendingVolatileCommit) {
         TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetControls(controls)
-            .SetAppConfig(app);
+            .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -5205,16 +5154,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { int32_value: 2 } items { int32_value: 20 } }");
     }
 
-    Y_UNIT_TEST_TWIN(UncommittedChangesRenameTable, UseSink) {
+    Y_UNIT_TEST(UncommittedChangesRenameTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(100)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -5571,15 +5517,12 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 6 } items { uint32_value: 66 } }");
     }
 
-    Y_UNIT_TEST_TWIN(ShardRestartLockNotBrokenByUncommittedBeforeRead, UseSink) {
+    Y_UNIT_TEST(ShardRestartLockNotBrokenByUncommittedBeforeRead) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(100)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(100);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -5643,15 +5586,12 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 6 } items { uint32_value: 66 } }");
     }
 
-    Y_UNIT_TEST_TWIN(ShardRestartLockBrokenByUncommittedBeforeRead, UseSink) {
+    Y_UNIT_TEST(ShardRestartLockBrokenByUncommittedBeforeRead) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(100)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(100);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -5715,15 +5655,12 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     }
 
 
-    Y_UNIT_TEST_TWIN(ShardRestartLockNotBrokenByUncommittedAfterRead, UseSink) {
+    Y_UNIT_TEST(ShardRestartLockNotBrokenByUncommittedAfterRead) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(100)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(100);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -5787,15 +5724,12 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 6 } items { uint32_value: 66 } }");
     }
 
-    Y_UNIT_TEST_TWIN(ShardRestartLockBrokenByUncommittedAfterRead, UseSink) {
+    Y_UNIT_TEST(ShardRestartLockBrokenByUncommittedAfterRead) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(100)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(100);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();

@@ -48,12 +48,7 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
     const NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns,
     bool forDelete, TPositionHandle pos, NYql::TExprContext& ctx)
 {
-    // Extract fulltext index settings
-    const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
-    YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
-
-    const auto& settings = fulltextDesc->GetSettings();
-    const bool withRelevance = settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+    const bool withRelevance = indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance;
 
     auto inputRowArg = TCoArgument(ctx.NewArgument(pos, "input_row"));
     auto tokenArg = TCoArgument(ctx.NewArgument(pos, "token"));

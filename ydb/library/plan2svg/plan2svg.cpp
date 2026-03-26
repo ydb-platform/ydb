@@ -368,16 +368,16 @@ TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, const NJso
 
     if (waitTimeUsNode) {
         WaitTime.Load(*waitTimeUsNode, MinTime, MaxTime);
-        MinTime = WaitTime.MinTime;
-        MaxTime = WaitTime.MaxTime;
+        Min0(MinTime, WaitTime.MinTime);
+        Max0(MaxTime, WaitTime.MaxTime);
     }
 
     if (Details.Load(node)) {
         Summary->Add(Details.Sum);
         if (auto* historyNode = node.GetValueByPath("History")) {
             History.Load(*historyNode, MinTime, MaxTime);
-            MinTime = History.MinTime;
-            MaxTime = History.MaxTime;
+            Min0(MinTime, History.MinTime);
+            Max0(MaxTime, History.MaxTime);
         }
     }
 }
@@ -1569,9 +1569,12 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
             stage->IndentY = std::max(stage->IndentY, c->FromStage->IndentY);
         }
     }
+
+    Height = std::max(Height, stage->IndentY);
 }
 
 void TPlan::MarkLayout() {
+    Height = 0;
     if (!Stages.empty()) {
         ui32 offsetY = 0;
         MarkStageIndent(0, offsetY, Stages.front());
@@ -1592,7 +1595,7 @@ void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, co
 
     background
         << "<rect x='" << x + firstMin << "' y='" << y
-        << "' width='" << lastMax - firstMin << "' height='" << h
+        << "' width='" << lastMax - firstMin + 1 << "' height='" << h
         << "' stroke-width='0' fill='" << color << "'/>" << Endl;
 
     if (firstMessage.Min < firstMessage.Max) {
@@ -1812,7 +1815,6 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
 
 void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     OffsetY = offsetY;
-    Height = 0;
 
     auto* p = this;
     auto planName = NodeType;
@@ -1825,23 +1827,27 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     offsetY += GAP_Y;
 
     ui32 summary3 = (Config.SummaryWidth - INTERNAL_GAP_X * 2) / 3;
+    auto titleHeight = INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2;
 
     _Builder
         << "<g data-group='g" << GroupId << "' class='selectable'><title> " << planName << "</title>" << Endl
         << SvgRect(Config.HeaderLeft, GAP_Y, Config.HeaderWidth, TIME_HEIGHT + INTERNAL_HEIGHT, "background")
-        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, GAP_Y + INTERNAL_TEXT_HEIGHT, planName)
+        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, GAP_Y + titleHeight, planName)
         << "</g>" << Endl;
 
     _Builder
         << "<g class='ardn button'>"
         << SvgRect(INTERNAL_GAP_X, GAP_Y, CONN_SIZE, CONN_SIZE, "transparent")
-        << "<use href='#icon_arrowdn' transform='translate(" << INTERNAL_GAP_X << ' ' << GAP_Y << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
+        << "<use href='#icon_arrowdn' transform='translate(" << INTERNAL_GAP_X << ' ' << GAP_Y << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl
+        << "<g class='aruu button'>"
+        << SvgRect(INTERNAL_GAP_X, GAP_Y + CONN_SIZE, CONN_SIZE, CONN_SIZE, "transparent")
+        << "<use href='#icon_arrowup' transform='translate(" << INTERNAL_GAP_X << ' ' << GAP_Y + CONN_SIZE << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
 
     _Builder
-        << SvgTextS(Config.OperatorLeft + 2, GAP_Y + INTERNAL_TEXT_HEIGHT, "Operators")
-        << SvgTextS(Config.SummaryLeft + 2, GAP_Y + INTERNAL_TEXT_HEIGHT, "Stages")
-        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, GAP_Y + INTERNAL_TEXT_HEIGHT, "Tasks")
-        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, GAP_Y + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y, ToString(p->Tasks));
+        << SvgTextS(Config.OperatorLeft + 2, GAP_Y + titleHeight, "Operators")
+        << SvgTextS(Config.SummaryLeft + 2, GAP_Y + titleHeight, "Stages")
+        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, GAP_Y + titleHeight, "Tasks")
+        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, GAP_Y + titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT, ToString(p->Tasks));
 
     _Builder
         << "<g><title>Ingress "
@@ -1856,12 +1862,12 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     }
     _Builder
         << "</title>" << Endl
-        << "  <rect x='" << Config.SummaryLeft << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT + GAP_Y
+        << "  <rect x='" << Config.SummaryLeft << "' y='" << GAP_Y + titleHeight + INTERNAL_GAP_Y
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.IngressMedium << "'/>" << Endl
         << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + 2
-        << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << FormatBytes(p->IngressBytes->Value) << "</text>" << Endl
+        << "' y='" << GAP_Y + titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->IngressBytes->Value) << "</text>" << Endl
         << "</g>" << Endl;
 
     _Builder
@@ -1874,53 +1880,53 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     }
     _Builder
         << "</title>" << Endl
-        << "  <rect x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT + GAP_Y
+        << "  <rect x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 << "' y='" << GAP_Y + titleHeight + INTERNAL_GAP_Y
         << "' width='" << Config.SummaryWidth - (summary3 + INTERNAL_GAP_X) * 2 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.CpuMedium << "'/>" << Endl
         << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 + 2
-        << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << FormatUsage(p->CpuTime->Value) << "</text>" << Endl
+        << "' y='" << GAP_Y + titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatUsage(p->CpuTime->Value) << "</text>" << Endl
         << "</g>" << Endl;
 
     _Builder
         << "<g><title>Memory " << FormatBytes(p->MaxMemoryUsage->Value) << "</title>" << Endl
-        << "  <rect x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT + GAP_Y
+        << "  <rect x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 << "' y='" << GAP_Y + titleHeight + INTERNAL_GAP_Y
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.MemMedium << "'/>" << Endl
         << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 + 2
-        << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y<< "'>" << FormatBytes(p->MaxMemoryUsage->Value) << "</text>" << Endl
+        << "' y='" << GAP_Y + titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->MaxMemoryUsage->Value) << "</text>" << Endl
         << "</g>" << Endl;
 
-    auto x = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->MaxTime + p->TimeOffset) / MaxTime;
+    auto x = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TimeOffset + p->MaxTime) / maxTime;
     _Builder
         << "<g><title>" << "Duration: " << FormatTimeMs(p->MaxTime) << ", Total " << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</title>" << Endl
-        << "  <rect x='" << x - summary3 << "' y='" << GAP_Y
+        << "  <rect x='" << x - summary3 << "' y='" << GAP_Y + INTERNAL_GAP_Y + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.StageGrid << "'/>" << Endl
         << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << x - 2
-        << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</text>" << Endl
+        << "' y='" << GAP_Y + titleHeight << "'>" << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</text>" << Endl
         << "</g>" << Endl;
 
-    offsetY += TIME_HEIGHT;
+    offsetY += titleHeight + INTERNAL_GAP_Y;
     if (!p->TotalCpuTime.Deriv.empty() && p->TotalCpuTime.MaxTime > p->TotalCpuTime.MinTime) {
 
         // auto tx0 = Config.TimelineLeft;
         // auto tw = Config.TimelineWidth;
 
-        auto xmin = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TotalCpuTime.MinTime + p->TimeOffset) / MaxTime;
-        auto xmax = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TotalCpuTime.MaxTime + p->TimeOffset) / MaxTime;
+        auto xmin = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TotalCpuTime.MinTime + p->TimeOffset) / maxTime;
+        auto xmax = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TotalCpuTime.MaxTime + p->TimeOffset) / maxTime;
 
         auto maxCpu = p->TotalCpuTime.MaxDeriv * TIME_SERIES_RANGES / (p->TotalCpuTime.MaxTime - p->TotalCpuTime.MinTime);
-        p->PrintDeriv(_Builder, p->TotalCpuTime, xmin, GAP_Y + TIME_HEIGHT, xmax - xmin, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
+        p->PrintDeriv(_Builder, p->TotalCpuTime, xmin, GAP_Y + titleHeight + INTERNAL_GAP_Y, xmax - xmin, TIME_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
     }
-    offsetY += INTERNAL_HEIGHT;
+    offsetY += TIME_HEIGHT;
 
     for (auto& s : Stages) {
         s->_Builder
             << "<g data-group='g" << s->GroupId << "' class='selectable'><title>Stage " << (s->External ? "E" : ToString(s->PhysicalStageId)) << "</title>" << Endl;
         auto stageClass = s->External ? "clone" : "stage";
-        Height = std::max(Height, s->IndentY);
+
         s->_Builder
             << SvgRect(Config.HeaderLeft + s->IndentX, 0, Config.HeaderWidth - s->IndentX, "100%", stageClass)
             << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, "100%", stageClass)
@@ -2537,7 +2543,7 @@ void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, 
         builder << SvgRect(Config.HeaderLeft + stage->IndentX, GAP_Y, INDENT_X, "100%", "stage");
     }
 
-    builder << "<svg data-stage='inner " << stage->PhysicalStageId << "' data-height='" << stage->Height << "' width='" << Config.Width << "' height='" << stage->Height << "' x='0' y='" << GAP_Y << "'>" << Endl;
+    builder << "<svg class='slimable' data-stage='inner " << stage->PhysicalStageId << "' data-height='" << stage->Height << "' width='" << Config.Width << "' height='" << stage->Height << "' x='0' y='" << GAP_Y << "'>" << Endl;
     builder << stage->_Builder;
     builder << "</svg>" << Endl;
 
@@ -2734,12 +2740,12 @@ TString TPlanVisualizer::PrintSvg() {
     auto w = Config.TimelineWidth - timelineDelta - INTERNAL_GAP_X * 2;
 
     for (auto plan : Plans) {
-        plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
-        for (ui64 t = 0; t < maxSec; t += deltaSec) {
-            ui64 x1 = t * w / maxSec;
+        for (ui64 t = 0; t <= maxSec; t += deltaSec) {
+            ui64 x1 = t * w * 1000 / MaxTime;
             auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
-            plan->_Builder << SvgTextS(x + x1 + 2, INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT, timeLabel);
+            plan->_Builder << SvgTextS(x + x1 + 2, GAP_Y + INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, timeLabel);
         }
+        plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
     }
 
     for (auto plan : Plans) {
@@ -2895,7 +2901,7 @@ TString TPlanVisualizer::PrintSvg() {
     }
 
     function toggle_slim_on(node) {
-        if (node && !node.classList.contains("slim")) {
+        if (node && node.classList.contains("slimable") && !node.classList.contains("slim")) {
             node.classList.add("slim");
             var delta = 18 - Number(node.getAttribute("height"));
             if (delta) {
@@ -2924,6 +2930,18 @@ TString TPlanVisualizer::PrintSvg() {
                         toggle_fold(child);
                     }
                     expand_tree(child)
+                }
+            }
+        }
+    }
+
+    function tree_slim_on(node) {
+        if (node) {
+            for (var i = 0; i < node.children.length; i++) {
+                var child = node.children[i];
+                if (child.tagName == "svg") {
+                    toggle_slim_on(child);
+                    tree_slim_on(child)
                 }
             }
         }
@@ -2973,6 +2991,10 @@ TString TPlanVisualizer::PrintSvg() {
                 expand_tree(find_parent_svg(node));
                 return;
             }
+            if (node.classList.contains("button") && node.classList.contains("aruu")) {
+                tree_slim_on(find_parent_svg(node));
+                return;
+            }
             if (node.classList.contains("selectable")) {
                 toggle_slim_off(find_parent_svg(node));
                 toggle_selection(node);
@@ -2984,22 +3006,8 @@ TString TPlanVisualizer::PrintSvg() {
 ]]>
 </script>
 )";
-    svg << TString(background) << Endl;
-
-    for (ui64 t = 0; t < maxSec; t += deltaSec) {
-        ui64 x1 = t * w / maxSec;
-        svg
-            << "<line x1='" << x + x1 << "' y1='0' x2='" << x + x1 << "' y2='" << "100%" // offsetY
-            << "' stroke-width='1' stroke='" << Config.Palette.StageGrid << "' stroke-dasharray='1,2'/>" << Endl;
-    }
-
     if (timelineDelta) {
         ui32 summary3 = (Config.SummaryWidth - INTERNAL_GAP_X * 2) / 3;
-        auto opacity = MaxTime ? std::min(0.5, static_cast<double>(UpdateTime - MaxTime) / (2 * MaxTime)) : 0.5;
-        svg
-        << "<rect x='" << Config.TimelineLeft + Config.TimelineWidth - timelineDelta << "' y='" << 0
-        << "' width='" << timelineDelta << "' height='" << offsetY
-        << "' stroke-width='0' opacity='" << opacity << "' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl;
         svg
         << "<g><title>" << "Last Update: " << FormatTimeMs(UpdateTime) << "</title>" << Endl
         << "  <rect x='" << Config.TimelineLeft + Config.TimelineWidth - summary3 << "' y='" << GAP_Y
@@ -3008,6 +3016,23 @@ TString TPlanVisualizer::PrintSvg() {
         << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << Config.TimelineLeft + Config.TimelineWidth - 2
         << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(UpdateTime) << "</text>" << Endl
         << "</g>" << Endl;
+    }
+
+    svg << TString(background) << Endl;
+
+    for (ui64 t = 0; t <= maxSec; t += deltaSec) {
+        ui64 x1 = t * w * 1000 / MaxTime;
+        svg
+            << "<line x1='" << x + x1 << "' y1='0' x2='" << x + x1 << "' y2='" << "100%" // offsetY
+            << "' stroke-width='1' stroke='" << Config.Palette.StageGrid << "' stroke-dasharray='1,2'/>" << Endl;
+    }
+
+    if (timelineDelta) {
+        auto opacity = MaxTime ? std::min(0.5, static_cast<double>(UpdateTime - MaxTime) / (2 * MaxTime)) : 0.5;
+        svg
+        << "<rect x='" << Config.TimelineLeft + Config.TimelineWidth - timelineDelta << "' y='" << 0
+        << "' width='" << timelineDelta << "' height='" << offsetY
+        << "' stroke-width='0' opacity='" << opacity << "' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl;
     }
 
     svg << TString(canvas) << Endl;

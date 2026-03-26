@@ -30,7 +30,7 @@ $str = ($x) -> {
 };
 
 SELECT
-    Ensure(count, count IS NOT DISTINCT FROM actual_count, 'Got: ' || $str(actual_count) || ', but expected: ' || $str(count))
+    Ensure(actual_count, count IS NOT DISTINCT FROM actual_count, 'Got: ' || $str(actual_count) || ', but expected: ' || $str(count))
 FROM
     $win_result
 ;

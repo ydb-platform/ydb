@@ -3,8 +3,7 @@
 
 #include <util/generic/algorithm.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NDetail;
 
@@ -413,5 +412,4 @@ void TCallableBuilder::Clear() {
     FuncPayload_ = TStringBuf();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

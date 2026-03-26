@@ -459,6 +459,10 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
 
         const auto now = ctx.Now();
 
+        //NOTE: Batch may contain multiple responses for a single shard.
+        // NextCondErase must be updated for each response, but the next
+        // cond-erase run should be scheduled only once per shard.
+
         for (const auto& ev : Responses) {
             const auto& record = ev->Get()->Record;
             const TTabletId tabletId(record.GetTabletID());
@@ -509,8 +513,8 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
                     }
                 }
 
-                // ScheduleNextCondErase (also) changes LastCondEraseLag
-                tableInfo->ScheduleNextCondErase(i.ShardIdx, now, i.Next);
+                // UpdateNextCondErase also changes LastCondEraseLag
+                tableInfo->UpdateNextCondErase(i.ShardIdx, now, i.Next);
 
                 {
                     const auto& lag = tableInfo->GetPartitions().at(i.PartitionIdx).LastCondEraseLag;
@@ -527,6 +531,16 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
             const auto& affectedShards = item.AffectedShards;
             for (const auto& i : affectedShards) {
                 Self->PersistTablePartitionCondErase(db, tablePathId, i.PartitionIdx, tableInfo);
+            }
+        }
+
+        // schedule next CondErase (once per shard)
+        for (const auto& item : AffectedTables | std::views::values) {
+            const auto& tableInfo = item.TableInfo;
+            for (const auto& i : item.AffectedShards) {
+                if (tableInfo->GetInFlightCondErase().contains(i.ShardIdx)) {
+                    tableInfo->RescheduleCondErase(i.ShardIdx);
+                }
             }
         }
 

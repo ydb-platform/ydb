@@ -17,8 +17,7 @@
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_types.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 enum class EPgStringType {
     None,
@@ -296,5 +295,4 @@ inline std::shared_ptr<arrow::Scalar> MakeSingularScalar(bool isNull) {
     }
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

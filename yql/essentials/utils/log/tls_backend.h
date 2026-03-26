@@ -6,8 +6,7 @@
 
 #include <utility>
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 
 /**
  * @brief Dispatches all invocations to default logger backend configured
@@ -62,5 +61,4 @@ private:
     TLogBackend* PrevBacked_;
 };
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

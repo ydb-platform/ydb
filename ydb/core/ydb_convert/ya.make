@@ -32,6 +32,8 @@ PEERDIR(
     ydb/public/api/protos
 )
 
+GENERATE_ENUM_SERIALIZATION(table_description.h)
+
 YQL_LAST_ABI_VERSION()
 
 END()

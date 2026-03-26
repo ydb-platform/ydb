@@ -65,8 +65,7 @@
     template <bool OPT1, bool OPT2>                                                                                                  \
     void N(NUnitTest::TTestContext&)
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TComputationNodeFactory GetTestFactory(TComputationNodeFactory customFactory = {});
 
@@ -172,5 +171,4 @@ extern const std::vector<std::pair<i8, double>> I8Samples;
 extern const std::vector<std::pair<ui16, double>> Ui16Samples;
 extern const std::vector<std::tuple<ui64, std::string, std::string, double, double, double, double>> TpchSamples;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

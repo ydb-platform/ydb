@@ -44,7 +44,7 @@ struct TFormatOptions {
     bool EnableSmallDiskOptimization = true;
     std::optional<TRcBuf> Metadata = std::nullopt;
     bool PlainDataChunks = false;
-    bool EnableFormatEncryption = true;
+    bool EnableFormatAndMetadataEncryption = true;
     std::optional<bool> EnableSectorEncryption = std::nullopt;
     std::optional<bool> ForceRandomizeMagic = std::nullopt;
 };

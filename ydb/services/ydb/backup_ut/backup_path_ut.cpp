@@ -1136,9 +1136,6 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(ParallelBackupWholeDatabase, IsOlap) {
-        if (IsOlap) {
-            return;  // TODO: fix me issue@26498 (need a copy column table here)
-        }
         using namespace fmt::literals;
         {
             auto res = YdbQueryClient().ExecuteQuery(R"sql(
@@ -1188,7 +1185,7 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 size_t tableIndex = 0;
                 for (size_t i = 0; i < listResult.GetChildren().size(); ++i) {
                     const auto& child = listResult.GetChildren()[i];
-                    if (child.Type == NYdb::NScheme::ESchemeEntryType::Table) {
+                    if (child.Type == NYdb::NScheme::ESchemeEntryType::Table || child.Type == NYdb::NScheme::ESchemeEntryType::ColumnTable) {
                         ++tablesFound;
                         tableIndex = i;
                     }
@@ -1314,10 +1311,7 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
         using namespace fmt::literals;
         
         if (IsOlap) {
-            // TODO: fix issue #26498 (need a copy-column table here,
-            // because there isn't a proper cancel for DataShard and ColumnShard,
-            // copy table will hide this problem)
-            return;  
+            return; // TODO (hcpp): fix me https://github.com/ydb-platform/ydb/issues/35873
         }
 
         // Make tables for parallel export

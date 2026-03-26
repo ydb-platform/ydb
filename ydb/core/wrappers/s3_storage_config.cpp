@@ -1,6 +1,7 @@
 #include "s3_storage.h"
 #include "s3_storage_config.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 
@@ -203,13 +204,14 @@ TString TS3ExternalStorageConfig::DoGetStorageId() const {
 }
 
 IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOperator(bool verbose) const {
-    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass, verbose, UseVirtualAddressing);
+    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, Counters, StorageClass, verbose, UseVirtualAddressing);
 }
 
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(
         const Aws::Auth::AWSCredentials& credentials,
         const Aws::Client::ClientConfiguration& config,
         const TString& bucket,
+        NMonitoring::TDynamicCounterPtr rootCounters,
         bool useVirtualAddressing,
         Aws::S3::Model::StorageClass storageClass)
     : Bucket(bucket)
@@ -218,25 +220,28 @@ TS3ExternalStorageConfig::TS3ExternalStorageConfig(
     , StorageClass(storageClass)
     , UseVirtualAddressing(useVirtualAddressing)
 {
+    if (rootCounters) {
+        Counters = GetServiceCounters(std::move(rootCounters), "aws_client")->GetSubgroup("service", "s3");
+    }
 }
 
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ImportFromS3Settings& settings)
-    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.bucket(), !settings.disable_virtual_addressing())
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ImportFromS3Settings& settings, NMonitoring::TDynamicCounterPtr rootCounters)
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.bucket(), std::move(rootCounters), !settings.disable_virtual_addressing())
 {
 }
 
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ListObjectsInS3ExportSettings& settings)
-    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.bucket(), !settings.disable_virtual_addressing())
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ListObjectsInS3ExportSettings& settings, NMonitoring::TDynamicCounterPtr rootCounters)
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.bucket(), std::move(rootCounters), !settings.disable_virtual_addressing())
 {
 }
 
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Export::ExportToS3Settings& settings)
-    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.bucket(), !settings.disable_virtual_addressing())
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Export::ExportToS3Settings& settings, NMonitoring::TDynamicCounterPtr rootCounters)
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.bucket(), std::move(rootCounters), !settings.disable_virtual_addressing())
 {
 }
 
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings)
-    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.GetBucket(), settings.GetUseVirtualAddressing(), ConvertStorageClass(settings.GetStorageClass()))
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings, NMonitoring::TDynamicCounterPtr rootCounters)
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.GetBucket(), std::move(rootCounters), settings.GetUseVirtualAddressing(), ConvertStorageClass(settings.GetStorageClass()))
 {
 }
 

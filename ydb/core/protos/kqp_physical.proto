@@ -13,6 +13,7 @@ import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
+import "ydb/core/protos/forced_compaction.proto";
 import "ydb/core/protos/sys_view_types.proto";
 
 enum EIsolationLevel {
@@ -394,10 +395,15 @@ message TKqpPhyConnection {
     };
 }
 
+enum EKqpFullTextIndexType {
+    EKqpFullTextPlain = 0;
+    EKqpFullTextRelevance = 1;
+}
+
 message TKqpFullTextSource {
     message TKqpQuerySettings {
         repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 1;
-        TKqpPhyValue QueryValue = 2;
+        repeated TKqpPhyValue QueryValue = 2;
     }
 
     message TIndexTable {
@@ -424,6 +430,9 @@ message TKqpFullTextSource {
     TKqpPhyValue BFactor = 11;
     TKqpPhyValue DefaultOperator = 12;
     TKqpPhyValue MinimumShouldMatch = 13;
+    TKqpPhyValue Mode = 14;
+
+    optional EKqpFullTextIndexType IndexType = 15;
 }
 
 message TKqpReadRangesSource {
@@ -443,6 +452,18 @@ message TKqpReadRangesSource {
     bool IsTableImmutable = 10;
     // Vector top-K pushdown for brute force vector search
     TKqpPhyVectorTopK VectorTopK = 11;
+}
+
+message TKqpSysViewSource {
+    TKqpPhyTableId Table = 1;
+    repeated TKqpPhyColumnId Columns = 2;
+    TKqpPhyValue ItemsLimit = 3;
+    bool Reverse = 4;
+
+    oneof RangesExpr {
+        TKqpPhyParamValue Ranges = 5;
+        TKqpPhyKeyRange KeyRange = 6;
+    }
 }
 
 message TKqpExternalSource {
@@ -470,6 +491,7 @@ message TKqpSource {
         TKqpReadRangesSource ReadRangesSource = 3;
         TKqpExternalSource ExternalSource = 4;
         TKqpFullTextSource FullTextSource = 5;
+        TKqpSysViewSource SysViewSource = 6;
     }
 }
 
@@ -495,6 +517,21 @@ message TKqpSink {
     }
 }
 
+message TKqpOutputTransform {
+    uint32 OutputIndex = 1;
+
+    bytes InputType = 2;
+    bytes OutputType = 3;
+
+    oneof Type {
+        TKqpInternalSink InternalSink = 4;
+    }
+}
+
+message TKqpControlPlaneSettings {
+    string Type = 1;
+}
+
 message TKqpPhyStage {
     NYql.NDqProto.TProgram Program = 1;
     repeated string ProgramParameters = 2;
@@ -512,6 +549,8 @@ message TKqpPhyStage {
     uint32 TaskCount = 14;
     double StageCost = 15;
     bool IsShuffleEliminated = 16;
+    repeated TKqpOutputTransform OutputTransforms = 17;
+    map<string, TKqpControlPlaneSettings> StageControlPlaneActors = 18;
 }
 
 message TKqpPhyResult {
@@ -614,6 +653,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme AlterSecret = 60;
         NKikimrSchemeOp.TModifyScheme DropSecret = 61;
         NKikimrSchemeOp.TModifyScheme TruncateTable = 62;
+        NKikimrForcedCompaction.TForcedCompactionSettings CompactTable = 63;
     }
 }
 

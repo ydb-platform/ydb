@@ -1,0 +1,17 @@
+diff --git a/include/__memory/pointer_traits.h b/include/__memory/pointer_traits.h
+index 8c7f8df..919ceae 100644
+--- a/include/__memory/pointer_traits.h
++++ b/include/__memory/pointer_traits.h
+@@ -54,7 +54,12 @@ struct __pointer_traits_element_type<_Ptr, __void_t<typename _Ptr::element_type>
+ 
+ template <class _Tp, class _Up>
+ struct __pointer_traits_rebind_impl {
++#if _LIBCPP_CLANG_VER < 1700 || defined(__CUDACC__)
++  // Some compilers fail the build instantly if the code contains `static_assert(false)`
++  static_assert(false && !is_class_v<_Tp>, "Cannot rebind pointer; did you forget to add a rebind member to your pointer?");
++#else
+   static_assert(false, "Cannot rebind pointer; did you forget to add a rebind member to your pointer?");
++#endif
+ };
+ 
+ template <template <class, class...> class _Sp, class _Tp, class... _Args, class _Up>

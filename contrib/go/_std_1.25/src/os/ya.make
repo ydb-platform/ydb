@@ -132,5 +132,52 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
         zero_copy_posix.go
         zero_copy_stub.go
     )
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND NOT CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        dir.go
+        dir_unix.go
+        dirent_wasip1.go
+        eloop_other.go
+        env.go
+        error.go
+        error_errno.go
+        exec.go
+        exec_nohandle.go
+        exec_posix.go
+        exec_unix.go
+        executable.go
+        executable_wasm.go
+        file.go
+        file_open_wasip1.go
+        file_posix.go
+        file_unix.go
+        file_wasip1.go
+        getwd.go
+        path.go
+        path_unix.go
+        pidfd_other.go
+        pipe_wasm.go
+        proc.go
+        rawconn.go
+        removeall_at.go
+        removeall_unix.go
+        root.go
+        root_nonwindows.go
+        root_openat.go
+        root_unix.go
+        stat.go
+        stat_unix.go
+        stat_wasip1.go
+        sticky_bsd.go
+        sys.go
+        sys_bsd.go
+        sys_wasip1.go
+        tempfile.go
+        types.go
+        types_unix.go
+        wait_unimp.go
+        zero_copy_posix.go
+        zero_copy_stub.go
+    )
 ENDIF()
 END()

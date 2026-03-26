@@ -38,6 +38,7 @@
 #include <util/string/split.h>
 #include <util/system/hp_timer.h>
 #include <util/system/info.h>
+#include <util/thread/pool.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -808,7 +809,9 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
 
     if (settings.WithContent_) {
         ExistingEntries.emplace(dbPath, ESchemeEntryType::SubDomain);
-        auto restoreResult = RestoreFolder(fsPath, dbPath, {});
+        TRestoreSettings restoreSettings;
+        restoreSettings.ReplaceSysACL(true);
+        auto restoreResult = RestoreFolder(fsPath, dbPath, restoreSettings);
         if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
             restoreResult = result;
         }

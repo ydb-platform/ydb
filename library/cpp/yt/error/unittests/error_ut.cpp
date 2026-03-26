@@ -83,7 +83,7 @@ public:
     }
     TWidget& operator = (const TWidget&) = delete;
 
-    TWidget(TWidget&&)
+    TWidget(TWidget&&) noexcept
     {
         MoveConstructorCalls++;
     }

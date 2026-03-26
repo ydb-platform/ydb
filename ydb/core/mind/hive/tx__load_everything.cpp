@@ -23,6 +23,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         Self->Nodes.clear();
+        Self->NodeSegments.clear();
         Self->TabletCategories.clear();
         Self->Tablets.clear();
         Self->OwnerToTablet.clear();
@@ -376,8 +377,11 @@ public:
                 if (Self->TryToDeleteNode(&node)) {
                     // node is deleted from hashmap
                     db.Table<Schema::Node>().Key(nodeId).Delete();
-                } else if (node.IsUnknown() && node.LocationAcquired) {
-                    Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
+                } else {
+                    if (node.IsUnknown() && node.LocationAcquired) {
+                        Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
+                    }
+                    Self->UpdateNodeSegments(&node);
                 }
                 if (!nodeRowset.Next())
                     return false;
@@ -479,6 +483,7 @@ public:
                     if (it == Self->Nodes.end()) {
                         // Tablet was locked to a node that had no local service
                         it = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first;
+                        Self->UpdateNodeSegments(&it->second);
                     }
                     it->second.LockedTablets.insert(&tablet);
                     if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
@@ -824,6 +829,7 @@ public:
                     }
                 }
                 db.Table<Schema::Node>().Key(itNode->first).Delete();
+                Self->RemoveNodeFromSegments(&itNode->second);
                 itNode = Self->Nodes.erase(itNode);
             } else {
                 ++itNode;

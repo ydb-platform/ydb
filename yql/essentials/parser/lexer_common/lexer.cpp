@@ -3,14 +3,16 @@
 
 #include <util/string/builder.h>
 
+#include <utility>
+
 namespace NSQLTranslation {
 
 namespace {
 
 class TDummyLexer: public ILexer {
 public:
-    explicit TDummyLexer(const TString& name)
-        : Name_(name)
+    explicit TDummyLexer(TString name)
+        : Name_(std::move(name))
     {
     }
 
@@ -29,8 +31,8 @@ private:
 
 class TDummyFactory: public ILexerFactory {
 public:
-    explicit TDummyFactory(const TString& name)
-        : Name_(name)
+    explicit TDummyFactory(TString name)
+        : Name_(std::move(name))
     {
     }
 

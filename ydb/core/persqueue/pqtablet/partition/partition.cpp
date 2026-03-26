@@ -121,6 +121,7 @@ namespace NKikimr::NPQ {
 static const TDuration WAKE_TIMEOUT = TDuration::Seconds(5);
 static const TDuration UPDATE_AVAIL_SIZE_INTERVAL = TDuration::MilliSeconds(100);
 static const TDuration MIN_UPDATE_COUNTERS_DELAY = TDuration::MilliSeconds(300);
+static const TDuration READ_METRICS_RESET_DELAY = TDuration::Seconds(60);
 static const ui32 MAX_USERS = 1000;
 static const ui32 MAX_KEYS = 10000;
 static const ui32 MAX_TXS = 1000;
@@ -907,10 +908,9 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     resSpeed.resize(4);
     ui64 maxQuota = 0;
     bool filterConsumers = !ev->Get()->Consumers.empty();
+    const auto& clientId = ev->Get()->ClientId;
     TSet<TString> requiredConsumers(ev->Get()->Consumers.begin(), ev->Get()->Consumers.end());
-    for (auto&& userInfoPair : UsersInfoStorage->GetAll()) {
-        auto& userInfo = userInfoPair.second;
-        auto& clientId = ev->Get()->ClientId;
+    for (auto&& [_, userInfo] : UsersInfoStorage->GetAll()) {
         bool consumerShouldBeProcessed = filterConsumers
             ? requiredConsumers.contains(userInfo.User)
             : clientId.empty() || clientId == userInfo.User;
@@ -989,7 +989,13 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             clientInfo->SetAvgReadSpeedPerHour(userInfo.AvgReadBytes[2].GetValue());
             clientInfo->SetAvgReadSpeedPerDay(userInfo.AvgReadBytes[3].GetValue());
 
-            clientInfo->SetReadingFinished(LastOffsetHasBeenCommited(userInfo));
+            auto lastOffsetHasBeenCommited = LastOffsetHasBeenCommited(userInfo);
+            clientInfo->SetReadingFinished(lastOffsetHasBeenCommited);
+
+            auto mit = MLPConsumers.find(userInfo.User);
+            if (mit != MLPConsumers.end()) {
+                clientInfo->SetUseForReading(mit->second.UseForReading);
+            }
         }
     }
 
@@ -1502,6 +1508,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
         return;
     }
     ClosedInternalPartition = true;
+
     auto response = new TEvPQ::TEvGetWriteInfoResponse();
     response->Cookie = Partition.InternalPartitionId;
     response->BodyKeys = std::move(CompactionBlobEncoder.DataKeysBody);
@@ -1509,7 +1516,9 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
               std::back_inserter(response->BodyKeys));
     std::move(BlobEncoder.DataKeysBody.begin(), BlobEncoder.DataKeysBody.end(),
               std::back_inserter(response->BodyKeys));
-    response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
+    if (!ev->GetSkipSrcIdInfo()) {
+        response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
+    }
 
     response->BytesWrittenGrpc = BytesWrittenGrpc.Value();
     response->BytesWrittenUncompressed = BytesWrittenUncompressed.Value();
@@ -1592,7 +1601,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
         return EProcessResult::Continue;
     }
 
-    auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
+    const auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
 
     EProcessResult ret = EProcessResult::Continue;
     const auto& knownSourceIds = SourceIdStorage.GetInMemorySourceIds();
@@ -1829,6 +1838,21 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
     OnReadComplete(info, userInfo, ev->Get(), ctx);
 }
 
+void TPartition::Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx) {
+    if (!UsersInfoStorage) {
+        return;
+    }
+
+    auto userInfo = UsersInfoStorage.Get()->GetIfExists(ev->Get()->ClientId);
+    if (!userInfo || !userInfo->LabeledCounters) {
+        return;
+    }
+
+    auto inFlightLimitReachedDuration = ev->Get()->InFlightLimitReachedDuration;
+    userInfo->LabeledCounters->GetCounters()[METRIC_IN_FLIGHT_LIMIT_REACHED_DURATION_MS].Set(inFlightLimitReachedDuration.MilliSeconds());
+    UsersInfoStorage->SetLastReadMetricsUpdateTime(ctx.Now());
+}
+
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->IsInternal) {
         CompacterPartitionRequestInflight = false;
@@ -1960,6 +1984,12 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
             SET_METRIC(userInfo.LabeledCounters, METRIC_COMMIT_MESSAGE_LAG, lag);
             SET_METRIC(userInfo.LabeledCounters, METRIC_TOTAL_COMMIT_MESSAGE_LAG, lag);
+        }
+
+        if (ctx.Now() - UsersInfoStorage->GetLastReadMetricsUpdateTime() > READ_METRICS_RESET_DELAY && userInfo.LabeledCounters->GetCounters()[METRIC_IN_FLIGHT_LIMIT_REACHED_DURATION_MS].Get() != 0) {
+            haveChanges = true;
+            userInfo.LabeledCounters->GetCounters()[METRIC_IN_FLIGHT_LIMIT_REACHED_DURATION_MS].Set(0);
+            UsersInfoStorage->SetLastReadMetricsUpdateTime(ctx.Now());
         }
 
         ui64 readMessageLag = GetEndOffset() - snapshot.ReadOffset;
@@ -2234,17 +2264,18 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event)
 {
+    const bool skipSrcIdInfo = event->GetSkipSrcIdInfo();
     UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(event), Now()));
-    RequestWriteInfoIfRequired();
+    RequestWriteInfoIfRequired(skipSrcIdInfo);
 }
 
-void TPartition::RequestWriteInfoIfRequired()
+void TPartition::RequestWriteInfoIfRequired(bool skipSrcIdInfo)
 {
     auto tx = std::get<1>(UserActionAndTransactionEvents.back().Event);
     auto supportId = tx->SupportivePartitionActor;
     if (supportId) {
         PQ_LOG_TX_D("Send TEvGetWriteInfoRequest for TxId " << tx->GetTxId());
-        Send(supportId, new TEvPQ::TEvGetWriteInfoRequest(),
+        Send(supportId, new TEvPQ::TEvGetWriteInfoRequest(skipSrcIdInfo),
              0, 0,
              tx->CalcPredicateSpan.GetTraceId());
         WriteInfosToTx.insert(std::make_pair(supportId, tx));
@@ -2269,9 +2300,10 @@ void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConf
 
 void TPartition::AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> tx)
 {
+    const bool skipSrcIdInfo = tx->GetSkipSrcIdInfo();
     UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(tx)));
     ++ImmediateTxCount;
-    RequestWriteInfoIfRequired();
+    RequestWriteInfoIfRequired(skipSrcIdInfo);
 }
 
 void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
@@ -3040,6 +3072,14 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
                             "Partition end offset " << GetEndOffset() <<
                             ", range end " << operation.GetCommitOffsetsBegin());
                 result = false;
+            } else if (IsCommitOffsetForbiddenForMLPConsumer(consumer, false)) {
+                LOG_W("Partition " << Partition <<
+                         " Consumer '" << consumer << "'" <<
+                         " Bad request (changing commit offset for MLP consumer) " <<
+                         " EndOffset " << GetEndOffset() <<
+                         " End " << operation.GetCommitOffsetsEnd());
+                issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Commit offset for MLP consumer.");
+                result = false;
             }
 
             if (!result) {
@@ -3116,7 +3156,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
         for (auto& k : t.WriteInfo->BodyKeys) {
             LOG_D("add key " << k.Key.ToString());
-            auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, k.Timestamp, true);
+            auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, ctx.Now(), true);
             if (write && !write->Value.empty()) {
                 AddCmdWriteWithDeferredTimestamp(write, PersistRequest.Get(), ctx);
                 BlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
@@ -3465,6 +3505,10 @@ void TPartition::ChangePlanStepAndTxId(ui64 step, ui64 txId)
     TxIdHasChanged = true;
 }
 
+bool TPartition::IsCommitOffsetForbiddenForMLPConsumer(const TString& consumer, bool explicitMLPRequest) const {
+    return !explicitMLPRequest && MLPConsumers.contains(consumer);
+}
+
 TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
                                                              TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
@@ -3500,6 +3544,13 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
                                  "incorrect offset range (begin > end)");
+            return EProcessResult::ContinueDrop;
+        }
+        if (IsCommitOffsetForbiddenForMLPConsumer(user, false)) {
+            ScheduleReplyPropose(tx,
+                                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
+                                 NKikimrPQ::TError::BAD_REQUEST,
+                                 "commit offset for MLP consumer");
             return EProcessResult::ContinueDrop;
         }
 
@@ -3747,6 +3798,13 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
                            NPersQueue::NErrorCode::WRONG_COOKIE,
                            TStringBuilder() << "set offset in already dead session " << act.SessionId << " actual is " << userInfo.Session);
 
+        return;
+    }
+
+    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && IsCommitOffsetForbiddenForMLPConsumer(act.ClientId, act.MLPRequest)) {
+        ScheduleReplyError(act.Cookie, act.IsInternal,
+                           NPersQueue::NErrorCode::BAD_REQUEST,
+                           TStringBuilder() << "set offset for consumer is forbidden");
         return;
     }
 

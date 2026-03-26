@@ -18,7 +18,7 @@ using namespace NKikimr::NKqp;
 // However, the same alias can appear multiple times in a query, but might already be out of scope
 // So we first collect all join conditions and fetch aliases and mappings only for the columns used in join conditions
 
-std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree>& cboTree, TVector<std::shared_ptr<TRelOptimizerNode>>& rels) {
+std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& cboTree, TVector<std::shared_ptr<TRelOptimizerNode>>& rels) {
     THashSet<TInfoUnit, TInfoUnit::THashFunction> allJoinColumns;
     std::shared_ptr<TJoinOptimizerNode> result;
 
@@ -98,7 +98,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree>&
     return result;
 }
 
-std::shared_ptr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode> tree, const TColumnLineage& lineage, TPositionHandle pos) {
+TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode> tree, const TColumnLineage& lineage, TPositionHandle pos) {
     if (tree->Kind == RelNodeType) {
         auto rel = std::static_pointer_cast<TRBORelOptimizerNode>(tree);
         return rel->Op;
@@ -125,7 +125,7 @@ std::shared_ptr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNo
 
         auto joinKind = ConvertToJoinString(join->JoinType);
 
-        auto res = std::make_shared<TOpJoin>(leftArg, rightArg, pos, joinKind, joinKeys);
+        auto res = MakeIntrusive<TOpJoin>(leftArg, rightArg, pos, joinKind, joinKeys);
         res->Props.JoinAlgo = join->JoinAlgo;
         return res;
     }
@@ -143,14 +143,14 @@ namespace NKqp {
  * are transformed into Pg types, we remap the synthenic variables back into original ones
  * to run the CBO, and then map them back
  */
-std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
     if (input->Kind != EOperator::CBOTree) {
         return input;
     }
 
-    auto & Config = ctx.KqpCtx.Config;
+    auto& Config = ctx.KqpCtx.Config;
     auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
 
     if (optLevel <= 1) {

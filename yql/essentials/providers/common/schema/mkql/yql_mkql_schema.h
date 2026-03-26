@@ -8,18 +8,15 @@
 
 #include <functional>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TType;
 class TStructType;
 class TProgramBuilder;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 struct TCodecContext;
 
@@ -31,5 +28,4 @@ NKikimr::NMiniKQL::TType* ParseTypeFromYson(const TStringBuf yson, NKikimr::NMin
 NKikimr::NMiniKQL::TType* ParseTypeFromYson(const NYT::TNode& node, NKikimr::NMiniKQL::TProgramBuilder& builder, IOutputStream& err);
 NKikimr::NMiniKQL::TType* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TCodecContext& ctx, IOutputStream& err);
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

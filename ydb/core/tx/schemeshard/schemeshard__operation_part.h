@@ -514,6 +514,8 @@ ISubOperation::TPtr CreateAlterColumnTable(TOperationId id, const TTxTransaction
 ISubOperation::TPtr CreateAlterColumnTable(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropColumnTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state);
@@ -607,6 +609,9 @@ ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTxStat
 
 ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
 ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
+
+ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);

@@ -54,6 +54,7 @@ SRCS(
     counters_columnshard.proto
     counters_coordinator.proto
     counters_datashard.proto
+    counters_detailed_datashard.proto
     counters_hive.proto
     counters_info.proto
     counters_kesus.proto
@@ -84,6 +85,7 @@ SRCS(
     flat_scheme_op.proto
     flat_tx_scheme.proto
     follower_group.proto
+    forced_compaction.proto
     fs_settings.proto
     grpc.proto
     grpc_pq_old.proto
@@ -109,6 +111,7 @@ SRCS(
     memory_controller_config.proto
     memory_stats.proto
     metrics.proto
+    metrics_config.proto
     minikql_engine.proto
     mon.proto
     msgbus.proto
@@ -178,6 +181,7 @@ PEERDIR(
     ydb/core/config/protos
     ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/nbs/cloud/blockstore/config/protos
     ydb/core/protos/nbs
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos

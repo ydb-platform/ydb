@@ -11,8 +11,7 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <utility>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 struct TWorkerFactoryOptions {
     IProgramFactoryPtr Factory;
     const TInputSpecBase& InputSpec;
@@ -57,7 +56,7 @@ struct TWorkerFactoryOptions {
         bool useSystemColumns,
         bool useWorkerPool,
         const TInternalProgramSettings& internalSettings,
-        const TString& issueReportTarget)
+        TString issueReportTarget)
         : Factory(std::move(Factory))
         , InputSpec(InputSpec)
         , OutputSpec(OutputSpec)
@@ -78,7 +77,7 @@ struct TWorkerFactoryOptions {
         , UseSystemColumns(useSystemColumns)
         , UseWorkerPool(useWorkerPool)
         , InternalSettings(internalSettings)
-        , IssueReportTarget(issueReportTarget)
+        , IssueReportTarget(std::move(issueReportTarget))
     {
     }
 };
@@ -178,5 +177,4 @@ public:
 public:
     TWorkerHolder<IPushStreamWorker> MakeWorker() override;
 };
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

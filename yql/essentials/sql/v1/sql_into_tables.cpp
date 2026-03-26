@@ -193,12 +193,12 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             return nullptr;
         }
     } else {
-        table.Keys = BuildTableKey(pos, service, cluster, nameOrAt.second, {nameOrAt.first ? "@" : ""});
+        table.Keys = BuildTableKey(pos, service, cluster, nameOrAt.second, {.ViewName = nameOrAt.first ? "@" : ""});
     }
 
     Ctx_.IncrementMonCounter("sql_insert_clusters", table.Cluster.GetLiteral() ? *table.Cluster.GetLiteral() : "unknown");
 
-    auto values = TSqlIntoValues(Ctx_, Mode_).Build(node.GetRule_into_values_source4(), SqlIntoUserModeStr_);
+    auto values = TSqlIntoValues(*this).Build(node.GetRule_into_values_source4(), SqlIntoUserModeStr_);
     if (!values) {
         return nullptr;
     }

@@ -90,7 +90,8 @@ struct TEvPQProxy {
         EvReadingFinished,
         EvAlterTopicResponse,
         EvParentCommitedToFinish,
-        EvEnd
+        EvUpdateReadMetrics,
+        EvEnd,
     };
 
 
@@ -406,6 +407,7 @@ struct TEvPQProxy {
         const ui64 AssignId;
     };
 
+    struct TEvUpdateReadMetrics : public NActors::TEventLocal<TEvUpdateReadMetrics, EvUpdateReadMetrics> {};
 
     struct TEvCommitDone : public NActors::TEventLocal<TEvCommitDone, EvCommitDone> {
         explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset, const ui64 endOffset, const bool readingFinishedSent)

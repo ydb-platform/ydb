@@ -191,6 +191,8 @@ private:
         if (!TableSchema.Update(schemaDiff, errors)) {
             return false;
         }
+
+        TableSchema.ParseIndexesFromFullSchema(description.GetSchema());
         return true;
     }
 

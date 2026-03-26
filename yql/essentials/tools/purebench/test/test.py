@@ -1,11 +1,27 @@
-import yatest.common
+import pytest
 import re
+import yatest.common
 
 PUREBENCH = yatest.common.build_path('yql/essentials/tools/purebench/purebench')
 
 
-def test_purebench_smoke():
-    result = yatest.common.execute([PUREBENCH, '--ndebug', '-r', '1'], text=True, check_exit_code=True)
+@pytest.mark.parametrize(
+    "useBlocks",
+    [
+        pytest.param(False, id="scalar"),
+        pytest.param(True, id="blocks"),
+    ],
+)
+def test_purebench_smoke(useBlocks):
+    cmdline = [
+        PUREBENCH,
+        '--ndebug',
+        '--repeats',
+        '1',
+        '--blocks-engine',
+        'force' if useBlocks else 'disable',
+    ]
+    result = yatest.common.execute(cmdline, text=True, check_exit_code=True)
     # Mask elapsed time and duration, since both can change in
     # different environments.
     stdout = result.stdout

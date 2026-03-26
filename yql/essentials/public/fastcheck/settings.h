@@ -8,8 +8,7 @@
 #include <google/protobuf/arena.h>
 #include <util/generic/maybe.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 struct TParsedSettingsCache {
     bool Success;
@@ -44,5 +43,4 @@ bool BuildLexerSettings(
     TIssues& issues,
     TMaybe<TParsedSettingsCache>& cache);
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

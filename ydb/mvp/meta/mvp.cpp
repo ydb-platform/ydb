@@ -1,22 +1,29 @@
+#include "mvp.h"
+
+#include <ydb/mvp/core/core_ydb.h>
+#include <ydb/mvp/core/core_ydbc.h>
+#include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/core/utils.h>
+#include <ydb/mvp/meta/support_links/source.h>
+
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/process_stats.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/http/http_cache.h>
+#include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
+
+#include <google/protobuf/text_format.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
+#include <yaml-cpp/yaml.h>
+
 #include <util/datetime/base.h>
 #include <util/generic/yexception.h>
-#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/stream/file.h>
 #include <util/system/hostname.h>
 #include <util/system/mlock.h>
-#include <ydb/library/actors/core/executor_pool_basic.h>
-#include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/interconnect/poller/poller_actor.h>
-#include <ydb/library/actors/protos/services_common.pb.h>
-#include <google/protobuf/text_format.h>
-#include <ydb/mvp/core/protos/mvp.pb.h>
-#include <ydb/library/actors/core/process_stats.h>
-#include <ydb/library/actors/http/http_proxy.h>
-#include <ydb/library/actors/http/http_cache.h>
-#include "mvp.h"
-#include <ydb/mvp/core/core_ydb.h>
-#include <ydb/mvp/core/core_ydbc.h>
 
 using namespace NMVP;
 
@@ -162,32 +169,69 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
     return loggerSettings;
 }
 
-void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
-    if (!config["meta"]) {
-        return;
+void TMVP::TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appConfig) {
+    if (!appConfig.HasMeta()) {
+        ythrow yexception() << "Check that `meta` section exists and is on the same indentation as `generic` section";
     }
-    auto meta = config["meta"];
 
-    MetaApiEndpoint = meta["meta_api_endpoint"].as<std::string>("");
-    MetaDatabase = meta["meta_database"].as<std::string>("");
-    MetaCache = meta["meta_cache"].as<bool>(false);
-    MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
-    DbUserTokenSource = meta["db_user_token_access"].as<bool>(false);
+    const auto& config = appConfig.GetMeta();
+
+    MetaApiEndpoint = config.GetMetaApiEndpoint();
+    MetaDatabase = config.GetMetaDatabase();
+    MetaCache = config.GetMetaCache();
+    MetaDatabaseTokenName = config.GetMetaDatabaseTokenName();
+    DbUserTokenSource = config.GetDbUserTokenAccess();
+    MetaSettings.MetaApiEndpoint = MetaApiEndpoint;
+    MetaSettings.MetaDatabase = MetaDatabase;
+    if (MetaSettings.MetaApiEndpoint.empty()) {
+        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX << "meta.meta_api_endpoint must be specified";
+    }
+    if (MetaSettings.MetaDatabase.empty()) {
+        ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX << "meta.meta_database must be specified";
+    }
+
+    if (config.HasGrafana()) {
+        MetaSettings.GrafanaEndpoint = config.GetGrafana().GetEndpoint();
+        MetaSettings.GrafanaSecretName = config.GetGrafana().GetSecretName();
+    } else {
+        MetaSettings.GrafanaEndpoint.clear();
+        MetaSettings.GrafanaSecretName.clear();
+    }
+
+    if (config.HasSupportLinks()) {
+        const auto& supportLinks = config.GetSupportLinks();
+        MetaSettings.ClusterLinkSources.clear();
+        MetaSettings.ClusterLinkSources.reserve(supportLinks.GetCluster().size());
+        for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
+            MetaSettings.ClusterLinkSources.push_back(MakeLinkSource(supportLinks.GetCluster(i)));
+        }
+        MetaSettings.DatabaseLinkSources.clear();
+        MetaSettings.DatabaseLinkSources.reserve(supportLinks.GetDatabase().size());
+        for (int i = 0; i < supportLinks.GetDatabase().size(); ++i) {
+            MetaSettings.DatabaseLinkSources.push_back(MakeLinkSource(supportLinks.GetDatabase(i)));
+        }
+    }
 }
 
+void TMVP::TryGetMetaOptionsFromConfig() {
+    if (StartupOptions.GetYamlConfigPath().empty()) {
+        return;
+    }
+    try {
+        YAML::Node config = YAML::LoadFile(StartupOptions.GetYamlConfigPath());
+        NMvp::NMeta::TMetaAppConfig appConfig;
+        MergeYamlNodeToProto(config, appConfig);
+        TryGetMetaOptionsFromConfig(appConfig);
+    } catch (const YAML::Exception& e) {
+        ythrow yexception() << "Error parsing YAML configuration file: " << e.what();
+    }
+}
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaDatabase = "/Root";
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
-    if (StartupOptions.Config) {
-        try {
-            TryGetMetaOptionsFromConfig(StartupOptions.Config);
-        } catch (const YAML::Exception& e) {
-            std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
-            std::exit(EXIT_FAILURE);
-        }
-    }
+    TryGetMetaOptionsFromConfig();
 
     if (MetaApiEndpoint.empty()) {
         MetaApiEndpoint = defaultMetaApiEndpoint;
@@ -196,6 +240,8 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     if (MetaDatabase.empty()) {
         MetaDatabase = defaultMetaDatabase;
     }
+
+    MetaSettings.AccessServiceType = StartupOptions.AccessServiceType;
 
     if (StartupOptions.Mlock) {
         LockAllMemory(LockCurrentMemory);

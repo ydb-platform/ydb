@@ -3,6 +3,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -38,14 +39,7 @@ const TString KikimrDefaultUtDomainRoot = "Root";
 
 extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 
-
-struct TTestLogSettings {
-    NLog::EPriority DefaultLogPriority = NLog::PRI_WARN;
-    std::unordered_map<NKikimrServices::EServiceKikimr, NLog::EPriority> LogPriorities;
-    bool Freeze = false;
-
-    TTestLogSettings& AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority);
-};
+using TTestLogSettings = NTestUtils::TTestLogSettings;
 
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 private:
@@ -58,7 +52,6 @@ private:
         FeatureFlags.SetEnableSparsedColumns(true);
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
-        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
         FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
         FeatureFlags.SetEnableFollowerStats(true);
         FeatureFlags.SetEnableColumnStore(true);
@@ -249,7 +242,6 @@ private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();
     void CreateSampleTables();
-    bool SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;
@@ -292,7 +284,8 @@ enum class EIndexTypeSql {
     GlobalAsync,
     GlobalVectorKMeansTree,
     GlobalFulltextPlain,
-    GlobalFulltextRelevance
+    GlobalFulltextRelevance,
+    GlobalJson
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -306,6 +299,7 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
     case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
     case NKqp::EIndexTypeSql::GlobalFulltextPlain:
     case NKqp::EIndexTypeSql::GlobalFulltextRelevance:
+    case NKqp::EIndexTypeSql::GlobalJson:
         return "GLOBAL";
     }
 }
@@ -323,11 +317,15 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalFulltextPlain;
     case EIndexTypeSql::GlobalFulltextRelevance:
         return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
+    case EIndexTypeSql::GlobalJson:
+        return NYdb::NTable::EIndexType::GlobalJson;
     }
 }
 
 TString ReformatYson(const TString& yson);
+TString SortYsonList(const TString& yson);
 void CompareYson(const TString& expected, const TString& actual, const TString& message = {});
+void CompareYsonUnordered(const TString& expected, const TString& actual, const TString& message = {});
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message = {});
 
 void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
@@ -462,6 +460,7 @@ public:
     void CreateDatabase(const TString& databaseName);
     Tests::TServer& GetServer() const;
     Tests::TClient& GetClient() const;
+    const TString& GetEndpoint() const;
 
 private:
     TPortManager PortManager;

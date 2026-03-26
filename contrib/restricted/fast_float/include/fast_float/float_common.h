@@ -2,6 +2,7 @@
 #define FASTFLOAT_FLOAT_COMMON_H
 
 #include <cfloat>
+#include <cstddef>
 #include <cstdint>
 #include <cassert>
 #include <cstring>
@@ -17,7 +18,7 @@
 
 #define FASTFLOAT_VERSION_MAJOR 8
 #define FASTFLOAT_VERSION_MINOR 2
-#define FASTFLOAT_VERSION_PATCH 2
+#define FASTFLOAT_VERSION_PATCH 3
 
 #define FASTFLOAT_STRINGIZE_IMPL(x) #x
 #define FASTFLOAT_STRINGIZE(x) FASTFLOAT_STRINGIZE_IMPL(x)
@@ -267,18 +268,151 @@ struct is_supported_char_type
                              > {
 };
 
+template <typename UC>
+inline FASTFLOAT_CONSTEXPR14 bool
+fastfloat_strncasecmp3(UC const *actual_mixedcase,
+                       UC const *expected_lowercase) {
+  uint64_t mask{0};
+  FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 1) { mask = 0x2020202020202020; }
+  else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 2) {
+    mask = 0x0020002000200020;
+  }
+  else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 4) {
+    mask = 0x0000002000000020;
+  }
+  else {
+    return false;
+  }
+
+  uint64_t val1{0}, val2{0};
+  if (cpp20_and_in_constexpr()) {
+    for (size_t i = 0; i < 3; i++) {
+      if ((actual_mixedcase[i] | 32) != expected_lowercase[i]) {
+        return false;
+      }
+    }
+    return true;
+  } else {
+    FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 1 || sizeof(UC) == 2) {
+      ::memcpy(&val1, actual_mixedcase, 3 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase, 3 * sizeof(UC));
+      val1 |= mask;
+      val2 |= mask;
+      return val1 == val2;
+    }
+    else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 4) {
+      ::memcpy(&val1, actual_mixedcase, 2 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase, 2 * sizeof(UC));
+      val1 |= mask;
+      if (val1 != val2) {
+        return false;
+      }
+      return (actual_mixedcase[2] | 32) == (expected_lowercase[2]);
+    }
+    else {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+template <typename UC>
+inline FASTFLOAT_CONSTEXPR14 bool
+fastfloat_strncasecmp5(UC const *actual_mixedcase,
+                       UC const *expected_lowercase) {
+  uint64_t mask{0};
+  uint64_t val1{0}, val2{0};
+  if (cpp20_and_in_constexpr()) {
+    for (size_t i = 0; i < 5; i++) {
+      if ((actual_mixedcase[i] | 32) != expected_lowercase[i]) {
+        return false;
+      }
+    }
+    return true;
+  } else {
+    FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 1) {
+      mask = 0x2020202020202020;
+      ::memcpy(&val1, actual_mixedcase, 5 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase, 5 * sizeof(UC));
+      val1 |= mask;
+      val2 |= mask;
+      return val1 == val2;
+    }
+    else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 2) {
+      mask = 0x0020002000200020;
+      ::memcpy(&val1, actual_mixedcase, 4 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase, 4 * sizeof(UC));
+      val1 |= mask;
+      if (val1 != val2) {
+        return false;
+      }
+      return (actual_mixedcase[4] | 32) == (expected_lowercase[4]);
+    }
+    else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 4) {
+      mask = 0x0000002000000020;
+      ::memcpy(&val1, actual_mixedcase, 2 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase, 2 * sizeof(UC));
+      val1 |= mask;
+      if (val1 != val2) {
+        return false;
+      }
+      ::memcpy(&val1, actual_mixedcase + 2, 2 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase + 2, 2 * sizeof(UC));
+      val1 |= mask;
+      if (val1 != val2) {
+        return false;
+      }
+      return (actual_mixedcase[4] | 32) == (expected_lowercase[4]);
+    }
+    else {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // Compares two ASCII strings in a case insensitive manner.
 template <typename UC>
 inline FASTFLOAT_CONSTEXPR14 bool
 fastfloat_strncasecmp(UC const *actual_mixedcase, UC const *expected_lowercase,
                       size_t length) {
-  for (size_t i = 0; i < length; ++i) {
-    UC const actual = actual_mixedcase[i];
-    if ((actual < 256 ? actual | 32 : actual) != expected_lowercase[i]) {
-      return false;
-    }
+  uint64_t mask{0};
+  FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 1) { mask = 0x2020202020202020; }
+  else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 2) {
+    mask = 0x0020002000200020;
   }
-  return true;
+  else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 4) {
+    mask = 0x0000002000000020;
+  }
+  else {
+    return false;
+  }
+
+  if (cpp20_and_in_constexpr()) {
+    for (size_t i = 0; i < length; i++) {
+      if ((actual_mixedcase[i] | 32) != expected_lowercase[i]) {
+        return false;
+      }
+    }
+    return true;
+  } else {
+    uint64_t val1{0}, val2{0};
+    size_t sz{8 / (sizeof(UC))};
+    for (size_t i = 0; i < length; i += sz) {
+      val1 = val2 = 0;
+      sz = std::min(sz, length - i);
+      ::memcpy(&val1, actual_mixedcase + i, sz * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase + i, sz * sizeof(UC));
+      val1 |= mask;
+      val2 |= mask;
+      if (val1 != val2) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
 
 #ifndef FLT_EVAL_METHOD

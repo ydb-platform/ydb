@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: (union_op select_stmt_intersect)* */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -118,9 +117,9 @@ SELECT
     curr_yr.sales_cnt - prev_yr.sales_cnt AS sales_cnt_diff,
     curr_yr.sales_amt - prev_yr.sales_amt AS sales_amt_diff
 FROM
-    all_sales AS curr_yr
+    $all_sales AS curr_yr
 ,
-    all_sales AS prev_yr
+    $all_sales AS prev_yr
 WHERE
     curr_yr.i_brand_id == prev_yr.i_brand_id
     AND curr_yr.i_class_id == prev_yr.i_class_id
@@ -128,7 +127,7 @@ WHERE
     AND curr_yr.i_manufact_id == prev_yr.i_manufact_id
     AND curr_yr.d_year == 2002
     AND prev_yr.d_year == 2002 - 1
-    AND CAST(curr_yr.sales_cnt AS Decimal (17, 2)) / CAST(prev_yr.sales_cnt AS Decimal (17, 2)) < 0.9
+    AND curr_yr.sales_cnt / prev_yr.sales_cnt < 0.9
 ORDER BY
     sales_cnt_diff,
     sales_amt_diff

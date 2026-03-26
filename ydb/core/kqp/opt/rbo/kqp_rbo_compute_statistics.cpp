@@ -32,7 +32,7 @@ TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NYql::TOptimizerStatistics::T
     return result;
 }
 
-void ComputeAlisesForJoin(const std::shared_ptr<IOperator>& left, const std::shared_ptr<IOperator>& right, TVector<TString>& leftAliases,
+void ComputeAlisesForJoin(const TIntrusivePtr<IOperator>& left, const TIntrusivePtr<IOperator>& right, TVector<TString>& leftAliases,
                           TVector<TString>& rightAliases, TVector<TString>& unionOfAliases) {
     THashSet<TString> leftAliasSet;
     THashSet<TString> rightAliasSet;

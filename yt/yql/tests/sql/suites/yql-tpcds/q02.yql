@@ -1,6 +1,6 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: (union_op select_stmt_intersect)* */
+/* custom error: Unknown alias: date_dim */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -10,14 +10,14 @@ $wscs = (
         sales_price
     FROM (
         SELECT
-            ws_sold_date_sk sold_date_sk,
-            ws_ext_sales_price sales_price
+            ws_sold_date_sk AS sold_date_sk,
+            ws_ext_sales_price AS sales_price
         FROM
             plato.web_sales
         UNION ALL
         SELECT
-            cs_sold_date_sk sold_date_sk,
-            cs_ext_sales_price sales_price
+            cs_sold_date_sk AS sold_date_sk,
+            cs_ext_sales_price AS sales_price
         FROM
             plato.catalog_sales
     )
@@ -69,7 +69,7 @@ $wswscs = (
             END
         ) AS sat_sales
     FROM
-        wscs
+        $wscs
     ,
         plato.date_dim
     WHERE
@@ -80,13 +80,13 @@ $wswscs = (
 
 SELECT
     d_week_seq1,
-    Round(sun_sales1 / sun_sales2, 2) AS r1,
-    Round(mon_sales1 / mon_sales2, 2) AS r2,
-    Round(tue_sales1 / tue_sales2, 2) AS r3,
-    Round(wed_sales1 / wed_sales2, 2) AS r4,
-    Round(thu_sales1 / thu_sales2, 2) AS r5,
-    Round(fri_sales1 / fri_sales2, 2) AS r6,
-    Round(sat_sales1 / sat_sales2, 2) AS r7
+    Math::Round(sun_sales1 / sun_sales2, 2) AS r1,
+    Math::Round(mon_sales1 / mon_sales2, 2) AS r2,
+    Math::Round(tue_sales1 / tue_sales2, 2) AS r3,
+    Math::Round(wed_sales1 / wed_sales2, 2) AS r4,
+    Math::Round(thu_sales1 / thu_sales2, 2) AS r5,
+    Math::Round(fri_sales1 / fri_sales2, 2) AS r6,
+    Math::Round(sat_sales1 / sat_sales2, 2) AS r7
 FROM (
     SELECT
         wswscs.d_week_seq AS d_week_seq1,

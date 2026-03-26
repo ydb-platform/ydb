@@ -985,7 +985,7 @@ void TExecutor::FollowerAuxUpdate(TString upd) {
 
 void TExecutor::FollowerAttached(ui32 totalFollowers) {
     Stats->FollowersCount = totalFollowers;
-    NeedFollowerSnapshot = true;
+    NeedLogSnapshot = true;
 
     if (CurrentStateFunc() != &TThis::StateWork)
         return;
@@ -1462,7 +1462,7 @@ void TExecutor::AdvancePendingPartSwitches() {
         MaybeRelaxRejectProbability();
 
         // Note: followers don't have VacuumLogic
-        if (NeedFollowerSnapshot || VacuumLogic && VacuumLogic->NeedLogSnaphot()) {
+        if (NeedLogSnapshot || VacuumLogic && VacuumLogic->NeedLogSnaphot()) {
             MakeLogSnapshot();
         }
     }
@@ -2579,6 +2579,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
 
         if (auto truncated = std::move(change->Truncated)) {
             commit->WaitFollowerGcAck = true; // as we could collect some page collections
+            NeedLogSnapshot = true;
 
             for (auto& record : truncated) {
                 ui32 table = record.Table;
@@ -2804,7 +2805,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
         }
 
-        if (NeedFollowerSnapshot || LogicSnap->MayFlush(false))
+        if (NeedLogSnapshot || LogicSnap->MayFlush(false))
             MakeLogSnapshot();
 
         CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
@@ -2834,7 +2835,7 @@ void TExecutor::MakeLogSnapshot() {
     if (!LogicSnap->MayFlush(true) || PendingPartSwitches)
         return;
 
-    NeedFollowerSnapshot = false;
+    NeedLogSnapshot = false;
     THPTimer makeLogSnapTimer;
 
     LogicRedo->FlushBatchedLog();
@@ -3264,7 +3265,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         LogicSnap->Confirm(msg->Step);
 
         VacuumLogic->OnSnapshotCommited(Generation(), step);
-        if (NeedFollowerSnapshot || VacuumLogic->NeedLogSnaphot())
+        if (NeedLogSnapshot || VacuumLogic->NeedLogSnaphot())
             MakeLogSnapshot();
 
         break;
@@ -3297,6 +3298,17 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     PlanTransactionActivation();
 
     MaybeRelaxRejectProbability();
+}
+
+void TExecutor::Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorContext &ctx) {
+    TEvTablet::TEvSnapshotConfirmed *msg = ev->Get();
+
+    Y_ENSURE(msg->Generation == Generation());
+    const ui32 step = msg->Step;
+
+    TActiveTransactionZone activeTransaction(this);
+
+    GcLogic->OnConfirmSnapshot(step, ctx);
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
@@ -4354,6 +4366,7 @@ STFUNC(TExecutor::StateWork) {
         hFunc(NSharedCache::TEvUpdated, Handle);
         HFunc(TEvTablet::TEvDropLease, Handle);
         HFunc(TEvTablet::TEvCommitResult, Handle);
+        HFunc(TEvTablet::TEvSnapshotConfirmed, Handle);
         hFunc(TEvTablet::TEvConfirmLeaderResult, Handle);
         hFunc(TEvTablet::TEvCheckBlobstorageStatusResult, Handle);
         hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
@@ -4810,10 +4823,12 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
         return false;
     }
 
-    { // Check by key filter existence
-        bool partByKeyFilter = bool(partView->ByKey);
-        bool schemeByKeyFilter = tableInfo.ByKeyFilter;
-        if (partByKeyFilter != schemeByKeyFilter) {
+    { // Check bloom filters
+        TVector<ui32> partPrefixes;
+        for (const auto& [prefixLen, bloom] : partView->ByKeyPrefixes) {
+            if (bloom) partPrefixes.push_back(prefixLen);
+        }
+        if (partPrefixes != tableInfo.ByKeyFilterPrefixes) {
             return true;
         }
     }
@@ -4886,7 +4901,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
-    comp->Layout.ByKeyFilter = tableInfo->ByKeyFilter;
+    comp->Layout.ByKeyFilterPrefixes = tableInfo->ByKeyFilterPrefixes;
     comp->Layout.UnderlayMask = comp->Params->UnderlayMask.Get();
     comp->Layout.SplitKeys = comp->Params->SplitKeys.Get();
     comp->Layout.MinRowVersion = snapshot->Subset->MinRowVersion();

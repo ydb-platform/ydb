@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <memory>
@@ -10,21 +11,19 @@ namespace NYdb::NBS::NBlockStore::NLoadTest {
 ////////////////////////////////////////////////////////////////////////////////
 
 using LoadTestSendRequestFunctionCB =
-    std::function<void(const NYdb::NBS::NProto::TError&, const void *udata)>;
-using LoadTestSendReadRequestFunction =
-    std::function<void(TBlockRange64, LoadTestSendRequestFunctionCB, const void *udata)>;
-using LoadTestSendWriteRequestFunction =
-    std::function<void(
-        ui64 blockIndexWriteTo,
-        const void* data,
-        size_t dataSize,
-        LoadTestSendRequestFunctionCB,
-        const void *udata
-    )>;
-using LoadTestNotifyCompletedFunction =
-    std::function<void(const void *udata)>;
+    std::function<void(const NYdb::NBS::NProto::TError&, const void* udata)>;
+using LoadTestSendReadRequestFunction = std::function<
+    void(TBlockRange64, LoadTestSendRequestFunctionCB, const void* udata)>;
+using LoadTestSendWriteRequestFunction = std::function<void(
+    ui64 blockIndexWriteTo,
+    const void* data,
+    size_t dataSize,
+    LoadTestSendRequestFunctionCB,
+    const void* udata)>;
+using LoadTestNotifyCompletedFunction = std::function<void(const void* udata)>;
 
-struct TLoadTestRequestCallbacks {
+struct TLoadTestRequestCallbacks
+{
     LoadTestSendReadRequestFunction Read;
     LoadTestSendWriteRequestFunction Write;
     LoadTestNotifyCompletedFunction NotifyCompleted;

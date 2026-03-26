@@ -80,7 +80,7 @@ public:
         const auto result = PHINode::Create(valueType, 2U, "result", done);
 
         if constexpr (IsStream) {
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(Type::getInt32Ty(context), state, ctx.Codegen, block, valuePtr);
+            const auto status = CallBoxedValueFetch(state, ctx, block, valuePtr);
             const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), "ok", block);
 
             const auto none = BasicBlock::Create(context, "none", ctx.Func);
@@ -93,7 +93,7 @@ public:
             result->addIncoming(special, block);
             BranchInst::Create(done, block);
         } else {
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), state, ctx.Codegen, block, valuePtr);
+            const auto status = CallBoxedValueNext(state, ctx, block, valuePtr);
             result->addIncoming(GetFinish(context), block);
             BranchInst::Create(good, done, status, block);
         }
@@ -195,13 +195,15 @@ public:
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            result = Flow->GetValue(CompCtx);
-            if (result.IsFinish()) {
+            NYql::NUdf::TUnboxedValue fetchResult;
+            fetchResult = Flow->GetValue(CompCtx);
+            if (fetchResult.IsFinish()) {
                 return NUdf::EFetchStatus::Finish;
             }
-            if (result.IsYield()) {
+            if (fetchResult.IsYield()) {
                 return NUdf::EFetchStatus::Yield;
             }
+            result = std::move(fetchResult);
             return NUdf::EFetchStatus::Ok;
         }
 
@@ -223,7 +225,12 @@ public:
 
     protected:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override Y_NO_SANITIZE("undefined") {
-            return FetchFunc(Ctx, result);
+            NUdf::TUnboxedValue fetchResult;
+            if (const auto status = FetchFunc(Ctx, fetchResult); NUdf::EFetchStatus::Ok != status) {
+                return status;
+            }
+            result = std::move(fetchResult);
+            return NUdf::EFetchStatus::Ok;
         }
 
         const TFetchPtr FetchFunc;
@@ -366,7 +373,7 @@ public:
 
         block = main;
 
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::WideFetch>(indexType, state, ctx.Codegen, block, values, ConstantInt::get(indexType, Width));
+        const auto status = CallBoxedValueWideFetch(state, ctx, block, values, Width);
 
         const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(indexType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "ok", block);
         const auto yield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(indexType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), "yield", block);
@@ -576,10 +583,7 @@ private:
 
         block = fail;
 
-        const auto throwFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFromWideFlowWrapper::Throw>());
-        const auto throwFuncType = FunctionType::get(Type::getVoidTy(context), {indexType, indexType}, false);
-        const auto throwFuncPtr = CastInst::Create(Instruction::IntToPtr, throwFunc, PointerType::getUnqual(throwFuncType), "thrower", block);
-        CallInst::Create(throwFuncType, throwFuncPtr, {width, ConstantInt::get(width->getType(), Representations.size())}, "", block)->setTailCall();
+        EmitFunctionCall<&TFromWideFlowWrapper::Throw>(Type::getVoidTy(context), {width, ConstantInt::get(width->getType(), Representations.size())}, ctx, block);
         new UnreachableInst(context, block);
 
         return ctx.Func;

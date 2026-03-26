@@ -209,6 +209,16 @@
             "uri": "file://test.test_MutInsert_/results.txt"
         }
     ],
+    "test.test[MutKeepAttrDict]": [
+        {
+            "uri": "file://test.test_MutKeepAttrDict_/results.txt"
+        }
+    ],
+    "test.test[MutKeepAttrList]": [
+        {
+            "uri": "file://test.test_MutKeepAttrList_/results.txt"
+        }
+    ],
     "test.test[MutTryDown]": [
         {
             "uri": "file://test.test_MutTryDown_/results.txt"
@@ -227,6 +237,11 @@
     "test.test[MutView]": [
         {
             "uri": "file://test.test_MutView_/results.txt"
+        }
+    ],
+    "test.test[Mutate]": [
+        {
+            "uri": "file://test.test_Mutate_/results.txt"
         }
     ],
     "test.test[NegativeArrayIndex]": [

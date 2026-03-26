@@ -7,8 +7,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 const TString ALL_CLUSTERS = "$all";
 
@@ -139,5 +138,4 @@ private:
     TMaybe<TType> Value_;
 };
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

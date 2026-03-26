@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/library/workload/tpcc)
 
 SRCS(
-    circular_queue_ut.cpp
     data_splitter_ut.cpp
     histogram_ut.cpp
     log_capture_ut.cpp

@@ -7,25 +7,21 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
-#include <util/system/spinlock.h>
 
 namespace NRetroTracing {
 
 class TSpanCircleBuffer {
+private:
+    static constexpr ui32 CellSize = 1 << 10;
+    static constexpr ui32 BufferSize = 4 << 20;
+    static constexpr ui32 Capacity = BufferSize / CellSize;
+    static constexpr ui32 CapacityMask = Capacity - 1;
+
 public:
-    TSpanCircleBuffer()
-        : Head(0)
-    {
-        std::fill(Buffer, Buffer + BufferSize, 0);
-    }
+    using TBuffer = std::array<char, BufferSize>;
 
+public:
     void WriteSpan(const TRetroSpan* span) {
-        std::unique_lock guard(Lock, std::try_to_lock);
-        if (!guard.owns_lock()) {
-            // read is in progress, reject span
-            return;
-        }
-
         if (!span->IsEnded()) {
             // unable to write non-ended span
             return;
@@ -36,23 +32,39 @@ public:
             // invalid span size, reject span
             return;
         }
-        if (Head + CellSize >= BufferSize) {
-            Head = 0;
+
+        { // critical section
+            std::unique_lock guard(Lock, std::try_to_lock);
+            if (!guard.owns_lock()) {
+                // read is in progress, reject span
+                return;
+            }
+            ui64 head = Head & CapacityMask;
+            std::memcpy(
+                static_cast<void*>(Buffer.data() + head * CellSize),
+                static_cast<const void*>(span),
+                spanSize);
+            ++Head;
         }
-        std::memcpy(static_cast<void*>(Buffer + Head), static_cast<const void*>(span), spanSize);
-        Head += CellSize;
     }
 
-    std::vector<std::unique_ptr<TRetroSpan>> GetSpans(const NWilson::TTraceId& traceId, bool getAll) {
+    std::vector<std::unique_ptr<TRetroSpan>> GetSpans(TBuffer& readBuffer,
+            const NWilson::TTraceId& traceId, bool getAll) {
         {
             std::lock_guard guard(Lock);
-            std::memcpy(static_cast<void*>(TmpBuffer), static_cast<const void*>(Buffer), BufferSize);
+            std::memcpy(
+                static_cast<void*>(readBuffer.data()),
+                static_cast<const void*>(Buffer.data()),
+                BufferSize);
         }
         TRetroSpan spanHeader(0, sizeof(TRetroSpan));
         std::vector<std::unique_ptr<TRetroSpan>> res;
         for (ui32 pos = 0; pos < BufferSize; pos += CellSize) {
-            const void* ptr = TmpBuffer + pos;
-            std::memcpy(reinterpret_cast<void*>(&spanHeader), ptr, sizeof(TRetroSpan));
+            const void* ptr = readBuffer.data() + pos;
+            std::memcpy(
+                reinterpret_cast<void*>(&spanHeader),
+                ptr,
+                sizeof(TRetroSpan));
             if (spanHeader.GetTraceId() && (getAll || spanHeader.GetTraceId().IsSameTrace(traceId))) {
                 res.push_back(TRetroSpan::DeserializeToUnique(ptr));
             }
@@ -61,14 +73,12 @@ public:
     }
 
 private:
-    static constexpr ui32 CellSize = 1_KB;
-    static constexpr ui32 BufferSize = 5_MB;
-    char Buffer[BufferSize] = {0};
-    // TODO: more effective locking mechanism, remove second tmp buffer
-    char TmpBuffer[BufferSize] = {0};
-    ui32 Head = 0;
-    TSpinLock Lock;
+    TBuffer Buffer = {0};
+    ui64 Head = 0;
+    std::mutex Lock;
 };
+
+// char TSpanCircleBuffer::TmpBuffer[BufferSize] = {0};
 
 static thread_local std::shared_ptr<TSpanCircleBuffer> SpanBuffer;
 static std::mutex Mutex;
@@ -88,11 +98,12 @@ void WriteSpan(const TRetroSpan* span) {
 }
 
 static std::vector<std::unique_ptr<TRetroSpan>> GetSpans(const NWilson::TTraceId& traceId, bool getAll) {
+    static TSpanCircleBuffer::TBuffer readBuffer;
     std::vector<std::unique_ptr<TRetroSpan>> res;
     std::lock_guard guard(Mutex);
     for (const auto& [id, buffer] : SpanBuffers) {
         if (std::shared_ptr<TSpanCircleBuffer> locked = buffer.lock()) {
-            std::vector<std::unique_ptr<TRetroSpan>> spans = locked->GetSpans(traceId, getAll);
+            std::vector<std::unique_ptr<TRetroSpan>> spans = locked->GetSpans(readBuffer, traceId, getAll);
             std::move(spans.begin(), spans.end(), std::back_inserter(res));
         }
     }

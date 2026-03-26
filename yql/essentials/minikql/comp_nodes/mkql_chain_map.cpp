@@ -133,9 +133,12 @@ public:
                     ComputationNodes.StateArg->SetValue(CompCtx, std::move(PreservedState));
                 }
 
-                if (!Iter.Next(ComputationNodes.ItemArg->RefValue(CompCtx))) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                if (!Iter.Next(fetchResult)) {
                     return false;
                 }
+
+                ComputationNodes.ItemArg->SetValue(CompCtx, std::move(fetchResult));
 
                 value = ComputationNodes.NewItem->GetValue(CompCtx);
                 PreservedState = ComputationNodes.NewState->GetValue(CompCtx);
@@ -205,10 +208,13 @@ public:
                 Init = NUdf::TUnboxedValuePod::Invalid();
             }
 
-            const auto status = List.Fetch(ComputationNodes.ItemArg->RefValue(CompCtx));
+            NYql::NUdf::TUnboxedValue fetchResult;
+            const auto status = List.Fetch(fetchResult);
             if (status != NUdf::EFetchStatus::Ok) {
                 return status;
             }
+
+            ComputationNodes.ItemArg->SetValue(CompCtx, std::move(fetchResult));
 
             value = ComputationNodes.NewItem->GetValue(CompCtx);
             ComputationNodes.StateArg->SetValue(CompCtx, ComputationNodes.NewState->GetValue(CompCtx));
@@ -294,8 +300,9 @@ public:
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        const auto itemPtr = codegenItemArg->CreateRefValue(ctx, block);
-        const auto status = IsStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItemArg, ctx, block, [&](Value* itemPtr) {
+            return IsStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
 
         const auto icmp = IsStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::getFalse(context), "cond", block);
 
@@ -486,12 +493,9 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListChainMapWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType(), init->getType()}, false);
-            const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-            const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list, init}, "value", block);
+            const auto value = EmitFunctionCall<&TListChainMapWrapper::MakeLazyList>(list->getType(), {self, ctx.Ctx, list, init}, ctx, block);
             map->addIncoming(value, block);
             BranchInst::Create(done, block);
         }

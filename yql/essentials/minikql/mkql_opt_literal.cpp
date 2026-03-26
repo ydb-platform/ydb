@@ -9,8 +9,7 @@
 
 #include <util/generic/singleton.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NDetail;
 
@@ -356,5 +355,4 @@ TRuntimeNode LiteralPropagationOptimization(TRuntimeNode root, const TTypeEnviro
     return SinglePassVisitCallables(root, explorer, GetLiteralPropagationOptimizationFuncProvider(), env, inPlace, wereChanges);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

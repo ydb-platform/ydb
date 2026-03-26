@@ -79,8 +79,6 @@ public:
     IChannelBuffer(const TChannelFullInfo& info) : Info(info) {}
     virtual ~IChannelBuffer() {}
 
-    TDqInputChannelStats PushStats;
-    TDqOutputChannelStats PopStats;
     TChannelFullInfo Info;
 
     virtual EDqFillLevel GetFillLevel() const = 0;
@@ -88,12 +86,13 @@ public:
     virtual void Push(TDataChunk&& data) = 0;
     virtual bool IsFinished() = 0;
     virtual bool IsEarlyFinished() = 0;
-    virtual void UpdatePopStats() {}
 
     virtual bool IsEmpty() = 0;
     virtual bool Pop(TDataChunk& data) = 0;
     virtual void EarlyFinish() = 0;
-    virtual void UpdatePushStats() {}
+
+    virtual void ExportPushStats(TDqAsyncStats& stats) = 0;
+    virtual void ExportPopStats(TDqAsyncStats& stats) = 0;
 
     void SendFinish();
     bool GetLeading();

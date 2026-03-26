@@ -114,7 +114,8 @@ namespace NActors {
             if (!Metrics) {
                 Metrics = Common->Metrics ? CreateInterconnectMetrics(Common) : CreateInterconnectCounters(Common);
             }
-            Metrics->SetPeerInfo(PeerNodeId, name, info.Location.GetDataCenterId());
+            const TString peerLabel = Common->Settings.MergePerHostCounters ? info.Host : name;
+            Metrics->SetPeerInfo(name, info.Location.GetDataCenterId(), peerLabel);
             PeerBridgePileName = info.Location.GetBridgePileName();
 
             LOG_DEBUG_IC("ICP02", "configured for host %s", name.data());
@@ -438,6 +439,11 @@ namespace NActors {
         if (Metrics) {
             Metrics->IncHandshakeFails();
         }
+        if (Common->Settings.MergePerHostCounters) {
+            LOG_NOTICE_IC("ICP36", "peer-level handshake fail PeerNodeId# %" PRIu32 " Peer# %s Host# %s Temporary# %u"
+                " Explanation# %s", PeerNodeId, Metrics ? Metrics->GetHumanFriendlyPeerHostName().data() : "",
+                TechnicalPeerHostName.data(), ui32(ev->Get()->Temporary), ev->Get()->Explanation.data());
+        }
 
         if (IncomingHandshakeActor || OutgoingHandshakeActor) {
             // one of handshakes is still going on
@@ -532,6 +538,16 @@ namespace NActors {
                 TActivationContext::Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected));
                 break;
 
+            case TEvForwardSubscribeSession::EventType: {
+                auto msg = ev->Release<TEvForwardSubscribeSession>();
+                if (msg->Event) {
+                    Send(msg->Event->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, msg->Event->Cookie);
+                    TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::unique_ptr<IEventHandle>(msg->Event.Release()),
+                        TEvents::TEvUndelivered::Disconnected));
+                }
+                break;
+            }
+
             case TEvInterconnect::TEvConnectNode::EventType:
             case TEvents::TEvSubscribe::EventType:
                 Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, ev->Cookie);
@@ -579,7 +595,7 @@ namespace NActors {
     void TInterconnectProxyTCP::EnqueueSessionEvent(STATEFN_SIG) {
         ICPROXY_PROFILED;
 
-        if (ev->Flags & IEventHandle::FlagFailFastWhenDisconnected) {
+        if (InErrorState) {
             return DropSessionEvent(ev);
         }
 

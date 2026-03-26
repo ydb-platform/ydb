@@ -710,6 +710,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 << " followers: " << entry.KnownFollowers.size()
                 << " allowLeader: " << allowLeader
                 << " allowFollowers: " << allowFollowers
+                << " candidates: " << winners.size()
                 << " winner: " << winner.KnownLeader);
 
             if (winner.IsLeader) {

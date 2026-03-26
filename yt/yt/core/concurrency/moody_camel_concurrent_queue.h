@@ -31,7 +31,7 @@
 
 #pragma once
 
-#if defined(__GNUC__)
+#if defined(__GNUC__) && !defined(__INTEL_COMPILER)
 // Disable -Wconversion warnings (spuriously triggered when Traits::size_t and
 // Traits::index_t are set to < 32 bits, causing integer promotion, causing warnings
 // upon assigning any computed values)
@@ -77,6 +77,7 @@
 #include <climits>      // for CHAR_BIT
 #include <array>
 #include <thread>       // partly for __WINPTHREADS_VERSION if on MinGW-w64 w/ POSIX threading
+#include <mutex>        // used for thread exit synchronization
 
 // Platform-specific definitions of a numeric thread ID type and an invalid value
 namespace moodycamel { namespace details {
@@ -104,7 +105,7 @@ namespace moodycamel { namespace details {
     static const thread_id_t invalid_thread_id2 = 0xFFFFFFFFU;  // Not technically guaranteed to be invalid, but is never used in practice. Note that all Win32 thread IDs are presently multiples of 4.
     static inline thread_id_t thread_id() { return static_cast<thread_id_t>(::GetCurrentThreadId()); }
 } }
-#elif defined(__arm__) || defined(_M_ARM) || defined(__aarch64__) || (defined(__APPLE__) && TARGET_OS_IPHONE)
+#elif defined(__arm__) || defined(_M_ARM) || defined(__aarch64__) || (defined(__APPLE__) && TARGET_OS_IPHONE) || defined(__MVS__) || defined(MOODYCAMEL_NO_THREAD_LOCAL)
 namespace moodycamel { namespace details {
     static_assert(sizeof(std::thread::id) == 4 || sizeof(std::thread::id) == 8, "std::thread::id is expected to be either 4 or 8 bytes");
 
@@ -216,9 +217,9 @@ namespace moodycamel { namespace details {
 // VS2013 doesn't support `thread_local`, and MinGW-w64 w/ POSIX threading has a crippling bug: http://sourceforge.net/p/mingw-w64/bugs/445
 // g++ <=4.7 doesn't support thread_local either.
 // Finally, iOS/ARM doesn't have support for it either, and g++/ARM allows it to compile but it's unconfirmed to actually work
-#if (!defined(_MSC_VER) || _MSC_VER >= 1900) && (!defined(__MINGW32__) && !defined(__MINGW64__) || !defined(__WINPTHREADS_VERSION)) && (!defined(__GNUC__) || __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8)) && (!defined(__APPLE__) || !TARGET_OS_IPHONE) && !defined(__arm__) && !defined(_M_ARM) && !defined(__aarch64__)
+#if (!defined(_MSC_VER) || _MSC_VER >= 1900) && (!defined(__MINGW32__) && !defined(__MINGW64__) || !defined(__WINPTHREADS_VERSION)) && (!defined(__GNUC__) || __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8)) && (!defined(__APPLE__) || !TARGET_OS_IPHONE) && !defined(__arm__) && !defined(_M_ARM) && !defined(__aarch64__) && !defined(__MVS__) && !defined(MOODYCAMEL_NO_THREAD_LOCAL)
 // Assume `thread_local` is fully supported in all other C++11 compilers/platforms
-//#define MOODYCAMEL_CPP11_THREAD_LOCAL_SUPPORTED    // always disabled for now since several users report having problems with it on
+#define MOODYCAMEL_CPP11_THREAD_LOCAL_SUPPORTED    // tentatively enabled for now; years ago several users report having problems with it on
 #endif
 #endif
 #endif
@@ -379,6 +380,13 @@ struct ConcurrentQueueDefaultTraits
     // Only affects instances of the BlockingConcurrentQueue.
     static const int MAX_SEMA_SPINS = 10000;
 
+    // Whether to recycle dynamically-allocated blocks into an internal free list or
+    // not. If false, only pre-allocated blocks (controlled by the constructor
+    // arguments) will be recycled, and all others will be `free`d back to the heap.
+    // Note that blocks consumed by explicit producers are only freed on destruction
+    // of the queue (not following destruction of the token) regardless of this trait.
+    static const bool RECYCLE_ALLOCATED_BLOCKS = false;
+
 
 #ifndef MCDBGQ_USE_RELACY
     // Memory allocation can be customized if needed.
@@ -416,6 +424,7 @@ struct ConsumerToken;
 template <typename T, typename Traits> class ConcurrentQueue;
 template <typename T, typename Traits> class BlockingConcurrentQueue;
 class ConcurrentQueueTests;
+
 
 namespace details
 {
@@ -467,15 +476,10 @@ namespace details
     template <typename T>
     static inline bool circular_less_than(T a, T b)
     {
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable: 4554)
-#endif
         static_assert(std::is_integral<T>::value && !std::numeric_limits<T>::is_signed, "circular_less_than is intended to be used only with unsigned integer types");
-        return static_cast<T>(a - b) > static_cast<T>(static_cast<T>(1) << static_cast<T>(sizeof(T) * CHAR_BIT - 1));
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
+        return static_cast<T>(a - b) > static_cast<T>(static_cast<T>(1) << (static_cast<T>(sizeof(T) * CHAR_BIT - 1)));
+        // Note: extra parens around rhs of operator<< is MSVC bug: https://developercommunity2.visualstudio.com/t/C4554-triggers-when-both-lhs-and-rhs-is/10034931
+        //       silencing the bug requires #pragma warning(disable: 4554) around the calling code and has no effect when done here.
     }
 
     template <typename U>
@@ -505,9 +509,9 @@ namespace details
     template <typename T>
     static inline void swap_relaxed(std::atomic<T>& left, std::atomic<T>& right)
     {
-        T temp = std::move(left.load(std::memory_order::relaxed));
-        left.store(std::move(right.load(std::memory_order::relaxed)), std::memory_order::relaxed);
-        right.store(std::move(temp), std::memory_order::relaxed);
+        T temp = left.load(std::memory_order::relaxed);
+        left.store(right.load(std::memory_order::relaxed), std::memory_order::relaxed);
+        right.store(temp, std::memory_order::relaxed);
     }
 
     template <typename T>
@@ -554,6 +558,8 @@ namespace details
     typedef RelacyThreadExitListener ThreadExitListener;
     typedef RelacyThreadExitNotifier ThreadExitNotifier;
 #else
+    class ThreadExitNotifier;
+
     struct ThreadExitListener
     {
         typedef void (*callback_t)(void*);
@@ -561,8 +567,8 @@ namespace details
         void* userData;
 
         ThreadExitListener* next;       // reserved for use by the ThreadExitNotifier
+        ThreadExitNotifier* chain;        // reserved for use by the ThreadExitNotifier
     };
-
 
     class ThreadExitNotifier
     {
@@ -570,13 +576,20 @@ namespace details
         static void subscribe(ThreadExitListener* listener)
         {
             auto& tlsInst = instance();
+            std::lock_guard<std::mutex> guard(mutex());
             listener->next = tlsInst.tail;
+            listener->chain = &tlsInst;
             tlsInst.tail = listener;
         }
 
         static void unsubscribe(ThreadExitListener* listener)
         {
-            auto& tlsInst = instance();
+            std::lock_guard<std::mutex> guard(mutex());
+            if (!listener->chain) {
+                return;  // race with ~ThreadExitNotifier
+            }
+            auto& tlsInst = *listener->chain;
+            listener->chain = nullptr;
             ThreadExitListener** prev = &tlsInst.tail;
             for (auto ptr = tlsInst.tail; ptr != nullptr; ptr = ptr->next) {
                 if (ptr == listener) {
@@ -596,7 +609,9 @@ namespace details
         {
             // This thread is about to exit, let everyone know!
             assert(this == &instance() && "If this assert fails, you likely have a buggy compiler! Change the preprocessor conditions such that MOODYCAMEL_CPP11_THREAD_LOCAL_SUPPORTED is no longer defined.");
+            std::lock_guard<std::mutex> guard(mutex());
             for (auto ptr = tail; ptr != nullptr; ptr = ptr->next) {
+                ptr->chain = nullptr;
                 ptr->callback(ptr->userData);
             }
         }
@@ -606,6 +621,13 @@ namespace details
         {
             static thread_local ThreadExitNotifier notifier;
             return notifier;
+        }
+
+        static inline std::mutex& mutex()
+        {
+            // Must be static because the ThreadExitNotifier could be destroyed while unsubscribe is called
+            static std::mutex mutex;
+            return mutex;
         }
 
     private:
@@ -788,7 +810,7 @@ public:
     // queue is fully constructed before it starts being used by other threads (this
     // includes making the memory effects of construction visible, possibly with a
     // memory barrier).
-    explicit ConcurrentQueue(size_t capacity = 6 * BLOCK_SIZE)
+    explicit ConcurrentQueue(size_t capacity = 32 * BLOCK_SIZE)
         : producerListTail(nullptr),
         producerCount(0),
         initialBlockPoolIndex(0),
@@ -1313,7 +1335,7 @@ public:
     // Returns true if the underlying atomic variables used by
     // the queue are lock-free (they should be on most platforms).
     // Thread-safe.
-    static bool is_lock_free()
+    static constexpr bool is_lock_free()
     {
         return
             details::static_is_lock_free<bool>::value == 2 &&
@@ -1428,7 +1450,7 @@ private:
     struct FreeList
     {
         FreeList() : freeListHead(nullptr) { }
-        FreeList(FreeList&& other) : freeListHead(other.freeListHead.load(std::memory_order::relaxed)) { other.freeListHead.store(nullptr, std::memory_order::relaxed); }
+        FreeList(FreeList&& other) noexcept : freeListHead(other.freeListHead.load(std::memory_order::relaxed)) { other.freeListHead.store(nullptr, std::memory_order::relaxed); }
         void swap(FreeList& other) { details::swap_relaxed(freeListHead, other.freeListHead); }
 
         FreeList(FreeList const&) MOODYCAMEL_DELETE_FUNCTION;
@@ -1457,7 +1479,7 @@ private:
             while (head != nullptr) {
                 auto prevHead = head;
                 auto refs = head->freeListRefs.load(std::memory_order::relaxed);
-                if ((refs & REFS_MASK) == 0 || !head->freeListRefs.compare_exchange_strong(refs, refs + 1, std::memory_order::acquire, std::memory_order::relaxed)) {
+                if ((refs & REFS_MASK) == 0 || !head->freeListRefs.compare_exchange_strong(refs, refs + 1, std::memory_order::acquire)) {
                     head = freeListHead.load(std::memory_order::acquire);
                     continue;
                 }
@@ -1507,7 +1529,7 @@ private:
                 node->freeListRefs.store(1, std::memory_order::release);
                 if (!freeListHead.compare_exchange_strong(head, node, std::memory_order::release, std::memory_order::relaxed)) {
                     // Hmm, the add failed, but we can only try again when the refcount goes back to zero
-                    if (node->freeListRefs.fetch_add(SHOULD_BE_ON_FREELIST - 1, std::memory_order::release) == 1) {
+                    if (node->freeListRefs.fetch_add(SHOULD_BE_ON_FREELIST - 1, std::memory_order::acq_rel) == 1) {
                         continue;
                     }
                 }
@@ -1537,7 +1559,7 @@ private:
     struct Block
     {
         Block()
-            : next(nullptr), elementsCompletelyDequeued(0), freeListRefs(0), freeListNext(nullptr), shouldBeOnFreeList(false), dynamicallyAllocated(true)
+            : next(nullptr), elementsCompletelyDequeued(0), freeListRefs(0), freeListNext(nullptr), dynamicallyAllocated(true)
         {
 #ifdef MCDBGQ_TRACKMEM
             owner = nullptr;
@@ -1582,7 +1604,7 @@ private:
             }
             else {
                 // Increment counter
-                auto prevVal = elementsCompletelyDequeued.fetch_add(1, std::memory_order::release);
+                auto prevVal = elementsCompletelyDequeued.fetch_add(1, std::memory_order::acq_rel);
                 assert(prevVal < BLOCK_SIZE);
                 return prevVal == BLOCK_SIZE - 1;
             }
@@ -1605,7 +1627,7 @@ private:
             }
             else {
                 // Increment counter
-                auto prevVal = elementsCompletelyDequeued.fetch_add(count, std::memory_order::release);
+                auto prevVal = elementsCompletelyDequeued.fetch_add(count, std::memory_order::acq_rel);
                 assert(prevVal + count <= BLOCK_SIZE);
                 return prevVal + count == BLOCK_SIZE;
             }
@@ -1654,7 +1676,6 @@ private:
     public:
         std::atomic<std::uint32_t> freeListRefs;
         std::atomic<Block*> freeListNext;
-        std::atomic<bool> shouldBeOnFreeList;
         bool dynamicallyAllocated;      // Perhaps a better name for this would be 'isNotPartOfInitialBlockPool'
 
 #ifdef MCDBGQ_TRACKMEM
@@ -1809,12 +1830,7 @@ private:
                 auto block = this->tailBlock;
                 do {
                     auto nextBlock = block->next;
-                    if (block->dynamicallyAllocated) {
-                        destroy(block);
-                    }
-                    else {
-                        this->parent->add_block_to_free_list(block);
-                    }
+                    this->parent->add_block_to_free_list(block);
                     block = nextBlock;
                 } while (block != this->tailBlock);
             }
@@ -1896,7 +1912,7 @@ private:
                     ++pr_blockIndexSlotsUsed;
                 }
 
-                MOODYCAMEL_CONSTEXPR_IF (!MOODYCAMEL_NOEXCEPT_CTOR(T, U, new ((T*)nullptr) T(std::forward<U>(element)))) {
+                MOODYCAMEL_CONSTEXPR_IF (!MOODYCAMEL_NOEXCEPT_CTOR(T, U, new (static_cast<T*>(nullptr)) T(std::forward<U>(element)))) {
                     // The constructor may throw. We want the element not to appear in the queue in
                     // that case (without corrupting the queue):
                     MOODYCAMEL_TRY {
@@ -1922,7 +1938,7 @@ private:
                 blockIndex.load(std::memory_order::relaxed)->front.store(pr_blockIndexFront, std::memory_order::release);
                 pr_blockIndexFront = (pr_blockIndexFront + 1) & (pr_blockIndexSize - 1);
 
-                MOODYCAMEL_CONSTEXPR_IF (!MOODYCAMEL_NOEXCEPT_CTOR(T, U, new ((T*)nullptr) T(std::forward<U>(element)))) {
+                MOODYCAMEL_CONSTEXPR_IF (!MOODYCAMEL_NOEXCEPT_CTOR(T, U, new (static_cast<T*>(nullptr)) T(std::forward<U>(element)))) {
                     this->tailIndex.store(newTailIndex, std::memory_order::release);
                     return true;
                 }
@@ -1997,7 +2013,7 @@ private:
                     // block size (in order to get a correct signed block count offset in all cases):
                     auto headBase = localBlockIndex->entries[localBlockIndexHead].base;
                     auto blockBaseIndex = index & ~static_cast<index_t>(BLOCK_SIZE - 1);
-                    auto offset = static_cast<size_t>(static_cast<typename std::make_signed<index_t>::type>(blockBaseIndex - headBase) / BLOCK_SIZE);
+                    auto offset = static_cast<size_t>(static_cast<typename std::make_signed<index_t>::type>(blockBaseIndex - headBase) / static_cast<typename std::make_signed<index_t>::type>(BLOCK_SIZE));
                     auto block = localBlockIndex->entries[(localBlockIndexHead + offset) & (localBlockIndex->size - 1)].block;
 
                     // Dequeue
@@ -2138,7 +2154,7 @@ private:
                     block = block->next;
                 }
 
-                MOODYCAMEL_CONSTEXPR_IF (MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new ((T*)nullptr) T(details::deref_noexcept(itemFirst)))) {
+                MOODYCAMEL_CONSTEXPR_IF (MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new (static_cast<T*>(nullptr)) T(details::deref_noexcept(itemFirst)))) {
                     blockIndex.load(std::memory_order::relaxed)->front.store((pr_blockIndexFront - 1) & (pr_blockIndexSize - 1), std::memory_order::release);
                 }
             }
@@ -2157,7 +2173,7 @@ private:
                 if (details::circular_less_than<index_t>(newTailIndex, stopIndex)) {
                     stopIndex = newTailIndex;
                 }
-                MOODYCAMEL_CONSTEXPR_IF (MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new ((T*)nullptr) T(details::deref_noexcept(itemFirst)))) {
+                MOODYCAMEL_CONSTEXPR_IF (MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new (static_cast<T*>(nullptr)) T(details::deref_noexcept(itemFirst)))) {
                     while (currentTailIndex != stopIndex) {
                         new ((*this->tailBlock)[currentTailIndex++]) T(*itemFirst++);
                     }
@@ -2172,7 +2188,7 @@ private:
                             // may only define a (noexcept) move constructor, and so calls to the
                             // cctor will not compile, even if they are in an if branch that will never
                             // be executed
-                            new ((*this->tailBlock)[currentTailIndex]) T(details::nomove_if<(bool)!MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new ((T*)nullptr) T(details::deref_noexcept(itemFirst)))>::eval(*itemFirst));
+                            new ((*this->tailBlock)[currentTailIndex]) T(details::nomove_if<!MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new (static_cast<T*>(nullptr)) T(details::deref_noexcept(itemFirst)))>::eval(*itemFirst));
                             ++currentTailIndex;
                             ++itemFirst;
                         }
@@ -2219,7 +2235,7 @@ private:
                 this->tailBlock = this->tailBlock->next;
             }
 
-            MOODYCAMEL_CONSTEXPR_IF (!MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new ((T*)nullptr) T(details::deref_noexcept(itemFirst)))) {
+            MOODYCAMEL_CONSTEXPR_IF (!MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new (static_cast<T*>(nullptr)) T(details::deref_noexcept(itemFirst)))) {
                 if (firstAllocatedBlock != nullptr)
                     blockIndex.load(std::memory_order::relaxed)->front.store((pr_blockIndexFront - 1) & (pr_blockIndexSize - 1), std::memory_order::release);
             }
@@ -2258,7 +2274,7 @@ private:
 
                     auto headBase = localBlockIndex->entries[localBlockIndexHead].base;
                     auto firstBlockBaseIndex = firstIndex & ~static_cast<index_t>(BLOCK_SIZE - 1);
-                    auto offset = static_cast<size_t>(static_cast<typename std::make_signed<index_t>::type>(firstBlockBaseIndex - headBase) / BLOCK_SIZE);
+                    auto offset = static_cast<size_t>(static_cast<typename std::make_signed<index_t>::type>(firstBlockBaseIndex - headBase) / static_cast<typename std::make_signed<index_t>::type>(BLOCK_SIZE));
                     auto indexIndex = (localBlockIndexHead + offset) & (localBlockIndex->size - 1);
 
                     // Iterate the blocks and dequeue
@@ -2500,7 +2516,7 @@ private:
 #endif
                 newBlock->ConcurrentQueue::Block::template reset_empty<implicit_context>();
 
-                MOODYCAMEL_CONSTEXPR_IF (!MOODYCAMEL_NOEXCEPT_CTOR(T, U, new ((T*)nullptr) T(std::forward<U>(element)))) {
+                MOODYCAMEL_CONSTEXPR_IF (!MOODYCAMEL_NOEXCEPT_CTOR(T, U, new (static_cast<T*>(nullptr)) T(std::forward<U>(element)))) {
                     // May throw, try to insert now before we publish the fact that we have this new block
                     MOODYCAMEL_TRY {
                         new ((*newBlock)[currentTailIndex]) T(std::forward<U>(element));
@@ -2518,7 +2534,7 @@ private:
 
                 this->tailBlock = newBlock;
 
-                MOODYCAMEL_CONSTEXPR_IF (!MOODYCAMEL_NOEXCEPT_CTOR(T, U, new ((T*)nullptr) T(std::forward<U>(element)))) {
+                MOODYCAMEL_CONSTEXPR_IF (!MOODYCAMEL_NOEXCEPT_CTOR(T, U, new (static_cast<T*>(nullptr)) T(std::forward<U>(element)))) {
                     this->tailIndex.store(newTailIndex, std::memory_order::release);
                     return true;
                 }
@@ -2696,7 +2712,7 @@ private:
                 if (details::circular_less_than<index_t>(newTailIndex, stopIndex)) {
                     stopIndex = newTailIndex;
                 }
-                MOODYCAMEL_CONSTEXPR_IF (MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new ((T*)nullptr) T(details::deref_noexcept(itemFirst)))) {
+                MOODYCAMEL_CONSTEXPR_IF (MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new (static_cast<T*>(nullptr)) T(details::deref_noexcept(itemFirst)))) {
                     while (currentTailIndex != stopIndex) {
                         new ((*this->tailBlock)[currentTailIndex++]) T(*itemFirst++);
                     }
@@ -2704,7 +2720,7 @@ private:
                 else {
                     MOODYCAMEL_TRY {
                         while (currentTailIndex != stopIndex) {
-                            new ((*this->tailBlock)[currentTailIndex]) T(details::nomove_if<(bool)!MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new ((T*)nullptr) T(details::deref_noexcept(itemFirst)))>::eval(*itemFirst));
+                            new ((*this->tailBlock)[currentTailIndex]) T(details::nomove_if<!MOODYCAMEL_NOEXCEPT_CTOR(T, decltype(*itemFirst), new (static_cast<T*>(nullptr)) T(details::deref_noexcept(itemFirst)))>::eval(*itemFirst));
                             ++currentTailIndex;
                             ++itemFirst;
                         }
@@ -2905,13 +2921,15 @@ private:
             else if (!new_block_index()) {
                 return false;
             }
-            localBlockIndex = blockIndex.load(std::memory_order::relaxed);
-            newTail = (localBlockIndex->tail.load(std::memory_order::relaxed) + 1) & (localBlockIndex->capacity - 1);
-            idxEntry = localBlockIndex->index[newTail];
-            assert(idxEntry->key.load(std::memory_order::relaxed) == INVALID_BLOCK_BASE);
-            idxEntry->key.store(blockStartIndex, std::memory_order::relaxed);
-            localBlockIndex->tail.store(newTail, std::memory_order::release);
-            return true;
+            else {
+                localBlockIndex = blockIndex.load(std::memory_order::relaxed);
+                newTail = (localBlockIndex->tail.load(std::memory_order::relaxed) + 1) & (localBlockIndex->capacity - 1);
+                idxEntry = localBlockIndex->index[newTail];
+                assert(idxEntry->key.load(std::memory_order::relaxed) == INVALID_BLOCK_BASE);
+                idxEntry->key.store(blockStartIndex, std::memory_order::relaxed);
+                localBlockIndex->tail.store(newTail, std::memory_order::release);
+                return true;
+            }
         }
 
         inline void rewind_block_index_tail()
@@ -2939,7 +2957,7 @@ private:
             assert(tailBase != INVALID_BLOCK_BASE);
             // Note: Must use division instead of shift because the index may wrap around, causing a negative
             // offset, whose negativity we want to preserve
-            auto offset = static_cast<size_t>(static_cast<typename std::make_signed<index_t>::type>(index - tailBase) / BLOCK_SIZE);
+            auto offset = static_cast<size_t>(static_cast<typename std::make_signed<index_t>::type>(index - tailBase) / static_cast<typename std::make_signed<index_t>::type>(BLOCK_SIZE));
             size_t idx = (tail + offset) & (localBlockIndex->capacity - 1);
             assert(localBlockIndex->index[idx]->key.load(std::memory_order::relaxed) == index && localBlockIndex->index[idx]->value.load(std::memory_order::relaxed) != nullptr);
             return idx;
@@ -3051,7 +3069,12 @@ private:
 #ifdef MCDBGQ_TRACKMEM
         block->owner = nullptr;
 #endif
-        freeList.add(block);
+        if (!Traits::RECYCLE_ALLOCATED_BLOCKS && block->dynamicallyAllocated) {
+            destroy(block);
+        }
+        else {
+            freeList.add(block);
+        }
     }
 
     inline void add_blocks_to_free_list(Block* block)
@@ -3203,12 +3226,6 @@ private:
 
     ProducerBase* recycle_or_create_producer(bool isExplicit)
     {
-        bool recycled;
-        return recycle_or_create_producer(isExplicit, recycled);
-    }
-
-    ProducerBase* recycle_or_create_producer(bool isExplicit, bool& recycled)
-    {
 #ifdef MCDBGQ_NOLOCKFREE_IMPLICITPRODHASH
         debug::DebugLock lock(implicitProdMutex);
 #endif
@@ -3218,13 +3235,11 @@ private:
                 bool expected = true;
                 if (ptr->inactive.compare_exchange_strong(expected, /*desired*/ false, std::memory_order::acquire, std::memory_order::relaxed)) {
                     // We caught one! It's been marked as activated, the caller can have it
-                    recycled = true;
                     return ptr;
                 }
             }
         }
 
-        recycled = false;
         return add_producer(isExplicit ? static_cast<ProducerBase*>(create<ExplicitProducer>(this)) : create<ImplicitProducer>(this));
     }
 
@@ -3395,7 +3410,7 @@ private:
             // Look for the id in this hash
             auto index = hashedId;
             while (true) {      // Not an infinite loop because at least one slot is free in the hash table
-                index &= hash->capacity - 1;
+                index &= hash->capacity - 1u;
 
                 auto probedKey = hash->entries[index].key.load(std::memory_order::relaxed);
                 if (probedKey == id) {
@@ -3408,15 +3423,14 @@ private:
                     if (hash != mainHash) {
                         index = hashedId;
                         while (true) {
-                            index &= mainHash->capacity - 1;
-                            probedKey = mainHash->entries[index].key.load(std::memory_order::relaxed);
+                            index &= mainHash->capacity - 1u;
                             auto empty = details::invalid_thread_id;
 #ifdef MOODYCAMEL_CPP11_THREAD_LOCAL_SUPPORTED
                             auto reusable = details::invalid_thread_id2;
-                            if ((probedKey == empty && mainHash->entries[index].key.compare_exchange_strong(empty, id, std::memory_order::relaxed, std::memory_order::relaxed)) ||
-                                (probedKey == reusable && mainHash->entries[index].key.compare_exchange_strong(reusable, id, std::memory_order::acquire, std::memory_order::acquire))) {
+                            if (mainHash->entries[index].key.compare_exchange_strong(empty,    id, std::memory_order::seq_cst, std::memory_order::relaxed) ||
+                                mainHash->entries[index].key.compare_exchange_strong(reusable, id, std::memory_order::seq_cst, std::memory_order::relaxed)) {
 #else
-                            if ((probedKey == empty && mainHash->entries[index].key.compare_exchange_strong(empty, id, std::memory_order::relaxed, std::memory_order::relaxed))) {
+                            if (mainHash->entries[index].key.compare_exchange_strong(empty,    id, std::memory_order::seq_cst, std::memory_order::relaxed)) {
 #endif
                                 mainHash->entries[index].value = value;
                                 break;
@@ -3445,7 +3459,7 @@ private:
                 // locked block).
                 mainHash = implicitProducerHash.load(std::memory_order::acquire);
                 if (newCount >= (mainHash->capacity >> 1)) {
-                    auto newCapacity = mainHash->capacity << 1;
+                    size_t newCapacity = mainHash->capacity << 1;
                     while (newCount >= (newCapacity >> 1)) {
                         newCapacity <<= 1;
                     }
@@ -3458,7 +3472,7 @@ private:
                     }
 
                     auto newHash = new (raw) ImplicitProducerHash;
-                    newHash->capacity = (size_t)newCapacity;
+                    newHash->capacity = static_cast<size_t>(newCapacity);
                     newHash->entries = reinterpret_cast<ImplicitProducerKVP*>(details::align_for<ImplicitProducerKVP>(raw + sizeof(ImplicitProducerHash)));
                     for (size_t i = 0; i != newCapacity; ++i) {
                         new (newHash->entries + i) ImplicitProducerKVP;
@@ -3478,14 +3492,10 @@ private:
             // to finish being allocated by another thread (and if we just finished allocating above, the condition will
             // always be true)
             if (newCount < (mainHash->capacity >> 1) + (mainHash->capacity >> 2)) {
-                bool recycled;
-                auto producer = static_cast<ImplicitProducer*>(recycle_or_create_producer(false, recycled));
+                auto producer = static_cast<ImplicitProducer*>(recycle_or_create_producer(false));
                 if (producer == nullptr) {
                     implicitProducerHashCount.fetch_sub(1, std::memory_order::relaxed);
                     return nullptr;
-                }
-                if (recycled) {
-                    implicitProducerHashCount.fetch_sub(1, std::memory_order::relaxed);
                 }
 
 #ifdef MOODYCAMEL_CPP11_THREAD_LOCAL_SUPPORTED
@@ -3496,17 +3506,17 @@ private:
 
                 auto index = hashedId;
                 while (true) {
-                    index &= mainHash->capacity - 1;
-                    auto probedKey = mainHash->entries[index].key.load(std::memory_order::relaxed);
-
+                    index &= mainHash->capacity - 1u;
                     auto empty = details::invalid_thread_id;
 #ifdef MOODYCAMEL_CPP11_THREAD_LOCAL_SUPPORTED
                     auto reusable = details::invalid_thread_id2;
-                    if ((probedKey == empty && mainHash->entries[index].key.compare_exchange_strong(empty, id, std::memory_order::relaxed, std::memory_order::relaxed)) ||
-                        (probedKey == reusable && mainHash->entries[index].key.compare_exchange_strong(reusable, id, std::memory_order::acquire, std::memory_order::acquire))) {
-#else
-                    if ((probedKey == empty && mainHash->entries[index].key.compare_exchange_strong(empty, id, std::memory_order::relaxed, std::memory_order::relaxed))) {
+                    if (mainHash->entries[index].key.compare_exchange_strong(reusable, id, std::memory_order::seq_cst, std::memory_order::relaxed)) {
+                        implicitProducerHashCount.fetch_sub(1, std::memory_order::relaxed);  // already counted as a used slot
+                        mainHash->entries[index].value = producer;
+                        break;
+                    }
 #endif
+                    if (mainHash->entries[index].key.compare_exchange_strong(empty,    id, std::memory_order::seq_cst, std::memory_order::relaxed)) {
                         mainHash->entries[index].value = producer;
                         break;
                     }
@@ -3525,9 +3535,6 @@ private:
 #ifdef MOODYCAMEL_CPP11_THREAD_LOCAL_SUPPORTED
     void implicit_producer_thread_exited(ImplicitProducer* producer)
     {
-        // Remove from thread exit listeners
-        details::ThreadExitNotifier::unsubscribe(&producer->threadExitListener);
-
         // Remove from hash
 #ifdef MCDBGQ_NOLOCKFREE_IMPLICITPRODHASH
         debug::DebugLock lock(implicitProdMutex);
@@ -3543,10 +3550,9 @@ private:
         for (; hash != nullptr; hash = hash->prev) {
             auto index = hashedId;
             do {
-                index &= hash->capacity - 1;
-                probedKey = hash->entries[index].key.load(std::memory_order::relaxed);
-                if (probedKey == id) {
-                    hash->entries[index].key.store(details::invalid_thread_id2, std::memory_order::release);
+                index &= hash->capacity - 1u;
+                probedKey = id;
+                if (hash->entries[index].key.compare_exchange_strong(probedKey, details::invalid_thread_id2, std::memory_order::seq_cst, std::memory_order::relaxed)) {
                     break;
                 }
                 ++index;
@@ -3697,7 +3703,7 @@ ConsumerToken::ConsumerToken(ConcurrentQueue<T, Traits>& queue)
     : itemsConsumedFromCurrent(0), currentProducer(nullptr), desiredProducer(nullptr)
 {
     initialOffset = queue.nextExplicitConsumerId.fetch_add(1, std::memory_order::release);
-    lastKnownGlobalOffset = (std::uint32_t)-1;
+    lastKnownGlobalOffset = static_cast<std::uint32_t>(-1);
 }
 
 template <typename T, typename Traits>
@@ -3705,7 +3711,7 @@ ConsumerToken::ConsumerToken(BlockingConcurrentQueue<T, Traits>& queue)
     : itemsConsumedFromCurrent(0), currentProducer(nullptr), desiredProducer(nullptr)
 {
     initialOffset = reinterpret_cast<ConcurrentQueue<T, Traits>*>(&queue)->nextExplicitConsumerId.fetch_add(1, std::memory_order::release);
-    lastKnownGlobalOffset = (std::uint32_t)-1;
+    lastKnownGlobalOffset = static_cast<std::uint32_t>(-1);
 }
 
 template <typename T, typename Traits>
@@ -3736,6 +3742,6 @@ inline void swap(typename ConcurrentQueue<T, Traits>::ImplicitProducerKVP& a, ty
 #pragma warning(pop)
 #endif
 
-#if defined(__GNUC__)
+#if defined(__GNUC__) && !defined(__INTEL_COMPILER)
 #pragma GCC diagnostic pop
 #endif

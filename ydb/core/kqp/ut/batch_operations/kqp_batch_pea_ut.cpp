@@ -15,7 +15,6 @@ namespace {
 
 TKikimrSettings GetTestSettings() {
     auto appConfig = NKikimrConfig::TAppConfig();
-    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
     appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
 
     auto logConfig = TTestLogSettings()

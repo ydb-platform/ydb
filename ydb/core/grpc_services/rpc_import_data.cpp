@@ -234,6 +234,9 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
         auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(KeyDesc->TableId.PathId.LocalPathId);
+        if (Request != nullptr && Request->GetInternalToken() != nullptr) {
+            ev->Record.SetUserSID(Request->GetInternalToken()->GetUserSID());
+        }
 
         const auto timeout = request.operation_params().has_operation_timeout()
             ? Min(GetDuration(request.operation_params().operation_timeout()), MAX_TIMEOUT)

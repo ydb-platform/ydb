@@ -1,4 +1,9 @@
 #include "../config-host.h"
+/* SPDX-License-Identifier: MIT */
+/*
+ * Description: test timestamp retrieving
+ *
+ */
 #include <time.h>
 #include <arpa/inet.h>
 #include <inttypes.h>

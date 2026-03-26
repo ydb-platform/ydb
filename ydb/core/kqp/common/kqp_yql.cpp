@@ -229,6 +229,9 @@ TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(con
         } else if (name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.MinimumShouldMatch = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::ModeSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.Mode = tuple.Value().Cast().Ptr();
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTableFullTextIndex setting name '" << name << "'");
         }
@@ -281,6 +284,13 @@ NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExp
             .Name().Build(MinimumShouldMatchSettingName)
             .Value(MinimumShouldMatch)
             .Done());
+    }
+
+    if (Mode) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+        .Name().Build(ModeSettingName)
+        .Value(Mode)
+        .Done());
     }
 
     return Build<TCoNameValueTupleList>(ctx, pos)

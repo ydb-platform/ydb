@@ -13,7 +13,7 @@ TString GetFullName(const TString& name);
 TString GetFullName(const TInfoUnit& name);
 
 TExprNode::TPtr BuildMultiConsumerHandler(TExprNode::TPtr input, const ui32 numConsumers, TExprContext& ctx, TPositionHandle pos);
-bool IsMultiConsumerHandlerNeeded(const std::shared_ptr<IOperator>& op);
+bool IsMultiConsumerHandlerNeeded(const TIntrusivePtr<IOperator>& op);
 
 TCoAtomList BuildAtomList(TStringBuf value, TPositionHandle pos, TExprContext& ctx);
 

@@ -113,6 +113,7 @@ class WorkloadFulltextIndex(WorkloadBase):
             SELECT `pk`, `text`, FulltextScore(`text`, "{query}") as `rel`
             FROM `{table_path}`
             VIEW `{index_name}`
+            WHERE FulltextScore(`text`, "{query}") > 0
             ORDER BY `rel`
             LIMIT {self.limit};
         """
@@ -129,7 +130,7 @@ class WorkloadFulltextIndex(WorkloadBase):
             prev = rel
         return n
 
-    def _wait_index_ready(self, index_name, table_path, utf8):
+    def _wait_index_ready(self, index_name, table_path):
         start_time = time.time()
         while time.time() - start_time < 60:
             time.sleep(5)
@@ -137,7 +138,6 @@ class WorkloadFulltextIndex(WorkloadBase):
                 res = self._select_contains(
                     index_name=index_name,
                     table_path=table_path,
-                    utf8=utf8,
                 )
                 if res == 0:
                     continue
@@ -164,7 +164,6 @@ class WorkloadFulltextIndex(WorkloadBase):
         self._wait_index_ready(
             table_path=table_path,
             index_name=index_name,
-            utf8=utf8,
         )
         n = 0
         for i in range(0, self.query_count):
@@ -203,7 +202,7 @@ class WorkloadFulltextIndex(WorkloadBase):
         self._delete_rows(
             table_path=table_path,
             min_key=self.row_count-3,
-            max_key=self.row_count,
+            max_key=self.row_count+3,
         )
         # sometimes replace the index
         if random.randint(0, 1) == 0:

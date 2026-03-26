@@ -222,7 +222,7 @@ public:
         return *this;
     }
 
-    TCallback& operator=(TCallback&& other)
+    TCallback& operator=(TCallback&& other) noexcept
     {
         TCallback(std::move(other)).Swap(*this);
         return *this;

@@ -218,3 +218,14 @@ storage_config_generation: 0
 #     opentelemetry:
 #       collector_url: grpc://localhost:4316
 #       service_name: your_cluster_name
+nbs_config:
+  enabled: true
+  nbs_storage_config:
+    scheme_shard_dir: "/Root/NBS"
+    folder_id: "testFolder"
+    ssd_system_channel_pool_kind: "ssd"
+    ssd_log_channel_pool_kind: "ssd"
+    ssd_index_channel_pool_kind: "ssd"
+    pipe_client_retry_count: 3
+    pipe_client_min_retry_time: 1
+    pipe_client_max_retry_time: 10

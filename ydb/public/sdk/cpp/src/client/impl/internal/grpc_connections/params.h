@@ -30,6 +30,7 @@ public:
     virtual TBalancingPolicy::TImpl GetBalancingSettings() const = 0;
     virtual TDuration GetGRpcKeepAliveTimeout() const = 0;
     virtual bool GetGRpcKeepAlivePermitWithoutCalls() const = 0;
+    virtual std::string GetGRpcLoadBalancingPolicy() const = 0;
     virtual TDuration GetSocketIdleTimeout() const = 0;
     virtual const TLog& GetLog() const = 0;
     virtual uint64_t GetMemoryQuota() const = 0;

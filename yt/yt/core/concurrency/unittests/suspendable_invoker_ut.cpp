@@ -37,7 +37,7 @@ protected:
 TEST_F(TSuspendableInvokerTest, Simple)
 {
     auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
-    suspendableInvoker->Suspend().Get();
+    WaitUntilSet(suspendableInvoker->Suspend());
     suspendableInvoker->Resume();
 }
 
@@ -87,19 +87,19 @@ TEST_F(TSuspendableInvokerTest, SuspendableDoubleWaitFor)
         .AsyncVia(suspendableInvoker)
         .Run();
 
-    suspendableInvoker->Suspend().Get();
+    WaitUntilSet(suspendableInvoker->Suspend());
     EXPECT_FALSE(promise.ToFuture().IsSet());
     suspendableInvoker->Resume();
-    promise.ToFuture().Get();
+    WaitUntilSet(promise.ToFuture());
 
-    setFlagFuture.Get();
+    WaitUntilSet(setFlagFuture);
 
     auto flagValue = BIND([&] () -> bool {
         return flag;
     })
         .AsyncVia(suspendableInvoker)
         .Run()
-        .Get()
+        .BlockingGet()
         .ValueOrThrow();
 
     EXPECT_TRUE(flagValue);
@@ -108,7 +108,7 @@ TEST_F(TSuspendableInvokerTest, SuspendableDoubleWaitFor)
 TEST_F(TSuspendableInvokerTest, EarlySuspend)
 {
     auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
-    suspendableInvoker->Suspend().Get();
+    WaitUntilSet(suspendableInvoker->Suspend());
 
     auto promise = NewPromise<void>();
 
@@ -121,7 +121,7 @@ TEST_F(TSuspendableInvokerTest, EarlySuspend)
     // Sleep(SleepQuantum);
     EXPECT_FALSE(promise.IsSet());
     suspendableInvoker->Resume();
-    promise.ToFuture().Get();
+    WaitUntilSet(promise.ToFuture());
     EXPECT_TRUE(promise.IsSet());
 }
 
@@ -139,7 +139,7 @@ TEST_F(TSuspendableInvokerTest, ResumeBeforeFullSuspend)
 
     EXPECT_FALSE(firstFuture.IsSet());
     suspendableInvoker->Resume();
-    EXPECT_FALSE(firstFuture.Get().IsOK());
+    EXPECT_FALSE(WaitForFast(firstFuture).IsOK());
 }
 
 TEST_F(TSuspendableInvokerTest, SuspendAndImmediatelyResume)
@@ -168,11 +168,11 @@ TEST_F(TSuspendableInvokerTest, AllowSuspendOnContextSwitch)
 
     auto suspendFuture = suspendableInvoker->Suspend();
     EXPECT_FALSE(suspendFuture.IsSet());
-    EXPECT_TRUE(suspendFuture.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(suspendFuture).IsOK());
 
     suspendableInvoker->Resume();
     promise.Set();
-    setFlagFuture.Get();
+    WaitUntilSet(setFlagFuture);
     EXPECT_TRUE(flag);
 }
 
@@ -186,7 +186,7 @@ TEST_F(TSuspendableInvokerTest, UnsetSuspendFutureCancelingOnResume)
         .Run();
     auto suspendFuture = suspendableInvoker->Suspend();
     suspendableInvoker->Resume();
-    auto error = suspendFuture.Get();
+    auto error = WaitForFast(suspendFuture);
     EXPECT_FALSE(error.IsOK());
     EXPECT_TRUE(error.GetCode() == NYT::EErrorCode::Canceled);
     EXPECT_TRUE(error.GetMessage() == "Invoker resumed before suspension completed");
@@ -217,7 +217,7 @@ TEST_F(TSuspendableInvokerTest, SuspendResumeOnFinishedRace)
             ++hits;
         }
         suspendableInvoker->Resume();
-        auto error = future.Get();
+        auto error = WaitForFast(future);
         if (!error.IsOK()) {
             EXPECT_FALSE(flag);
             YT_VERIFY(error.GetCode() == NYT::EErrorCode::Canceled);
@@ -226,7 +226,7 @@ TEST_F(TSuspendableInvokerTest, SuspendResumeOnFinishedRace)
         }
     }
     auto future = suspendableInvoker->Suspend();
-    EXPECT_TRUE(future.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(future).IsOK());
 }
 
 TEST_F(TSuspendableInvokerTest, ResumeInApply)
@@ -242,7 +242,7 @@ TEST_F(TSuspendableInvokerTest, ResumeInApply)
     auto suspendFuture = suspendableInvoker->Suspend()
         .Apply(BIND([=] { suspendableInvoker->Resume(); }));
 
-    EXPECT_TRUE(suspendFuture.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(suspendFuture).IsOK());
 }
 
 TEST_F(TSuspendableInvokerTest, SuspendInApplyWhenSuspensionFailed)
@@ -270,15 +270,14 @@ TEST_F(TSuspendableInvokerTest, SuspendInApplyWhenSuspensionFailed)
     suspendableInvoker->Resume();
     EXPECT_TRUE(flag);
 
-    EXPECT_TRUE(suspendFuture.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(suspendFuture).IsOK());
 }
 
 TEST_F(TSuspendableInvokerTest, VerifySerializedActionsOrder)
 {
     auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
 
-    suspendableInvoker->Suspend()
-        .Get();
+    WaitUntilSet(suspendableInvoker->Suspend());
 
     const int totalActionCount = 100000;
 
@@ -318,4 +317,3 @@ TEST_F(TSuspendableInvokerTest, VerifySerializedActionsOrder)
 
 } // namespace
 } // namespace NYT::NConcurrency
-

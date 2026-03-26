@@ -5,6 +5,7 @@
 #include <yt/yt/core/misc/shutdown.h>
 
 #include <library/cpp/yt/threading/event_count.h>
+#include <library/cpp/yt/threading/execution_stack.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <util/system/thread.h>
@@ -77,21 +78,7 @@ private:
     ::TThread UnderlyingThread_;
 
 #if defined(_unix_)
-    class TSignalHandlerStack
-        : private TNonCopyable
-    {
-    public:
-        explicit TSignalHandlerStack(size_t size);
-        ~TSignalHandlerStack();
-
-    private:
-        size_t Size_;
-        char* Base_;
-
-        static const int GuardPageCount = 1;
-    };
-
-    std::unique_ptr<TSignalHandlerStack> SignalHandlerStack_;
+    std::unique_ptr<NThreading::TExecutionStack> SignalHandlerStack_;
 #endif
 
     void SetThreadPriority();

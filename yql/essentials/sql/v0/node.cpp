@@ -13,6 +13,8 @@
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV0 {
@@ -26,10 +28,10 @@ TString ErrorDistinctByGroupKey(const TString& column) {
     return TStringBuilder() << "Unable to use DISTINCT by grouping column: " << column << ". You should leave one of them.";
 }
 
-TTableRef::TTableRef(const TString& refName, const TString& cluster, TNodePtr keys)
-    : RefName(refName)
-    , Cluster(cluster)
-    , Keys(keys)
+TTableRef::TTableRef(TString  refName, TString  cluster, TNodePtr keys)
+    : RefName(std::move(refName))
+    , Cluster(std::move(cluster))
+    , Keys(std::move(keys))
 {
 }
 
@@ -75,17 +77,17 @@ bool TTableRef::Check(TContext& ctx) const {
     return true;
 }
 
-TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TString& type, bool nullable, bool isTypeString)
-    : Pos(pos)
-    , Name(name)
-    , Type(type)
+TColumnSchema::TColumnSchema(TPosition pos, TString name, TString type, bool nullable, bool isTypeString)
+    : Pos(std::move(pos))
+    , Name(std::move(name))
+    , Type(std::move(type))
     , Nullable(nullable)
     , IsTypeString(isTypeString)
 {
 }
 
 INode::INode(TPosition pos)
-    : Pos_(pos)
+    : Pos_(std::move(pos))
 {
 }
 
@@ -287,9 +289,9 @@ void INode::DoAdd(TNodePtr node) {
     Y_DEBUG_ABORT_UNLESS(false, "Node is not expandable");
 }
 
-TAstAtomNode::TAstAtomNode(TPosition pos, const TString& content, ui32 flags)
+TAstAtomNode::TAstAtomNode(TPosition pos, TString content, ui32 flags)
     : INode(pos)
-    , Content_(content)
+    , Content_(std::move(content))
     , Flags_(flags)
 {
 }
@@ -443,9 +445,9 @@ bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& node
     return true;
 }
 
-TCallNode::TCallNode(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
+TCallNode::TCallNode(TPosition pos, TString opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
     : TAstListNode(pos)
-    , OpName_(opName)
+    , OpName_(std::move(opName))
     , MinArgs_(minArgs)
     , MaxArgs_(maxArgs)
     , Args_(args)
@@ -800,17 +802,17 @@ THoppingWindowSpecPtr THoppingWindowSpec::Clone() const {
     return res;
 }
 
-TColumnNode::TColumnNode(TPosition pos, const TString& column, const TString& source)
+TColumnNode::TColumnNode(TPosition pos, TString column, TString source)
     : INode(pos)
-    , ColumnName_(column)
-    , Source_(source)
+    , ColumnName_(std::move(column))
+    , Source_(std::move(source))
 {
 }
 
-TColumnNode::TColumnNode(TPosition pos, const TNodePtr& column, const TString& source)
+TColumnNode::TColumnNode(TPosition pos, TNodePtr column, TString source)
     : INode(pos)
-    , ColumnExpr_(column)
-    , Source_(source)
+    , ColumnExpr_(std::move(column))
+    , Source_(std::move(source))
 {
 }
 
@@ -998,8 +1000,8 @@ const TString& IAggregation::GetName() const {
     return Name_;
 }
 
-IAggregation::IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode)
-    : INode(pos), Name_(name), Func_(func), AggMode_(aggMode)
+IAggregation::IAggregation(TPosition pos, TString name, TString func, EAggregateMode aggMode)
+    : INode(pos), Name_(std::move(name)), Func_(std::move(func)), AggMode_(aggMode)
 {}
 
 TAstNode* IAggregation::Translate(TContext& ctx) const {
@@ -1891,22 +1893,22 @@ TLiteralNode::TLiteralNode(TPosition pos, bool isNull)
     Add(isNull ? "Null" : "Void");
 }
 
-TLiteralNode::TLiteralNode(TPosition pos, const TString& type, const TString& value)
+TLiteralNode::TLiteralNode(TPosition pos, TString type, TString value)
     : TAstListNode(pos)
     , Null_(false)
     , Void_(false)
-    , Type_(type)
-    , Value_(value)
+    , Type_(std::move(type))
+    , Value_(std::move(value))
 {
     Add(Type_, BuildQuotedAtom(Pos_, Value_));
 }
 
-TLiteralNode::TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags)
+TLiteralNode::TLiteralNode(TPosition pos, TString value, ui32 nodeFlags)
     : TAstListNode(pos)
     , Null_(false)
     , Void_(false)
     , Type_("String")
-    , Value_(value)
+    , Value_(std::move(value))
 {
     Add(Type_, BuildQuotedAtom(pos, Value_, nodeFlags));
 }
@@ -2130,9 +2132,9 @@ TNodePtr BuildListOfNamedNodes(TPosition pos, TVector<TNodePtr>&& exprs) {
 const char* const TArgPlaceholderNode::ProcessRows = "$ROWS";
 const char* const TArgPlaceholderNode::ProcessRow = "$ROW";
 
-TArgPlaceholderNode::TArgPlaceholderNode(TPosition pos, const TString &name) :
+TArgPlaceholderNode::TArgPlaceholderNode(TPosition pos, TString name) :
     INode(pos),
-    Name_(name)
+    Name_(std::move(name))
 {
 }
 
@@ -2424,12 +2426,12 @@ TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TStrin
 template <bool Bit>
 class TCastNode: public TAstListNode {
 public:
-    TCastNode(TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne, const TString& paramTwo)
+    TCastNode(TPosition pos, TNodePtr expr, const TString& typeName, TString paramOne, TString paramTwo)
         : TAstListNode(pos)
-        , Expr_(expr)
+        , Expr_(std::move(expr))
         , NormalizedTypeName_(TypeByAlias(typeName))
-        , ParamOne_(paramOne)
-        , ParamTwo_(paramTwo)
+        , ParamOne_(std::move(paramOne))
+        , ParamTwo_(std::move(paramTwo))
     {}
 
     const TString* GetSourceName() const override {
@@ -2583,10 +2585,10 @@ TNodePtr BuildBinaryOp(TPosition pos, const TString& opName, TNodePtr a, TNodePt
 
 class TCalcOverWindow final: public INode {
 public:
-    TCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr node)
+    TCalcOverWindow(TPosition pos, TString windowName, TNodePtr node)
         : INode(pos)
-        , WindowName_(windowName)
-        , FuncNode_(node)
+        , WindowName_(std::move(windowName))
+        , FuncNode_(std::move(node))
     {}
 
     TAstNode* Translate(TContext& ctx) const override {
@@ -2710,9 +2712,9 @@ TNodePtr BuildShortcutNode(const TNodePtr& node, const TString& baseName) {
 
 class TDoCall final : public INode {
 public:
-    TDoCall(TPosition pos, const TNodePtr& node)
+    TDoCall(TPosition pos, TNodePtr node)
         : INode(pos)
-        , Node_(node)
+        , Node_(std::move(node))
     {
         FakeSource_ = BuildFakeSource(pos);
     }

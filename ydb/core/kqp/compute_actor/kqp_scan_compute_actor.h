@@ -1,11 +1,14 @@
 #pragma once
 
+#include "kqp_scan_common.h"
 #include "kqp_scan_events.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+
+#include <library/cpp/string_utils/quote/quote.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
@@ -26,6 +29,9 @@ private:
 
     std::set<NActors::TActorId> Fetchers;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
+    bool ScanDataInFlight = false;
+    ui64 SendDataReceived = 0;
+    ui64 AcksSent = 0;
 
     struct TLockHash {
         size_t operator()(const NKikimrDataEvents::TLock& lock) {
@@ -83,6 +89,7 @@ public:
                 hFunc(TEvScanExchange::TEvRegisterFetcher, Handle);
                 hFunc(TEvScanExchange::TEvFetcherFinished, Handle);
                 hFunc(TEvScanExchange::TEvTerminateFromFetcher, Handle)
+                hFunc(NActors::NMon::TEvHttpInfo, OnMonitoringPage)
                 default:
                     BaseStateFuncBody(ev);
             }
@@ -159,6 +166,41 @@ public:
     }
 
     void DoBootstrap();
+
+    void ExtraMonitoringInfo(TStringStream& str, const TCgiParameters& cgi) override {
+        TBase::ExtraMonitoringInfo(str, cgi);
+        str << Endl << "Backpressure:" << Endl;
+        str << "  ScanDataInFlight: " << ScanDataInFlight << Endl;
+        str << "  AcksSent: " << AcksSent << Endl;
+        str << "  SendDataReceived: " << SendDataReceived << Endl;
+        if (!Fetchers.empty()) {
+            HTML(str) {
+                str << Endl << "Fetcher(s): " << Fetchers.size();
+                for (auto& fetcherId : Fetchers) {
+                    str << " ";
+                    HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"ca", ToString(SelfId())}, {"sf", ToString(fetcherId)}, {"view", ""}})) {
+                        str << fetcherId;
+                    }
+                }
+                str << Endl;
+            }
+        }
+    }
+
+    void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+        const TCgiParameters& cgi = ev->Get()->Request.GetParams();
+        auto sf = cgi.Get("sf");
+        UrlUnescape(sf);
+        if (sf) {
+            for (auto& fetcherId : Fetchers) {
+                if (sf == ToString(fetcherId)) {
+                    TActivationContext::Send(ev->Forward(fetcherId));
+                    return;
+                }
+            }
+        }
+        TBase::OnMonitoringPage(ev);
+    }
 
 };
 

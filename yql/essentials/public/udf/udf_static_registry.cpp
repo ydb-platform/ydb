@@ -3,8 +3,7 @@
 #include <util/generic/singleton.h>
 #include <util/generic/vector.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 TUdfModuleWrapperList* StaticUdfModuleWrapperList() {
     return Singleton<TUdfModuleWrapperList>();
@@ -18,5 +17,4 @@ void AddToStaticUdfRegistry(TUdfModuleWrapper&& wrapper) {
     StaticUdfModuleWrapperList()->emplace_back(wrapper);
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

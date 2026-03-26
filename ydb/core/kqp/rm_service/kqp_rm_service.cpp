@@ -1,5 +1,6 @@
 #include "kqp_rm_service.h"
 
+#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/domain.h>
@@ -147,12 +148,16 @@ struct TEvPrivate {
         EvPublishResources = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvSchedulePublishResources,
         EvTakeResourcesSnapshot,
+        EvWarmupDeadline,
     };
 
     struct TEvPublishResources : public TEventLocal<TEvPublishResources, EEv::EvPublishResources> {
     };
 
     struct TEvSchedulePublishResources : public TEventLocal<TEvSchedulePublishResources, EEv::EvSchedulePublishResources> {
+    };
+
+    struct TEvWarmupDeadline : public TEventLocal<TEvWarmupDeadline, EEv::EvWarmupDeadline> {
     };
 };
 
@@ -581,11 +586,14 @@ public:
 
     TKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         TIntrusivePtr<TKqpCounters> counters, const TActorId& resourceBrokerId,
-        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, ui32 nodeId)
+        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, ui32 nodeId,
+        TDuration warmupDeadline)
         : NodeId(nodeId)
         , Config(config)
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
+        , WarmupInProgress(warmupDeadline > TDuration::Zero())
+        , WarmupDeadline(warmupDeadline)
     {
         ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
     }
@@ -628,6 +636,11 @@ public:
         }
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
+
+        if (WarmupInProgress) {
+            LOG_I("Warmup in progress, resource publishing delayed for up to " << WarmupDeadline);
+            Schedule(WarmupDeadline, new TEvPrivate::TEvWarmupDeadline());
+        }
 
         Become(&TKqpResourceManagerActor::WorkState);
 
@@ -676,6 +689,8 @@ private:
             hFunc(TEvTenantPool::TEvTenantPoolStatus, HandleWork);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleWork);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleWork);
+            hFunc(TEvKqpWarmupComplete, HandleWarmupComplete);
+            cFunc(TEvPrivate::EvWarmupDeadline, HandleWarmupDeadline);
             hFunc(TEvents::TEvUndelivered, HandleWork);
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
@@ -889,6 +904,22 @@ private:
         return TStringBuilder() << "kqprm+" << database;
     }
 
+    void HandleWarmupComplete(TEvKqpWarmupComplete::TPtr&) {
+        if (WarmupInProgress) {
+            WarmupInProgress = false;
+            LOG_I("Warmup complete, starting resource publishing");
+            PublishResourceUsage("warmup_complete");
+        }
+    }
+
+    void HandleWarmupDeadline() {
+        if (WarmupInProgress) {
+            WarmupInProgress = false;
+            LOG_W("Warmup deadline exceeded, forcing resource publishing");
+            PublishResourceUsage("warmup_deadline");
+        }
+    }
+
     void PublishResourceUsage(TStringBuf reason) {
         const TDuration publishInterval = TDuration::Seconds(Config.GetPublishStatisticsIntervalSec());
         if (PublishResourcesScheduledAt) {
@@ -923,19 +954,33 @@ private:
             LOG_D("Don't set KqpProxySharedResources");
         }
         ActorIdToProto(MakeKqpResourceManagerServiceID(SelfId().NodeId()), payload.MutableResourceManagerActorId()); // legacy
-        with_lock (ResourceManager->Lock) {
-            payload.SetAvailableComputeActors(ResourceManager->ExecutionUnitsResource.load()); // legacy
-            payload.SetTotalMemory(ResourceManager->TotalMemoryResource->GetLimit()); // legacy
-            payload.SetUsedMemory(ResourceManager->TotalMemoryResource->GetLimit() - ResourceManager->TotalMemoryResource->Available()); // legacy
 
-            payload.SetExecutionUnits(ResourceManager->ExecutionUnitsResource.load());
+        if (WarmupInProgress) {
+            // Publish with zero compute resources during warmup to prevent other nodes
+            // from assigning compute tasks, while keeping discovery and gossip working
+            payload.SetAvailableComputeActors(0);
+            payload.SetTotalMemory(0);
+            payload.SetUsedMemory(0);
+            payload.SetExecutionUnits(0);
             auto* pool = payload.MutableMemory()->Add();
             pool->SetPool(EKqpMemoryPool::ScanQuery);
-            pool->SetAvailable(ResourceManager->TotalMemoryResource->Available());
+            pool->SetAvailable(0);
+        } else {
+            with_lock (ResourceManager->Lock) {
+                payload.SetAvailableComputeActors(ResourceManager->ExecutionUnitsResource.load()); // legacy
+                payload.SetTotalMemory(ResourceManager->TotalMemoryResource->GetLimit()); // legacy
+                payload.SetUsedMemory(ResourceManager->TotalMemoryResource->GetLimit() - ResourceManager->TotalMemoryResource->Available()); // legacy
+
+                payload.SetExecutionUnits(ResourceManager->ExecutionUnitsResource.load());
+                auto* pool = payload.MutableMemory()->Add();
+                pool->SetPool(EKqpMemoryPool::ScanQuery);
+                pool->SetAvailable(ResourceManager->TotalMemoryResource->Available());
+            }
         }
 
         LOG_I("Send to publish resource usage for "
             << "reason: " << reason
+            << (WarmupInProgress ? " (warmup: zero resources)" : "")
             << ", payload: " << payload.ShortDebugString());
         WbState.LastPublishTime = now;
         if (ResourceManager->ResourceInfoExchanger) {
@@ -968,6 +1013,9 @@ private:
 
     std::optional<TInstant> PublishResourcesScheduledAt;
     std::optional<TString> SelfDataCenterId;
+
+    bool WarmupInProgress = false;
+    TDuration WarmupDeadline;
 };
 
 } // namespace NRm
@@ -975,9 +1023,9 @@ private:
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
     TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker,
-    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, ui32 nodeId)
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, ui32 nodeId, TDuration warmupDeadline)
 {
-    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources), nodeId);
+    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources), nodeId, warmupDeadline);
 }
 
 std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _nodeId) {

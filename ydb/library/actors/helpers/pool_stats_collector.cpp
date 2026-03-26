@@ -2,6 +2,7 @@
 #include "collector_counters.h"
 
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/subsystems/stats.h>
 #include <util/generic/vector.h>
 
 namespace NActors {
@@ -35,6 +36,7 @@ public:
     }
 
     void Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx, TStatsCollectingActor* actor) {
+        auto& statsSubSystem = GetActorSystemStats(*ctx.ActorSystem());
         auto *event = ev->Get();
         if (event->Tag == 0) {
             StartOfCollecting = ctx.Now();
@@ -44,12 +46,13 @@ public:
             TVector<TExecutorThreadStats> stats;
             TVector<TExecutorThreadStats> sharedStats;
             TExecutorPoolStats poolStats;
-            ctx.ActorSystem()->GetPoolStats(poolId, poolStats, stats, sharedStats);
+            statsSubSystem.GetPoolStats(poolId, poolStats, stats, sharedStats);
             SetAggregatedCounters(PoolCounters[poolId], poolStats, stats, sharedStats);
             ctx.Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup(poolId + 1));
             return;
         }
-        THarmonizerStats harmonizerStats = ctx.ActorSystem()->GetHarmonizerStats();
+        THarmonizerStats harmonizerStats;
+        statsSubSystem.GetHarmonizerStats(harmonizerStats);
         ActorSystemCounters.Set(harmonizerStats);
         actor->OnWakeup(ctx);
         ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));

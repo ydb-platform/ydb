@@ -11,7 +11,7 @@
 #include "simdjson/generic/ondemand/value-inl.h"
 #include "simdjson/jsonpathutil.h"
 #if SIMDJSON_STATIC_REFLECTION
-#include "simdjson/generic/ondemand/json_string_builder.h"  // for constevalutil::fixed_string
+#error #include "simdjson/generic/ondemand/json_string_builder.h"  // for constevalutil::fixed_string
 #error #include <meta>
 #endif
 #endif // SIMDJSON_CONDITIONAL_INCLUDE

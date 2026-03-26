@@ -17,13 +17,13 @@ IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChu
             "buffer", DataBuffer.size());
     }
     if (!!Data) {
-        auto result = Loader->ApplyConclusion(Data, GetRecordsCount());
+        auto result = Loader->ApplyConclusion(Data, GetRecordsCount(), std::nullopt, AdditionalAccessorData);
         Y_ABORT_UNLESS(result.IsSuccess(), "Incorrect object for result request. internal path id: %s error: %s ", InternalPathId.data(),
             result.GetErrorMessage().data());
         return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);
     } else {
         AFL_VERIFY(!!DataBuffer);
-        auto result = Loader->ApplyConclusion(TString(DataBuffer.data(), DataBuffer.size()), GetRecordsCount());
+        auto result = Loader->ApplyConclusion(TString(DataBuffer.data(), DataBuffer.size()), GetRecordsCount(), std::nullopt, AdditionalAccessorData);
         Y_ABORT_UNLESS(result.IsSuccess(), "Incorrect object for result request. internal path id: %s error: %s ", InternalPathId.data(),
             result.GetErrorMessage().data());
         return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);

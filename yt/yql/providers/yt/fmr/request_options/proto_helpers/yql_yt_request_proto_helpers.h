@@ -109,6 +109,14 @@ NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams)
 
 TMapTaskParams MapTaskParamsFromProto(const NProto::TMapTaskParams& protoMapTaskParams);
 
+NProto::TSortOperationParams SortOperationParamsToProto(const TSortOperationParams& sortOperationParams);
+
+TSortOperationParams SortOperationParamsFromProto(const NProto::TSortOperationParams& protoSortOperationParams);
+
+NProto::TLocalSortTaskParams LocalSortTaskParamsToProto(const TLocalSortTaskParams& localSortTaskParams);
+
+TLocalSortTaskParams LocalSortTaskParamsFromProto(const NProto::TLocalSortTaskParams& protoLocalSortTaskParams);
+
 NProto::TOperationParams OperationParamsToProto(const TOperationParams& operationParams);
 
 TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoOperationParams);

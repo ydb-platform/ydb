@@ -21,21 +21,20 @@
 #include <util/generic/string.h>
 #include <util/stream/output.h>
 
+#include <utility>
+
 class ITimeProvider;
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 class TScopedAlloc;
 class IComputationGraph;
 class IFunctionRegistry;
 class TTypeEnvironment;
 class TType;
 class TStructType;
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 /**
  * SQL or s-expression translation error.
  */
@@ -1074,8 +1073,8 @@ public:
         TInputSpec inputSpec,
         TOutputSpec outputSpec,
         std::shared_ptr<WorkerFactory> workerFactory)
-        : InputSpec_(inputSpec)
-        , OutputSpec_(outputSpec)
+        : InputSpec_(std::move(inputSpec))
+        , OutputSpec_(std::move(outputSpec))
         , WorkerFactory_(std::move(workerFactory))
     {
     }
@@ -1224,8 +1223,7 @@ void ConfigureLogging(const TLoggingOptions& = {});
  * If the ConfigureLogging method has not been called the default logging initialization will be performed.
  */
 IProgramFactoryPtr MakeProgramFactory(const TProgramFactoryOptions& = {});
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc
 
 Y_DECLARE_OUT_SPEC(inline, NYql::NPureCalc::TCompileError, stream, value) {
     stream << value.AsStrBuf() << Endl << "Issues:" << Endl << value.GetIssues() << Endl << Endl << "Yql:" << Endl << value.GetYql();

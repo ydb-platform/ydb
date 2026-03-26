@@ -82,21 +82,21 @@ inline NYql::TAstParseResult SqlToYqlWithSettings(const TString& query, const NS
 inline void ExpectFailWithError(const TString& query, const TString& error) {
     NYql::TAstParseResult res = SqlToYql(query);
 
-    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), error);
 }
 
 inline void ExpectFailWithError(const TString& query, const TString& error, const NSQLTranslation::TTranslationSettings& settings) {
     NYql::TAstParseResult res = SqlToYqlWithSettings(query, settings);
 
-    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), error);
 }
 
 inline void ExpectFailWithFuzzyError(const TString& query, const TString& errorRegex) {
     NYql::TAstParseResult res = SqlToYql(query);
 
-    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT(NPcre::TPcre<char>(errorRegex.c_str()).Matches(Err2Str(res)));
 }
 
@@ -108,7 +108,7 @@ inline NYql::TAstParseResult SqlToYqlWithAnsiLexer(const TString& query, size_t 
 inline void ExpectFailWithErrorForAnsiLexer(const TString& query, const TString& error) {
     NYql::TAstParseResult res = SqlToYqlWithAnsiLexer(query);
 
-    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), error);
 }
 
@@ -136,7 +136,7 @@ public:
     }
 };
 
-typedef std::function<void(const TString& word, const TString& line)> TVerifyLineFunc;
+using TVerifyLineFunc = std::function<void(const TString& word, const TString& line)>;
 
 inline TString VerifyProgram(const NYql::TAstParseResult& res, TWordCountHive& wordCounter, TVerifyLineFunc verifyLine = TVerifyLineFunc()) {
     const auto program = GetPrettyPrint(res);
@@ -165,7 +165,7 @@ inline void VerifySqlInHints(const TString& query, const THashSet<TString>& expe
     }
 
     NYql::TAstParseResult res = SqlToYql(pragma + query);
-    UNIT_ASSERT(res.Root);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
         Y_UNUSED(word);
@@ -222,7 +222,7 @@ inline NSQLTranslation::TTranslationSettings GetSettingsWithS3Binding(const TStr
                                 ]
                             ]
     ]])__";
-    bindSettings.Settings["partitioned_by"] = "[\"key\", \"subkey\"]";
+    bindSettings.Settings["partitioned_by"] = R"(["key", "subkey"])";
     settings.Bindings[name] = bindSettings;
     return settings;
 }

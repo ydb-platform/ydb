@@ -10,9 +10,8 @@ namespace NKikimr::NKqp {
 using namespace NYdb;
 
 Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
-    Y_UNIT_TEST_TWIN(NamedExpressionSimple, UseSink) {
+    Y_UNIT_TEST(NamedExpressionSimple) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(
@@ -39,9 +38,8 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(2)));
     }
 
-    Y_UNIT_TEST_TWIN(NamedExpressionChanged, UseSink) {
+    Y_UNIT_TEST(NamedExpressionChanged) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(
@@ -82,9 +80,8 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         CompareYson(R"([[["1"];["test"]];[["2"];["test"]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    Y_UNIT_TEST_TWIN(NamedExpressionRandomChanged, UseSink) {
+    Y_UNIT_TEST(NamedExpressionRandomChanged) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
 
         {
@@ -146,9 +143,8 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(NamedExpressionRandomChanged2, UseSink) {
+    Y_UNIT_TEST(NamedExpressionRandomChanged2) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
 
         const TString query = R"(
@@ -188,9 +184,8 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    Y_UNIT_TEST_TWIN(NamedExpressionRandom, UseSink) {
+    Y_UNIT_TEST(NamedExpressionRandom) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         const std::vector<std::pair<std::string, std::string>> operations = {
             {"UPSERT INTO", ""},
@@ -241,9 +236,8 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(NamedExpressionRandomInsert, UseSink) {
+    Y_UNIT_TEST(NamedExpressionRandomInsert) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         const std::vector<std::pair<std::string, std::string>> operations = {
             {"UPSERT INTO", ""},
@@ -301,9 +295,8 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(NamedExpressionRandomDataQuery, UseSink) {
+    Y_UNIT_TEST(NamedExpressionRandomDataQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         const std::vector<std::pair<std::string, std::string>> operations = {
             {"UPSERT INTO", ""},
@@ -367,9 +360,8 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(NamedExpressionRandomInsertDataQuery, UseSink) {
+    Y_UNIT_TEST(NamedExpressionRandomInsertDataQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         const std::vector<std::pair<std::string, std::string>> operations = {
             {"UPSERT INTO", ""},
@@ -438,9 +430,8 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(NamedExpressionRandomUpsertIndex, UseSink, UseDataQuery) {
+    Y_UNIT_TEST_TWIN(NamedExpressionRandomUpsertIndex, UseDataQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         const std::vector<std::pair<std::string, std::string>> tests = {
             {"", ""},
@@ -547,9 +538,8 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(NamedExpressionRandomUpsertReturning, UseSink, UseDataQuery) {
+    Y_UNIT_TEST_TWIN(NamedExpressionRandomUpsertReturning, UseDataQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         const std::vector<std::pair<std::string, std::string>> tests = {
             {"", ""},
@@ -656,9 +646,8 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(NamedExpressionRandomUpsertRevert, UseSink, UseDataQuery) {
+    Y_UNIT_TEST_TWIN(NamedExpressionRandomUpsertRevert, UseDataQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         const std::vector<std::string> ops = {"UPSERT", "INSERT", "INSERT OR REVERT"};
 
@@ -760,10 +749,8 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(NamedExpressionRandomSelect, UseSink) {
+    Y_UNIT_TEST(NamedExpressionRandomSelect) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-
         TKikimrRunner kikimr(settings);
         {
             const TString query = R"(

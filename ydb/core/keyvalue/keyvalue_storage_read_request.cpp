@@ -255,8 +255,8 @@ public:
                     (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
                     (ErrorReason, result->ErrorReason));
             // kill the key value tablet due to it's obsolete generation
+            ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_BLOCKED);
             Send(IntermediateResult->KeyValueActorId, new TKikimrEvents::TEvPoisonPill);
-            ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_ERROR);
             return;
         }
 
@@ -431,6 +431,8 @@ public:
             return NKikimrKeyValue::Statuses::RSTATUS_OK;
         } else if (status == NKikimrProto::OVERRUN) {
             return NKikimrKeyValue::Statuses::RSTATUS_OVERRUN;
+        } else if (status == NKikimrProto::BLOCKED) {
+            return NKikimrKeyValue::Statuses::RSTATUS_BLOCKED;
         } else {
             return NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR;
         }

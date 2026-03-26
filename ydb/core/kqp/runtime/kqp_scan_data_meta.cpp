@@ -3,6 +3,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -31,7 +32,18 @@ TScanDataColumnsMeta::TScanDataColumnsMeta(const TSmallVec<TKqpComputeContextBas
 
 }
 
-TScanDataColumnsMeta::TScanDataColumnsMeta(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta) {
+namespace {
+    void InitPgTypesForColumns(TSmallVec<TKqpComputeContextBase::TColumn>& columns, const TTypeEnvironment& typeEnv) {
+        for (auto& col : columns) {
+            if (col.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+                auto pgTypeId = NPg::PgTypeIdFromTypeDesc(col.Type.GetPgTypeDesc());
+                col.PgType = TPgType::Create(pgTypeId, typeEnv);
+            }
+        }
+    }
+}
+
+TScanDataColumnsMeta::TScanDataColumnsMeta(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TTypeEnvironment* typeEnv) {
     Columns.reserve(meta.GetColumns().size());
     for (const auto& column : meta.GetColumns()) {
         TKqpComputeContextBase::TColumn c;
@@ -68,6 +80,12 @@ TScanDataColumnsMeta::TScanDataColumnsMeta(const NKikimrTxDataShard::TKqpTransac
     }
 
     TotalColumnsCount = ResultColumns.size() + SystemColumns.size();
+
+    if (typeEnv) {
+        InitPgTypesForColumns(Columns, *typeEnv);
+        InitPgTypesForColumns(SystemColumns, *typeEnv);
+        InitPgTypesForColumns(ResultColumns, *typeEnv);
+    }
 }
 
 }

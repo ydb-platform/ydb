@@ -431,6 +431,46 @@ TStatus AnnotateKqpSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx
     return TStatus::Ok;
 }
 
+TStatus AnnotateSysViewSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData)
+{
+    auto table = ResolveTable(node->Child(TKqpReadSysViewSourceSettings::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    const auto& columns = node->ChildPtr(TKqpReadSysViewSourceSettings::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, TCoAtomList(columns), false);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    auto ranges = node->Child(TKqpReadSysViewSourceSettings::idx_RangesExpr);
+    if (!TCoVoid::Match(ranges) &&
+        !TCoArgument::Match(ranges) &&
+        !TCoParameter::Match(ranges) &&
+        !TCoRangeFinalize::Match(ranges) &&
+        !TDqPhyPrecompute::Match(ranges) &&
+        !TKqpTxResultBinding::Match(ranges) &&
+        !TKqlKeyRange::Match(ranges))
+    {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(ranges->Pos()),
+            TStringBuilder()
+                << "Expected KeyRange, Void, Parameter, Argument or RangeFinalize in ranges, but got: "
+                << ranges->Content()
+        ));
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -2401,7 +2441,7 @@ TStatus AnnotateKqpSinkEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 8, 9, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 9, 10, ctx)) {
         return TStatus::Error;
     }
     input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
@@ -2411,22 +2451,55 @@ TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ct
 TStatus AnnotateSublinkBase(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto subquery = node->Child(TKqpSublinkBase::idx_Subquery);
     auto itemType = subquery->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto valueType = itemType->GetItems()[0]->GetItemType();
+
     if (TKqpExprSublink::Match(node.Get())) {
-        auto valueType = itemType->GetItems()[0]->GetItemType();
         if (!valueType->IsOptionalOrNull()) {
             valueType = ctx.MakeType<TOptionalExprType>(valueType);
         }
         node->SetTypeAnn(valueType);
-    } else /* (TKqpExistsSublink::Match(node.Get()) || TKqpInSublink::Match(node.Get())) */ {
-        YQL_CLOG(TRACE, CoreDq) << "Checking boolean sublink";
+        return TStatus::Ok;
+    }
 
-        auto pgSyntax = node->Child(TKqpBooleanSublink::idx_ReturnPgBool);
-        if (std::stoi(TString(pgSyntax->Content()))) {
-            node->SetTypeAnn(ctx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId));
-        } else {
-            node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
+    YQL_CLOG(TRACE, CoreDq) << "Checking boolean sublink";
+
+
+    if (TKqpInSublink::Match(node.Get())) {
+        auto& lambda = node->ChildRef(TKqpInSublink::idx_InLambda);
+        auto outerTypeNode = node->Child(TKqpInSublink::idx_OuterType);
+        auto outerType = outerTypeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+      
+        
+        TVector<const TItemExprType*> newItemTypes;
+        // Need to modify the outer type to remove _alias prefix
+        for (auto itemType : outerType->GetItems()) {
+            auto oldTypeName = TString(itemType->GetName());
+            if (oldTypeName.StartsWith("_alias_")) {
+                auto newTypeName = oldTypeName.substr(7);
+                newItemTypes.push_back(ctx.MakeType<TItemExprType>(newTypeName, itemType->GetItemType()));
+            }
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(oldTypeName, itemType->GetItemType()));
+        }
+        auto fixedOuterType = ctx.MakeType<TStructExprType>(newItemTypes);
+
+        YQL_CLOG(TRACE, CoreDq) << "Outer type: " << *(TTypeAnnotationNode*)fixedOuterType;
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, { fixedOuterType, valueType }, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!lambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
         }
     }
+
+    auto pgSyntax = node->Child(TKqpBooleanSublink::idx_ReturnPgBool);
+    if (std::stoi(TString(pgSyntax->Content()))) {
+        node->SetTypeAnn(ctx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId));
+    } else {
+        node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
+    }
+
     return TStatus::Ok;
 }
 
@@ -2943,6 +3016,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpReadRangesSourceSettings::Match(input.Get())) {
                 return AnnotateKqpSourceSettings(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
+            }
+
+            if (TKqpReadSysViewSourceSettings::Match(input.Get())) {
+                return AnnotateSysViewSourceSettings(input, ctx, cluster, *tablesData);
             }
 
             if (TKqlExternalEffect::Match(input.Get())) {

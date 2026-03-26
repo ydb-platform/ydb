@@ -152,7 +152,15 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
             return "global sync fulltext_plain";
         case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
             return "global sync fulltext_relevance";
+        case NYql::TIndexDescription::EType::GlobalJson:
+            return "global sync json";
+        case NYql::TIndexDescription::EType::LocalBloomFilter:
+            return "local bloom_filter";
+        case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
+            return "local bloom_ngram_filter";
     }
+    Y_UNREACHABLE();
+    return "unknown";
 }
 
 TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const TKikimrTableDescription& tableData, bool forcePrimary, TMaybe<ui64> tabletId,
@@ -409,7 +417,8 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
         const auto onlyStreamIndexes = std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
             return index.second->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree
                 && index.second->Type != TIndexDescription::EType::GlobalFulltextPlain
-                && index.second->Type != TIndexDescription::EType::GlobalFulltextRelevance;
+                && index.second->Type != TIndexDescription::EType::GlobalFulltextRelevance
+                && index.second->Type != TIndexDescription::EType::GlobalJson;
         });
 
         if (onlyStreamIndexes) {
@@ -778,8 +787,13 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
             case TIndexDescription::EType::GlobalFulltextPlain:
             case TIndexDescription::EType::GlobalFulltextRelevance:
+            case TIndexDescription::EType::GlobalJson:
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
                 return true;
         }
+        Y_UNREACHABLE();
+        return false;
     };
     const bool needsKqpEffect = std::find_if(indexes.begin(), indexes.end(), idxNeedsKqpEffect) != indexes.end();
 
@@ -798,7 +812,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Columns<TCoAtomList>()
                 .Add(updateColumnsList)
                 .Build()
-            .ReturningColumns<TCoAtomList>().Build()
+            .ReturningColumns(update.ReturningColumns())
             .IsBatch(update.IsBatch())
             .Settings(IsConditionalUpdateSetting(useStreamIndex, ctx, update.Pos()))
             .Done();

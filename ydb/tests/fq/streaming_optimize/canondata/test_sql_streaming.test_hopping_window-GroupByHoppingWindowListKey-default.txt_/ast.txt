@@ -18,7 +18,7 @@
 (let $17 '('"UseSsl" '1))
 (let $18 '('('"Consumer" '"test_client") $15 $16 '('"ReconnectPeriod" '"") '('"Format" '"json_each_row") '('"ReadGroup" '"fqrun") $17))
 (let $19 (SecureParam '"cluster:default_pq"))
-(let $20 (DqPqTopicSource $6 $13 $14 $18 $19 '"" $12))
+(let $20 (DqPqTopicSource $6 $13 $14 $18 $19 '"" $12 '""))
 (let $21 (DqStage '((DqSource $7 $20)) (lambda '($25) (block '(
   (let $26 '('('"format" '"json_each_row") '('"formatSettings" '('('"data.datetime.formatname" '"POSIX") '('"data.timestamp.formatname" '"POSIX"))) '('"settings" '($16))))
   (let $27 (DqSourceWideWrap $25 $7 $12 $26))

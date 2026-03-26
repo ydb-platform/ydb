@@ -15,6 +15,14 @@
                 }
             }
         },
+        "ast-index": {
+            "executable": {
+                "ast-index": [
+                    "ast-index"
+                ]
+            },
+            "formula": "build/external_resources/ast-index/resources.json"
+        },
         "atop": {
             "executable": {
                 "atop": [
@@ -382,6 +390,41 @@
                 "allure": {
                     "bottle": "allure_commandline",
                     "executable": "allure"
+                }
+            }
+        },
+        "ast-index": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WINDOWS"
+                    }
+                }
+            ],
+            "tools": {
+                "ast-index": {
+                    "bottle": "ast-index",
+                    "executable": "ast-index"
                 }
             }
         },
@@ -2739,6 +2782,9 @@
     "tools": {
         "allure": {
             "description": "Run Allure commandline"
+        },
+        "ast-index": {
+            "description": "Fast code search for Android/Kotlin/Java, iOS/Swift/ObjC, TypeScript, Rust, Ruby, C#, Python, Go, C++, Perl, Proto projects"
         },
         "atop": {
             "description": "Advanced System & Process Monitor"

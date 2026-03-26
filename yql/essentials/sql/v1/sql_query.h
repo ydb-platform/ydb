@@ -52,6 +52,9 @@ private:
     bool AlterTableAlterColumnSetNotNull(const TRule_alter_table_alter_column_set_not_null& node, TAlterTableParameters& params);
     bool AlterTableAlterColumnSetCompression(const TRule_alter_table_alter_column_set_compression& node, TAlterTableParameters& params);
     bool AlterTableCompact(const TRule_alter_table_compact& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnSetDefault(const TRule_alter_table_alter_column_set_default& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_column_drop_default& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnSetEncoding(const TRule_alter_table_alter_column_set_encoding& node, TAlterTableParameters& params);
 
     TNodePtr Build(const TRule_delete_stmt& stmt);
 

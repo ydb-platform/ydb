@@ -2,9 +2,12 @@
 
 #include "vhost.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/overlapped_requests_guard_wrapper.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/split_requests_wrapper.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/helpers.h>
@@ -411,10 +414,12 @@ public:
         IStoragePtr storage)
     {
         TDeviceHandlerParams params{
-            .Storage = std::move(storage),
+            .Storage = CreateWrappers(options, std::move(storage)),
             .DiskId = options.DiskId,
             .ClientId = options.ClientId,
             .BlockSize = options.BlockSize,
+            .BlockCount = options.BlocksCount,
+            .BlocksPerStripeCount = options.StripeSize / options.BlockSize,
             .MaxZeroBlocksSubRequestSize = options.MaxZeroBlocksSubRequestSize,
             .UnalignedRequestsDisabled = options.UnalignedRequestsDisabled,
             .StorageMediaKind = options.StorageMediaKind};
@@ -514,6 +519,18 @@ private:
     {
         auto* endpoint = reinterpret_cast<TEndpoint*>(vhostRequest->Cookie);
         endpoint->ProcessRequest(std::move(vhostRequest));
+    }
+
+    IStoragePtr CreateWrappers(
+        const TStorageOptions& options,
+        IStoragePtr storage)
+    {
+        storage = CreateSplitRequestsStorageWrapper(std::move(storage));
+        if (options.CreateOverlappedRequestsGuard) {
+            storage =
+                CreateOverlappedRequestsGuardStorageWrapper(std::move(storage));
+        }
+        return storage;
     }
 };
 

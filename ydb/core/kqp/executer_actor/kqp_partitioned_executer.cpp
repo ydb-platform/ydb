@@ -30,6 +30,33 @@ namespace {
 #define PE_STLOG_E(MESSAGE, ...) STLOG(PRI_ERROR,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
 #define PE_STLOG_C(MESSAGE, ...) STLOG(PRI_CRIT,   NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
 
+void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGateway::TExecPhysicalRequest& from) {
+    request.AllowTrailingResults = from.AllowTrailingResults;
+    request.QueryType = from.QueryType;
+    request.PerRequestDataSizeLimit = from.PerRequestDataSizeLimit;
+    request.MaxShardCount = from.MaxShardCount;
+    request.LocksOp = from.LocksOp;
+    request.AcquireLocksTxId = from.AcquireLocksTxId;
+    request.Timeout = from.Timeout;
+    request.CancelAfter = from.CancelAfter;
+    request.MaxComputeActors = from.MaxComputeActors;
+    request.MaxAffectedShards = from.MaxAffectedShards;
+    request.TotalReadSizeLimitBytes = from.TotalReadSizeLimitBytes;
+    request.MkqlMemoryLimit = from.MkqlMemoryLimit;
+    request.PerShardKeysSizeLimitBytes = from.PerShardKeysSizeLimitBytes;
+    request.StatsMode = from.StatsMode;
+    request.ProgressStatsPeriod = from.ProgressStatsPeriod;
+    request.Snapshot = from.Snapshot;
+    request.ResourceManager_ = from.ResourceManager_;
+    request.CaFactory_ = from.CaFactory_;
+    request.IsolationLevel = from.IsolationLevel;
+    request.RlPath = from.RlPath;
+    request.NeedTxId = from.NeedTxId;
+    request.UseImmediateEffects = from.UseImmediateEffects;
+    request.UserTraceId = from.UserTraceId;
+    request.OutputChunkMaxSize = from.OutputChunkMaxSize;
+}
+
 /**
  * TKqpPartitionedExecuter only executes BATCH UPDATE/DELETE queries
  * with the idempotent set of updates (except primary key), without RETURNING,
@@ -73,6 +100,7 @@ public:
         , UserToken(std::move(settings.UserToken))
         , RequestCounters(std::move(settings.RequestCounters))
         , TableServiceConfig(std::move(settings.ExecuterConfig.TableServiceConfig))
+        , TliConfig(std::move(settings.ExecuterConfig.TliConfig))
         , MutableExecuterConfig(std::move(settings.ExecuterConfig.MutableConfig))
         , UserRequestContext(std::move(settings.UserRequestContext))
         , StatementResultIndex(std::move(settings.StatementResultIndex))
@@ -84,6 +112,7 @@ public:
         , WriteBufferInitialMemoryLimit(std::move(settings.WriteBufferInitialMemoryLimit))
         , WriteBufferMemoryLimit(std::move(settings.WriteBufferMemoryLimit))
         , ChannelService(channelService)
+        , QuerySpanId(settings.QuerySpanId)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
@@ -561,7 +590,8 @@ private:
         auto txAlloc = std::make_shared<TTxAllocatorState>(FuncRegistry, TimeProvider, RandomProvider);
 
         IKqpGateway::TExecPhysicalRequest newRequest(txAlloc);
-        IKqpGateway::TExecPhysicalRequest::FillRequestFrom(newRequest, Request);
+        FillRequestFrom(newRequest, Request);
+        newRequest.AcquireLocksTxId = 0;
         for (auto& tx : Request.Transactions) {
             newRequest.Transactions.emplace_back(tx.Body, tx.Params);
         }
@@ -582,9 +612,11 @@ private:
             .SessionActorId = SelfId(),
             .TxManager = txManager,
             .TraceId = Request.TraceId.GetTraceId(),
+            .QuerySpanId = QuerySpanId,
             .Counters = RequestCounters->Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
-            .Alloc = std::move(alloc)
+            .Alloc = std::move(alloc),
+            .UserSID = UserToken->GetUserSID()
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
@@ -600,7 +632,7 @@ private:
         }
 
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
-        const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig);
+        const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig, TliConfig);
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
             executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
@@ -915,6 +947,7 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr RequestCounters;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
+    NKikimrConfig::TTliConfig TliConfig;
     TIntrusivePtr<TExecuterMutableConfig> MutableExecuterConfig;
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
@@ -928,6 +961,7 @@ private:
     const ui64 WriteBufferInitialMemoryLimit;
     const ui64 WriteBufferMemoryLimit;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
+    ui64 QuerySpanId = 0;
 };
 
 } // namespace

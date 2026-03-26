@@ -327,6 +327,31 @@ def test_iter_sequences_mixed(benchmark):
     benchmark(lambda: list(wcwidth.iter_sequences(text)))
 
 
+# Brahmic script benchmarks — text with virama conjuncts
+BRAHMIC_DEVANAGARI = 'हिन्दी भाषा में लिखा गया पाठ है। क्षत्रिय स्त्री ' * 20
+BRAHMIC_BENGALI = 'বাংলা ভাষায় লেখা একটি পাঠ। বাঙ্গালী ভাষা ' * 20
+
+
+def test_wcswidth_brahmic_devanagari(benchmark):
+    """Benchmark wcswidth() with Devanagari text containing conjuncts."""
+    benchmark(wcwidth.wcswidth, BRAHMIC_DEVANAGARI)
+
+
+def test_wcswidth_brahmic_bengali(benchmark):
+    """Benchmark wcswidth() with Bengali text containing conjuncts."""
+    benchmark(wcwidth.wcswidth, BRAHMIC_BENGALI)
+
+
+def test_width_brahmic_devanagari(benchmark):
+    """Benchmark width() with Devanagari text containing conjuncts."""
+    benchmark(wcwidth.width, BRAHMIC_DEVANAGARI)
+
+
+def test_width_brahmic_bengali(benchmark):
+    """Benchmark width() with Bengali text containing conjuncts."""
+    benchmark(wcwidth.width, BRAHMIC_BENGALI)
+
+
 # UDHR-based benchmarks,
 # Load combined text (500+ world languages)
 import yatest.common as yc

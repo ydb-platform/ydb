@@ -117,8 +117,8 @@ struct TReaderSettings {
     TString DatabasePath;
     TString TopicName;
     TString Consumer;
-    TDuration WaitTime = TDuration::Zero();
-    TDuration VisibilityTimeout = TDuration::Seconds(30);
+    std::optional<TDuration> WaitTime;
+    std::optional<TDuration> ProcessingTimeout;
     ui32 MaxNumberOfMessage = 1;
     bool UncompressMessages = false;
 

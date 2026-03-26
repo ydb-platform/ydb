@@ -1,8 +1,12 @@
 #pragma once
 
-#include <library/cpp/threading/future/future.h>
+#include <yt/yql/providers/yt/common/yql_yt_settings.h>
+
 #include <yt/cpp/mapreduce/interface/fwd.h>
 #include <yt/cpp/mapreduce/interface/common.h>
+
+#include <library/cpp/threading/future/future.h>
+
 #include <util/generic/hash.h>
 
 namespace NYql {
@@ -32,6 +36,7 @@ struct TTableDownloaderOptions {
     bool ForceLocalTableContent;
     TMaybe<ui32> PublicId;
     TString UniqueId;
+    ETableContentDeliveryMode DeliveryMode;
 };
 
 struct TTableDownloaderResult {

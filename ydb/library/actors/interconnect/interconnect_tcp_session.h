@@ -23,6 +23,7 @@
 
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>
+#include <util/digest/multi.h>
 #include <util/datetime/cputimer.h>
 
 #include "events_local.h"
@@ -36,6 +37,7 @@
 
 #include <unordered_set>
 #include <unordered_map>
+#include <tuple>
 
 namespace NInterconnect {
     class TInterconnectZcProcessor;
@@ -155,7 +157,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
-                ui32 RdmaCheckSum = 0;
+                ui32 RdmaCumulativeCheckSum = 0;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -168,7 +170,7 @@ namespace NActors {
 
             void PrepareCatchBuffer();
             void ApplyCatchBuffer();
-            void FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
+            int FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
             void DropFront(TRope *from, size_t numBytes);
 
             struct TRdmaReadReqOk {};
@@ -283,7 +285,7 @@ namespace NActors {
         XXH3_state_t XxhashState;
         XXH3_state_t XxhashXdcState;
 
-        size_t PayloadSize;
+        size_t PayloadSize = 0;
         ui32 ChecksumExpected, Checksum;
         bool IgnorePayload;
         TRope Payload;
@@ -372,6 +374,13 @@ namespace NActors {
             return DurationToCycles(TDuration::MicroSeconds(500));
         }
 
+        bool UseKernelLivenessMode() const {
+            // Once kernel liveness is negotiated for this session, user-space liveness checks
+            // are disabled and both actors rely on kernel keepalive/user-timeout.
+            // Keep this condition identical to TInterconnectSessionTCP::UseKernelLivenessMode().
+            return Params.UseKernelLiveness;
+        }
+
         const TDuration DeadPeerTimeout;
         TMonotonic LastReceiveTimestamp;
         void HandleCheckDeadPeer();
@@ -448,6 +457,24 @@ namespace NActors {
             return EActivityType::INTERCONNECT_SESSION_TCP;
         }
 
+        struct TSubscriberInfo {
+            ui64 Cookie = 0;
+            ui32 ActivityIndex = Max<ui32>();
+            TString EventTypeName;
+            TString StackTrace;
+        };
+
+        using TSubscriberHistoryKey = std::tuple<TString, ui32, TString>;
+
+        struct TSubscriberHistoryKeyHash {
+            size_t operator()(const TSubscriberHistoryKey& key) const noexcept {
+                return MultiHash(std::get<0>(key), std::get<1>(key), std::get<2>(key));
+            }
+        };
+
+        using TSubscriberHistory = std::unordered_map<TSubscriberHistoryKey, ui64, TSubscriberHistoryKeyHash>;
+        static constexpr ui64 MaxSubscriberHistoryEntries = 1000;
+
         TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
         ~TInterconnectSessionTCP();
 
@@ -479,9 +506,14 @@ namespace NActors {
 
         void Enqueue(STATEFN_SIG);
         void Forward(STATEFN_SIG);
+        void ForwardWithSubscribe(STATEFN_SIG);
         void ForwardDelayed();
         void Subscribe(STATEFN_SIG);
         void Unsubscribe(STATEFN_SIG);
+        void EnqueueForward(TAutoPtr<IEventHandle> ev);
+        void UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex = Max<ui32>(),
+            TString eventTypeName = {},
+            TString stackTrace = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         std::optional<TTimeLimit> TimeLimit;
@@ -490,6 +522,7 @@ namespace NActors {
             TimeLimit.emplace(GetMaxCyclesPerEvent());
             STRICT_STFUNC_BODY(
                 fFunc(TEvInterconnect::EvForward, Forward)
+                fFunc(TEvForwardSubscribeSession::EventType, ForwardWithSubscribe)
                 cFunc(TEvInterconnect::EvForwardDelayed, ForwardDelayed)
                 cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
                 fFunc(TEvInterconnect::TEvConnectNode::EventType, Subscribe)
@@ -561,6 +594,10 @@ namespace NActors {
         TDuration GetLostConnectionTimeout() const;
         ui32 GetTotalInflightAmountOfData() const;
         ui64 GetMaxCyclesPerEvent() const;
+        bool UseKernelLivenessMode() const {
+            // Effective liveness mode for the currently attached transport connection.
+            return KernelLivenessMode;
+        }
 
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -598,7 +635,9 @@ namespace NActors {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        const TSessionParams Params;
+        const TSessionParams Params; // stable session template used for continuation handshakes
+        // Runtime mode negotiated for the current socket; may differ from Params on reconnect.
+        bool KernelLivenessMode = false;
         std::unique_ptr<TEventHolderPool> Pool;
         TMaybe<TChannelScheduler> ChannelScheduler;
         ui64 TotalOutputQueueSize;
@@ -648,7 +687,9 @@ namespace NActors {
         ui64 InflightDataAmount = 0;
         ui64 RdmaInflightDataAmount = 0;
 
-        std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;
+        std::unordered_map<TActorId, TSubscriberInfo, TActorId::THash> Subscribers;
+        TSubscriberHistory SubscriberHistory;
+        bool SubscriberHistoryOverflow = false;
 
         struct TDelayedEvent {
             TAutoPtr<IEventHandle> Event;
@@ -659,6 +700,7 @@ namespace NActors {
         // time at which we want to send confirmation packet even if there was no outgoing data
         ui64 UnconfirmedBytes = 0;
         TMonotonic ForcePacketTimestamp = TMonotonic::Max();
+        TMonotonic ClockSkewPingTimestamp = TMonotonic::Max();
         TPriorityQueue<TMonotonic, TVector<TMonotonic>, std::greater<TMonotonic>> FlushSchedule;
         size_t MaxFlushSchedule = 0;
         ui64 FlushEventsScheduled = 0;

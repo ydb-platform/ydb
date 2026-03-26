@@ -5,8 +5,8 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-void UpdateNumOfConsumers(std::shared_ptr<IOperator> &input) {
-    auto &props = input->Props;
+void UpdateNumOfConsumers(TIntrusivePtr<IOperator>& input) {
+    auto& props = input->Props;
     if (props.NumOfConsumers.has_value()) {
         props.NumOfConsumers.value() += 1;
     } else {
@@ -14,7 +14,28 @@ void UpdateNumOfConsumers(std::shared_ptr<IOperator> &input) {
     }
 }
 
+void MaybeSetJoinAlgo(TPhysicalOpProps& props, const TRBOContext& rboCtx) {
+    // Currently we ingore cbo join type.
+    if (false && props.JoinAlgo.has_value()) {
+        return;
+    }
+
+    auto joinMode = rboCtx.KqpCtx.Config->GetHashJoinMode();
+    EJoinAlgoType joinAlgo;
+    switch (joinMode) {
+        // This is a little bit confusing, because it's not a hash join.
+        case NYql::NDq::EHashJoinMode::Map: {
+            joinAlgo = EJoinAlgoType::MapJoin;
+            break;
+        }
+        default: {
+            joinAlgo = EJoinAlgoType::GraceJoin;
+            break;
+        }
+    }
+    props.JoinAlgo = joinAlgo;
 }
+} // namespace
 
 namespace NKikimr {
 namespace NKqp {
@@ -22,9 +43,7 @@ namespace NKqp {
 /**
  * Assign stages and build stage graph in the process
  */
-bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    Y_UNUSED(props);
-
+bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     auto nodeName = input->ToString(ctx.ExprCtx);
     YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName;
 
@@ -45,11 +64,11 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
         TString readName;
         if (input->Kind == EOperator::Source) {
             auto opRead = CastOperator<TOpRead>(input);
-            auto newStageId = props.StageGraph.AddSourceStage(opRead->Columns, opRead->GetOutputIUs(), opRead->StorageType, opRead->NeedsMap());
+            const auto newStageId = props.StageGraph.AddSourceStage(opRead->Columns, opRead->GetOutputIUs(), opRead->StorageType, opRead->NeedsMap());
             input->Props.StageId = newStageId;
             readName = opRead->Alias;
         } else {
-            auto newStageId = props.StageGraph.AddStage();
+            const auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages source: " << readName;
@@ -58,18 +77,19 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
         auto leftStage = join->GetLeftInput()->Props.StageId;
         auto rightStage = join->GetRightInput()->Props.StageId;
 
-        auto newStageId = props.StageGraph.AddStage();
+        const auto newStageId = props.StageGraph.AddStage();
         join->Props.StageId = newStageId;
 
         const auto leftInputStorageType = props.StageGraph.GetStorageType(*leftStage);
         const auto rightInputStorageType = props.StageGraph.GetStorageType(*rightStage);
+        MaybeSetJoinAlgo(join->Props, ctx);
 
-        // For cross-join we build a stage with map and broadcast connections
-        if (join->JoinKind == "Cross") {
-            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TMapConnection>(leftInputStorageType));
-            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TBroadcastConnection>(rightInputStorageType));
+        // For cross-join or map join we build a stage with map and broadcast connections
+        // FIXME: We assume that right side is small one, map join also can work with hash shuffle connections.
+        if (join->JoinKind == "Cross" || join->Props.JoinAlgo == EJoinAlgoType::MapJoin) {
+            props.StageGraph.Connect(*leftStage, newStageId, MakeIntrusive<TMapConnection>(leftInputStorageType));
+            props.StageGraph.Connect(*rightStage, newStageId, MakeIntrusive<TBroadcastConnection>(rightInputStorageType));
         }
-
         // For inner join (we don't support other joins yet) we build a new stage
         // with GraceJoinCore and connect inputs via Shuffle connections
         else {
@@ -80,30 +100,30 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
                 rightShuffleKeys.push_back(key.second);
             }
 
-            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TShuffleConnection>(leftShuffleKeys, leftInputStorageType));
-            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TShuffleConnection>(rightShuffleKeys, rightInputStorageType));
+            props.StageGraph.Connect(*leftStage, newStageId, MakeIntrusive<TShuffleConnection>(leftShuffleKeys, leftInputStorageType));
+            props.StageGraph.Connect(*rightStage, newStageId, MakeIntrusive<TShuffleConnection>(rightShuffleKeys, rightInputStorageType));
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
     } else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
         auto childOp = CastOperator<IUnaryOperator>(input)->GetInput();
-        auto prevStageId = *(childOp->Props.StageId);
+        const auto prevStageId = *(childOp->Props.StageId);
         UpdateNumOfConsumers(childOp);
 
         // If the child operator is a source, it requires its own stage
         // So we have build a new stage for current operator
         if (childOp->Kind == EOperator::Source) {
             auto opRead = CastOperator<TOpRead>(childOp);
-            auto newStageId = props.StageGraph.AddStage();
+            const auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
-            std::shared_ptr<TConnection> connection;
+            TIntrusivePtr<TConnection> connection;
             // Type of connections depends on the storage type.
             switch (opRead->GetTableStorageType()) {
                 case NYql::EStorageType::RowStorage: {
-                    connection.reset(new TSourceConnection());
+                    connection.Reset(MakeIntrusive<TSourceConnection>());
                     break;
                 }
                 case NYql::EStorageType::ColumnStorage: {
-                    connection.reset(new TUnionAllConnection(NYql::EStorageType::ColumnStorage, props.StageGraph.GetOutputIndex(prevStageId)));
+                    connection.Reset(MakeIntrusive<TUnionAllConnection>(NYql::EStorageType::ColumnStorage, props.StageGraph.GetOutputIndex(prevStageId)));
                     break;
                 }
                 default: {
@@ -118,26 +138,24 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
         else if (!childOp->IsSingleConsumer()) {
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
-            props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TMapConnection>());
+            props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TMapConnection>());
         } else {
             input->Props.StageId = prevStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";
     } else if (input->Kind == EOperator::Sort) {
         auto sort = CastOperator<TOpSort>(input);
-        auto newStageId = props.StageGraph.AddStage();
+        const auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
-        auto prevStageId = *(sort->GetInput()->Props.StageId);
-        auto conn = std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(prevStageId));
-        props.StageGraph.Connect(prevStageId, newStageId,conn);
+        const auto prevStageId = *(sort->GetInput()->Props.StageId);
+        props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetStorageType(prevStageId)));
     }
     else if (input->Kind == EOperator::Limit) {
         auto limit = CastOperator<TOpLimit>(input);
-        auto newStageId = props.StageGraph.AddStage();
+        const auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
-        auto prevStageId = *(limit->GetInput()->Props.StageId);
-        auto conn = std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(prevStageId));
-        props.StageGraph.Connect(prevStageId, newStageId,conn);
+        const auto prevStageId = *(limit->GetInput()->Props.StageId);
+        props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetStorageType(prevStageId)));
     } else if (input->Kind == EOperator::UnionAll) {
         auto unionAll = CastOperator<TOpUnionAll>(input);
         UpdateNumOfConsumers(unionAll->GetLeftInput());
@@ -146,15 +164,16 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
         auto leftStage = unionAll->GetLeftInput()->Props.StageId;
         auto rightStage = unionAll->GetRightInput()->Props.StageId;
 
-        auto newStageId = props.StageGraph.AddStage();
+        const auto newStageId = props.StageGraph.AddStage();
         unionAll->Props.StageId = newStageId;
+        const bool parallelUnionAllConnections = ctx.KqpCtx.Config->GetEnableParallelUnionAllConnectionsForExtend();
 
-        props.StageGraph.Connect(
-            *leftStage, newStageId,
-            std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(*leftStage), props.StageGraph.GetOutputIndex(*leftStage)));
-        props.StageGraph.Connect(
-            *rightStage, newStageId,
-            std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(*rightStage), props.StageGraph.GetOutputIndex(*rightStage)));
+        props.StageGraph.Connect(*leftStage, newStageId,
+                                 MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetStorageType(*leftStage), props.StageGraph.GetOutputIndex(*leftStage),
+                                                                    parallelUnionAllConnections));
+        props.StageGraph.Connect(*rightStage, newStageId,
+                                 MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetStorageType(*rightStage), props.StageGraph.GetOutputIndex(*rightStage),
+                                                                    parallelUnionAllConnections));
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stages union_all";
     } else if (input->Kind == EOperator::Aggregate) {
@@ -165,9 +184,9 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
         aggregate->Props.StageId = newStageId;
         if (!aggregate->KeyColumns.empty()) {
             props.StageGraph.Connect(inputStageId, newStageId,
-                                     std::make_shared<TShuffleConnection>(aggregate->KeyColumns, props.StageGraph.GetStorageType(inputStageId)));
+                                     MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns, props.StageGraph.GetStorageType(inputStageId)));
         } else {
-            props.StageGraph.Connect(inputStageId, newStageId, std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(inputStageId)));
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetStorageType(inputStageId)));
         }
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to Aggregation ";

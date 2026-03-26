@@ -801,7 +801,6 @@ class _NamespaceInstaller(namespaces.Installer):
         self.installation_dir = installation_dir
         self.editable_name = editable_name
         self.outputs: list[str] = []
-        self.dry_run = False
 
     def _get_nspkg_file(self):
         """Installation target."""

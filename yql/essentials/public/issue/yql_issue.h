@@ -12,6 +12,8 @@
 #include <util/digest/numeric.h>
 #include <google/protobuf/message.h>
 
+#include <utility>
+
 #include "yql_issue_id.h"
 
 namespace NYql {
@@ -28,10 +30,10 @@ struct TPosition {
 
     TPosition() = default;
 
-    TPosition(ui32 column, ui32 row, const TString& file = {})
+    TPosition(ui32 column, ui32 row, TString file = {})
         : Column(column)
         , Row(row)
-        , File(file)
+        , File(std::move(file))
     {
         SanitizeNonAscii(File);
     }
@@ -89,8 +91,8 @@ struct TRange {
     }
 
     TRange(TPosition position, TPosition endPosition)
-        : Position(position)
-        , EndPosition(endPosition)
+        : Position(std::move(position))
+        , EndPosition(std::move(endPosition))
     {
     }
 
@@ -117,7 +119,7 @@ public:
 
     TIssue() = default;
 
-    template <typename T>
+    template <typename T> // NOLINTNEXTLINE(modernize-pass-by-value)
     explicit TIssue(const T& message)
         : Message_(message)
         , Position(TPosition())
@@ -126,7 +128,7 @@ public:
         SanitizeNonAscii(Message_);
     }
 
-    template <typename T>
+    template <typename T> // NOLINTNEXTLINE(modernize-pass-by-value)
     TIssue(TPosition position, const T& message)
         : Message_(message)
         , Position(position)
@@ -139,11 +141,11 @@ public:
         return {Position, EndPosition};
     }
 
-    template <typename T>
+    template <typename T> // NOLINTNEXTLINE(modernize-pass-by-value)
     TIssue(TPosition position, TPosition endPosition, const T& message)
         : Message_(message)
-        , Position(position)
-        , EndPosition(endPosition)
+        , Position(std::move(position))
+        , EndPosition(std::move(endPosition))
     {
         SanitizeNonAscii(Message_);
     }

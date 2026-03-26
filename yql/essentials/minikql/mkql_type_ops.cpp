@@ -37,8 +37,7 @@
 #include <array>
 #include <functional>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NYql;
 
@@ -527,9 +526,9 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
             return value;
 
         case NUdf::EDataSlot::Uuid: {
-            ui16 dw[8];
-            std::memcpy(dw, value.AsStringRef().Data(), sizeof(dw));
-            NUuid::UuidToString(dw, out);
+            std::array<ui16, 8> dw;
+            std::memcpy(dw.data(), value.AsStringRef().Data(), sizeof(dw));
+            NUuid::UuidToString(dw.data(), out);
             break;
         }
 
@@ -870,7 +869,7 @@ public:
                 weekOfYear = 1;
             }
 
-            Days_[date] = TDayInfo{month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek};
+            Days_[date] = TDayInfo{.Month = month, .Day = day, .DayOfYear = dayOfYear, .WeekOfYear = weekOfYear, .WeekOfYearIso8601 = weekOfYearIso8601, .DayOfWeek = dayOfWeek};
         }
 
         InitializeSolarCycle();
@@ -1192,16 +1191,16 @@ private:
             auto daysInYear = IsLeapYear(year) ? 366u : 365u;
             auto lastDayOfWeek = (dayOfWeek + daysInYear - 1) % 7;
             YearsCache_[yearIdx] = TYearCache{
-                date,
-                7 + dayOfWeek,
-                (dayOfWeek >= 4) ? dayOfWeek : dayOfWeek + 7,
-                lastDayOfWeek,
-                weekOfYearIso8601 == 53};
+                .CumulativeDays = date,
+                .WeekOffset = 7 + dayOfWeek,
+                .Iso8601WeekOffset = (dayOfWeek >= 4) ? dayOfWeek : dayOfWeek + 7,
+                .LastDayOfWeek = lastDayOfWeek,
+                .FirstIsoWeek53 = weekOfYearIso8601 == 53};
             ui32 weekOfYear = 1;
             for (ui32 dayOfYear = 0; dayOfYear < daysInYear; ++dayOfYear) {
                 ui32 month, day;
                 EnrichMonthDay(year, dayOfYear, month, day);
-                DaysCache_[date] = TDayCache{month, day, dayOfYear, weekOfYear, weekOfYearIso8601};
+                DaysCache_[date] = TDayCache{.Month = month, .Day = day, .DayOfYear = dayOfYear, .WeekOfYear = weekOfYear, .WeekOfYearIso8601 = weekOfYearIso8601};
 
                 date++;
                 if (dayOfWeek < 6) {
@@ -1515,24 +1514,24 @@ ui32 ParseNumber(ui32& pos, NUdf::TStringRef buf, ui32& value, i8 dig_cnt) {
 }
 
 NUdf::TUnboxedValuePod ParseUuid(NUdf::TStringRef buf, bool shortForm) {
-    ui16 dw[8];
+    std::array<ui16, 8> dw;
 
-    if (!NUuid::ParseUuidToArray(buf, dw, shortForm)) {
+    if (!NUuid::ParseUuidToArray(buf, dw.data(), shortForm)) {
         return NUdf::TUnboxedValuePod();
     }
 
-    return MakeString(NUdf::TStringRef(reinterpret_cast<char*>(dw), sizeof(dw)));
+    return MakeString(NUdf::TStringRef(reinterpret_cast<char*>(dw.data()), sizeof(dw)));
 }
 
 bool ParseUuid(NUdf::TStringRef buf, void* out, bool shortForm) {
-    ui16 dw[8];
+    std::array<ui16, 8> dw;
 
-    if (!NUuid::ParseUuidToArray(buf, dw, shortForm)) {
+    if (!NUuid::ParseUuidToArray(buf, dw.data(), shortForm)) {
         return false;
     }
 
     if (out) {
-        std::memcpy(out, dw, sizeof(dw));
+        std::memcpy(out, dw.data(), sizeof(dw));
     }
     return true;
 }
@@ -3033,5 +3032,4 @@ bool DeserializeTzTimestamp64(TStringBuf buf, i64& timestamp, ui16& tzId) {
     return true;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

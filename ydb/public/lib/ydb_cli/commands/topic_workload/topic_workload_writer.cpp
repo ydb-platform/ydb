@@ -1,6 +1,8 @@
 #include "topic_workload_writer.h"
 #include "topic_workload_writer_producer.h"
 #include "topic_workload_writer_worker_common.h"
+#include "topic_workload_configurator.h"
+#include "topic_workload_describe.h"
 
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
@@ -15,12 +17,14 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(const TTopicWorkloadWrite
     Producers = std::vector<std::shared_ptr<TTopicWorkloadWriterProducer>>();
     Producers.reserve(Params.PartitionCount);
 
+    NTopic::TTopicClient topicClient(Params.Driver);
+
     for (ui32 i = 0; i < Params.PartitionCount; ++i) {
         // write to random partition, cause workload CLI tool can be launched in several instances
         // and they need to load test different partitions of the topic
         ui32 partitionId = (Params.PartitionSeed + i) % Params.PartitionCount;
 
-        Producers.push_back(CreateProducer(partitionId));
+        Producers.push_back(CreateProducer(partitionId, topicClient));
     }
 
     WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
@@ -126,7 +130,8 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
     );
 }
 
-std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::CreateProducer(ui64 partitionId) {
+std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::CreateProducer(ui64 partitionId,
+                                                                                         NTopic::TTopicClient& topicClient) {
     auto clock = NUnifiedAgent::TClock();
     auto producerId = TGUID::CreateTimebased().AsGuidString();
 
@@ -161,7 +166,7 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
 
     settings.DirectWriteToPartition(Params.Direct);
 
-    producer->SetWriteSession(NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings));
+    producer->SetWriteSession(topicClient.CreateWriteSession(settings));
 
     return producer;
 }
@@ -211,6 +216,72 @@ void TTopicWorkloadWriterWorker::WriterLoop(const TTopicWorkloadWriterParams& pa
     }
 
     WRITE_LOG(writer.Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Writer finished " << Now().ToStringUpToSeconds());
+}
+
+void TTopicWorkloadWriterWorker::RetryableConfiguratorLoop(const TTopicWorkloadConfiguratorParams& params)
+{
+    auto errorFlag = params.ErrorFlag;
+
+    const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
+
+    while (!*errorFlag && Now() < endTime) {
+        try {
+            ConfiguratorLoop(params, endTime);
+        } catch (const yexception& ex) {
+            WRITE_LOG(params.Log, ELogPriority::TLOG_WARNING, TStringBuilder() << ex);
+        }
+    }
+}
+
+void TTopicWorkloadWriterWorker::ConfiguratorLoop(const TTopicWorkloadConfiguratorParams& params, TInstant endTime)
+{
+    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Configurator started " << Now().ToStringUpToSeconds());
+
+    try {
+        TTopicWorkloadConfiguratorWorker configurator(params);
+        configurator.Process(endTime);
+    } catch (const std::runtime_error& re) {
+        WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, TStringBuilder()
+            << "Configurator failed with error: " << re.what());
+    } catch (...) {
+        WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, TStringBuilder()
+            << "Configurator caught unknown exception: " << CurrentExceptionMessage());
+    }
+
+    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Configurator finished " << Now().ToStringUpToSeconds());
+}
+
+void TTopicWorkloadWriterWorker::RetryableDescriberLoop(const TTopicWorkloadDescriberParams& params)
+{
+    auto errorFlag = params.ErrorFlag;
+
+    const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
+
+    while (!*errorFlag && Now() < endTime) {
+        try {
+            DescriberLoop(params, endTime);
+        } catch (const yexception& ex) {
+            WRITE_LOG(params.Log, ELogPriority::TLOG_WARNING, TStringBuilder() << ex);
+        }
+    }
+}
+
+void TTopicWorkloadWriterWorker::DescriberLoop(const TTopicWorkloadDescriberParams& params, TInstant endTime)
+{
+    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Describer started " << Now().ToStringUpToSeconds());
+
+    try {
+        TTopicWorkloadDescriberWorker describer(params);
+        describer.Process(endTime);
+    } catch (const std::runtime_error& re) {
+        WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, TStringBuilder()
+            << "Describer failed with error: " << re.what());
+    } catch (...) {
+        WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, TStringBuilder()
+            << "Describer caught unknown exception: " << CurrentExceptionMessage());
+    }
+
+    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Describer finished " << Now().ToStringUpToSeconds());
 }
 
 void TTopicWorkloadWriterWorker::TryCommitTx(TInstant& commitTime)

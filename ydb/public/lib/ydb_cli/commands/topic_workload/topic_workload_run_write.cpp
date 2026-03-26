@@ -117,6 +117,9 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .DefaultValue(0)
         .Hidden()
         .StoreResult(&Scenario.ProducerKeysCount);
+
+    Scenario.ConfigMetadataMonitoringOptions(config);
+
     config.IsNetworkIntensive = true;
 }
 

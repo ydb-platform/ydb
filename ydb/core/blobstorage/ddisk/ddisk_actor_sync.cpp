@@ -1,4 +1,5 @@
 #include "ddisk_actor.h"
+#include "direct_io_op.h"
 
 #include <ydb/core/util/stlog.h>
 
@@ -25,7 +26,7 @@ namespace NKikimr::NDDisk {
         template <typename TSegment>
         static IEventBase* MakeReadQuery(const TQueryCredentials& sourceCreds,
                 const TBlockSelector& selector, const TSegment& segment) {
-            return new TEvReadPersistentBuffer(sourceCreds, selector, segment.GetLsn(), TReadInstruction(true));
+            return new TEvReadPersistentBuffer(sourceCreds, selector, segment.GetLsn(), segment.GetGeneration(), TReadInstruction(true));
         }
     };
 
@@ -61,7 +62,7 @@ namespace NKikimr::NDDisk {
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         TSyncIt syncIt = SyncsInFlight.end();
-        counters.Request();
+        counters.Request(0);
 
         auto cleanupSyncState = [&] {
             if (syncIt == SyncsInFlight.end()) {
@@ -139,6 +140,7 @@ namespace NKikimr::NDDisk {
                 return;
             }
 
+            sync.RequestsInFlight++;
             std::vector<TSegmentManager::TOutdatedRequest> outdated;
             const TSegmentManager::TSegment segmentRange{selector.OffsetInBytes, selector.OffsetInBytes + selector.Size};
             ui64 requestId = 0;
@@ -175,7 +177,6 @@ namespace NKikimr::NDDisk {
                 IEventHandle::FlagTrackDelivery,
                 requestId,
                 sync.Span.GetTraceId());
-            sync.RequestsInFlight++;
         }
 
         sync.VChunkIndex = *vChunkIndex;
@@ -244,6 +245,7 @@ namespace NKikimr::NDDisk {
         ui64 cuttedFromData = request.Selector.OffsetInBytes;
         request.SegmentsInFlight = segments.size();
 
+        // TODO: don't flush each time, write as a single op?
         for (auto& [begin, end] : segments) {
             if (cuttedFromData < begin) {
                 data.EraseFront(begin - cuttedFromData);
@@ -252,42 +254,15 @@ namespace NKikimr::NDDisk {
             data.ExtractFront(end - begin, &segmentData);
             cuttedFromData = end;
 
-            auto callback = [
-                this,
-                begin = begin,
-                end = end,
-                syncId = syncId,
-                requestId = ev->Cookie
-            ] (NPDisk::TEvChunkWriteRawResult& evResult, NWilson::TSpan&& /*span*/) {
-                if (auto it = SyncsInFlight.find(syncId); it != SyncsInFlight.end()) {
-                    auto &sync = it->second;
-                    auto &request = sync.Requests[requestId - sync.FirstRequestId];
+            auto diskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, begin);
+            std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TInternalSyncWriteOp>();
+            auto* syncWriteOp = static_cast<TInternalSyncWriteOp*>(op.get());
+            syncWriteOp->SetSyncId(syncId);
+            syncWriteOp->SetRequestId(ev->Cookie);
+            syncWriteOp->SetSegment(begin, end);
+            syncWriteOp->PrepareWrite(std::move(segmentData), diskOffset, chunkRef.ChunkIdx, begin);
 
-                    if (request.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
-                        return;
-                    }
-
-                    if (evResult.Status != NKikimrProto::EReplyStatus::OK) {
-                        request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-                        request.ErrorReason << "[" << begin << ";" << end << ") failed to write; reason: " << evResult.ErrorReason << "; ";
-                        sync.ErrorReason << "[request_idx=" << requestId - sync.FirstRequestId << "]" << "failed to write; ";
-                        if (--sync.RequestsInFlight == 0) {
-                            ReplySync(it);
-                        }
-                        return;
-                    }
-
-                    if (--request.SegmentsInFlight == 0) {
-                        request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
-
-                        if (--sync.RequestsInFlight == 0) {
-                            ReplySync(it);
-                        }
-                    }
-                }
-            };
-            TBlockSelector segmentSelector(sync.VChunkIndex, begin, end - begin);
-            SendInternalWrite(chunkRef, sync.Creds, segmentSelector, NWilson::TTraceId{ev->TraceId}, std::move(segmentData), std::move(callback));
+            DirectUringOp(op);
         }
     }
 
@@ -297,6 +272,43 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvReadResult::TPtr ev) {
         InternalSyncReadResult(ev);
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvInternalSyncWriteResult::TPtr ev) {
+        auto it = SyncsInFlight.find(ev->Get()->SyncId);
+        if (it == SyncsInFlight.end()) {
+            return;
+        }
+        auto& sync = it->second;
+
+        const ui64 requestId = ev->Get()->RequestId;
+        if (requestId < sync.FirstRequestId || requestId >= sync.FirstRequestId + sync.Requests.size()) {
+            return;
+        }
+        auto& request = sync.Requests[requestId - sync.FirstRequestId];
+
+        if (request.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
+            return;
+        }
+
+        const ui64 begin = ev->Get()->SegmentBegin;
+        const ui64 end = ev->Get()->SegmentEnd;
+        if (ev->Get()->Status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+            request.ErrorReason << "[" << begin << ";" << end << ") failed to write; reason: " << ev->Get()->ErrorMessage << "; ";
+            sync.ErrorReason << "[request_idx=" << requestId - sync.FirstRequestId << "] failed to write; ";
+            if (--sync.RequestsInFlight == 0) {
+                ReplySync(it);
+            }
+            return;
+        }
+
+        if (--request.SegmentsInFlight == 0) {
+            request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+            if (--sync.RequestsInFlight == 0) {
+                ReplySync(it);
+            }
+        }
     }
 
     template <typename TResultEvent, typename TCounters>

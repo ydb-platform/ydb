@@ -997,6 +997,7 @@ TEST_F(TEmbeddedYPathOpsTest, attributes)
 
 inline constexpr char MyAttributeKey1[] = "my_attribute_1";
 inline constexpr char MyAttributeKey2[] = "my_attribute_2";
+inline constexpr char ClusterKey[] = "cluster";
 
 TEST(TConstraintRichYPathTest, AllowedAttributes)
 {
@@ -1017,6 +1018,103 @@ TEST(TConstraintRichYPathTest, RequiredAttributes)
     EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_2=b>//home/path"))), "YPath \"<\\\"my_attribute_2\\\"=\\\"b\\\";\\n>//home/path\" does not have attribute \"my_attribute_1\"");
     Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_1=b;my_attribute_2=b>//home/path")));
     Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_1=b;my_attribute_2=b;a=b>//home/path")));
+}
+
+TEST(TConstraintRichYPathTest, BasicMethods)
+{
+    using TRequiredAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<MyAttributeKey1, ClusterKey>>;
+    auto path = TRequiredAttributePath("<my_attribute_1=b>//home/path");
+    EXPECT_EQ(path.GetPath(), "//home/path");
+    path.SetPath("//new/path");
+    EXPECT_EQ(path.GetPath(), "//new/path");
+
+    EXPECT_EQ(path.Attributes().Get<std::string>(MyAttributeKey1), "b");
+
+    path.SetAttribute(MyAttributeKey1, "hello");
+    EXPECT_EQ(path.Attributes().Get<std::string>(MyAttributeKey1), "hello");
+
+    path.RemoveAttribute(MyAttributeKey1);
+    EXPECT_THROW(path.Attributes().Get<std::string>(MyAttributeKey1), TErrorException);
+
+    path.SetCluster("primary");
+    EXPECT_EQ(path.GetCluster(), "primary");
+}
+
+TEST(TConstraintRichYPathTest, Serialization)
+{
+    using TRequiredAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<MyAttributeKey1>>;
+    auto path = TRequiredAttributePath("<my_attribute_1=b>//home/path");
+    auto ysonString = ConvertToYsonString(path);
+
+    {
+        TRequiredAttributePath otherPath;
+        auto node = ConvertToNode(ysonString);
+        Deserialize(otherPath, node);
+        EXPECT_EQ(otherPath, path);
+    }
+
+    {
+        auto buf = ToString(ysonString);
+        TMemoryInput input(buf.data(), buf.size());
+        NYson::TYsonPullParser parser(&input, NYson::EYsonType::Node);
+        NYson::TYsonPullParserCursor cursor(&parser);
+
+        TRequiredAttributePath otherPath;
+        Deserialize(otherPath, &cursor);
+        EXPECT_EQ(otherPath, path);
+    }
+}
+
+TEST(TConstraintRichYPathTest, Context)
+{
+    using TRequiredAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<MyAttributeKey1>>;
+    auto path = TRequiredAttributePath("<my_attribute_1=b>//home/path");
+    TStringStream stream;
+    TStreamSaveContext saveContext(&stream);
+
+    path.Save(saveContext);
+
+    TRequiredAttributePath otherPath;
+    TStreamLoadContext loadContext(&stream);
+    otherPath.Load(loadContext);
+
+    EXPECT_EQ(otherPath, path);
+}
+
+void AssignPathModifyAttributes(auto left, auto right) {
+    EXPECT_EQ(right.GetCluster(), std::nullopt);
+    left = right;
+    right.SetCluster("primary");
+    EXPECT_EQ(left.GetCluster(), std::nullopt);
+    EXPECT_EQ(right.GetCluster(), "primary");
+}
+
+TEST(TConstraintRichYPathTest, ModifyAttributesAfterAssign)
+{
+    using TWhiteListedAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<ClusterKey>>;
+    AssignPathModifyAttributes(TRichYPath(), TRichYPath("//home/path"));
+    AssignPathModifyAttributes(TWhiteListedAttributePath(), TRichYPath("//home/path"));
+    AssignPathModifyAttributes(TRichYPath(), TWhiteListedAttributePath("//home/path"));
+    AssignPathModifyAttributes(TWhiteListedAttributePath(), TWhiteListedAttributePath("//home/path"));
+}
+
+template <typename T>
+void CopyPathModifyAttributes(auto right)
+{
+    EXPECT_EQ(right.GetCluster(), std::nullopt);
+    T left(right);
+    right.SetCluster("primary");
+    EXPECT_EQ(left.GetCluster(), std::nullopt);
+    EXPECT_EQ(right.GetCluster(), "primary");
+}
+
+TEST(TConstraintRichYPathTest, ModifyAttributesAfterCopy)
+{
+    using TWhiteListedAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<ClusterKey>>;
+    CopyPathModifyAttributes<TRichYPath>(TRichYPath("//home/path"));
+    CopyPathModifyAttributes<TWhiteListedAttributePath>(TRichYPath("//home/path"));
+    CopyPathModifyAttributes<TRichYPath>(TWhiteListedAttributePath("//home/path"));
+    CopyPathModifyAttributes<TWhiteListedAttributePath>(TWhiteListedAttributePath("//home/path"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

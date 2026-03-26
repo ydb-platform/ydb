@@ -250,7 +250,7 @@ public:
     TCompactBitmap& operator=(const TCompactBitmap& other) = delete;
 
     TCompactBitmap(TCompactBitmap&& other) noexcept;
-    TCompactBitmap& operator=(TCompactBitmap&& other);
+    TCompactBitmap& operator=(TCompactBitmap&& other) noexcept;
 
     void Initialize(int bitSize);
     void CopyFrom(const TCompactBitmap& other, int bitSize);

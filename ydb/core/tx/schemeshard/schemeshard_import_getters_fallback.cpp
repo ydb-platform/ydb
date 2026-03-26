@@ -68,11 +68,6 @@ IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo
     return new TSchemeGetterFallback(replyTo, std::move(importInfo), itemIdx);
 }
 
-// TODO: move standard implementation to separate file and support build under Windows
-IActor* CreateSchemeGetterFS(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx) {
-    return new TSchemeGetterFallback(replyTo, std::move(importInfo), itemIdx);
-}
-
 IActor* CreateSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo) {
     return new TSchemaMappingGetterFallback(replyTo, std::move(importInfo));
 }

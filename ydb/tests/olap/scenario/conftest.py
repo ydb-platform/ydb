@@ -166,7 +166,7 @@ class BaseTestSet:
     @classmethod
     def _get_cluster_config(cls):
         return KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
+            erasure=Erasure.NONE,
             extra_feature_flags={
                 "enable_column_store": True,
                 "enable_external_data_sources": True,

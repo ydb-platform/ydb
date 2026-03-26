@@ -322,7 +322,7 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
 TMaybe<std::pair<TCondenseInputResult, TMaybeNode<TDqPhyPrecompute>>>
 RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf> inputColumns,
     const THashSet<TString>& checkDefaults, const TKikimrTableDescription& table,
-    const TSecondaryIndexes& indexes, const bool useStreamIndexes, TPositionHandle pos, TExprContext& ctx)
+    const TSecondaryIndexes& indexes, const bool useStreamIndexes, TPositionHandle pos, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
     auto condenseResult = CondenseInput(inputRows, ctx);
     if (!condenseResult) {
@@ -508,7 +508,7 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         YQL_ENSURE(condenseResult);
     }
 
-    auto helper = CreateUpsertUniqBuildHelper(table, inputColumns, usedIndexes, pos, ctx);
+    auto helper = CreateUpsertUniqBuildHelper(table, inputColumns, usedIndexes, pos, ctx, kqpCtx);
     if (helper->GetChecksNum() == 0) {
         // Return result of read stage only in case of uniq index
         // We do not want to change plan for non uniq index for a while
@@ -669,7 +669,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
             .Done();
     }
 
-    auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, useStreamIndex, pos, ctx);
+    auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, useStreamIndex, pos, ctx, kqpCtx);
 
     if (!checkedInput) {
         return {};
@@ -941,8 +941,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         }
 
         TVector<TExprBase> fulltextDictDelta;
-        const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
-        const bool withRelevance = fulltextDesc && fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+        const bool withRelevance = indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance;
         TMaybeNode<TKqpTable> docsTableNode;
         TMaybeNode<TExprBase> addedDocs, removedDocs;
         if (withRelevance) {
@@ -957,6 +956,8 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 : MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumnsWithoutData, pos, ctx);
 
             switch (indexDesc->Type) {
+                case TIndexDescription::EType::GlobalJson:
+                    YQL_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique:
@@ -995,6 +996,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     }
                     break;
                 }
+                case TIndexDescription::EType::LocalBloomFilter:
+                case TIndexDescription::EType::LocalBloomNgramFilter:
+                    break;
             }
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, pos)
@@ -1020,6 +1024,8 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                       inputColumnsSet, indexTableColumns, table, pos, ctx, false);
 
             switch (indexDesc->Type) {
+                case TIndexDescription::EType::GlobalJson:
+                    YQL_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique:
@@ -1066,6 +1072,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     }
                     break;
                 }
+                case TIndexDescription::EType::LocalBloomFilter:
+                case TIndexDescription::EType::LocalBloomNgramFilter:
+                    break;
             }
 
             if (fulltextDictDelta.size()) {

@@ -657,6 +657,11 @@ struct aws_mqtt5_client_options {
      * configuration but changes the refresh frequency to a value that prevents DNS pinging.
      */
     struct aws_host_resolution_config *host_resolution_override;
+
+    /**
+     * IoT SDK metrics configuration
+     */
+    const struct aws_mqtt_iot_metrics *metrics;
 };
 
 AWS_EXTERN_C_BEGIN

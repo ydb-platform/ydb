@@ -100,6 +100,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPPurgeRequest::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&);
+    void Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr&);
 
     template<typename TEventHandle>
     bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
@@ -160,6 +162,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE(HandleUpdateWriteTimestampRequest)
     DESCRIBE_HANDLE(HandleRegisterMessageGroupRequest)
     DESCRIBE_HANDLE(HandleDeregisterMessageGroupRequest)
+    DESCRIBE_HANDLE(HandleUpdateReadMetricsRequest)
     DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
 #undef DESCRIBE_HANDLE
 
@@ -273,7 +276,8 @@ private:
         TEvPQ::TEvMLPUnlockRequest::TPtr,
         TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr,
         TEvPQ::TEvMLPPurgeRequest::TPtr,
-        TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
+        TEvPQ::TEvGetMLPConsumerStateRequest::TPtr,
+        TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr
     >;
     TDeque<TMLPRequest> MLPRequests;
 
@@ -643,6 +647,19 @@ private:
     bool HasTxPersistSpan = false;
     bool HasTxDeleteSpan = false;
     ui8 WriteTxsSpanVerbosity = 0;
+
+    // Список TEvReadSetAck для неизвестных транзакций. Их нужно отправлять только когда
+    // завершиться запись в цикле WRITE_TX_COOKIE. Так мы уверены, что таблетка является лидером
+    struct TDeferredReadSetAck {
+        TActorId Sender;
+        std::unique_ptr<TEvTxProcessing::TEvReadSetAck> Ack;
+    };
+    TDeque<TDeferredReadSetAck> PendingDeferredReadSetAcks; // ждут очередной итерации цикла записи WRITE_TX_COOKIE
+    TDeque<TDeferredReadSetAck> DeferredReadSetAcks;        // ждут пока завершится цикл записи WRITE_TX_COOKIE
+
+    void MovePendingDeferredReadSetAcks();
+    void AddPendingDeferredReadSetAck(TDeferredReadSetAck&& ack);
+    void SendDeferredReadSetAcks(const TActorContext& ctx);
 };
 
 }// NPQ

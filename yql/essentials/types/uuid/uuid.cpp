@@ -2,8 +2,9 @@
 
 #include <util/stream/str.h>
 
-namespace NKikimr {
-namespace NUuid {
+#include <array>
+
+namespace NKikimr::NUuid {
 
 namespace {
 
@@ -40,21 +41,22 @@ TString UuidBytesToString(const TString& in) {
 }
 
 void UuidBytesToString(const TString& in, IOutputStream& out) {
-    ui16 dw[8];
-    std::memcpy(dw, in.data(), sizeof(dw));
-    NUuid::UuidToString(dw, out);
+    std::array<ui16, 8> dw;
+    std::memcpy(dw.data(), in.data(), sizeof(dw));
+    NUuid::UuidToString(dw.data(), out);
 }
 
 void UuidHalfsToString(ui64 low, ui64 hi, IOutputStream& out) {
     union {
-        ui16 Dw[8];
-        ui64 Half[2];
+        ui16 Dw[8];   // NOLINT(modernize-avoid-c-arrays)
+        ui64 Half[2]; // NOLINT(modernize-avoid-c-arrays)
     } buf;
     buf.Half[0] = low;
     buf.Half[1] = hi;
     NUuid::UuidToString(buf.Dw, out);
 }
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 void UuidToString(ui16 dw[8], IOutputStream& out) {
     WriteHex(dw[1], out);
     WriteHex(dw[0], out);
@@ -72,13 +74,12 @@ void UuidToString(ui16 dw[8], IOutputStream& out) {
 
 void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out) {
     union {
-        char Bytes[16];
-        ui64 Half[2];
+        char Bytes[16]; // NOLINT(modernize-avoid-c-arrays)
+        ui64 Half[2];   // NOLINT(modernize-avoid-c-arrays)
     } buf;
     buf.Half[0] = low;
     buf.Half[1] = hi;
     out.Write(buf.Bytes, 16);
 }
 
-} // namespace NUuid
-} // namespace NKikimr
+} // namespace NKikimr::NUuid

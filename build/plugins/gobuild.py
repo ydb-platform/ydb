@@ -5,7 +5,6 @@ import os
 from _common import rootrel_arc_src, tobuilddir
 import ymake
 
-
 runtime_cgo_path = os.path.join('runtime', 'cgo')
 runtime_msan_path = os.path.join('runtime', 'msan')
 runtime_race_path = os.path.join('runtime', 'race')

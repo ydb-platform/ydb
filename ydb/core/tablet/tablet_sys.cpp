@@ -225,6 +225,7 @@ void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
         graph->Entries.erase(graph->Entries.begin(), snapIterator); // erase head of graph
 
     Graph.Snapshot = snapshot;
+    Graph.SnapshotSource = {};
 
     const TLogoBlobID logid(TabletID(), StateStorageInfo.KnownGeneration, 0, 0, 0, 0);
     TVector<TEvTablet::TLogEntryReference> refs;
@@ -1540,6 +1541,8 @@ bool TTablet::ProgressCommitQueue() {
 
         if (entry->IsSnapshot) {
             Graph.Snapshot = std::pair<ui32, ui32>(StateStorageInfo.KnownGeneration, step);
+            Graph.SnapshotSource = entry->Source;
+            Graph.SnapshotCookie = entry->SourceCookie;
             GcLogChannel(entry->ConfirmedOnSend);
         }
 
@@ -1558,6 +1561,7 @@ bool TTablet::ProgressCommitQueue() {
     }
 
     ProgressFollowerQueue();
+    ProgressSendSyncCommit();
     TryFinishFollowerSync();
     return true;
 }
@@ -1643,8 +1647,22 @@ void TTablet::ProgressFollowerQueue() {
 
         Graph.PostponedFollowerUpdates.pop_front();
     }
+}
 
-    if (Graph.PostponedFollowerUpdates && Graph.Queue.empty() && Graph.SyncCommit.SyncStep == 0) {
+void TTablet::ProgressSendSyncCommit() {
+    bool needSyncCommit = (
+        // We must have committed and confirmed all commits
+        Graph.Queue.empty() &&
+        // We must not have another sync commit inflight
+        Graph.SyncCommit.SyncStep == 0 &&
+        (
+            // And either there are pending follower updates waiting for confirmation
+            Graph.PostponedFollowerUpdates ||
+            // Or the latest snapshot wasn't confirmed by the last commit
+            Graph.Snapshot > std::make_pair(StateStorageInfo.KnownGeneration, Graph.ConfirmedCommited)
+        ));
+
+    if (needSyncCommit) {
         Graph.SyncCommit.SyncStep = Graph.NextEntry - 1;
         if (GcInFly) {
             // Since we always confirm the last commit it should be impossible
@@ -1663,6 +1681,13 @@ void TTablet::ProgressFollowerQueue() {
 
         Y_DEBUG_ABORT_UNLESS(Graph.Confirmed == Graph.SyncCommit.SyncStep); // last entry must be confirmed
         Y_DEBUG_ABORT_UNLESS(Graph.SyncCommit.SyncStep > Graph.ConfirmedCommited); // commit should make some progress
+
+        if (Graph.Snapshot > std::make_pair(StateStorageInfo.KnownGeneration, Graph.ConfirmedCommited)) {
+            // We are confirming the last committed snapshot
+            Graph.SyncCommit.Snapshot = Graph.Snapshot.second;
+            Graph.SyncCommit.SnapshotSource = Graph.SnapshotSource;
+            Graph.SyncCommit.SnapshotCookie = Graph.SnapshotCookie;
+        }
 
         TVector<TEvTablet::TLogEntryReference> refs;
         Register(
@@ -1736,8 +1761,19 @@ void TTablet::Handle(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
         } else {
             Y_DEBUG_ABORT_UNLESS(logid.Cookie() == 1 && step == Graph.SyncCommit.SyncStep);
 
+            if (Graph.SyncCommit.Snapshot != 0) {
+                // This snapshot is now confirmed
+                Send(Graph.SyncCommit.SnapshotSource,
+                    new TEvTablet::TEvSnapshotConfirmed(
+                        TabletID(),
+                        StateStorageInfo.KnownGeneration,
+                        Graph.SyncCommit.Snapshot),
+                    0, Graph.SyncCommit.SnapshotCookie);
+            }
+
             Graph.ConfirmedCommited = Max(Graph.ConfirmedCommited, step);
             Graph.SyncCommit.SyncStep = 0;
+            Graph.SyncCommit.Snapshot = 0;
             if (GcInFly == 0 && GcNextStep != 0) {
                 GcLogChannel(std::exchange(GcNextStep, 0));
             }

@@ -68,6 +68,7 @@ class TTestEnv: public TCmsTestEnv {
         UNIT_ASSERT(DispatchEvents(options));
     }
 
+public:
     void SetPDiskStateImpl(const TSet<TPDiskID>& ids, EPDiskState state) {
         for (const auto& id : ids) {
             Y_ABORT_UNLESS(MockNodes.contains(id.NodeId));
@@ -82,7 +83,6 @@ class TTestEnv: public TCmsTestEnv {
         Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateState));
     }
 
-public:
     explicit TTestEnv(ui32 nodeCount, ui32 pdisks, NKikimrCms::TCmsConfig config = {})
         : TCmsTestEnv(nodeCount, pdisks)
     {
@@ -258,7 +258,9 @@ public:
                             if (it != pdiskUpdates.end()) {
                                 if (expectedStatus == update.GetStatus()) {
                                     auto& vec = TFakeNodeWhiteboardService::BSControllerResponsePatterns[id];
-                                    if (!(TFakeNodeWhiteboardService::NoisyBSCPipeCounter % 3) && (vec.empty() || *vec.begin())) {
+                                    bool bscWillDisconnect = TFakeNodeWhiteboardService::NoisyBSCPipe
+                                        && (TFakeNodeWhiteboardService::NoisyBSCPipeCounter + 1) % 3;
+                                    if (!bscWillDisconnect && (vec.empty() || *vec.begin())) {
                                         it->second.UpdateStatusRequested = true;
                                     } else {
                                         it->second.IgnoredUpdateRequests++;
@@ -272,7 +274,6 @@ public:
             default:
                 break;
             }
-
             bool allUpdateStatusRequestedOrIgnored = true;
             for (const auto& [id, info] : pdiskUpdates) {
                 allUpdateStatusRequestedOrIgnored &= (info.UpdateStatusRequested || info.IgnoredUpdateRequests == 6);

@@ -198,6 +198,10 @@ message ImportFromFsSettings {
     // - Patterns are matched against the database object names stored in the backup listing.
     // - Object is excluded from import operation if it matches any of the specified exclude regexps.
     repeated string exclude_regexps = 9;
+
+    // Index population mode.
+    // If not specified, indexes will be built.
+    ImportFromS3Settings.IndexPopulationMode index_population_mode = 10;
 }
 
 message ImportFromFsResult {

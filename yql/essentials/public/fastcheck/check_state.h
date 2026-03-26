@@ -14,8 +14,7 @@
 #include <google/protobuf/message.h>
 #include <util/generic/maybe.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 class TCheckState {
 private:
@@ -66,5 +65,4 @@ private:
     TMaybe<TAstResultCache> TranslateCache_;
 };
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

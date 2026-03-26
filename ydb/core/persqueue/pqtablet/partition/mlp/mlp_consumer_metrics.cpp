@@ -43,7 +43,7 @@ void TConsumerActor::UpdateMetrics() {
     counters.SetCPUUsage(CPUUsageMetric);
     CPUUsageMetric = 0;
 
-    Send(PartitionActorId, new TEvPQ::TEvMLPConsumerState(std::move(counters)));
+    Send(PartitionActorId, new TEvPQ::TEvMLPConsumerState(UseForReading(), std::move(counters)));
 
     if (DetailedMetrics) {
         DetailedMetrics->UpdateMetrics(metrics);

@@ -424,6 +424,14 @@ void TUsersInfoStorage::Remove(const TString& user, const TActorContext&) {
     UsersInfo.erase(it);
 }
 
+TInstant TUsersInfoStorage::GetLastReadMetricsUpdateTime() const {
+    return LastReadMetricsUpdateTime;
+}
+
+void TUsersInfoStorage::SetLastReadMetricsUpdateTime(TInstant time) {
+    LastReadMetricsUpdateTime = time;
+}
+
 TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration) {
     auto it = UsersInfo.find(user.empty() ? CLIENTID_WITHOUT_CONSUMER : user);
     if (it == UsersInfo.end()) {

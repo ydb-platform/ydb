@@ -72,7 +72,7 @@ public:
                 auto securityObject = std::make_unique<TSecurityObject>(pathDescription.GetSelf().GetOwner(), pathDescription.GetSelf().GetEffectiveACL(), false);
                 auto tokenObject = GetRequest().GetUserTokenObject();
                 if (tokenObject && !securityObject->CheckAccess(NACLib::SelectRow, NACLib::TUserToken(tokenObject))) {
-                    return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Read access required"), "Access denied");
+                    return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Read access required"), "Access denied");
                 }
                 const auto& partitions = pathDescription.GetTablePartitions();
                 const auto& metrics = pathDescription.GetTablePartitionMetrics();
@@ -144,7 +144,7 @@ public:
     void ReplyAndPassAway() override {
         if (DescribeResult.IsError()) {
             if (DescribeResult.GetError() == "AccessDenied") {
-                return ReplyAndPassAway(GetHTTPFORBIDDEN(), "Access denied");
+                return ReplyAndPassAway(GETHTTPACCESSDENIED(), "Access denied");
             } else if (DescribeResult.GetError() == "Unknown") {
                 return ReplyAndPassAway(GetHTTPINTERNALERROR(), "Unknown error");
             } else {

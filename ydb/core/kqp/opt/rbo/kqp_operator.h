@@ -219,7 +219,7 @@ public:
     virtual TString ToString(TExprContext& ctx) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
-    bool NeedsMap();
+    bool NeedsMap() const;
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -236,6 +236,7 @@ public:
 
 class TMapElement {
 public:
+    TMapElement() = default;
     TMapElement(const TInfoUnit& elementName, const TExpression& expr);
     TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
 
@@ -274,6 +275,8 @@ public:
     bool IsOrdered() const {
         return Ordered;
     }
+
+    TVector<TMapElement>& GetMapElements() { return MapElements; }
 
     TVector<TMapElement> MapElements;
     bool Project = true;

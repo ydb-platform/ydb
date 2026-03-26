@@ -1758,6 +1758,134 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestQueryClient(ColumnStore);
     }
 
+    void TestOlapProjectionPushdown(bool explain) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        // Fallback is enabled to be able to insert values by `INSERT VALUES`.
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(!explain);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                a Int64	NOT NULL,
+                b Int32,
+                timestamp Timestamp,
+                jsonDoc JsonDocument,
+                jsonDoc1 JsonDocument,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        if (!explain) {
+            auto insertRes = session2.ExecuteQuery(R"(
+                INSERT INTO `/Root/foo` (a, b, timestamp, jsonDoc, jsonDoc1)
+                VALUES (1, 1, Timestamp("1970-01-01T00:00:03.000001Z"), JsonDocument('{"a.b.c" : "a1", "b.c.d" : "b1", "c.d.e" : "c1"}'), JsonDocument('{"a" : "1.1", "b" : "1.2", "c" : "1.3"}'));
+                INSERT INTO `/Root/foo` (a, b, timestamp, jsonDoc, jsonDoc1)
+                VALUES (2, 11, Timestamp("1970-01-01T00:00:03.000001Z"), JsonDocument('{"a.b.c" : "a2", "b.c.d" : "b2", "c.d.e" : "c2"}'), JsonDocument('{"a" : "2.1", "b" : "2.2", "c" : "2.3"}'));
+                INSERT INTO `/Root/foo` (a, b, timestamp, jsonDoc, jsonDoc1)
+                VALUES (3, 11, Timestamp("1970-01-01T00:00:03.000001Z"), JsonDocument('{"b.c.a" : "a3", "b.c.d" : "b3", "c.d.e" : "c3"}'), JsonDocument('{"x" : "3.1", "y" : "1.2", "z" : "1.3"}'));
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT(insertRes.IsSuccess());
+        }
+
+        std::vector<TString> queries = {
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+                PRAGMA YqlSelect = 'force';
+
+                SELECT a, JSON_VALUE(jsonDoc,"$.\"a.b.c\"") as result FROM `/Root/foo`
+                where b > 10
+                order by a;
+            )",
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+                PRAGMA YqlSelect = 'force';
+
+                SELECT a, JSON_VALUE(jsonDoc, "$.\"a.b.c\"") as result, JSON_VALUE(jsonDoc1, "$.\"x\"") as result1 FROM `/Root/foo`
+                where b > 10
+                order by a;
+            )",
+            /*
+            R"(
+                PRAGMA kikimr.OptEnableOlapPushdownProjections="true";
+
+                SELECT a, JSON_VALUE(jsonDoc, "$.\"a.b.c\"") as result
+                FROM `/Root/foo`
+                WHERE timestamp = Timestamp("1970-01-01T00:00:03.000001Z")
+                ORDER BY a
+                LIMIT 1;
+            )",
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+                PRAGMA YqlSelect = 'force';
+
+                SELECT a, JSON_VALUE(jsonDoc, "$.\"a.b.c\"") as result, JSON_VALUE(jsonDoc, "$.\"c.d.e\"") as result1 FROM `/Root/foo`
+                where b > 10
+                order by a;
+            )",
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT (JSON_VALUE(jsonDoc, "$.\"a.b.c\"") in ["a1", "a3", "a4"]) as col1, CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) as col2
+                FROM `/Root/foo`
+                ORDER BY col2;
+            )",
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT (JSON_VALUE(jsonDoc, "$.\"a.b.c\"") in ["a1", "a3", "a4"]) as col1,
+                       CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) as col2,
+                       CAST(JSON_VALUE(jsonDoc1, "$.\"b\"") as Double) as col3
+                FROM `/Root/foo`
+                ORDER BY col2;
+            )",
+            */
+        };
+
+        const std::vector<TString> results = {
+             R"([[2;["a2"]];[3;#]])",
+             R"([[2;["a2"];#];[3;#;["3.1"]]])",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+
+            if (explain) {
+                auto result =
+                    session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                        .ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+                auto ast = *result.GetStats()->GetAst();
+                UNIT_ASSERT_C(ast.find("KqpOlapProjections") != std::string::npos, TStringBuilder() << "Projections not pushed down. Query: " << query);
+                UNIT_ASSERT_C(ast.find("KqpOlapProjection") != std::string::npos, TStringBuilder() << "Projection not pushed down. Query: " << query);
+            } else {
+                auto result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                TString output = FormatResultSetYson(result.GetResultSet(0));
+                CompareYson(output, results[i]);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(OlapProjection, Explain) {
+        TestOlapProjectionPushdown(true);
+    }
+
     void TestLimit(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

@@ -35,9 +35,6 @@ def drop_non_bpf_flags(s):
     if s.startswith('-I') and 'contrib/libs/cxxsupp/libcxx/include' in s:
         return None
 
-    if s.startswith('-march='):
-        return None
-
     return s
 
 

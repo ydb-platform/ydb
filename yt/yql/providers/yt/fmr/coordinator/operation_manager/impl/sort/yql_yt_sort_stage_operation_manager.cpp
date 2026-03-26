@@ -16,7 +16,7 @@ public:
     {
     }
 
-    TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) {
+    TPartitionResult PartitionOperationImpl(const TPrepareOperationStageContext& context) override {
         const auto currentStage = StagePlan_[CurrentStageIndex_];
         switch (currentStage) {
             case ETaskType::LocalSort:
@@ -48,7 +48,7 @@ public:
         return TAdvanceStageResult{.HasNextStage = CurrentStageIndex_ < StagePlan_.size()};
     }
 
-    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) {
+    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) override {
         const auto currentStage = StagePlan_[CurrentStageIndex_];
         switch (currentStage) {
             case ETaskType::LocalSort:
@@ -59,6 +59,22 @@ public:
                 YQL_ENSURE(false, "Unknown stage type");
         }
         return TGetNewPartIdsForTaskResult{};
+    }
+
+    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {
+        std::vector<TPartIdInfo> groupsToClear;
+        if (auto* localSortTaskParams = std::get_if<TLocalSortTaskParams>(&context.Task->TaskParams)) {
+            TString tableId = localSortTaskParams->Output.TableId;
+            if (!localSortTaskParams->Output.PartId.empty() && context.PartIdStats.contains(localSortTaskParams->Output.PartId)) {
+                groupsToClear.emplace_back(tableId, localSortTaskParams->Output.PartId);
+            }
+        } else if (auto* sortedMergeTaskParams = std::get_if<TSortedMergeTaskParams>(&context.Task->TaskParams)) {
+            TString tableId = sortedMergeTaskParams->Output.TableId;
+            if (!sortedMergeTaskParams->Output.PartId.empty() && context.PartIdStats.contains(sortedMergeTaskParams->Output.PartId)) {
+                groupsToClear.emplace_back(tableId, sortedMergeTaskParams->Output.PartId);
+            }
+        }
+        return groupsToClear;
     }
 
 private:

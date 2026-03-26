@@ -288,5 +288,75 @@ int CompareKeyRowsAcrossYsonBlocks(
     return 0;
 }
 
+TMaybe<TSmallKeyValue> TryExtractSmallYsonValue(TStringBuf ysonData) {
+    if (ysonData.empty()) {
+        return TSmallKeyValue{std::monostate{}};
+    }
+    TYsonReader reader(ysonData);
+    char marker = reader.PeekByte();
+    switch (marker) {
+        case SYMBOL_ENTITY:
+            return TSmallKeyValue{std::monostate{}};
+        case MARKER_FALSE:
+            return TSmallKeyValue{false};
+        case MARKER_TRUE:
+            return TSmallKeyValue{true};
+        case MARKER_INT64:
+            reader.ReadByte();
+            return TSmallKeyValue{reader.ReadVarInt64()};
+        case MARKER_UINT64:
+            reader.ReadByte();
+            return TSmallKeyValue{reader.ReadVarUint64()};
+        case MARKER_DOUBLE:
+            reader.ReadByte();
+            return TSmallKeyValue{reader.ReadDouble()};
+        default:
+            return Nothing();
+    }
+}
+
+int CompareExtractedKeys(const TExtractedKey& lhs, const TExtractedKey& rhs) {
+    if (lhs.Small.Defined() && rhs.Small.Defined()) {
+        const auto& l = *lhs.Small;
+        const auto& r = *rhs.Small;
+
+        if (std::holds_alternative<std::monostate>(l) && std::holds_alternative<std::monostate>(r)) {
+            return 0;
+        }
+        if (std::holds_alternative<std::monostate>(l)) {
+            return -1;
+        }
+        if (std::holds_alternative<std::monostate>(r)) {
+            return 1;
+        }
+
+        if (auto lp = std::get_if<bool>(&l)) {
+            auto rp = std::get_if<bool>(&r);
+            Y_ENSURE(rp, "Type mismatch in key comparison");
+            return TernaryCompare(*lp, *rp);
+        }
+        if (auto lp = std::get_if<i64>(&l)) {
+            auto rp = std::get_if<i64>(&r);
+            Y_ENSURE(rp, "Type mismatch in key comparison");
+            return TernaryCompare(*lp, *rp);
+        }
+        if (auto lp = std::get_if<ui64>(&l)) {
+            auto rp = std::get_if<ui64>(&r);
+            Y_ENSURE(rp, "Type mismatch in key comparison");
+            return TernaryCompare(*lp, *rp);
+        }
+        if (auto lp = std::get_if<double>(&l)) {
+            auto rp = std::get_if<double>(&r);
+            Y_ENSURE(rp, "Type mismatch in key comparison");
+            return NaNSafeCompare(*lp, *rp);
+        }
+
+        ythrow yexception() << "Unsupported or mismatched types in CompareExtractedKeys";
+    }
+
+    // Fallback to full YSON comparison via raw bytes
+    return CompareYsonValuesImpl(lhs.RawYson, rhs.RawYson);
+}
+
 } // namespace NYql::NFmr
 

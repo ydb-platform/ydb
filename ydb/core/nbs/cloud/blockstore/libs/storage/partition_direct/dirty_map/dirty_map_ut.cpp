@@ -4,6 +4,21 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+TVector<ui64> GetLsns(const TVector<TPBufferSegment>& segments)
+{
+    TVector<ui64> lsns;
+    for (const auto& segment: segments) {
+        lsns.push_back(segment.Lsn);
+    }
+    return lsns;
+}
+
+}   // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
 Y_UNIT_TEST_SUITE(TDirtyMapTest)
@@ -68,7 +83,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Without write, we should not get flush hints
         auto flushHint = dirtyMap.MakeFlushHint(1);
-        UNIT_ASSERT_EQUAL(true, flushHint.empty());
+        UNIT_ASSERT_EQUAL(true, flushHint.Empty());
 
         TLocationMask requested = TLocationMask::MakePrimaryPBuffers();
         TLocationMask confirmed = TLocationMask::MakePrimaryPBuffers();
@@ -85,7 +100,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap.GetInflightCount());
 
         flushHint = dirtyMap.MakeFlushHint(2);
-        UNIT_ASSERT_EQUAL(true, flushHint.empty());
+        UNIT_ASSERT_EQUAL(true, flushHint.Empty());
 
         dirtyMap.WriteFinished(
             124,
@@ -97,17 +112,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(2, dirtyMap.GetInflightCount());
 
         flushHint = dirtyMap.MakeFlushHint(2);
-        UNIT_ASSERT_EQUAL(false, flushHint.empty());
         UNIT_ASSERT_VALUES_EQUAL(
-            "123[10..19];124[20..29];",
-            flushHint[ELocation::PBuffer0].DebugPrint());
-        UNIT_ASSERT_VALUES_EQUAL(
-            "123[10..19];124[20..29];",
-            flushHint[ELocation::PBuffer1].DebugPrint());
-        UNIT_ASSERT_VALUES_EQUAL(
-            "123[10..19];124[20..29];",
-            flushHint[ELocation::PBuffer2].DebugPrint());
-
+            "PBuffer0->DDisk0:123[10..19],124[20..29];"
+            "PBuffer1->DDisk1:123[10..19],124[20..29];"
+            "PBuffer2->DDisk2:123[10..19],124[20..29];",
+            flushHint.DebugPrint());
         // Erase hints should be generated after completing flushing.
         auto eraseHints = dirtyMap.MakeEraseHint(2);
         UNIT_ASSERT_EQUAL(true, eraseHints.empty());
@@ -115,22 +124,42 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // After getting flush hints, we should not get it once again
         {
             auto flushHint = dirtyMap.MakeFlushHint(2);
-            UNIT_ASSERT_EQUAL(true, flushHint.empty());
+            UNIT_ASSERT_EQUAL(true, flushHint.Empty());
         }
 
         // After getting flushing errors, we should get flush hints again
-        dirtyMap.FlushFinished(ELocation::PBuffer0, {123, 124}, {});
-        dirtyMap.FlushFinished(ELocation::PBuffer1, {123, 124}, {});
-        dirtyMap.FlushFinished(ELocation::PBuffer2, {}, {123, 124});
+        dirtyMap.FlushFinished(
+            TRoute{
+                .Source = ELocation::PBuffer0,
+                .Destination = ELocation::DDisk0},
+            {123, 124},
+            {});
+        dirtyMap.FlushFinished(
+            TRoute{
+                .Source = ELocation::PBuffer1,
+                .Destination = ELocation::DDisk1},
+            {123, 124},
+            {});
+        dirtyMap.FlushFinished(
+            TRoute{
+                .Source = ELocation::PBuffer2,
+                .Destination = ELocation::DDisk2},
+            {},
+            {123, 124});
 
         flushHint = dirtyMap.MakeFlushHint(2);
-        UNIT_ASSERT_EQUAL(false, flushHint.empty());
+        UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         UNIT_ASSERT_VALUES_EQUAL(
-            "123[10..19];124[20..29];",
-            flushHint[ELocation::PBuffer2].DebugPrint());
+            "PBuffer2->DDisk2:123[10..19],124[20..29];",
+            flushHint.DebugPrint());
 
         // Complete flushing to third ddisk
-        dirtyMap.FlushFinished(ELocation::PBuffer2, {123, 124}, {});
+        dirtyMap.FlushFinished(
+            TRoute{
+                .Source = ELocation::PBuffer2,
+                .Destination = ELocation::DDisk2},
+            {123, 124},
+            {});
 
         // Erase hints should be generated after completing the required
         // number of write operations.
@@ -185,16 +214,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TLocationMask::MakePrimaryPBuffers(),
             TLocationMask::MakePrimaryPBuffers());
 
-        dirtyMap.WriteFinished(
-            124,
-            TBlockRange64::WithLength(10, 10),
-            TLocationMask::MakePrimaryPBuffers(),
-            TLocationMask::MakePrimaryPBuffers());
-
         auto flushHint = dirtyMap.MakeFlushHint(1);
-        UNIT_ASSERT_EQUAL(false, flushHint.empty());
-        for (const auto& [location, flush]: flushHint) {
-            dirtyMap.FlushFinished(location, {flush.Segments[0].Lsn}, {});
+        UNIT_ASSERT_EQUAL(false, flushHint.Empty());
+        for (const auto& [route, flush]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, {GetLsns(flush.Segments)}, {});
         }
 
         // Lock pbuffer
@@ -228,7 +251,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Flush hints should not be generated when DDisk is locked.
         auto flushHint = dirtyMap.MakeFlushHint(1);
-        UNIT_ASSERT_EQUAL(true, flushHint.empty());
+        UNIT_ASSERT_EQUAL(true, flushHint.Empty());
 
         // Lock pbuffer
         dirtyMap.UnLockDDiskRange(lockHandle);
@@ -257,17 +280,87 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Flush hints should be generated when has quorum PBuffers.
         auto flushHint = dirtyMap.MakeFlushHint(1);
-        UNIT_ASSERT_EQUAL(false, flushHint.empty());
+        UNIT_ASSERT_EQUAL(false, flushHint.Empty());
 
         UNIT_ASSERT_VALUES_EQUAL(
-            "123[10..19];",
-            flushHint[ELocation::PBuffer0].DebugPrint());
+            "PBuffer0->DDisk0:123[10..19];"
+            "PBuffer1->DDisk1:123[10..19];"
+            "PBuffer2->DDisk2:123[10..19];",
+            flushHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldRestoreOverCompletePBuffer)
+    {
+        TBlocksDirtyMap dirtyMap;
+
+        // Block written to four PBuffers
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::PBuffer0);
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::PBuffer1);
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::PBuffer2);
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::HOPBuffer0);
+
+        // Flush hints should be generated when has quorum PBuffers.
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_EQUAL(false, flushHint.Empty());
+
         UNIT_ASSERT_VALUES_EQUAL(
-            "123[10..19];",
-            flushHint[ELocation::PBuffer1].DebugPrint());
+            "PBuffer0->DDisk0:123[10..19];"
+            "PBuffer1->DDisk1:123[10..19];"
+            "PBuffer2->DDisk2:123[10..19];",
+            flushHint.DebugPrint());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
-            "123[10..19];",
-            flushHint[ELocation::PBuffer2].DebugPrint());
+            "123{[D.....P+++*.][10..19][0..9]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldFlushFromHandOff)
+    {
+        TBlocksDirtyMap dirtyMap;
+
+        // Block written to two primary PBuffers and one hand-off PBuffer
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::PBuffer1);
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::PBuffer2);
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::HOPBuffer0);
+
+        // Flush hints should be generated when has quorum PBuffers.
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_EQUAL(false, flushHint.Empty());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "PBuffer1->DDisk0:123[10..19];"
+            "PBuffer1->DDisk1:123[10..19];"
+            "PBuffer2->DDisk2:123[10..19];",
+            flushHint.DebugPrint());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "123{[D.....P.++*.][10..19][0..9]};",
+            readHint.DebugPrint());
     }
 
     Y_UNIT_TEST(ShouldReadFromDDiskIfRangeIsNotCoveredByInflightRange)
@@ -281,14 +374,30 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TLocationMask::MakePrimaryPBuffers());
 
         auto flushHint = dirtyMap.MakeFlushHint(1);
-        UNIT_ASSERT_EQUAL(false, flushHint.empty());
         UNIT_ASSERT_VALUES_EQUAL(
-            "123[0..99];",
-            flushHint[ELocation::PBuffer0].DebugPrint());
+            "PBuffer0->DDisk0:123[0..99];"
+            "PBuffer1->DDisk1:123[0..99];"
+            "PBuffer2->DDisk2:123[0..99];",
+            flushHint.DebugPrint());
 
-        dirtyMap.FlushFinished(ELocation::PBuffer0, {123}, {});
-        dirtyMap.FlushFinished(ELocation::PBuffer1, {123}, {});
-        dirtyMap.FlushFinished(ELocation::PBuffer2, {123}, {});
+        dirtyMap.FlushFinished(
+            TRoute{
+                .Source = ELocation::PBuffer0,
+                .Destination = ELocation::DDisk0},
+            {123},
+            {});
+        dirtyMap.FlushFinished(
+            TRoute{
+                .Source = ELocation::PBuffer1,
+                .Destination = ELocation::DDisk1},
+            {123},
+            {});
+        dirtyMap.FlushFinished(
+            TRoute{
+                .Source = ELocation::PBuffer2,
+                .Destination = ELocation::DDisk2},
+            {123},
+            {});
 
         auto eraseHint = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_EQUAL(false, eraseHint.empty());
@@ -309,6 +418,42 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[D+++..P.....][0..99][0..99]};",
             readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ReadShouldWaitPBufferRestore)
+    {
+        TBlocksDirtyMap dirtyMap;
+
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::PBuffer0);
+        auto readHint1 =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL("WaitReady:NotReady", readHint1.DebugPrint());
+        UNIT_ASSERT_VALUES_EQUAL(false, readHint1.WaitReady.IsReady());
+
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::PBuffer1);
+        auto readHint2 =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL("WaitReady:NotReady", readHint2.DebugPrint());
+        UNIT_ASSERT_VALUES_EQUAL(false, readHint2.WaitReady.IsReady());
+
+        dirtyMap.RestorePBuffer(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            ELocation::PBuffer2);
+        auto readHint3 =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "123{[D.....P+++..][10..19][0..9]};",
+            readHint3.DebugPrint());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, readHint1.WaitReady.IsReady());
+        UNIT_ASSERT_VALUES_EQUAL(true, readHint2.WaitReady.IsReady());
     }
 }
 

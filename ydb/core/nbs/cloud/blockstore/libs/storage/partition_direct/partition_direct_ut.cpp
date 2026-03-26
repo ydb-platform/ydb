@@ -25,7 +25,27 @@ const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
 const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
 
-void SetupStorage(TEnvironmentSetup& env, ui32 syncRequestsBatchSize = 3)
+////////////////////////////////////////////////////////////////////////////////
+
+struct TScopedNbsService: TDisableCopyMove
+{
+    explicit TScopedNbsService(const NKikimrConfig::TNbsConfig& nbsConfig)
+    {
+        CreateNbsService(nbsConfig);
+        StartNbsService();
+    }
+
+    ~TScopedNbsService()
+    {
+        StopNbsService();
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+[[nodiscard]] TScopedNbsService SetupStorage(
+    TEnvironmentSetup& env,
+    ui32 syncRequestsBatchSize = 3)
 {
     env.CreateBoxAndPool();
     env.Sim(TDuration::Seconds(30));
@@ -57,8 +77,8 @@ void SetupStorage(TEnvironmentSetup& env, ui32 syncRequestsBatchSize = 3)
     storageConfig->SetPersistentBufferDDiskPoolName(
         PersistentBufferDDiskPoolName);
     storageConfig->SetSyncRequestsBatchSize(syncRequestsBatchSize);
-    CreateNbsService(nbsConfig);
-    StartNbsService();
+
+    return TScopedNbsService(nbsConfig);
 }
 
 NKikimrBlockStore::TVolumeConfig CreateVolumeConfig(ui64 blockCount)
@@ -165,7 +185,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        SetupStorage(env);
+        auto scopedService = SetupStorage(env);
 
         auto partition = CreatePartitionTablet(env);
 
@@ -323,7 +343,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        SetupStorage(
+        auto scopedService = SetupStorage(
             env,
             1   // syncRequestsBatchSize
         );
@@ -407,7 +427,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        SetupStorage(env);
+        auto scopedService = SetupStorage(env);
 
         const ui64 blockCount = 3 * BlocksPerRegion;
         auto partition = CreatePartitionTablet(env, blockCount);
@@ -478,7 +498,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        SetupStorage(env);
+        auto scopedService = SetupStorage(env);
 
         auto partition = CreatePartitionTablet(env);
 

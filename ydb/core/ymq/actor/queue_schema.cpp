@@ -501,7 +501,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     }
 
     auto* consumer = config->AddConsumers();
-    consumer->SetName("sqs_consumer");
+    consumer->SetName(ConsumerName);
     consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
     consumer->SetKeepMessageOrder(IsFifo_);
     if (ValidatedAttributes_.DelaySeconds) {

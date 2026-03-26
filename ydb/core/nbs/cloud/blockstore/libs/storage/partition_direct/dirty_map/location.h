@@ -53,6 +53,12 @@ constexpr std::array<ELocation, 10> AllLocations{
     ELocation::HOPBuffer0,
     ELocation::HOPBuffer1};
 
+constexpr std::array<ELocation, 3> PrimaryDDiskLocations{
+    ELocation::DDisk0,
+    ELocation::DDisk1,
+    ELocation::DDisk2,
+};
+
 constexpr std::array<ELocation, 5> DDiskLocations{
     ELocation::DDisk0,
     ELocation::DDisk1,
@@ -70,6 +76,9 @@ constexpr std::array<ELocation, 5> PBufferLocations{
 
 bool IsDDisk(ELocation location);
 bool IsPBuffer(ELocation location);
+
+ELocation TranslateDDiskToPBuffer(ELocation location);
+ELocation TranslatePBufferToDDisk(ELocation location);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -119,6 +128,17 @@ private:
     explicit TLocationMask(ui16 mask);
 
     ui16 Mask = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TRoute
+{
+    ELocation Source;
+    ELocation Destination;
+
+    bool operator==(const TRoute& other) const;
+    bool operator<(const TRoute& other) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

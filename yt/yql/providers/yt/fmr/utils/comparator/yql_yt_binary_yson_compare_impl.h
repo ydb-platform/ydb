@@ -9,8 +9,20 @@
 
 
 #include <cstring>
+#include <variant>
 
 namespace NYql::NFmr {
+
+using TSmallKeyValue = std::variant<std::monostate, bool, i64, ui64, double>;
+
+TMaybe<TSmallKeyValue> TryExtractSmallYsonValue(TStringBuf ysonData);
+
+struct TExtractedKey {
+    TMaybe<TSmallKeyValue> Small;
+    TStringBuf RawYson;
+};
+
+int CompareExtractedKeys(const TExtractedKey& lhs, const TExtractedKey& rhs);
 
 struct TColumnOffsetRange {
     ui64 StartOffset = 0;
@@ -28,8 +40,6 @@ enum class ESortOrder {
 
 // Row markup: key columns ranges + last range is full row boundary [rowStart,rowEnd).
 using TRowIndexMarkup = std::vector<TColumnOffsetRange>;
-
-
 
 struct TYsonReader {
     TStringBuf Data;

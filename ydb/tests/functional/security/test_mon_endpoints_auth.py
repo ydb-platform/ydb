@@ -1,88 +1,433 @@
 # -*- coding: utf-8 -*-
-from helpers import check_endpoints, check_expected_results
+import requests
 
 
-PUBLIC_STATUSES = {
-    None: 200,
-    'user@builtin': 200,
-    'database@builtin': 200,
-    'viewer@builtin': 200,
-    'monitoring@builtin': 200,
-    'root@builtin': 200,
+EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
+    '/counters': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/counters/hosts': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/healthcheck?format=prometheus': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/healthcheck': {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/healthcheck?database=%2FRoot': {
+        None: 200,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/ping': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/status': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/ver': {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/login': {
+        None: 400,
+        'user@builtin': 400,
+        'database@builtin': 400,
+        'viewer@builtin': 400,
+        'monitoring@builtin': 400,
+        'root@builtin': 400,
+    },
+    '/viewer/capabilities': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/static/css/bootstrap.min.css': {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/monitoring/': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/internal': {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/actors/': {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
 }
 
-ENFORCE_MONITORING_STATUSES = {
-    None: 401,
-    'user@builtin': 403,
-    'database@builtin': 403,
-    'viewer@builtin': 403,
-    'monitoring@builtin': 200,
-    'root@builtin': 200,
+EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
+    '/counters': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/counters/hosts': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/healthcheck?format=prometheus': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/healthcheck': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/healthcheck?database=%2FRoot': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/ping': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/status': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/ver': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/login': {
+        None: 400,
+        'user@builtin': 400,
+        'database@builtin': 400,
+        'viewer@builtin': 400,
+        'monitoring@builtin': 400,
+        'root@builtin': 400,
+    },
+    '/viewer/capabilities': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/static/css/bootstrap.min.css': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/monitoring/': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/internal': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/actors/': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
 }
 
-WITHOUT_ENFORCE_STATUSES = {
-    None: 200,
-    'user@builtin': 200,
-    'database@builtin': 200,
-    'viewer@builtin': 200,
-    'monitoring@builtin': 200,
-    'root@builtin': 200,
+
+assert len(EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN) == len(
+    EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN
+), "Handlers list must be the same"
+
+
+def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    response = requests.get(endpoint_url, headers=headers, verify=False)
+    token_desc = token if token is not None else "null"
+    assert (
+        response.status_code == expected_status
+    ), f"Expected {endpoint_path} with token={token_desc} to return {expected_status}, got {response.status_code}"
+
+
+def _test_endpoints(cluster, expected_results):
+    host = cluster.nodes[1].host
+    mon_port = cluster.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+
+    for endpoint_path, expected_statuses in expected_results.items():
+        endpoint_url = f'{base_url}{endpoint_path}'
+        for token, expected_status in expected_statuses.items():
+            _test_endpoint(endpoint_url, endpoint_path, token, expected_status)
+
+
+def test_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    _test_endpoints(ydb_cluster_with_enforce_user_token, EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN)
+
+
+def test_without_enforce_user_token(ydb_cluster_without_enforce_user_token):
+    _test_endpoints(ydb_cluster_without_enforce_user_token, EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN)
+
+
+def test_with_require_counters_authentication(ydb_cluster_with_require_counters_auth):
+    EXPECTED_RESULTS_WITH_REQUIRE_COUNTERS_AUTH = {
+        '/counters': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/counters/hosts': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/ping': {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },  # checks this just in case
+    }
+    _test_endpoints(ydb_cluster_with_require_counters_auth, EXPECTED_RESULTS_WITH_REQUIRE_COUNTERS_AUTH)
+
+
+def test_with_require_healthcheck_authentication(ydb_cluster_with_require_healthcheck_auth):
+    EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH = {
+        '/healthcheck?format=prometheus': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck?database=%2FRoot': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck?database=%2FRoot&format=prometheus': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/ping': {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },  # checks this just in case
+    }
+    _test_endpoints(ydb_cluster_with_require_healthcheck_auth, EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH)
+
+
+PUBLIC_ENDPOINTS_LIST = {
+    '/actors/tablet_counters_aggregator': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/counters': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/counters/hosts': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/followercounters': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/labeledcounters': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/ping': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/status': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/viewer/capabilities': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/healthcheck?format=prometheus': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/monitoring/': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
 }
 
-REQUIRE_COUNTERS_AUTH_STATUSES = {
-    None: 401,
-    'user@builtin': 403,
-    'database@builtin': 403,
-    'viewer@builtin': 200,
-    'monitoring@builtin': 200,
-    'root@builtin': 200,
-}
-
-REQUIRE_HEALTHCHECK_PROMETHEUS_STATUSES = {
-    None: 401,
-    'user@builtin': 403,
-    'database@builtin': 403,
-    'viewer@builtin': 200,
-    'monitoring@builtin': 200,
-    'root@builtin': 200,
-}
-
-REQUIRE_HEALTHCHECK_MONITORING_STATUSES = {
-    None: 401,
-    'user@builtin': 403,
-    'database@builtin': 403,
-    'viewer@builtin': 403,
-    'monitoring@builtin': 200,
-    'root@builtin': 200,
-}
-
-
-PUBLIC_ENDPOINTS = [
-    '/actors/tablet_counters_aggregator',
-    # Feature flag
-    '/counters',
-    # Feature flag
-    '/counters/hosts',
-    '/followercounters',
-    '/labeledcounters',
-    '/ping',
-    '/status',
-    '/viewer/capabilities',
-    # Feature flag
-    '/healthcheck?format=prometheus',
-    # Authorisation page inside
-    '/monitoring/',
-]
-
-ENFORCE_MONITORING_ENDPOINTS = [
-    '/healthcheck',
-    '/ver',
-    '/static/css/bootstrap.min.css',
-    '/internal',
-    '/actors/',
-]
-
-ADDITIONAL_ACCESS_CASES = {
+PUBLIC_ENDPOINTS_WITH_PARAMS = {
     '/healthcheck?database=%2FRoot': {
         None: 200,
         'user@builtin': 403,
@@ -93,102 +438,10 @@ ADDITIONAL_ACCESS_CASES = {
     },
 }
 
-WITHOUT_ENFORCE_ENDPOINTS = [
-    '/actors/tablet_counters_aggregator',
-    '/counters',
-    '/counters/hosts',
-    '/followercounters',
-    '/labeledcounters',
-    '/healthcheck?format=prometheus',
-    '/healthcheck',
-    '/healthcheck?database=%2FRoot',
-    '/ping',
-    '/status',
-    '/ver',
-    '/viewer/capabilities',
-    '/static/css/bootstrap.min.css',
-    '/monitoring/',
-    '/internal',
-    '/actors/',
-]
 
-REQUIRE_COUNTERS_AUTH_ENDPOINTS = [
-    '/counters',
-    '/counters/hosts',
-]
-
-REQUIRE_HEALTHCHECK_PROMETHEUS_ENDPOINTS = [
-    '/healthcheck?format=prometheus',
-    '/healthcheck?database=%2FRoot&format=prometheus',
-]
-
-REQUIRE_HEALTHCHECK_MONITORING_ENDPOINTS = [
-    '/healthcheck',
-    '/healthcheck?database=%2FRoot',
-]
-
-SANITY_PUBLIC_ENDPOINTS = [
-    '/ping',
-]
+def test_public_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    _test_endpoints(ydb_cluster_with_enforce_user_token, PUBLIC_ENDPOINTS_LIST)
 
 
-def test_public_access(ydb_cluster_with_enforce_user_token):
-    check_endpoints(
-        ydb_cluster_with_enforce_user_token,
-        PUBLIC_ENDPOINTS,
-        PUBLIC_STATUSES,
-    )
-
-
-def test_monitoring_access_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
-    check_endpoints(
-        ydb_cluster_with_enforce_user_token,
-        ENFORCE_MONITORING_ENDPOINTS,
-        ENFORCE_MONITORING_STATUSES,
-    )
-
-
-def test_additional_access_cases_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
-    check_expected_results(
-        ydb_cluster_with_enforce_user_token,
-        ADDITIONAL_ACCESS_CASES,
-    )
-
-
-def test_without_enforce_user_token(ydb_cluster_without_enforce_user_token):
-    check_endpoints(
-        ydb_cluster_without_enforce_user_token,
-        WITHOUT_ENFORCE_ENDPOINTS,
-        WITHOUT_ENFORCE_STATUSES,
-    )
-
-
-def test_with_require_counters_authentication(ydb_cluster_with_require_counters_auth):
-    check_endpoints(
-        ydb_cluster_with_require_counters_auth,
-        REQUIRE_COUNTERS_AUTH_ENDPOINTS,
-        REQUIRE_COUNTERS_AUTH_STATUSES,
-    )
-    check_endpoints(
-        ydb_cluster_with_require_counters_auth,
-        SANITY_PUBLIC_ENDPOINTS,
-        PUBLIC_STATUSES,
-    )
-
-
-def test_with_require_healthcheck_authentication(ydb_cluster_with_require_healthcheck_auth):
-    check_endpoints(
-        ydb_cluster_with_require_healthcheck_auth,
-        REQUIRE_HEALTHCHECK_PROMETHEUS_ENDPOINTS,
-        REQUIRE_HEALTHCHECK_PROMETHEUS_STATUSES,
-    )
-    check_endpoints(
-        ydb_cluster_with_require_healthcheck_auth,
-        REQUIRE_HEALTHCHECK_MONITORING_ENDPOINTS,
-        REQUIRE_HEALTHCHECK_MONITORING_STATUSES,
-    )
-    check_endpoints(
-        ydb_cluster_with_require_healthcheck_auth,
-        SANITY_PUBLIC_ENDPOINTS,
-        PUBLIC_STATUSES,
-    )
+def test_public_endpoints_with_params_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    _test_endpoints(ydb_cluster_with_enforce_user_token, PUBLIC_ENDPOINTS_WITH_PARAMS)

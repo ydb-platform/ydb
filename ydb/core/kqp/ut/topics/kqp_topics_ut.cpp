@@ -5,6 +5,7 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpTopics) {
 
+static
 void AddReadOperation(NTopic::TTopicOperations& ops,
                       const TString& topic, ui32 partition,
                       const ui64 begin, const ui64 end,
@@ -23,6 +24,7 @@ void AddReadOperation(NTopic::TTopicOperations& ops,
                      "read-session");
 }
 
+static
 void AddWriteOperation(NTopic::TTopicOperations& ops,
                        const TString& topic, ui32 partition,
                        const ui32 supportivePartition)

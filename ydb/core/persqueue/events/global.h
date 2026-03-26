@@ -237,6 +237,8 @@ namespace NKikimr::TEvPersQueue {
     };
 
     struct TEvProposeTransaction : public TEventPreSerializedPB<TEvProposeTransaction, NKikimrPQ::TEvProposeTransaction, EvProposeTransaction> {
+        bool GetSkipSrcIdInfo() const;
+
         NWilson::TSpan ExecuteSpan;
     };
 

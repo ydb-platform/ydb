@@ -104,7 +104,7 @@ VictimQueryTexts: [QuerySpanId=1111111111111111 QueryText=SELECT * FROM Orders W
 
 Для автоматического анализа логов TLI в репозитории {{ ydb-short-name }} есть утилита [find_tli_chain.py](https://github.com/ydb-platform/ydb/tree/main/ydb/tools/tli_analysis).
 
-Данная утилита на вход параметры:
+Данная утилита принимает на вход параметры:
 
 - `VictimQuerySpanId` - идентификатор сломанного запроса из сообщения об ошибке SDK;
 - `LogFile` - имя лог-файла для анализа логов.

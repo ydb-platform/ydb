@@ -36,7 +36,7 @@
 #include <arrow/util/string.h>
 #include <arrow/util/thread_pool.h>
 #include <arrow/util/ubsan.h>
-#include <arrow/visitor_inline.h>
+#include <arrow/visit_type_inline.h>
 
 #include <generated/File.fbs.h>  // IWYU pragma: export
 #include <generated/Message.fbs.h>

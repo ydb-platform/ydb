@@ -498,7 +498,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        SetupStorage(env);
+        auto scopedService = SetupStorage(env);
 
         auto partition = CreatePartitionTablet(env);
 

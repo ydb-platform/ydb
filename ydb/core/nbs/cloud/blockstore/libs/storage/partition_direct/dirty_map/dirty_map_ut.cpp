@@ -374,14 +374,30 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TLocationMask::MakePrimaryPBuffers());
 
         auto flushHint = dirtyMap.MakeFlushHint(1);
-        UNIT_ASSERT_EQUAL(false, flushHint.empty());
         UNIT_ASSERT_VALUES_EQUAL(
-            "123[0..99];",
-            flushHint[ELocation::PBuffer0].DebugPrint());
+            "PBuffer0->DDisk0:123[0..99];"
+            "PBuffer1->DDisk1:123[0..99];"
+            "PBuffer2->DDisk2:123[0..99];",
+            flushHint.DebugPrint());
 
-        dirtyMap.FlushFinished(ELocation::PBuffer0, {123}, {});
-        dirtyMap.FlushFinished(ELocation::PBuffer1, {123}, {});
-        dirtyMap.FlushFinished(ELocation::PBuffer2, {123}, {});
+        dirtyMap.FlushFinished(
+            TRoute{
+                .Source = ELocation::PBuffer0,
+                .Destination = ELocation::DDisk0},
+            {123},
+            {});
+        dirtyMap.FlushFinished(
+            TRoute{
+                .Source = ELocation::PBuffer1,
+                .Destination = ELocation::DDisk1},
+            {123},
+            {});
+        dirtyMap.FlushFinished(
+            TRoute{
+                .Source = ELocation::PBuffer2,
+                .Destination = ELocation::DDisk2},
+            {123},
+            {});
 
         auto eraseHint = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_EQUAL(false, eraseHint.empty());

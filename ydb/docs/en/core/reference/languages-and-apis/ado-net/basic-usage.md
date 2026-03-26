@@ -267,7 +267,7 @@ await transaction.CommitAsync();
 
 {% note warning %}
 
-In this mode, error handling (for example, [Transaction Lock Invalidation](https://ydb.tech/docs/en/troubleshooting/performance/queries/transaction-lock-invalidation)) is your responsibility. {{ ydb-short-name }} may roll back a transaction on MVCC lock invalidation.
+See more about [Transaction Lock Invalidation](https://ydb.tech/docs/en/troubleshooting/performance/queries/transaction-lock-invalidation))
 
 {% endnote %}
 

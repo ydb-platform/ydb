@@ -276,7 +276,7 @@ await transaction.CommitAsync();
 
 {% note warning %}
 
-В таком случае обработка ошибок ([Transaction Locks Invalidated](https://ydb.tech/docs/ru/troubleshooting/performance/queries/transaction-lock-invalidation)) становится заботой пользователя. YDB может откатить транзакцию в случае инвалидации MVC локов.
+Подробнее про обработку ошибок ([Transaction Locks Invalidated](https://ydb.tech/docs/ru/troubleshooting/performance/queries/transaction-lock-invalidation)).
 
 {% endnote %}
 

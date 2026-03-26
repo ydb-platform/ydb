@@ -1817,7 +1817,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             for (int i = 0; i < 10; i++) {
                 auto res = session.DescribeTable("Root/EmptyTable", describeSettings).ExtractValueSync();
                 UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
-                const auto& stats = res.GetTableDescription().GetPartitionStats();
+                const auto& desc = res.GetTableDescription();
+                const auto& stats = desc.GetPartitionStats();
                 if (stats.size() == 1 && stats[0].LeaderNodeId == firstNodeId + 1) {
                     done = true;
                     break;

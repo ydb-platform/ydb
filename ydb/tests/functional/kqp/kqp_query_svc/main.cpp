@@ -123,9 +123,10 @@ Y_UNIT_TEST_SUITE(NodeIdDescribe)
             auto res = session.DescribeTable("/local/UniformDist", describeTableSettings).ExtractValueSync();
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionsCount(), 4096);
-            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats().size(), 4096);
-            for (const auto& x : res.GetTableDescription().GetPartitionStats()) {
+            const auto& desc = res.GetTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitionsCount(), 4096);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitionStats().size(), 4096);
+            for (const auto& x : desc.GetPartitionStats()) {
                 nodes.insert(x.LeaderNodeId);
             }
         }

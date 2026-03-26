@@ -23,7 +23,8 @@ class TResourceIdResolver: public TActorBootstrapped<TResourceIdResolver> {
             LOG_D("Describe succeeded"
                 << ": path# " << Database);
 
-            for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
+            const auto& desc = result.GetTableDescription();
+            for (const auto& [k, v] : desc.GetAttributes()) {
                 if (k == "cloud_id") {
                     return Reply(TString{v});
                 }

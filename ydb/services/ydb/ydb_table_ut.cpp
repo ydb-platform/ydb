@@ -1988,7 +1988,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         expected.push_back(R"___([[3865470565u];[200000001u];["F"]])___");
 
         int row = 0;
-        for (const auto& range : describeResult.GetTableDescription().GetKeyRanges()) {
+        const auto& desc = describeResult.GetTableDescription();
+        for (const auto& range : desc.GetKeyRanges()) {
             TReadTableSettings readTableSettings;
             if (auto from = range.From()) {
                 readTableSettings.From(from.value());
@@ -3459,13 +3460,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
                 "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
+            const auto& desc = res.GetTableDescription();
+            auto columns = desc.GetTableColumns();
             UNIT_ASSERT_EQUAL(columns.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
+            const auto& families = desc.GetColumnFamilies();
             UNIT_ASSERT_EQUAL(families.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
@@ -3489,13 +3491,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
                 "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
+            const auto& desc = res.GetTableDescription();
+            auto columns = desc.GetTableColumns();
             UNIT_ASSERT_EQUAL(columns.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
+            const auto& families = desc.GetColumnFamilies();
             UNIT_ASSERT_EQUAL(families.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
         }
@@ -3515,13 +3518,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
                 "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
+            const auto& desc = res.GetTableDescription();
+            auto columns = desc.GetTableColumns();
             UNIT_ASSERT_EQUAL(columns.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
+            const auto& families = desc.GetColumnFamilies();
             UNIT_ASSERT_EQUAL(families.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
@@ -3551,13 +3555,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
                 "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
+            const auto& desc = res.GetTableDescription();
+            auto columns = desc.GetTableColumns();
             UNIT_ASSERT_EQUAL(columns.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
+            const auto& families = desc.GetColumnFamilies();
             UNIT_ASSERT_EQUAL(families.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
@@ -3581,13 +3586,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
                 "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
+            const auto& desc = res.GetTableDescription();
+            auto columns = desc.GetTableColumns();
             UNIT_ASSERT_EQUAL(columns.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
+            const auto& families = desc.GetColumnFamilies();
             UNIT_ASSERT_EQUAL(families.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
         }
@@ -3611,13 +3617,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
                 "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
+            const auto& desc = res.GetTableDescription();
+            auto columns = desc.GetTableColumns();
             UNIT_ASSERT_EQUAL(columns.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
+            const auto& families = desc.GetColumnFamilies();
             UNIT_ASSERT_EQUAL(families.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
@@ -3643,13 +3650,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
                 "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
+            const auto& desc = res.GetTableDescription();
+            auto columns = desc.GetTableColumns();
             UNIT_ASSERT_EQUAL(columns.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
+            const auto& families = desc.GetColumnFamilies();
             UNIT_ASSERT_EQUAL(families.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
@@ -3771,13 +3779,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
                 "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
+            const auto& desc = res.GetTableDescription();
+            auto columns = desc.GetTableColumns();
             UNIT_ASSERT_EQUAL(columns.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
+            const auto& families = desc.GetColumnFamilies();
             UNIT_ASSERT_EQUAL(families.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
@@ -3840,17 +3849,18 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS,
                 "Status: " << res.GetStatus() << " Issues: " << TPrintableIssues(res.GetIssues()));
-            auto columns = res.GetTableDescription().GetTableColumns();
+            const auto& desc = res.GetTableDescription();
+            auto columns = desc.GetTableColumns();
             UNIT_ASSERT_EQUAL(columns.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Name, "Key");
             UNIT_ASSERT_VALUES_EQUAL(columns[0].Family, "");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Name, "Value");
             UNIT_ASSERT_VALUES_EQUAL(columns[1].Family, "alt");
-            const auto& settings = res.GetTableDescription().GetStorageSettings();
+            const auto& settings = desc.GetStorageSettings();
             UNIT_ASSERT_VALUES_EQUAL(settings.GetExternal(), "hdd");
             UNIT_ASSERT_VALUES_EQUAL(settings.GetStoreExternalBlobs().value(), true);
             UNIT_ASSERT_VALUES_EQUAL(settings.GetExternalDataChannelsCount().value(), 7U);
-            const auto& families = res.GetTableDescription().GetColumnFamilies();
+            const auto& families = desc.GetColumnFamilies();
             UNIT_ASSERT_EQUAL(families.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetData(), "ssd");
@@ -4116,7 +4126,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), true);
@@ -4194,7 +4205,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), true);
@@ -4237,7 +4249,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), true);
@@ -4261,7 +4274,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), true);
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 50);
@@ -4281,7 +4295,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), false);
         }
@@ -4298,7 +4313,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().value(), true);
         }
@@ -4334,7 +4350,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), false);
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
@@ -4354,7 +4371,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), true);
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
@@ -4375,7 +4393,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().value(), false);
         }
@@ -4406,7 +4425,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().value(), false);
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
@@ -4442,7 +4462,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().value(), false);
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
@@ -4480,7 +4501,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDescribeTableResult describeResult = session.DescribeTable(tableName)
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describeResult.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().value(), true);
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());

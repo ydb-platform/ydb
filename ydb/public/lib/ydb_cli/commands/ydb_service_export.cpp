@@ -44,7 +44,8 @@ namespace {
             auto describeResult = session.DescribeTable(entry.Name).ExtractValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
 
-            const auto& attributes = describeResult.GetTableDescription().GetAttributes();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& attributes = desc.GetAttributes();
             auto it = attributes.find("__async_replica");
             return it != attributes.end() && it->second == "true";
         };

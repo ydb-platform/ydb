@@ -703,9 +703,10 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
 
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionsCount(), 8);
-            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats().size(), 8);
-            for (const auto& s : res.GetTableDescription().GetPartitionStats()) {
+            const auto& desc = res.GetTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitionsCount(), 8);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitionStats().size(), 8);
+            for (const auto& s : desc.GetPartitionStats()) {
                 nodeIds.emplace(s.LeaderNodeId);
             }
             Cerr << "waitTablets: attempt " << i << ", tablet leader nodes: {";

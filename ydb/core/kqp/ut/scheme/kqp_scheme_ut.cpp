@@ -1012,7 +1012,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describe.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), false);
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
@@ -1195,7 +1196,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describe.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), true);
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
@@ -1208,7 +1210,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
+            const auto& desc = describe.GetTableDescription();
+            const auto& partSettings = desc.GetPartitioningSettings();
             UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), false);
             UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
@@ -1937,7 +1940,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             return parser.GetOptionalUint64().value();
         };
 
-        const std::vector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
+        const auto& desc = describeResult.GetTableDescription();
+        const std::vector<TKeyRange>& keyRanges = desc.GetKeyRanges();
 
         size_t n = 0;
         const std::vector<ui64> expectedRanges = { 10ul, 100ul, 1000ul, 10000ul };
@@ -2003,7 +2007,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             return parser.GetOptionalInt64().value();
         };
 
-        const std::vector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
+        const auto& desc = describeResult.GetTableDescription();
+        const std::vector<TKeyRange>& keyRanges = desc.GetKeyRanges();
 
         size_t n = 0;
         const std::vector<i64> expectedRanges = { 0l, 10l, 10000l };
@@ -2061,7 +2066,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             return std::pair<ui64, std::optional<std::string>>(pk1, pk2);
         };
 
-        const std::vector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
+        const auto& desc = describeResult.GetTableDescription();
+        const std::vector<TKeyRange>& keyRanges = desc.GetKeyRanges();
 
         size_t n = 0;
         const std::vector<std::pair<ui64, TString>> expectedRanges = {
@@ -2284,7 +2290,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-        const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
+        const auto& desc = describeResult.GetTableDescription();
+        const auto& columnFamilies = desc.GetColumnFamilies();
         UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 3);
         for (const auto& family : columnFamilies) {
             if (family.GetName() == "Family1") {
@@ -2505,7 +2512,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-            const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& columnFamilies = desc.GetColumnFamilies();
             UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 2);
             for (const auto& family : columnFamilies) {
                 if (family.GetName() == "Family1") {
@@ -2541,7 +2549,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-            const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
+            const auto& desc = describeResult.GetTableDescription();
+            const auto& columnFamilies = desc.GetColumnFamilies();
             UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 3);
             for (const auto& family : columnFamilies) {
                 if (family.GetName() == "Family1") {

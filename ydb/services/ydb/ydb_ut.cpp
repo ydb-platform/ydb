@@ -4548,7 +4548,8 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
                 ).GetValueSync();
 
             UNIT_ASSERT(descResult.IsSuccess());
-            auto ranges = descResult.GetTableDescription().GetKeyRanges();
+            const auto& desc = descResult.GetTableDescription();
+            const auto& ranges = desc.GetKeyRanges();
             UNIT_ASSERT_VALUES_EQUAL(ranges.size(), 10);
 
             auto extractValue = [](const TValue& val) {

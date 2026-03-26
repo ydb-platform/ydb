@@ -122,7 +122,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ", dstPath# " << target.Config->GetDstPath()
                 << ", kind# " << target.Kind);
 
-            for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
+            const auto& desc = result.GetTableDescription();
+            for (const auto& index : desc.GetIndexDescriptions()) {
                 switch (index.GetIndexType()) {
                 case NYdb::NTable::EIndexType::GlobalSync:
                 case NYdb::NTable::EIndexType::GlobalUnique:

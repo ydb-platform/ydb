@@ -754,15 +754,9 @@ public:
                 TExprBase node(input);
 
                 auto addSecretValueParam = [&](auto secretNode) {
-                    if (secretNode.ValueFromParam().Value() != "1") {
+                    TString paramName(secretNode.ValueParamName().Value());
+                    if (paramName.empty()) {
                         return;
-                    }
-                    if (!secretNode.Value().template Maybe<TCoAtom>()) {
-                        return;
-                    }
-                    TString paramName(secretNode.Value().template Cast<TCoAtom>().Value());
-                    if (!paramName.StartsWith("$")) {
-                        paramName = "$" + paramName;
                     }
                     for (const auto& param : queryCtx->PreparingQuery->GetParameters()) {
                         if (param.GetName() == paramName) {

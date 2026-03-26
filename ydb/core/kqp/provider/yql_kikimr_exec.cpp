@@ -445,12 +445,11 @@ namespace {
     TSecretSettings ParseSecretSettings(TKiCreateSecret createSecret) {
         TSecretSettings settings;
         settings.Name = TString(createSecret.Secret());
-        if (auto value = createSecret.Value().Maybe<TCoAtom>()) {
-            if (createSecret.ValueFromParam().Value() == "1") {
-                settings.ValueParamName = TString(value.Cast().Value());
-            } else {
-                settings.Value = TString(value.Cast().Value());
-            }
+        if (auto value = TString(createSecret.Value())) {
+            settings.Value = std::move(value);
+        }
+        if (auto paramName = TString(createSecret.ValueParamName())) {
+            settings.ValueParamName = std::move(paramName);
         }
         settings.InheritPermissions = FromString<bool>(TString(createSecret.InheritPermissions()));
         return settings;
@@ -459,12 +458,11 @@ namespace {
     TSecretSettings ParseSecretSettings(TKiAlterSecret alterSecret) {
         TSecretSettings settings;
         settings.Name = TString(alterSecret.Secret());
-        if (auto value = alterSecret.Value().Maybe<TCoAtom>()) {
-            if (alterSecret.ValueFromParam().Value() == "1") {
-                settings.ValueParamName = TString(value.Cast().Value());
-            } else {
-                settings.Value = TString(value.Cast().Value());
-            }
+        if (auto value = TString(alterSecret.Value())) {
+            settings.Value = std::move(value);
+        }
+        if (auto paramName = TString(alterSecret.ValueParamName())) {
+            settings.ValueParamName = std::move(paramName);
         }
         return settings;
     }

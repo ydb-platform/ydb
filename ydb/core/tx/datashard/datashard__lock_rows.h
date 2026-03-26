@@ -42,6 +42,13 @@ namespace NKikimr::NDataShard {
         {}
     };
 
+    // Unique index tables have PK = (index columns, original table PK columns).
+    // This method returns a prefix of it which must be unique and should be used
+    // to check for write conflicts. NULL semantics imply that NULLs don't conflict
+    // with each other so the method returns all <cells> if there are NULLs in first
+    // <count> columns.
+    TConstArrayRef<TCell> GetUniqueIndexKey(TConstArrayRef<TCell> cells, ui32 count);
+
 } // namespace NKikimr::NDataShard
 
 template<>

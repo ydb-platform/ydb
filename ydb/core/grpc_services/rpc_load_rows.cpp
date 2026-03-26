@@ -529,23 +529,12 @@ private:
             }
         }
 
-        if (!ValidateInputBatch(errorMessage)) {
-            return false;
-        }
-
-        return true;
+        return ValidateInputBatch(errorMessage);
     }
 
     bool ValidateInputBatch(TString& errorMessage) {
-        if (!ValidateNotNullColumns(errorMessage)) {
-            return false;
-        }
-
-        if (!ValidateUtf8(errorMessage)) {
-            return false;
-        }
-
-        return true;
+        return ValidateNotNullColumns(errorMessage) &&
+            ValidateUtf8(errorMessage);
     }
 
     bool ValidateNotNullColumns(TString& errorMessage) {

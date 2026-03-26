@@ -1058,6 +1058,84 @@ void TestNonStreamingWithEmptyIntermediatePageContinue() {
     UNIT_ASSERT_GT(iterationsCount, 1u);
 }
 
+// Verifies that prefetchTriggered correctly prevents double-advance.
+// In streaming mode with MaxPagesInFlight > 1, prefetch triggers ContinueCursor
+// to start fetching the next page while the current one is sent to the client.
+// When the client acks and Continue() is called, prefetchTriggered should be true
+// and ContinueCursor should NOT be called again (which would skip a page).
+void TestPrefetchNoDoubleAdvance() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    // Enable streaming with enough MaxPagesInFlight to allow prefetch.
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetEnabled(true);
+    streamingConfig->SetMaxPagesInFlight(8);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write enough data to produce multiple streaming pages.
+    const ui32 numRecords = 5000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    UNIT_ASSERT(reader.InitializeScanner());
+    reader.Ack();
+
+    // Receive all batches and verify correct completion.
+    // If prefetchTriggered was not handled correctly (double-advance),
+    // some pages would be skipped and we'd get fewer rows than expected.
+    ui32 batchCount = 0;
+    while (true) {
+        bool hasMore = reader.Receive();
+        if (!hasMore) {
+            break;
+        }
+        reader.Ack();
+        ++batchCount;
+    }
+
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    auto rb = reader.GetResult();
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    Cerr << "PrefetchNoDoubleAdvance: batches=" << batchCount
+         << ", rows=" << rb->num_rows()
+         << ", iterations=" << reader.GetIterationsCount() << Endl;
+
+    // With 5000 records and streaming, we expect multiple batches.
+    // If ContinueCursor was called twice (double-advance), we'd skip pages
+    // and get fewer rows or the scan would complete incorrectly.
+    UNIT_ASSERT_GT(batchCount, 1u);
+}
+
 // Verifies that a task processing error during streaming causes the scan to
 // terminate with a proper error status (TEvScanError) and does not crash or hang.
 //
@@ -1233,6 +1311,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(NonStreamingWithEmptyIntermediatePageContinue) {
         TestNonStreamingWithEmptyIntermediatePageContinue();
+    }
+
+    Y_UNIT_TEST(PrefetchNoDoubleAdvance) {
+        TestPrefetchNoDoubleAdvance();
     }
 
     Y_UNIT_TEST(StreamingEnabled) {

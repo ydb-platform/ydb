@@ -934,37 +934,38 @@ NSchemeCache::TSchemeCacheNavigate::TEntry& InferEntry(NKikimr::NSchemeCache::TS
 
 namespace {
 TString ComposeStructuredTokenJsonForExternalDataSource(const NYql::TExternalSource& externalSource) {
-    switch (externalSource.DataSourceAuth.identity_case()) {
+    const auto& dataSourceAuth = externalSource.DataSourceAuth;
+    switch (dataSourceAuth.identity_case()) {
         case NKikimrSchemeOp::TAuth::kNone:
             return NYql::ComposeStructuredTokenJsonForServiceAccount("", "", "");
 
         case NKikimrSchemeOp::TAuth::kBasic:
             return NYql::ComposeStructuredTokenJsonForBasicAuthWithSecret(
-                    externalSource.DataSourceAuth.GetBasic().GetLogin(),
-                    externalSource.DataSourceAuth.GetBasic().GetPasswordSecretName(),
+                    dataSourceAuth.GetBasic().GetLogin(),
+                    dataSourceAuth.GetBasic().GetPasswordSecretName(),
                     externalSource.Password);
 
         case NKikimrSchemeOp::TAuth::kMdbBasic:
             return NYql::ComposeStructuredTokenJsonForBasicAuthWithSecret(
-                    externalSource.DataSourceAuth.GetMdbBasic().GetLogin(),
-                    externalSource.DataSourceAuth.GetMdbBasic().GetPasswordSecretName(),
+                    dataSourceAuth.GetMdbBasic().GetLogin(),
+                    dataSourceAuth.GetMdbBasic().GetPasswordSecretName(),
                     externalSource.Password);
 
         case NKikimrSchemeOp::TAuth::kServiceAccount:
             return NYql::ComposeStructuredTokenJsonForServiceAccountWithSecret(
-                    externalSource.DataSourceAuth.GetServiceAccount().GetId(),
-                    externalSource.DataSourceAuth.GetServiceAccount().GetSecretName(),
+                    dataSourceAuth.GetServiceAccount().GetId(),
+                    dataSourceAuth.GetServiceAccount().GetSecretName(),
                     externalSource.ServiceAccountIdSignature);
 
         case NKikimrSchemeOp::TAuth::kToken:
             return NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(
-                    externalSource.DataSourceAuth.GetToken().GetTokenSecretName(),
+                    dataSourceAuth.GetToken().GetTokenSecretName(),
                     externalSource.Token);
 
         case NKikimrSchemeOp::TAuth::kIam:
             return NYql::ComposeStructuredTokenJsonForIamAuth(
-                    externalSource.DataSourceAuth.GetIam().GetServiceAccountId(),
-                    externalSource.DataSourceAuth.GetIam().GetResourceId());
+                    dataSourceAuth.GetIam().GetServiceAccountId(),
+                    dataSourceAuth.GetIam().GetResourceId());
 
         case NKikimrSchemeOp::TAuth::kAws:
             throw yexception() << "Unhandled auth method: Aws";

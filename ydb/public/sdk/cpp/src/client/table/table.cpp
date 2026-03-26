@@ -191,6 +191,38 @@ const TBuildIndexOperation::TMetadata& TBuildIndexOperation::Metadata() const {
     return Metadata_;
 }
 
+TCompact::TCompact(bool cascade, uint32_t maxShardsInFlight)
+    : Cascade_(cascade)
+    , MaxShardsInFlight_(maxShardsInFlight)
+{}
+
+TCompact::TCompact()
+    : TCompact(false, 1)
+{}
+
+void TCompact::SerializeTo(Ydb::Table::CompactItem& proto) const {
+    proto.set_cascade(Cascade_);
+    proto.set_max_shards_in_flight(MaxShardsInFlight_);
+}
+
+TCompactionOperation::TCompactionOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    Ydb::Table::CompactMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+    Metadata_.State = static_cast<ECompactState>(metadata.state());
+    Metadata_.Progress = metadata.progress();
+    Metadata_.Path = metadata.path();
+    Metadata_.Cascade = metadata.cascade();
+    Metadata_.MaxInFlight = metadata.max_shards_in_flight();
+    Metadata_.Total = metadata.shards_total();
+    Metadata_.Done = metadata.shards_done();
+}
+
+const TCompactionOperation::TMetadata& TCompactionOperation::Metadata() const {
+    return Metadata_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPartitioningSettings::TImpl {
@@ -1859,6 +1891,10 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
             request.mutable_drop_metrics_settings();
             break;
         }
+    }
+
+    if (settings.Compact_) {
+        settings.Compact_->SerializeTo(*request.mutable_compact());
     }
 
     return request;

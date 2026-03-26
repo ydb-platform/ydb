@@ -14,7 +14,7 @@ IF (ALLOCATOR == "B" OR ALLOCATOR == "BS" OR ALLOCATOR == "C")
 ENDIF()
 
 SRCS(
-    fast_metrics.cpp
+    inmemory_metrics.cpp
     stats.cpp
 )
 

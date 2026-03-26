@@ -1,5 +1,5 @@
 #include "actor_benchmark_helper.h"
-#include "subsystems/fast_metrics.h"
+#include "subsystems/inmemory_metrics.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -10,7 +10,7 @@
 using namespace NActors;
 using namespace NActors::NTests;
 
-Y_UNIT_TEST_SUITE(FastMetrics) {
+Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
     using TActorBenchmark = ::NActors::NTests::TActorBenchmark<>;
 
@@ -21,18 +21,18 @@ Y_UNIT_TEST_SUITE(FastMetrics) {
     Y_UNIT_TEST(SubsystemAccessor) {
         auto setup = TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, false, false);
-        setup->RegisterSubSystem(MakeFastMetricsRegistry({
+        setup->RegisterSubSystem(MakeInMemoryMetricsRegistry({
             .MemoryBytes = 4096,
             .ChunkSizeBytes = 256,
             .MaxLines = 4,
         }));
 
         TActorSystem actorSystem(setup);
-        UNIT_ASSERT_VALUES_EQUAL(GetFastMetrics(actorSystem).GetConfig().MemoryBytes, 4096);
+        UNIT_ASSERT_VALUES_EQUAL(GetInMemoryMetrics(actorSystem).GetConfig().MemoryBytes, 4096);
     }
 
     Y_UNIT_TEST(AppendAndSnapshot) {
-        TFastMetricsRegistry registry({
+        TInMemoryMetricsRegistry registry({
             .MemoryBytes = 1024,
             .ChunkSizeBytes = 64,
             .MaxLines = 4,
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(FastMetrics) {
     }
 
     Y_UNIT_TEST(ClosePreservesHistory) {
-        TFastMetricsRegistry registry({
+        TInMemoryMetricsRegistry registry({
             .MemoryBytes = 1024,
             .ChunkSizeBytes = 64,
             .MaxLines = 4,
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(FastMetrics) {
     }
 
     Y_UNIT_TEST(LineLimitReturnsNoopWriter) {
-        TFastMetricsRegistry registry({
+        TInMemoryMetricsRegistry registry({
             .MemoryBytes = 128,
             .ChunkSizeBytes = 64,
             .MaxLines = 1,
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(FastMetrics) {
     }
 
     Y_UNIT_TEST(RolloverUsesFreeChunk) {
-        TFastMetricsRegistry registry({
+        TInMemoryMetricsRegistry registry({
             .MemoryBytes = 128,
             .ChunkSizeBytes = 64,
             .MaxLines = 4,
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(FastMetrics) {
     }
 
     Y_UNIT_TEST(ReopenClosedLineBySameKey) {
-        TFastMetricsRegistry registry({
+        TInMemoryMetricsRegistry registry({
             .MemoryBytes = 256,
             .ChunkSizeBytes = 64,
             .MaxLines = 4,
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(FastMetrics) {
     }
 
     Y_UNIT_TEST(ZeroMemoryWriterDrops) {
-        TFastMetricsRegistry registry({
+        TInMemoryMetricsRegistry registry({
             .MemoryBytes = 0,
             .ChunkSizeBytes = 64,
             .MaxLines = 1,
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(FastMetrics) {
     }
 
     Y_UNIT_TEST(TooSmallChunkAlwaysDrops) {
-        TFastMetricsRegistry registry({
+        TInMemoryMetricsRegistry registry({
             .MemoryBytes = 8,
             .ChunkSizeBytes = 8,
             .MaxLines = 1,
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(FastMetrics) {
     }
 
     Y_UNIT_TEST(StealOldestSealedChunk) {
-        TFastMetricsRegistry registry({
+        TInMemoryMetricsRegistry registry({
             .MemoryBytes = 128,
             .ChunkSizeBytes = 64,
             .MaxLines = 2,
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(FastMetrics) {
     }
 
     Y_UNIT_TEST(ConcurrentAppendAndSnapshot) {
-        TFastMetricsRegistry registry({
+        TInMemoryMetricsRegistry registry({
             .MemoryBytes = 32768,
             .ChunkSizeBytes = 256,
             .MaxLines = 4,
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(FastMetrics) {
     }
 
     Y_UNIT_TEST(ConcurrentWritersWithRandomSnapshots) {
-        TFastMetricsRegistry registry({
+        TInMemoryMetricsRegistry registry({
             .MemoryBytes = 16384,
             .ChunkSizeBytes = 256,
             .MaxLines = 8,

@@ -1,4 +1,4 @@
-#include "fast_metrics.h"
+#include "inmemory_metrics.h"
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -70,7 +70,7 @@ namespace NActors {
     };
 
     struct TSnapshotPinnedChunk {
-        TFastMetricsRegistry* Registry = nullptr;
+        TInMemoryMetricsRegistry* Registry = nullptr;
         TChunk* Chunk = nullptr;
         TChunkView View;
     };
@@ -121,9 +121,9 @@ namespace NActors {
 
     } // namespace
 
-    class TFastMetricsRegistry::TImpl {
+    class TInMemoryMetricsRegistry::TImpl {
     public:
-        explicit TImpl(TFastMetricsConfig cfg)
+        explicit TImpl(TInMemoryMetricsConfig cfg)
             : Config(std::move(cfg))
             , ChunkCount(Config.ChunkSizeBytes ? Config.MemoryBytes / Config.ChunkSizeBytes : 0)
             , MaxLines(Config.MaxLines ? Config.MaxLines : ChunkCount / 2)
@@ -140,7 +140,7 @@ namespace NActors {
             }
         }
 
-        TFastMetricsConfig Config;
+        TInMemoryMetricsConfig Config;
         ui32 ChunkCount = 0;
         ui32 MaxLines = 0;
 
@@ -185,7 +185,7 @@ namespace NActors {
         return hash;
     }
 
-    TLineWriter::TLineWriter(TFastMetricsRegistry* registry, TLine* line) noexcept
+    TLineWriter::TLineWriter(TInMemoryMetricsRegistry* registry, TLine* line) noexcept
         : Registry(registry)
         , Line(line)
     {
@@ -269,16 +269,16 @@ namespace NActors {
         return SnapshotLines;
     }
 
-    std::unique_ptr<TFastMetricsRegistry> MakeFastMetricsRegistry(TFastMetricsConfig config) {
-        return std::make_unique<TFastMetricsRegistry>(std::move(config));
+    std::unique_ptr<TInMemoryMetricsRegistry> MakeInMemoryMetricsRegistry(TInMemoryMetricsConfig config) {
+        return std::make_unique<TInMemoryMetricsRegistry>(std::move(config));
     }
 
-    TFastMetricsRegistry::TFastMetricsRegistry(TFastMetricsConfig config)
+    TInMemoryMetricsRegistry::TInMemoryMetricsRegistry(TInMemoryMetricsConfig config)
         : Impl(std::make_unique<TImpl>(std::move(config)))
     {
     }
 
-    TFastMetricsRegistry::~TFastMetricsRegistry() = default;
+    TInMemoryMetricsRegistry::~TInMemoryMetricsRegistry() = default;
 
     namespace {
         TLineKey MakeLineKey(TStringBuf name, std::span<const TLabel> labels) {
@@ -314,7 +314,7 @@ namespace NActors {
         }
     }
 
-    TLineWriter TFastMetricsRegistry::GetOrCreateLine(TStringBuf name, std::span<const TLabel> labels) {
+    TLineWriter TInMemoryMetricsRegistry::GetOrCreateLine(TStringBuf name, std::span<const TLabel> labels) {
         auto key = MakeLineKey(name, labels);
 
         TGuard<TMutex> guard(Impl->RegistryLock);
@@ -350,7 +350,7 @@ namespace NActors {
         }
     }
 
-    void TFastMetricsRegistry::MaybeDropClosedLine(TLine* line) {
+    void TInMemoryMetricsRegistry::MaybeDropClosedLine(TLine* line) {
         TGuard<TMutex> guard(Impl->RegistryLock);
         auto it = Impl->LinesById.find(line->LineId);
         if (it == Impl->LinesById.end()) {
@@ -369,7 +369,7 @@ namespace NActors {
         Impl->LinesByKey.erase(key);
     }
 
-    TChunk* TFastMetricsRegistry::TryAcquireFreeChunk() {
+    TChunk* TInMemoryMetricsRegistry::TryAcquireFreeChunk() {
         TGuard<TMutex> guard(Impl->VictimLock);
         if (Impl->FreeList.empty()) {
             return nullptr;
@@ -380,7 +380,7 @@ namespace NActors {
         return chunk;
     }
 
-    void TFastMetricsRegistry::PublishSealedChunk(TChunk* chunk) {
+    void TInMemoryMetricsRegistry::PublishSealedChunk(TChunk* chunk) {
         TGuard<TMutex> guard(Impl->VictimLock);
         chunk->Generation.fetch_add(1, std::memory_order_acq_rel);
         TLine* owner = chunk->Owner.load(std::memory_order_acquire);
@@ -393,20 +393,20 @@ namespace NActors {
         });
     }
 
-    void TFastMetricsRegistry::ReturnChunkToFree(TChunk* chunk) {
+    void TInMemoryMetricsRegistry::ReturnChunkToFree(TChunk* chunk) {
         TGuard<TMutex> guard(Impl->VictimLock);
         FinalizeReturnedChunk(chunk);
         Impl->FreeList.push_back(chunk);
     }
 
-    void TFastMetricsRegistry::ReleasePinnedChunk(TChunk* chunk) {
+    void TInMemoryMetricsRegistry::ReleasePinnedChunk(TChunk* chunk) {
         const i32 prev = chunk->Readers.fetch_sub(1, std::memory_order_acq_rel);
         if (prev == RetiringBias + 1) {
             ReturnChunkToFree(chunk);
         }
     }
 
-    void TFastMetricsRegistry::RetireChunk(TChunk* chunk) {
+    void TInMemoryMetricsRegistry::RetireChunk(TChunk* chunk) {
         i32 readers = chunk->Readers.load(std::memory_order_acquire);
         while (true) {
             Y_ABORT_UNLESS(readers >= 0);
@@ -420,7 +420,7 @@ namespace NActors {
         }
     }
 
-    TChunk* TFastMetricsRegistry::TryStealOldestChunk() {
+    TChunk* TInMemoryMetricsRegistry::TryStealOldestChunk() {
         while (true) {
             TChunk* victim = nullptr;
             ui64 generation = 0;
@@ -504,7 +504,7 @@ namespace NActors {
         }
     }
 
-    bool TFastMetricsRegistry::Append(TLine* line, ui64 value) noexcept {
+    bool TInMemoryMetricsRegistry::Append(TLine* line, ui64 value) noexcept {
         if (!line || Impl->ShuttingDown.load(std::memory_order_acquire)) {
             return false;
         }
@@ -578,7 +578,7 @@ namespace NActors {
         }
     }
 
-    void TFastMetricsRegistry::CloseLine(TLine* line) noexcept {
+    void TInMemoryMetricsRegistry::CloseLine(TLine* line) noexcept {
         if (!line) {
             return;
         }
@@ -595,7 +595,7 @@ namespace NActors {
         }
     }
 
-    TSnapshot TFastMetricsRegistry::Snapshot() const {
+    TSnapshot TInMemoryMetricsRegistry::Snapshot() const {
         TSnapshot snapshot;
         auto data = std::make_shared<TSnapshotData>();
         data->Anchor = Impl->TimeAnchor;
@@ -629,7 +629,7 @@ namespace NActors {
                     .CommittedBytes = chunk->CommittedBytes.load(std::memory_order_acquire),
                 });
                 data->Chunks.push_back(TSnapshotPinnedChunk{
-                    .Registry = const_cast<TFastMetricsRegistry*>(this),
+                    .Registry = const_cast<TInMemoryMetricsRegistry*>(this),
                     .Chunk = chunk,
                     .View = lineSnapshot.Chunks.back(),
                 });
@@ -643,34 +643,34 @@ namespace NActors {
         return snapshot;
     }
 
-    ui64 TFastMetricsRegistry::GetReuseWatermark() const noexcept {
+    ui64 TInMemoryMetricsRegistry::GetReuseWatermark() const noexcept {
         return Impl->ReuseWatermark.load(std::memory_order_acquire);
     }
 
-    const TFastMetricsConfig& TFastMetricsRegistry::GetConfig() const noexcept {
+    const TInMemoryMetricsConfig& TInMemoryMetricsRegistry::GetConfig() const noexcept {
         return Impl->Config;
     }
 
-    void TFastMetricsRegistry::OnBeforeStop(TActorSystem&) {
+    void TInMemoryMetricsRegistry::OnBeforeStop(TActorSystem&) {
         Impl->ShuttingDown.store(true, std::memory_order_release);
     }
 
-    TFastMetricsRegistry& GetFastMetrics(TActorSystem& actorSystem) {
-        auto* subSystem = actorSystem.GetSubSystem<TFastMetricsRegistry>();
-        Y_ABORT_UNLESS(subSystem, "actor system fast metrics subsystem is not registered");
+    TInMemoryMetricsRegistry& GetInMemoryMetrics(TActorSystem& actorSystem) {
+        auto* subSystem = actorSystem.GetSubSystem<TInMemoryMetricsRegistry>();
+        Y_ABORT_UNLESS(subSystem, "actor system in-memory metrics subsystem is not registered");
         return *subSystem;
     }
 
-    const TFastMetricsRegistry& GetFastMetrics(const TActorSystem& actorSystem) {
-        auto* subSystem = actorSystem.GetSubSystem<TFastMetricsRegistry>();
-        Y_ABORT_UNLESS(subSystem, "actor system fast metrics subsystem is not registered");
+    const TInMemoryMetricsRegistry& GetInMemoryMetrics(const TActorSystem& actorSystem) {
+        auto* subSystem = actorSystem.GetSubSystem<TInMemoryMetricsRegistry>();
+        Y_ABORT_UNLESS(subSystem, "actor system in-memory metrics subsystem is not registered");
         return *subSystem;
     }
 
-    TFastMetricsRegistry& GetFastMetrics() {
+    TInMemoryMetricsRegistry& GetInMemoryMetrics() {
         TActorSystem* actorSystem = TActivationContext::ActorSystem();
-        auto* subSystem = actorSystem->GetSubSystem<TFastMetricsRegistry>();
-        Y_ABORT_UNLESS(subSystem, "actor system fast metrics subsystem is not registered");
+        auto* subSystem = actorSystem->GetSubSystem<TInMemoryMetricsRegistry>();
+        Y_ABORT_UNLESS(subSystem, "actor system in-memory metrics subsystem is not registered");
         return *subSystem;
     }
 

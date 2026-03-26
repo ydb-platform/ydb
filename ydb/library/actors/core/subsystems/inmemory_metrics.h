@@ -14,12 +14,12 @@
 
 namespace NActors {
     class TActorSystem;
-    class TFastMetricsRegistry;
+    class TInMemoryMetricsRegistry;
     class TLine;
     struct TChunk;
     struct TSnapshotData;
 
-    struct TFastMetricsConfig {
+    struct TInMemoryMetricsConfig {
         ui64 MemoryBytes = 0;
         ui32 ChunkSizeBytes = 4096;
         ui32 MaxLines = 0;
@@ -58,7 +58,7 @@ namespace NActors {
     class TLineWriter {
     public:
         TLineWriter() noexcept = default;
-        TLineWriter(TFastMetricsRegistry* registry, TLine* line) noexcept;
+        TLineWriter(TInMemoryMetricsRegistry* registry, TLine* line) noexcept;
         TLineWriter(TLineWriter&& rhs) noexcept;
         TLineWriter& operator=(TLineWriter&& rhs) noexcept;
         TLineWriter(const TLineWriter&) = delete;
@@ -71,7 +71,7 @@ namespace NActors {
         ui32 GetLineId() const noexcept;
 
     private:
-        TFastMetricsRegistry* Registry = nullptr;
+        TInMemoryMetricsRegistry* Registry = nullptr;
         TLine* Line = nullptr;
     };
 
@@ -94,7 +94,7 @@ namespace NActors {
         TVector<TChunkView> Chunks;
 
     private:
-        friend class TFastMetricsRegistry;
+        friend class TInMemoryMetricsRegistry;
         std::shared_ptr<TSnapshotData> Data;
         TVector<size_t> ChunkIndexes;
     };
@@ -111,7 +111,7 @@ namespace NActors {
         TVector<TLineSnapshot> Lines() const;
 
     private:
-        friend class TFastMetricsRegistry;
+        friend class TInMemoryMetricsRegistry;
         TVector<TLineSnapshot> SnapshotLines;
     };
 
@@ -120,18 +120,18 @@ namespace NActors {
         ui64 Value = 0;
     };
 
-    std::unique_ptr<TFastMetricsRegistry> MakeFastMetricsRegistry(TFastMetricsConfig config);
+    std::unique_ptr<TInMemoryMetricsRegistry> MakeInMemoryMetricsRegistry(TInMemoryMetricsConfig config);
 
-    class TFastMetricsRegistry : public ISubSystem {
+    class TInMemoryMetricsRegistry : public ISubSystem {
     public:
-        explicit TFastMetricsRegistry(TFastMetricsConfig config);
-        ~TFastMetricsRegistry() override;
+        explicit TInMemoryMetricsRegistry(TInMemoryMetricsConfig config);
+        ~TInMemoryMetricsRegistry() override;
 
         TLineWriter GetOrCreateLine(TStringBuf name, std::span<const TLabel> labels);
         TSnapshot Snapshot() const;
 
         ui64 GetReuseWatermark() const noexcept;
-        const TFastMetricsConfig& GetConfig() const noexcept;
+        const TInMemoryMetricsConfig& GetConfig() const noexcept;
 
     private:
         friend class TLineWriter;
@@ -154,8 +154,8 @@ namespace NActors {
         std::unique_ptr<TImpl> Impl;
     };
 
-    TFastMetricsRegistry& GetFastMetrics(TActorSystem& actorSystem);
-    const TFastMetricsRegistry& GetFastMetrics(const TActorSystem& actorSystem);
-    TFastMetricsRegistry& GetFastMetrics();
+    TInMemoryMetricsRegistry& GetInMemoryMetrics(TActorSystem& actorSystem);
+    const TInMemoryMetricsRegistry& GetInMemoryMetrics(const TActorSystem& actorSystem);
+    TInMemoryMetricsRegistry& GetInMemoryMetrics();
 
 } // namespace NActors

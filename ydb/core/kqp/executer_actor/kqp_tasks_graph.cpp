@@ -3166,6 +3166,11 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
         MaxTasksGraph.AddNodes(resourcesSnapshot);
     }
 
+    // TODO: remove this part later. The nodes from snapshot should be sufficient.
+    for (const auto [_, node] : GetMeta().ShardIdToNodeId) {
+        MaxTasksGraph.AddNode(node);
+    }
+
     for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
         const auto& tx = Transactions.at(txIdx);
         auto scheduledTaskCount = ScheduleByCost(tx, resourcesSnapshot);
@@ -3174,6 +3179,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
             auto& stageInfo = GetStageInfo(NYql::NDq::TStageId(txIdx, stageIdx));
 
             // TODO: move this check to FillStages() - after all necessary params are set in KqpTasksGraph ctor.
+
             // Check which type of tasks to build later
             const bool maybeOlapRead = (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap();
 

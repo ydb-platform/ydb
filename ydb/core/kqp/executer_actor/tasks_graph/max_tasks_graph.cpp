@@ -21,6 +21,24 @@ void TMaxTasksGraph::AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& reso
     }
 }
 
+void TMaxTasksGraph::AddNode(TNodeId node) {
+    auto nodeIt = NodeIds.find(node);
+    if (nodeIt == NodeIds.end()) {
+        {
+            TStringStream ss;
+            ss << "Adding node not found in resource snapshot: " << node << Endl;
+            ss << "Known nodes:";
+            for (const auto [knownNode, _] : NodeIds) {
+                ss << " " << knownNode;
+            }
+            ss << Endl;
+        }
+
+        NodeIds.emplace(node, Nodes.size());
+        Nodes.push_back({MaxChannelsCount});
+    }
+}
+
 void TMaxTasksGraph::AddStage(const TStageId& stage, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput) {
     TStage newStage;
     newStage.Type = type;

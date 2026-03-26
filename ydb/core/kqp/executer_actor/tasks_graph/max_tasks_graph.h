@@ -33,6 +33,7 @@ public:
     explicit TMaxTasksGraph(size_t maxChannelsCount);
 
     void AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot);
+    void AddNode(TNodeId node); // TODO: it's workaround. remove later.
     void AddStage(const TStageId& stage, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput = std::nullopt);
     void AddTasks(const TStageId& stage, TNodeId node, size_t tasksCount);
     void AddTasks(const TStageId& stage, size_t tasksCount);

@@ -43,23 +43,25 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
             while(!Queue.empty()) {
                 auto& reply = Queue.front();
-                if (offset < reply.Offsets.front()) {
+                if (offset < reply.Messages.front().Offset) {
                     break;
                 }
-                while (!reply.Offsets.empty() && offset > reply.Offsets.front()) {
-                    reply.Offsets.pop_front();
+                while (!reply.Messages.empty() && offset > reply.Messages.front().Offset) {
+                    reply.Messages.pop_front();
                 }
-                if (!reply.Offsets.empty() && offset == reply.Offsets.front()) {
+                if (!reply.Messages.empty() && offset == reply.Messages.front().Offset) {
                     auto* message = PendingResponse->Record.AddMessage();
                     message->MutableId()->SetPartitionId(PartitionId);
                     message->MutableId()->SetOffset(offset);
                     message->SetData(result.GetData());
                     message->MutableMessageMeta()->SetMessageGroupId(result.GetSourceId());
                     message->MutableMessageMeta()->SetSentTimestampMilliseconds(result.GetWriteTimestampMS());
+                    message->MutableMessageMeta()->SetApproximateReceiveCount(reply.Messages.front().ApproximateReceiveCount);
+                    message->MutableMessageMeta()->SetApproximateFirstReceiveTimestampMilliseconds(reply.Messages.front().ApproximateFirstReceiveTimestamp.MilliSeconds());
 
-                    reply.Offsets.pop_front();
+                    reply.Messages.pop_front();
                 }
-                if (reply.Offsets.empty()) {
+                if (reply.Messages.empty()) {
                     if (PendingResponse->Record.MessageSize() > 0) {
                         Send(reply.Sender, PendingResponse.release(), 0, reply.Cookie);
                     } else {
@@ -99,15 +101,15 @@ STFUNC(TMessageEnricherActor::StateWork) {
 void TMessageEnricherActor::ProcessQueue() {
     while(!Queue.empty()) {
         auto& reply = Queue.front();
-        if (reply.Offsets.empty()) {
+        if (reply.Messages.empty()) {
             Send(reply.Sender, new TEvPQ::TEvMLPReadResponse(), 0, reply.Cookie);
 
             Queue.pop_front();
             continue;
         }
 
-        auto firstOffset = reply.Offsets.front();
-        auto lastOffset = Queue.back().Offsets.back();
+        auto firstOffset = reply.Messages.front().Offset;
+        auto lastOffset = Queue.back().Messages.back().Offset;
         auto count = lastOffset - firstOffset + 1;
         LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << TabletId);
         SendToPQTablet(MakeEvPQRead(ConsumerName, PartitionId, firstOffset, count));

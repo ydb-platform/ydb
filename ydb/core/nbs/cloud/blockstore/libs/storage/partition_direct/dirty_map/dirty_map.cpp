@@ -162,16 +162,6 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
 TInflightInfo::~TInflightInfo()
 {
     Y_ABORT_UNLESS(PBuffersLockCount == 0);
-    // Y_ABORT_UNLESS(State == EState::Erasing);
-    // Y_ABORT_UNLESS(EraseConfirmed == EraseRequested);
-}
-
-NThreading::TFuture<void> TInflightInfo::TInflightInfo::GetReadyFuture()
-{
-    if (!ReadyPromise.Initialized()) {
-        ReadyPromise = NThreading::NewPromise<void>();
-    }
-    return ReadyPromise.GetFuture();
 }
 
 void TInflightInfo::RestorePBuffer(ELocation location)
@@ -187,9 +177,26 @@ void TInflightInfo::RestorePBuffer(ELocation location)
     WriteConfirmed.Set(location);
 
     if (WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount) {
+        if (QuorumReadyPromise.Initialized()) {
+            QuorumReadyPromise.TrySetValue();
+        }
+
         State = EState::PBufferWritten;
         ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
     }
+}
+
+TInflightInfo::EState TInflightInfo::GetState() const
+{
+    return State;
+}
+
+NThreading::TFuture<void> TInflightInfo::GetQuorumReadyFuture()
+{
+    if (!QuorumReadyPromise.Initialized()) {
+        QuorumReadyPromise = NThreading::NewPromise<void>();
+    }
+    return QuorumReadyPromise.GetFuture();
 }
 
 TLocationMask TInflightInfo::ReadMask() const
@@ -342,6 +349,21 @@ void TInflightInfo::UnlockPBuffer()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TBlocksDirtyMap::RestorePBuffer(
+    ui64 lsn,
+    TBlockRange64 range,
+    ELocation location)
+{
+    if (auto item = Inflight.GetValue(lsn)) {
+        Y_ABORT_UNLESS(item->Range == range);
+
+        auto& inflight = item->Value;
+        inflight.RestorePBuffer(location);
+    } else {
+        Inflight.AddRange(lsn, range, TInflightInfo(this, lsn, location));
+    }
+}
+
 TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 {
     TReadHint result;
@@ -398,7 +420,7 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         // Caller should wait until PBuffers quorum will be made.
         auto item = Inflight.GetValue(readHint.Lsn);
         Y_ABORT_UNLESS(item);
-        result.WaitReady = item->Value.GetReadyFuture();
+        result.WaitReady = item->Value.GetQuorumReadyFuture();
         Y_ABORT_UNLESS(result.RangeHints.empty());
     } else {
         result.RangeHints.push_back(std::move(readHint));
@@ -525,21 +547,6 @@ void TBlocksDirtyMap::EraseFinished(
         auto& inflight = item->Value;
 
         inflight.EraseFailed(location);
-    }
-}
-
-void TBlocksDirtyMap::RestorePBuffer(
-    ui64 lsn,
-    TBlockRange64 range,
-    ELocation location)
-{
-    if (auto item = Inflight.GetValue(lsn)) {
-        Y_ABORT_UNLESS(item->Range == range);
-
-        auto& inflight = item->Value;
-        inflight.RestorePBuffer(location);
-    } else {
-        Inflight.AddRange(lsn, range, TInflightInfo(this, lsn, location));
     }
 }
 

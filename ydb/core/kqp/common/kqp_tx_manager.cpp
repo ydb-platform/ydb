@@ -235,6 +235,7 @@ public:
 
     void SetSkipConflictCheckForTopicsInTransaction(bool skipConflictCheck) override {
         SkipConflictCheck = skipConflictCheck;
+        TopicOperations.SetSkipConflictCheck(SkipConflictCheck);
     }
 
     TVector<NKikimrDataEvents::TLock> GetLocks() const override {

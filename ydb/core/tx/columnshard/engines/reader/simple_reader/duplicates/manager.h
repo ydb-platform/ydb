@@ -118,6 +118,7 @@ private:
     const std::shared_ptr<TPortionStore> Portions;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
+    const ui64 KeyBasedDedupThreshold;
 
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter, TNoopDelete, TFilterSizeProvider> FiltersCache;
     TLRUCache<ui64, TSortableBorders> MaterializedBordersCache;
@@ -157,6 +158,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
             hFunc(NPrivate::TEvFilterRequestResourcesAllocated, Handle);
+            hFunc(NPrivate::TEvPKKeysFetched, Handle);
             hFunc(NPrivate::TEvFilterConstructionResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
@@ -166,6 +168,7 @@ private:
 
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
+    void Handle(const NPrivate::TEvPKKeysFetched::TPtr&);
     void Handle(const NPrivate::TEvFilterConstructionResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
         AbortAndPassAway("aborted by actor system");
@@ -206,7 +209,7 @@ private:
     }
 
     TIntervalsIterator StartIntervalProcessing(
-        const THashSet<ui64>& intersectingPortions, const std::shared_ptr<TFilterAccumulator>& constructor);
+        const THashSet<ui64>& intersectingPortions, const std::shared_ptr<TFilterAccumulator>& constructor, const bool useKeyBasedDedup);
 
 public:
     TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions);

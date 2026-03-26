@@ -56,4 +56,21 @@ public:
     }
 };
 
+class TEvPKKeysFetched
+    : public NActors::TEventLocal<TEvPKKeysFetched, NColumnShard::TEvPrivate::EvPKKeysFetched> {
+private:
+    std::unique_ptr<TBuildFilterContext> Context;
+    std::optional<TJobStatus::TResultInFlightGuard> ResultGuard;
+
+public:
+    TEvPKKeysFetched(TBuildFilterContext&& context, TJobStatus::TResultInFlightGuard&& guard)
+        : Context(std::make_unique<TBuildFilterContext>(std::move(context))), ResultGuard(std::move(guard))
+    {
+    }
+
+    TBuildFilterContext&& ExtractContext() {
+        return std::move(*Context);
+    }
+};
+
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering::NPrivate

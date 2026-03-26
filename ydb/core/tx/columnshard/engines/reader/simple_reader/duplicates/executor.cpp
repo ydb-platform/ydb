@@ -1,10 +1,100 @@
 #include "executor.h"
 #include "merge.h"
+#include "pk_fetcher.h"
 #include "private_events.h"
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 namespace {
+
+class TPKFetchingCallback: public ::NKikimr::NGeneralCache::NPublic::ICallback<NGeneralCache::TColumnDataCachePolicy> {
+private:
+    using TAddress = NGeneralCache::TGlobalColumnAddress;
+
+    TBuildFilterContext Context;
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
+
+private:
+    virtual void DoOnResultReady(THashMap<TAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& objectAddresses,
+        THashSet<TAddress>&& /*removedAddresses*/,
+        ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TColumnDataCachePolicy>&& errorAddresses) override {
+        if (errorAddresses.HasErrors()) {
+            TActorContext::AsActorContext().Send(Context.GetOwner(),
+                new NPrivate::TEvFilterConstructionResult(
+                    TConclusionStatus::Fail(errorAddresses.GetErrorMessage()), Context.MakeResultInFlightGuard()));
+            return;
+        }
+
+        AFL_VERIFY(AllocationGuard);
+        // Create task to extract PK keys from loaded column data
+        const std::shared_ptr<TFetchPKKeysTask> task =
+            std::make_shared<TFetchPKKeysTask>(std::move(Context), std::move(objectAddresses), AllocationGuard);
+        NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(std::static_pointer_cast<NConveyor::ITask>(task));
+    }
+
+    virtual bool DoIsAborted() const override {
+        return Context.GetAbortionFlag() && Context.GetAbortionFlag()->Val();
+    }
+
+public:
+    TPKFetchingCallback(TBuildFilterContext&& context, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard)
+        : Context(std::move(context))
+        , AllocationGuard(allocationGuard)
+    {
+        AFL_VERIFY(allocationGuard);
+    }
+
+    void OnError(const TString& errorMessage) {
+        AFL_VERIFY(Context.GetOwner());
+        TActorContext::AsActorContext().Send(
+            Context.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorMessage),
+                                                       Context.MakeResultInFlightGuard()));
+    }
+};
+
+class TPKDataAllocation: public NGroupedMemoryManager::IAllocation {
+private:
+    TBuildFilterContext Context;
+
+private:
+    virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
+        TActorContext::AsActorContext().Send(Context.GetOwner(),
+            new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
+                Context.MakeResultInFlightGuard()));
+    }
+    virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
+        const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
+        // For PK fetching, we only need to load PK columns from the main portion
+        AFL_VERIFY(Context.GetUseKeyBasedDedup());
+        const ui64 mainPortionId = Context.GetMainPortionId();
+        auto mainPortion = Context.GetPortion(mainPortionId);
+        
+        THashSet<TPortionAddress> portionAddresses;
+        portionAddresses.insert(mainPortion->GetAddress());
+        
+        // Get only PK column IDs from the snapshot schema
+        auto snapshotSchema = Context.GetSnapshotSchema();
+        auto pkSchema = Context.GetPKSchema();
+        std::set<ui32> pkColumnIds;
+        for (int i = 0; i < pkSchema->num_fields(); ++i) {
+            auto fieldName = pkSchema->field(i)->name();
+            auto columnId = snapshotSchema->GetColumnIdVerified(fieldName);
+            pkColumnIds.insert(columnId);
+        }
+        
+        auto columnDataManager = Context.GetColumnDataManager();
+        columnDataManager->AskColumnData(NBlobOperations::EConsumer::DUPLICATE_FILTERING, portionAddresses, std::move(pkColumnIds),
+            std::make_shared<TPKFetchingCallback>(std::move(Context), guard));
+        return true;
+    }
+
+public:
+    TPKDataAllocation(TBuildFilterContext&& context, const ui64 mem)
+        : NGroupedMemoryManager::IAllocation(mem)
+        , Context(std::move(context))
+    {
+    }
+};
 
 class TColumnFetchingCallback: public ::NKikimr::NGeneralCache::NPublic::ICallback<NGeneralCache::TColumnDataCachePolicy> {
 private:

@@ -17,6 +17,7 @@ private:
     static std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> GetStageFeatures() {
         static const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> StageFeatures = {
             NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("INTERSECTIONS", 10000000),   // 10 MiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("PK_ONLY", 100000000),   // 100 MiB
             NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
             NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 10000000000),   // 10 GiB
         };
@@ -41,8 +42,9 @@ class TFilterAccumulator: TMoveOnly {
 public:
     enum class EFetchingStage {
         INTERSECTIONS = 0,
-        ACCESSORS = 1,
-        COLUMN_DATA = 2,
+        PK_ONLY = 1,  // For key-based dedup: fetch only PK from main portion
+        ACCESSORS = 2,
+        COLUMN_DATA = 3,
     };
 
 private:
@@ -78,6 +80,10 @@ public:
         AFL_VERIFY(Filters.empty());
         AFL_VERIFY(cnt);
         Filters.resize(cnt);
+    }
+    
+    void ClearFilters() {
+        Filters.clear();
     }
 
     void AddFilter(const ui32 intervalIdx, const NArrow::TColumnFilter& filterExt) {
@@ -183,6 +189,10 @@ private:
     YDB_READONLY_DEF(std::unique_ptr<TFilterBuildingGuard>, RequestGuard);
     YDB_READONLY_DEF(std::shared_ptr<TJobStatus>, Status);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> SelfMemory;
+    YDB_READONLY_DEF(bool, UseKeyBasedDedup);
+    YDB_READONLY_DEF(ui64, MainPortionId);
+    std::shared_ptr<std::vector<NArrow::TSimpleRow>> MainPortionPKKeys;  // PK keys from main portion for key-based dedup
+    std::shared_ptr<TFilterAccumulator> FilterAccumulator;  // For key-based dedup: keep accumulator alive during PK fetching
 
 public:
     TBuildFilterContext(const TActorId owner, const std::shared_ptr<const TAtomicCounter>& abortionFlag, const TSnapshot& maxVersion,
@@ -190,7 +200,9 @@ public:
         const std::shared_ptr<ISnapshotSchema>& snapshotSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
-        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory)
+        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory, const bool useKeyBasedDedup = false,
+        const ui64 mainPortionId = 0, const std::shared_ptr<std::vector<NArrow::TSimpleRow>>& mainPortionPKKeys = nullptr,
+        const std::shared_ptr<TFilterAccumulator>& filterAccumulator = nullptr)
         : Owner(owner)
         , AbortionFlag(abortionFlag)
         , MaxVersion(maxVersion)
@@ -204,6 +216,10 @@ public:
         , RequestGuard(std::move(requestGuard))
         , Status(std::make_shared<TJobStatus>())
         , SelfMemory(contextMemory)
+        , UseKeyBasedDedup(useKeyBasedDedup)
+        , MainPortionId(mainPortionId)
+        , MainPortionPKKeys(mainPortionPKKeys)
+        , FilterAccumulator(filterAccumulator)
     {
         AFL_VERIFY(Owner);
         AFL_VERIFY(RequiredPortions.size());
@@ -214,6 +230,11 @@ public:
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(Counters);
         AFL_VERIFY(SelfMemory);
+        if (UseKeyBasedDedup) {
+            AFL_VERIFY(MainPortionId);
+            // MainPortionPKKeys can be null initially (before PK fetching)
+            // It will be set after PK keys are loaded
+        }
     }
 
     TBuildFilterContext(TBuildFilterContext&& other) = default;
@@ -259,6 +280,27 @@ public:
 
     const TSnapshot& GetMaxVersion() const {
         return MaxVersion;
+    }
+
+    const std::shared_ptr<std::vector<NArrow::TSimpleRow>>& GetMainPortionPKKeys() const {
+        return MainPortionPKKeys;
+    }
+
+    void SetMainPortionPKKeys(const std::shared_ptr<std::vector<NArrow::TSimpleRow>>& keys) {
+        AFL_VERIFY(UseKeyBasedDedup);
+        MainPortionPKKeys = keys;
+    }
+
+    const std::shared_ptr<TFilterAccumulator>& GetFilterAccumulator() const {
+        return FilterAccumulator;
+    }
+
+    void SetFilterAccumulator(const std::shared_ptr<TFilterAccumulator>& accumulator) {
+        FilterAccumulator = accumulator;
+    }
+
+    const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& GetSelfMemory() const {
+        return SelfMemory;
     }
 
     ~TBuildFilterContext() {

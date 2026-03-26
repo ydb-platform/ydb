@@ -160,8 +160,8 @@ NYdb::NTable::TClientSettings TMVP::GetMetaDatabaseClientSettings(const TRequest
     NYdb::NTable::TClientSettings clientSettings;
     clientSettings.AuthToken(GetMetaDatabaseAuthToken(request));
     clientSettings.Database(location.RootDomain);
-    if (TString database = location.GetDatabaseName(request)) {
-        clientSettings.Database(database);
+    if (TString metaDatabasePath = location.GetMetaDatabaseName(request)) {
+        clientSettings.Database(metaDatabasePath);
     }
     return clientSettings;
 }

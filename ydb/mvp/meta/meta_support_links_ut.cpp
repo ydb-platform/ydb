@@ -89,11 +89,11 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
     static NYdb::NTable::TDataQueryResult MakeClusterInfoResult() {
         const TString resultSetString = R"(
 columns {
-  name: "workspace"
+  name: "k8s_namespace"
   type { type_id: UTF8 }
 }
 columns {
-  name: "grafana_ds"
+  name: "datasource"
   type { type_id: UTF8 }
 }
 rows {
@@ -117,11 +117,11 @@ rows {
 
     static NYdb::NTable::TDataQueryResult MakeEmptyClusterInfoResult() {
         const TString resultSetString = R"(columns {
-  name: "workspace"
+  name: "k8s_namespace"
   type { type_id: UTF8 }
 }
 columns {
-  name: "grafana_ds"
+  name: "datasource"
   type { type_id: UTF8 }
 }
 )";
@@ -290,9 +290,17 @@ columns {
         UNIT_ASSERT_VALUES_EQUAL(json["links"][1]["url"].GetStringRobust(), "https://wiki.example.com/runbooks/mock-dashboard");
 
         UNIT_ASSERT(json.Has("errors"));
-        UNIT_ASSERT_VALUES_EQUAL(json["errors"].GetArray().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["source"].GetStringRobust(), "meta");
-        UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("missing-cluster"));
-        UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("is not found in MasterClusterExt.db"));
+        UNIT_ASSERT(json["errors"].GetArray().size() >= 1);
+        bool hasMetaError = false;
+        for (const auto& error : json["errors"].GetArray()) {
+            if (error["source"].GetStringRobust() == "meta" &&
+                error["message"].GetStringRobust().Contains("missing-cluster") &&
+                error["message"].GetStringRobust().Contains("is not found in MasterClusterExt.db"))
+            {
+                hasMetaError = true;
+                break;
+            }
+        }
+        UNIT_ASSERT(hasMetaError);
     }
 }

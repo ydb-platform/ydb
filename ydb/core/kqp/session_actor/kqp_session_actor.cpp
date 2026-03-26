@@ -3654,7 +3654,7 @@ public:
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
 
                 // cancel/abort during compilation
-                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAdmissionAbort);
+                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleExecute);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);
 
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);

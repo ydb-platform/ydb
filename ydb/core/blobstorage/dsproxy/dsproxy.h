@@ -326,6 +326,7 @@ protected:
     const ui32 RestartCounter = 0;
     std::shared_ptr<const TCostModel> CostModel;
     const TMonotonic RequestStartTime;
+    THashMap<ui32, TActorId> NodeSubscriptions;
 
 private:
     const TActorId Source;
@@ -399,6 +400,7 @@ struct TBlobStorageGroupMultiPutParameters {
     TAccelerationParams AccelerationParams;
     TDuration LongRequestThreshold;
     TDuration MaxTimeout = TDuration::Seconds(60);
+    bool ReduceInterpileTraffic;
 
     static ui32 CalculateRestartCounter(TBatchedVec<TEvBlobStorage::TEvPut::TPtr>& events) {
         ui32 maxRestarts = 0;

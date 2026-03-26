@@ -701,7 +701,7 @@ namespace NKikimr {
 
                 // check the sync state for this group
                 const auto& groupPileInfo = state.GetPile(i);
-                if (auto eventToSend = PrepareEvent(groupPileInfo, originalRequest)) {
+                if (auto eventToSend = PrepareEvent(groupPileInfo, originalRequest, pile->BridgePileId)) {
                     SendQuery(request, pile->BridgePileId, std::move(eventToSend));
                 }
             }
@@ -737,7 +737,8 @@ namespace NKikimr {
         }
 
         template<typename TEvent>
-        std::unique_ptr<IEventBase> PrepareEvent(const NKikimrBridge::TGroupState::TPile& pile, const TEvent& ev) {
+        std::unique_ptr<IEventBase> PrepareEvent(const NKikimrBridge::TGroupState::TPile& pile, const TEvent& ev,
+                TBridgePileId bridgePileId) {
             std::unique_ptr<TEvent> res;
 
             switch (pile.GetStage()) {
@@ -770,6 +771,19 @@ namespace NKikimr {
                 case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_ABORT();
+            }
+
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
+                if (Info->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE && !ev.AlreadyEncrypted) {
+                    // we have to encrypt this message
+                } else if (bridgePileId == BridgeInfo->SelfNodePile->BridgePileId) {
+                    // send this message as is
+                } else {
+                    // enable reducing interpile traffic
+                    res = std::make_unique<TEvBlobStorage::TEvPut>(ev.Id, TRope(ev.Buffer), ev.Deadline, ev.HandleClass,
+                        ev.Tactic, ev.IssueKeepFlag, ev.IgnoreBlock, ev.AlreadyEncrypted,
+                        /*reduceInterpileTraffic=*/ true);
+                }
             }
 
             if (!res) {
@@ -826,6 +840,7 @@ namespace NKikimr {
                     const auto& bridgeGroupState = Info->Group->GetBridgeGroupState();
                     const ui32 myGeneration = bridgeGroupState.GetPile(pile.BridgePileId.GetPileIndex()).GetGroupGeneration();
 
+<<<<<<< HEAD
                     Y_VERIFY_DEBUG_S(common->RestartCounter < 100, "GroupId# " << GroupId
                         << " item.GroupId# " << item.GroupId
                         << " myGeneration# " << myGeneration
@@ -833,6 +848,11 @@ namespace NKikimr {
                         << " Info.Generation# " << request->Info->GroupGeneration
                         << " Type# " << TypeName<TEvent>()
                         << " RequestId# " << request->RequestId); // too often restarts do not make sense
+=======
+                    Y_VERIFY_DEBUG_S(common->RestartCounter < 100, "myGeneration# " << myGeneration
+                        << " RacingGeneration# " << msg->RacingGeneration
+                        << " Info.Generation# " << request->Info->GroupGeneration); // too often restarts do not make sense
+>>>>>>> 17c34433eb5 (Introduce interpile put traffic optimization (#36607))
 
                     if (myGeneration < msg->RacingGeneration) {
                         PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));

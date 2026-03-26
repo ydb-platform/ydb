@@ -55,6 +55,12 @@ public:
             return HasSingleBit(Left) && HasSingleBit(Right);
         }
 
+        bool Bridges(const TNodeSet& lhs, const TNodeSet& rhs) const {
+            return
+                IsSubset(Left,  lhs) && !Overlaps(Left,  rhs) &&
+                IsSubset(Right, rhs) && !Overlaps(Right, lhs);
+        }
+
         TNodeSet Left;
         TNodeSet Right;
         EJoinKind JoinKind;
@@ -223,12 +229,7 @@ public:
     /* Find any edge between lhs and rhs. (It can skip conditions and generate invalid plan in case of cycles) */
     const TEdge* FindEdgeBetween(const TNodeSet& lhs, const TNodeSet& rhs) const {
         for (const auto& edge: Edges_) {
-            if (
-                IsSubset(edge.Left, lhs) &&
-                !Overlaps(edge.Left, rhs) &&
-                IsSubset(edge.Right, rhs) &&
-                !Overlaps(edge.Right, lhs)
-            ) {
+            if (edge.Bridges(lhs, rhs)) {
                 return &edge;
             }
         }
@@ -248,12 +249,7 @@ public:
         TVector<TJoinColumn>& resRightJoinKeys
     ) {
         for (const auto& edge: Edges_) {
-            if (
-                IsSubset(edge.Left, lhs) &&
-                !Overlaps(edge.Left, rhs) &&
-                IsSubset(edge.Right, rhs) &&
-                !Overlaps(edge.Right, lhs)
-            ) {
+            if (edge.Bridges(lhs, rhs)) {
                 for (const auto& [lhsEdgeCond, rhsEdgeCond]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
                     bool hasSameEquivClass = false;
                     for (const auto& lhsResJoinKey: resLeftJoinKeys) {
